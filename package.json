@@ -1,0 +1,24 @@
+{
+  "name": "fptu-lost-found-system",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Sprint 1 authentication base for FPTU Lost & Found System.",
+  "workspaces": ["apps/*"],
+  "scripts": {
+    "dev": "concurrently -n API,WEB -c blue,green \"npm run dev:api\" \"npm run dev:web\"",
+    "dev:api": "npm --workspace @lnfs/api-node run dev",
+    "dev:web": "npm --workspace @lnfs/web run dev",
+    "dev:java": "mvn -f apps/java-admin-service/pom.xml spring-boot:run",
+    "migrate": "npm --workspace @lnfs/api-node run migrate",
+    "check:env": "node scripts/check-env.mjs",
+    "test": "npm --workspace @lnfs/api-node run test && npm --workspace @lnfs/web run lint",
+    "build": "npm --workspace @lnfs/api-node run build && npm --workspace @lnfs/web run build",
+    "build:java": "mvn -f apps/java-admin-service/pom.xml package -DskipTests"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

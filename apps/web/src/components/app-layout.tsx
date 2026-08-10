@@ -1,0 +1,8 @@
+import { LogOut, ShieldCheck, UserRound } from "lucide-react";
+import { Link, NavLink, Outlet } from "react-router-dom";
+import { useAuth } from "../context/auth-context";
+
+export function AppLayout() {
+  const { user, logout } = useAuth();
+  return <div className="app-shell"><header className="topbar"><Link className="brand" to="/profile"><span className="brand-mark"><i>F</i><i>P</i><i>T</i></span><span>Lost &amp; Found<small>FPTU Đà Nẵng</small></span></Link><nav><NavLink to="/profile"><UserRound size={18} /> Hồ sơ</NavLink>{user?.roles.some((role) => role === "STAFF" || role === "ADMIN") && <NavLink to="/staff"><ShieldCheck size={18} /> Khu vực nội bộ</NavLink>}</nav><button className="icon-text-button" onClick={() => void logout()}><LogOut size={18} /> Đăng xuất</button></header><main className="workspace"><Outlet /></main></div>;
+}
