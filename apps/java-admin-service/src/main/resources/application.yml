@@ -1,0 +1,17 @@
+server:
+  port: ${JAVA_ADMIN_PORT:8081}
+spring:
+  application:
+    name: lnfs-java-admin-extension
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true
+info:
+  lnfs:
+    boundary: "Read-only extension skeleton; Node.js owns authentication and writes."
