@@ -77,6 +77,11 @@ export function HomePage() {
           <p className="story-kicker"><span /> FPTU Lost &amp; Found</p>
           <h1 id="home-title">Một món đồ thất lạc.<br /><em>Một hành trình trở về.</em></h1>
           <p className="hero-lead">Hai người xa lạ để lại những dấu hiệu khác nhau. Hệ thống giúp các dấu hiệu ấy tìm thấy nhau, còn quyết định cuối cùng luôn có con người xác minh.</p>
+          <div className="campus-strip" aria-label="Thông tin campus">
+            <span><MapPin size={16} /> FPTU Đà Nẵng</span>
+            <span><Clock3 size={16} /> 8:00 - 17:30</span>
+            <span><ShieldCheck size={16} /> Điểm tiếp nhận</span>
+          </div>
           <div className="hero-actions">
             <button className="journey-button journey-button--orange" onClick={() => chooseStory("LOST")}>Tôi bị mất đồ <ArrowRight size={18} /></button>
             <button className="journey-button journey-button--ghost" onClick={() => chooseStory("FOUND")}>Tôi vừa nhặt được đồ</button>
@@ -85,6 +90,7 @@ export function HomePage() {
         </div>
         <div className="hero-stage">
           <Suspense fallback={<div className="journey-loading">Đang dựng hành trình...</div>}><JourneyScene /></Suspense>
+          <div className="campus-card"><strong>Campus Lost &amp; Found Desk</strong><span>Tòa Alpha · Phòng CTSV</span></div>
           <div className="floating-status floating-status--lost"><span>LOST</span><strong>14:10</strong><small>Một báo cáo vừa được gửi</small></div>
           <div className="floating-status floating-status--found"><span>FOUND</span><strong>14:18</strong><small>Một dấu hiệu mới xuất hiện</small></div>
         </div>
@@ -96,12 +102,24 @@ export function HomePage() {
         <StageMarker number="01" label="Báo tin" align="left" />
         <div className="story-heading">
           <p className="story-index">Bắt đầu</p>
-          <h2>Bạn đang ở phía nào của câu chuyện?</h2>
-          <p>Cùng một món đồ, hai trải nghiệm rất khác. Chọn một phía để xem thông tin của bạn đi qua hệ thống như thế nào.</p>
+          <h2>Chọn câu chuyện gần với bạn nhất</h2>
+          <p>Mỗi món đồ thường bắt đầu từ một trong hai tình huống. Hãy chọn hướng phù hợp để tiếp tục hành trình tìm lại hoặc trao trả vật phẩm.</p>
         </div>
         <div className="choice-grid">
-          <button className={`choice-panel choice-panel--lost ${storySide === "LOST" ? "is-selected" : ""}`} onClick={() => chooseStory("LOST")}><span className="choice-code">LOST / 01</span><ScanSearch /><h3>Tôi làm mất đồ</h3><p>Một chút lo lắng, vài chi tiết còn nhớ và hy vọng có người đã nhặt được.</p><strong>Đi theo luồng báo mất <ArrowRight size={17} /></strong></button>
-          <button className={`choice-panel choice-panel--found ${storySide === "FOUND" ? "is-selected" : ""}`} onClick={() => chooseStory("FOUND")}><span className="choice-code">FOUND / 02</span><Sparkles /><h3>Tôi nhặt được đồ</h3><p>Một hành động nhỏ có thể đưa một món đồ quan trọng trở về đúng người.</p><strong>Đi theo luồng báo nhặt <ArrowRight size={17} /></strong></button>
+          <button type="button" aria-pressed={storySide === "LOST"} className={`choice-panel choice-panel--lost ${storySide === "LOST" ? "is-selected" : ""}`} onClick={() => chooseStory("LOST")}>
+            <span className="choice-topline"><span className="choice-code">LOST / 01</span><span className="choice-check"><Check size={14} /> Đang chọn</span></span>
+            <span className="choice-icon"><ScanSearch /></span>
+            <span className="choice-copy"><span className="choice-title">Tôi làm mất đồ</span><span className="choice-description">Mô tả vật phẩm, thời gian và địa điểm bạn nhớ để hệ thống tìm các báo cáo phù hợp.</span></span>
+            <span className="choice-meta"><span>Vật phẩm đã mất</span><span>Vị trí gần nhất</span><span>Gợi ý phù hợp</span></span>
+            <strong className="choice-action">Bắt đầu báo mất <ArrowRight size={17} /></strong>
+          </button>
+          <button type="button" aria-pressed={storySide === "FOUND"} className={`choice-panel choice-panel--found ${storySide === "FOUND" ? "is-selected" : ""}`} onClick={() => chooseStory("FOUND")}>
+            <span className="choice-topline"><span className="choice-code">FOUND / 02</span><span className="choice-check"><Check size={14} /> Đang chọn</span></span>
+            <span className="choice-icon"><Sparkles /></span>
+            <span className="choice-copy"><span className="choice-title">Tôi nhặt được đồ</span><span className="choice-description">Gửi thông tin món đồ nhặt được để chủ sở hữu có cơ hội nhận lại an toàn.</span></span>
+            <span className="choice-meta"><span>Món đồ tìm thấy</span><span>Điểm giao nộp</span><span>Staff xác minh</span></span>
+            <strong className="choice-action">Bắt đầu báo nhặt <ArrowRight size={17} /></strong>
+          </button>
         </div>
         <StoryConnector direction="left-right" />
       </StoryStage>
@@ -109,7 +127,7 @@ export function HomePage() {
       <StoryStage className="story-section quick-story story-stage--describe" id="quick-story">
         <StageMarker number="02" label="Mô tả nhanh" align="right" />
         <div className="input-story">
-          <div className="story-heading story-heading--left"><p className="story-index">Thông tin ban đầu</p><h2>{selected.title}</h2><p>{selected.description}</p></div>
+          <div className="story-heading story-heading--left stage-copy-card"><p className="story-index">Thông tin ban đầu</p><h2>{selected.title}</h2><p>{selected.description}</p><div className="stage-benefits"><span><Check size={15} /> Nhập nhanh trong vài phút</span><span><Check size={15} /> Có thể thêm ảnh minh chứng</span><span><Check size={15} /> Dữ liệu được chuyển sang bước so sánh</span></div></div>
           <motion.div className="story-form-preview" aria-label={`Minh họa luồng ${selected.label}`} initial={{ opacity: 0, x: 36 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }} transition={{ duration: 0.6 }}>
             <div className="preview-title"><span>{storySide}</span><small>Bản nháp báo tin</small></div>
             <label>Tên vật phẩm<strong>{selected.item}</strong></label>
@@ -125,9 +143,14 @@ export function HomePage() {
       <StoryStage className="story-section analysis-story story-stage--analysis" id="system-analysis">
         <StageMarker number="03" label="Hệ thống xử lý" align="left" />
         <div className="analysis-layout">
-          <div className="story-heading story-heading--left"><p className="story-index">Dữ liệu đi vào hệ thống</p><h2>Những chi tiết rời rạc được sắp xếp lại.</h2><p>Thông tin được chuẩn hóa thành các dấu hiệu có thể so sánh. Đây là bước chuẩn bị dữ liệu, chưa phải kết luận matching.</p></div>
+          <div className="story-heading story-heading--left stage-copy-card"><p className="story-index">Dữ liệu đi vào hệ thống</p><h2>Những chi tiết rời rạc được sắp xếp lại.</h2><p>Thông tin được chuẩn hóa thành các dấu hiệu có thể so sánh. Đây là bước chuẩn bị dữ liệu, chưa phải kết luận matching.</p><div className="stage-note"><Sparkles size={18} /><span>Mục tiêu là biến mô tả tự do thành các tín hiệu rõ ràng: tên đồ, nơi xảy ra, thời gian và đặc điểm nhận dạng.</span></div></div>
           <div className="analysis-pipeline">
-            {["Chuẩn hóa thông tin", "Phân tích mô tả", "Trích xuất dấu hiệu", "Sẵn sàng so sánh"].map((step, index) => <motion.article key={step} initial={{ opacity: 0, y: 22 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: index * 0.11 }}><span>0{index + 1}</span><strong>{step}</strong><i><Check size={15} /></i></motion.article>)}
+            {[
+              { title: "Chuẩn hóa thông tin", desc: "Làm sạch tên đồ, thời gian, địa điểm." },
+              { title: "Phân tích mô tả", desc: "Nhận diện màu sắc, chất liệu, dấu hiệu riêng." },
+              { title: "Trích xuất dấu hiệu", desc: "Tạo bộ tín hiệu dùng để đối chiếu." },
+              { title: "Sẵn sàng so sánh", desc: "Đưa vào hàng chờ tìm báo cáo phù hợp." }
+            ].map((step, index) => <motion.article key={step.title} initial={{ opacity: 0, y: 22 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: index * 0.11 }}><span>0{index + 1}</span><strong>{step.title}</strong><small>{step.desc}</small><i><Check size={15} /></i></motion.article>)}
           </div>
         </div>
         <StoryConnector direction="left-right" />
@@ -136,7 +159,7 @@ export function HomePage() {
       <StoryStage className="processing-story story-stage--search" id="matching-search">
         <StageMarker number="04" label="Tìm kiếm và so sánh" align="right" dark />
         <div className="processing-inner">
-          <div className="processing-copy"><p className="story-index">Hệ thống tiếp nhận</p><h2>Phần còn lại để hệ thống tìm kiếm.</h2><p>Thông tin được kiểm tra, phân loại và so sánh với các báo cáo đang mở. Đây là gợi ý matching theo nhiều tín hiệu, không phải kết luận quyền sở hữu.</p><div className="signal-list"><span><Check /> Dữ liệu hợp lệ</span><span><Check /> Cùng danh mục</span><span><Check /> Gần thời gian</span><span><Check /> Cùng khu vực</span></div></div>
+          <div className="processing-copy"><p className="story-index">Hệ thống tiếp nhận</p><h2>Phần còn lại để hệ thống tìm kiếm.</h2><p>Thông tin được kiểm tra, phân loại và so sánh với các báo cáo đang mở. Đây là gợi ý matching theo nhiều tín hiệu, không phải kết luận quyền sở hữu.</p><div className="processing-stats"><span><strong>24/7</strong><small>theo dõi báo cáo</small></span><span><strong>4</strong><small>tín hiệu chính</small></span><span><strong>1</strong><small>hàng chờ staff</small></span></div><div className="signal-list"><span><Check /> Dữ liệu hợp lệ</span><span><Check /> Cùng danh mục</span><span><Check /> Gần thời gian</span><span><Check /> Cùng khu vực</span></div></div>
           <div className="scan-board">
             <div className="scan-status"><ScanSearch size={14} /><span>Đang quét báo cáo phù hợp</span></div>
             <motion.div className="scan-line" aria-hidden="true" animate={{ top: ["7%", "91%", "91%", "7%"], opacity: [.25, 1, 1, .25] }} transition={{ duration: 3.2, repeat: Infinity, ease: "easeInOut", times: [0, .46, .54, 1] }}><i /></motion.div>
@@ -150,22 +173,24 @@ export function HomePage() {
 
       <StoryStage className="match-moment story-stage--match" id="potential-match">
         <StageMarker number="05" label="Gợi ý phù hợp" align="left" />
-        <div className="match-copy"><p className="story-index">Potential match</p><h2>Có vẻ hai câu chuyện đang nói về cùng một món đồ.</h2><p>Mức tương đồng chỉ mang tính gợi ý. Hệ thống không tự động giao đồ dù điểm matching cao.</p></div>
+        <div className="match-copy"><p className="story-index">Gợi ý phù hợp</p><h2>Có vẻ hai câu chuyện đang nói về cùng một món đồ.</h2><p>Mức tương đồng chỉ mang tính gợi ý. Hệ thống không tự động giao đồ dù điểm matching cao.</p></div>
         <div className="match-stage"><article className="match-card match-card--lost"><span>LOST</span><h3>Ví da màu đen</h3><p>Alpha · 14:10</p></article><motion.div className="match-score" initial={{ scale: .72 }} whileInView={{ scale: 1 }} viewport={{ once: true }} transition={{ type: "spring", stiffness: 220 }}><ScanSearch size={24} /><strong>92%</strong><small>tương đồng</small></motion.div><article className="match-card match-card--found"><span>FOUND</span><h3>Ví da màu đen</h3><p>Alpha · 14:18</p></article></div>
+        <div className="match-alert"><ShieldCheck size={18} /><span>Gợi ý này sẽ được đưa vào danh sách cần staff xác minh trước khi liên hệ bàn giao.</span></div>
         <div className="match-reasons"><span><Check /> Cùng danh mục</span><span><Check /> Cùng tòa Alpha</span><span><Check /> Cách nhau 8 phút</span><span><Check /> Mô tả tương đồng</span></div>
         <StoryConnector direction="left-center" />
       </StoryStage>
 
       <StoryStage className="story-section human-review story-stage--review" id="human-review">
         <StageMarker number="06" label="Con người xác minh" align="center" />
-        <div className="review-visual"><div className="review-sheet"><span className="review-status"><ShieldCheck size={17} /> Human verification required</span><div className="review-handoff"><span>Hybrid matching suggestion</span><ArrowDown size={16} /><strong>Human verification</strong></div><h3>Evidence review support</h3><p>Thông tin riêng và bằng chứng sở hữu chỉ hỗ trợ nhân viên đưa ra quyết định.</p><ul><li><Check /> Đặc điểm riêng của vật phẩm</li><li><Check /> Bằng chứng sở hữu</li><li><Check /> Thông tin chỉ chủ sở hữu biết</li></ul><div className="review-stamp">ĐANG XEM XÉT</div></div></div>
-        <div className="story-heading story-heading--left"><p className="story-index">Con người xác minh</p><h2>Công nghệ tìm ra khả năng. Con người bảo vệ sự chính xác.</h2><p>Người nhận gửi claim và bằng chứng. Staff/Admin xem xét trước khi xác nhận lịch bàn giao, giúp hạn chế nhận nhầm hoặc mạo danh.</p></div>
+        <div className="review-visual"><div className="review-sheet"><span className="review-status"><ShieldCheck size={17} /> Cần nhân viên xác minh</span><div className="review-handoff"><span>Gợi ý từ hệ thống</span><ArrowDown size={16} /><strong>Nhân viên xác minh</strong></div><h3>Đối chiếu bằng chứng</h3><p>Thông tin riêng và bằng chứng sở hữu chỉ hỗ trợ nhân viên đưa ra quyết định.</p><ul><li><Check /> Đặc điểm riêng của vật phẩm</li><li><Check /> Bằng chứng sở hữu</li><li><Check /> Thông tin chỉ chủ sở hữu biết</li></ul><div className="review-stamp">ĐANG XEM XÉT</div></div></div>
+        <div className="story-heading story-heading--left stage-copy-card"><p className="story-index">Con người xác minh</p><h2>Công nghệ tìm ra khả năng. Con người bảo vệ sự chính xác.</h2><p>Người nhận gửi claim và bằng chứng. Staff/Admin xem xét trước khi xác nhận lịch bàn giao, giúp hạn chế nhận nhầm hoặc mạo danh.</p><div className="stage-benefits"><span><Check size={15} /> Bảo vệ thông tin riêng</span><span><Check size={15} /> Hạn chế nhận nhầm</span><span><Check size={15} /> Có lịch sử xử lý rõ ràng</span></div></div>
         <StoryConnector direction="center-right" />
       </StoryStage>
 
       <StoryStage className="handover-story story-stage--handover" id="handover">
         <StageMarker number="07" label="Bàn giao" align="right" dark />
         <div className="story-heading"><p className="story-index">Đoạn đường cuối</p><h2>Giờ chỉ còn đưa món đồ về đúng người.</h2></div>
+        <div className="handover-summary"><span><CalendarCheck size={18} /> Lịch hẹn đã xác nhận</span><strong>Thứ 5 · 15:30 · Tòa Alpha</strong></div>
         <div className="handover-track"><div><span>01</span><strong>Người nhặt</strong><small>Giao nộp món đồ</small></div><motion.i initial={{ scaleX: 0 }} whileInView={{ scaleX: 1 }} viewport={{ once: true }} /><div className="handover-point"><span><CalendarCheck /></span><strong>Điểm bàn giao</strong><small>Thứ 5 · 15:30</small></div><motion.i initial={{ scaleX: 0 }} whileInView={{ scaleX: 1 }} viewport={{ once: true }} /><div><span>03</span><strong>Chủ sở hữu</strong><small>Nhận lại an toàn</small></div></div>
         <div className="journey-progress"><span className="is-done">Lost</span><span className="is-done">Found</span><span className="is-done">Matched</span><span className="is-done">Verified</span><span className="is-current">Returned</span></div>
       </StoryStage>

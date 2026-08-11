@@ -37,5 +37,5 @@ function Field({ icon, label, children }: { icon: ReactNode; label: string; chil
 }
 
 export function AuthFrame({ eyebrow, title, subtitle, children }: { eyebrow: string; title: string; subtitle: string; children: ReactNode }) {
-  return <main className="auth-page"><section className="auth-aside"><div className="campus-stamp">FPTU<br /><strong>LOST<br />FOUND</strong></div><p>Campus identity</p><h1>Nhặt đồ đừng ngại, đăng tin trả lại. Lạc đồ một lần, cộng đồng cùng tìm.</h1><div className="signal-line"><span />Xác thực email · Phiên an toàn · Phân quyền rõ ràng</div></section><section className="auth-panel"><div className="auth-card"><p className="eyebrow">{eyebrow}</p><h2>{title}</h2><p className="muted">{subtitle}</p>{children}</div></section></main>;
+  return <main className="auth-page"><section className="auth-aside"><div className="campus-stamp">FPTU<br /><strong>LOST<br />FOUND</strong></div><p>Dành cho campus</p><h1>Nhặt đồ đừng ngại, đăng tin trả lại. Lạc đồ một lần, cộng đồng cùng tìm.</h1><div className="signal-line"><span />Xác thực email · Phiên an toàn · Phân quyền rõ ràng</div></section><section className="auth-panel"><div className="auth-card"><p className="eyebrow">{eyebrow}</p><h2>{title}</h2><p className="muted">{subtitle}</p>{children}</div></section></main>;
 }
