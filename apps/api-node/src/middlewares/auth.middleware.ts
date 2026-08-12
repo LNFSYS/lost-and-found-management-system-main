@@ -25,6 +25,21 @@ export async function requireAuth(request: Request, _response: Response, next: N
   }
 }
 
+export async function optionalAuth(request: Request, _response: Response, next: NextFunction) {
+  const value = request.header("authorization");
+  if (!value) return next();
+  const token = value.startsWith("Bearer ") ? value.slice(7) : undefined;
+  if (!token) return next(new HttpError(401, "Phien dang nhap khong hop le"));
+  try {
+    const payload = jwt.verify(token, env.jwtAccessSecret) as AccessTokenPayload;
+    if (!await authService.validateAccessSession(payload)) return next(new HttpError(401, "Phien dang nhap da het han"));
+    request.auth = payload;
+    next();
+  } catch {
+    next(new HttpError(401, "Phien dang nhap da het han"));
+  }
+}
+
 export function requireAnyRole(...roles: Role[]) {
   return (request: Request, _response: Response, next: NextFunction) => {
     if (!request.auth?.roles.some((role) => roles.includes(role))) return next(new HttpError(403, "Bạn không có quyền thực hiện thao tác này"));

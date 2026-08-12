@@ -1,6 +1,7 @@
 import { adminCatalogRepository } from "../repositories/admin-catalog.repository.js";
 import { HttpError } from "../utils/http-error.js";
 import { id } from "../utils/security.js";
+import { normalizeVietnameseText } from "../utils/text.js";
 import type {
   CreateAreaInput,
   CreateBuildingInput,
@@ -11,13 +12,7 @@ import type {
 } from "../validators/admin-catalog.validator.js";
 
 function normalizeCatalogName(value: string) {
-  return value
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[đĐ]/g, "d")
-    .trim()
-    .replace(/\s+/g, " ")
-    .toLowerCase();
+  return normalizeVietnameseText(value);
 }
 
 async function ensureTopLevelCategory(parentId: string) {

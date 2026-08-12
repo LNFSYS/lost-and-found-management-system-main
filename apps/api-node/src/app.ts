@@ -7,6 +7,7 @@ import { env } from "./config/env.js";
 import { isOriginAllowed, parseAllowedOrigins } from "./config/cors.js";
 import { adminRoutes } from "./routes/admin.routes.js";
 import { authRoutes } from "./routes/auth.routes.js";
+import { postRoutes } from "./routes/post.routes.js";
 
 export function createApp() {
   const app = express();
@@ -22,6 +23,7 @@ export function createApp() {
   app.use(cookieParser());
   app.get("/api/health", (_request, response) => response.json({ status: "ok", service: "lnfs-auth-api" }));
   app.use("/api/auth", authRoutes);
+  app.use("/api/posts", postRoutes);
   app.use("/api/admin", adminRoutes);
   app.use(errorHandler);
   return app;
