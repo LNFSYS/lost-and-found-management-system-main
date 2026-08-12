@@ -5,6 +5,7 @@ import { AppLayout } from "./components/app-layout";
 import { RouteGuard } from "./components/route-guard";
 import { AuthProvider } from "./context/auth-context";
 import { ForgotPasswordPage, ResetPasswordPage } from "./pages/forgot-password-page";
+import { AdminPage } from "./pages/admin-page";
 import { LoginPage } from "./pages/login-page";
 import { ProfilePage } from "./pages/profile-page";
 import { RegisterPage } from "./pages/register-page";
@@ -31,6 +32,9 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
               <Route path="/profile" element={<ProfilePage />} />
               <Route element={<RouteGuard roles={["STAFF", "ADMIN"]} />}>
                 <Route path="/staff" element={<StaffPage />} />
+              </Route>
+              <Route element={<RouteGuard roles={["ADMIN"]} />}>
+                <Route path="/admin" element={<AdminPage />} />
               </Route>
             </Route>
           </Route>

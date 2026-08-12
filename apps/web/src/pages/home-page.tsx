@@ -1,12 +1,8 @@
 import { ArrowDown, ArrowRight, CalendarCheck, Check, Clock3, MapPin, ScanSearch, ShieldCheck, Sparkles } from "lucide-react";
 import { motion } from "motion/react";
-import { lazy, Suspense, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
-
-const JourneyScene = lazy(async () => {
-  const module = await import("../components/journey-scene");
-  return { default: module.JourneyScene };
-});
+import heroCampusImage from "../assets/fptu-da-nang-campus.jpg";
 
 type StorySide = "LOST" | "FOUND";
 type StageAlign = "left" | "center" | "right";
@@ -75,24 +71,36 @@ export function HomePage() {
       <div className="hero-grid" id="journey-start">
         <div className="hero-copy">
           <p className="story-kicker"><span /> FPTU Lost &amp; Found</p>
-          <h1 id="home-title">Một món đồ thất lạc.<br /><em>Một hành trình trở về.</em></h1>
-          <p className="hero-lead">Hai người xa lạ để lại những dấu hiệu khác nhau. Hệ thống giúp các dấu hiệu ấy tìm thấy nhau, còn quyết định cuối cùng luôn có con người xác minh.</p>
+          <h1 id="home-title">Đồ thất lạc,<br /><em>có đường về.</em></h1>
+          <p className="hero-lead">Hệ thống giúp kết nối người mất và người nhặt bằng thông tin, hình ảnh và xác minh từ Staff/Admin.</p>
           <div className="campus-strip" aria-label="Thông tin campus">
             <span><MapPin size={16} /> FPTU Đà Nẵng</span>
             <span><Clock3 size={16} /> 8:00 - 17:30</span>
             <span><ShieldCheck size={16} /> Điểm tiếp nhận</span>
           </div>
           <div className="hero-actions">
-            <button className="journey-button journey-button--orange" onClick={() => chooseStory("LOST")}>Tôi bị mất đồ <ArrowRight size={18} /></button>
-            <button className="journey-button journey-button--ghost" onClick={() => chooseStory("FOUND")}>Tôi vừa nhặt được đồ</button>
+            <button className="journey-button journey-button--orange" onClick={() => chooseStory("LOST")}>Báo mất đồ <ArrowRight size={18} /></button>
+            <button className="journey-button journey-button--ghost" onClick={() => chooseStory("FOUND")}>Đăng đồ nhặt được</button>
+          </div>
+          <div className="hero-stats" aria-label="Thống kê nhanh">
+            <span><strong>28</strong><small>Bài đăng</small></span>
+            <span><strong>12</strong><small>Người dùng</small></span>
+            <span><strong>8</strong><small>Khu vực</small></span>
+            <span><strong>Staff</strong><small>Xác minh</small></span>
           </div>
           <a className="scroll-cue" href="#two-sides"><ArrowDown size={16} /> Cuộn để theo dấu món đồ</a>
         </div>
         <div className="hero-stage">
-          <Suspense fallback={<div className="journey-loading">Đang dựng hành trình...</div>}><JourneyScene /></Suspense>
-          <div className="campus-card"><strong>Campus Lost &amp; Found Desk</strong><span>Tòa Alpha · Phòng CTSV</span></div>
-          <div className="floating-status floating-status--lost"><span>LOST</span><strong>14:10</strong><small>Một báo cáo vừa được gửi</small></div>
-          <div className="floating-status floating-status--found"><span>FOUND</span><strong>14:18</strong><small>Một dấu hiệu mới xuất hiện</small></div>
+          <figure className="hero-campus-photo">
+            <img src={heroCampusImage} alt="FPT University Đà Nẵng campus với tòa Alpha và cầu nối màu cam" decoding="async" fetchPriority="high" />
+          </figure>
+          <div className="hero-workflow" aria-label="Quy trình xử lý nhanh">
+            <span><ScanSearch size={15} /> Báo tin</span><i /><span><Sparkles size={15} /> Gợi ý trùng khớp</span><i /><span><ShieldCheck size={15} /> Staff xác minh</span>
+          </div>
+          <div className="campus-card"><ShieldCheck size={17} /><strong>Campus Lost &amp; Found Desk</strong><span>Tòa Alpha · Phòng CTSV</span></div>
+          <div className="floating-status floating-status--lost"><span><i /> LOST</span><strong>14:10</strong><small>Một báo cáo vừa được gửi</small></div>
+          <div className="floating-status floating-status--found"><span><i /> FOUND</span><strong>14:18</strong><small>Một dấu hiệu mới xuất hiện</small></div>
+          <div className="floating-status floating-status--verified"><span><i /> VERIFIED</span><strong>Staff</strong><small>Đang kiểm tra bằng chứng</small></div>
         </div>
       </div>
     </section>
