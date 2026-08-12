@@ -19,10 +19,10 @@ const session = {
 async function openHome(page: Page) {
   await page.route("**/api/auth/refresh", async (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(session) }));
   await page.goto("/home");
-  await expect(page.getByRole("heading", { level: 1, name: /Một món đồ thất lạc/i })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: /Đồ thất lạc/i })).toBeVisible();
 }
 
-test("renders the protected storytelling home with a nonblank WebGL scene", async ({ page }) => {
+test("renders the protected storytelling home with a campus hero image", async ({ page }) => {
   await openHome(page);
   await expect(page.locator(".story-thread-layer")).toHaveCount(0);
   await expect(page.locator(".thread-spool")).toHaveCount(0);
@@ -32,24 +32,15 @@ test("renders the protected storytelling home with a nonblank WebGL scene", asyn
     const position = getComputedStyle(connector).position;
     return position !== "fixed" && position !== "sticky";
   }))).toBe(true);
-  const canvas = page.locator(".journey-scene canvas");
-  await expect(canvas).toBeVisible();
-  await expect.poll(async () => canvas.evaluate((element) => {
-    const target = element as HTMLCanvasElement;
-    if (target.width === 0 || target.height === 0) return 0;
-    const sample = document.createElement("canvas");
-    sample.width = 32;
-    sample.height = 32;
-    const context = sample.getContext("2d");
-    if (!context) return 0;
-    context.drawImage(target, 0, 0, sample.width, sample.height);
-    const pixels = context.getImageData(0, 0, sample.width, sample.height).data;
-    let coloredPixels = 0;
-    for (let index = 0; index < pixels.length; index += 4) {
-      if (pixels[index + 3] > 0 && pixels[index] + pixels[index + 1] + pixels[index + 2] > 24) coloredPixels += 1;
-    }
-    return coloredPixels;
-  })).toBeGreaterThan(20);
+  const campusImage = page.getByRole("img", { name: /FPT University Đà Nẵng campus/i });
+  await expect(campusImage).toBeVisible();
+  await expect.poll(() => campusImage.evaluate((element) => {
+    const image = element as HTMLImageElement;
+    return image.complete && image.naturalWidth > 400 && image.naturalHeight > 250;
+  })).toBe(true);
+  await expect(page.locator(".hero-campus-photo")).toBeVisible();
+  await expect(page.locator(".floating-status--lost")).toBeVisible();
+  await expect(page.locator(".floating-status--found")).toBeVisible();
   await page.screenshot({ path: "../../test-results/home/home-desktop-top.png" });
 
   for (const stageId of ["#two-sides", "#quick-story", "#system-analysis", "#matching-search"]) {
@@ -71,14 +62,14 @@ test("renders the protected storytelling home with a nonblank WebGL scene", asyn
   }
 
   await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(800);
-  await expect(page.getByText("Human verification required")).toBeVisible();
+  await expect(page.getByText("Cần nhân viên xác minh")).toBeVisible();
   await page.screenshot({ path: "../../test-results/home/home-desktop.png", fullPage: true });
 });
 
 test("keeps the story readable without horizontal overflow on mobile", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await openHome(page);
-  await expect(page.getByRole("button", { name: /Tôi bị mất đồ/i }).first()).toBeVisible();
+  await expect(page.getByRole("button", { name: /Báo mất đồ/i }).first()).toBeVisible();
   for (const stageId of ["#two-sides", "#quick-story", "#system-analysis", "#matching-search", "#potential-match", "#human-review", "#handover"]) {
     await page.locator(stageId).scrollIntoViewIfNeeded();
     await page.waitForTimeout(100);
