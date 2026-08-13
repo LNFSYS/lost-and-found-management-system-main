@@ -1,5 +1,6 @@
 node_modules/
 dist/
+apps/api-node/uploads/
 .env
 .env.*
 !.env.example

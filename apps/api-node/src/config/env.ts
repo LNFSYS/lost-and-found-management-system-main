@@ -3,7 +3,13 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const moduleDirectory = path.dirname(fileURLToPath(import.meta.url));
-for (const envPath of [path.resolve(process.cwd(), ".env"), path.resolve(moduleDirectory, "../../../../.env")]) {
+const repositoryRoot = path.resolve(moduleDirectory, "../../../../");
+for (const envPath of [
+  path.resolve(process.cwd(), ".env"),
+  path.resolve(moduleDirectory, "../../.env"),
+  path.resolve(moduleDirectory, "../../../.env"),
+  path.resolve(repositoryRoot, ".env")
+]) {
   dotenv.config({ path: envPath, override: false });
 }
 
@@ -33,6 +39,9 @@ export const env = {
   nodeEnv: process.env.NODE_ENV ?? "development",
   port: number("API_PORT", 3001),
   frontendUrl: process.env.FRONTEND_URL?.trim() ?? "http://localhost:5173",
+  uploadDir: process.env.UPLOAD_DIR?.trim()
+    ? path.resolve(repositoryRoot, process.env.UPLOAD_DIR.trim())
+    : path.resolve(repositoryRoot, "apps/api-node/uploads"),
   db: {
     host: process.env.DB_HOST?.trim() ?? "localhost",
     port: number("DB_PORT", 3306),
