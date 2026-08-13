@@ -16,6 +16,10 @@ function routeId(request: Request) {
 }
 
 export const postController = {
+  async getFormCatalog(_request: Request, response: Response) {
+    response.json(await postService.getFormCatalog());
+  },
+
   async listBoard(request: Request, response: Response) {
     response.json(await postService.listBoard(listPostsQuerySchema.parse(request.query), request.auth));
   },

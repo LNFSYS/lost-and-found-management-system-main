@@ -23,6 +23,7 @@ function uploadSingleImage(request: Request, response: Response, next: NextFunct
 }
 
 postRoutes.get("/", optionalAuth, (req, res, next) => postController.listBoard(req, res).catch(next));
+postRoutes.get("/catalog", requireAuth, (req, res, next) => postController.getFormCatalog(req, res).catch(next));
 postRoutes.get("/mine", requireAuth, (req, res, next) => postController.listMine(req, res).catch(next));
 postRoutes.post("/", requireAuth, (req, res, next) => postController.createPost(req, res).catch(next));
 postRoutes.get("/:id", optionalAuth, (req, res, next) => postController.getPost(req, res).catch(next));

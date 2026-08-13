@@ -4,6 +4,58 @@ export interface AdminCategory { id: string; name: string; icon: string | null; 
 export interface AdminArea { id: string; name: string; description: string | null; isActive: boolean; sortOrder: number; buildingCount: number; createdAt: string; }
 export interface AdminBuilding { id: string; areaId: string; areaName: string; name: string; isActive: boolean; sortOrder: number; createdAt: string; }
 export interface AdminCatalog { stats: { totalPosts: number; processingPosts: number; totalUsers: number; returnedPosts: number }; categories: AdminCategory[]; areas: AdminArea[]; buildings: AdminBuilding[]; }
+export interface PostCatalog {
+  categories: Array<{ id: string; name: string; parentId: string | null }>;
+  areas: Array<{ id: string; name: string }>;
+  buildings: Array<{ id: string; areaId: string; name: string }>;
+  handoverPoints: Array<{ id: string; name: string; address: string; openingHours: string | null }>;
+}
+export interface CreatePostPayload {
+  type: "LOST" | "FOUND";
+  title: string;
+  description: string;
+  categoryId: string;
+  areaId?: string | null;
+  buildingId?: string | null;
+  roomText?: string | null;
+  customLocation?: string | null;
+  contactInfo: string;
+  lostFoundAt: string;
+  handoverPointId?: string | null;
+  visibilityMode?: "PUBLIC" | "PRIVATE_DETAILS";
+}
+export interface CreatedPost { id: string; type: "LOST" | "FOUND"; title: string; status: string; createdAt: string; }
+export interface PostSummary {
+  id: string;
+  type: "LOST" | "FOUND";
+  status: "OPEN" | "MATCHED" | "RESOLVED" | "CLOSED" | "EXPIRED" | "HIDDEN";
+  visibilityMode: "PUBLIC" | "PRIVATE_DETAILS";
+  title: string;
+  description: string | null;
+  category: { id: string; name: string | null; icon: string | null } | null;
+  location: {
+    area: { id: string; name: string | null } | null;
+    building: { id: string; name: string | null } | null;
+    roomText: string | null;
+    customLocation: string | null;
+  };
+  handoverPoint: { id: string; name: string | null; address: string | null } | null;
+  lostFoundAt: string | null;
+  owner: { id: string; fullName: string };
+  media: Array<{ id: string; url: string; mediaKind: "ITEM" | "EVIDENCE" }>;
+  canEdit: boolean;
+  createdAt: string;
+}
+export interface PostListResponse { total: number; page: number; pageSize: number; items: PostSummary[]; }
+export interface PostListFilters {
+  q?: string;
+  type?: "LOST" | "FOUND";
+  status?: PostSummary["status"];
+  categoryId?: string;
+  page?: number;
+  pageSize?: number;
+  sort?: "newest" | "oldest" | "incident_newest" | "incident_oldest";
+}
 export type AdminCategoryPayload = { name?: string; icon?: string | null; parentId?: string | null; isActive?: boolean; sortOrder?: number };
 export type AdminAreaPayload = { name?: string; description?: string | null; isActive?: boolean; sortOrder?: number };
 export type AdminBuildingPayload = { name?: string; areaId?: string; isActive?: boolean; sortOrder?: number };
@@ -15,7 +67,7 @@ let refreshInFlight: Promise<SessionResponse | null> | null = null;
 
 async function raw<T>(path: string, init: RequestInit = {}, retry = true): Promise<T> {
   const headers = new Headers(init.headers);
-  if (init.body && !headers.has("content-type")) headers.set("content-type", "application/json");
+  if (init.body && !(init.body instanceof FormData) && !headers.has("content-type")) headers.set("content-type", "application/json");
   if (accessToken) headers.set("authorization", `Bearer ${accessToken}`);
   const response = await fetch(`${API_URL}${path}`, { ...init, headers, credentials: "include" });
   if (response.status === 401 && retry && path !== "/auth/refresh") {
@@ -42,6 +94,24 @@ export async function refreshSession() {
 
 function storeSession(session: SessionResponse) { accessToken = session.accessToken; return session.user; }
 
+function queryString(filters: PostListFilters) {
+  const query = new URLSearchParams();
+  Object.entries(filters).forEach(([key, value]) => {
+    if (value !== undefined && value !== "") query.set(key, String(value));
+  });
+  const value = query.toString();
+  return value ? `?${value}` : "";
+}
+
+async function mediaBlob(path: string, retry = true): Promise<Blob> {
+  const headers = new Headers();
+  if (accessToken) headers.set("authorization", `Bearer ${accessToken}`);
+  const response = await fetch(`${API_URL}${path.replace(/^\/api/, "")}`, { headers, credentials: "include" });
+  if (response.status === 401 && retry && await refreshSession()) return mediaBlob(path, false);
+  if (!response.ok) throw new Error("Không thể tải ảnh vật phẩm");
+  return response.blob();
+}
+
 export const api = {
   requestRegistrationOtp: (email: string) => raw<{ delivered: boolean; expiresInMinutes: number }>("/auth/register/request-otp", { method: "POST", body: JSON.stringify({ email }) }),
   register: async (payload: { email: string; otp: string; password: string; fullName: string; audienceRole: "STUDENT" | "LECTURER"; studentCode?: string; phoneNumber?: string }) => storeSession(await raw<SessionResponse>("/auth/register", { method: "POST", body: JSON.stringify(payload) })),
@@ -51,6 +121,18 @@ export const api = {
   resetPassword: (email: string, token: string, newPassword: string) => raw<{ reset: boolean }>("/auth/reset-password", { method: "POST", body: JSON.stringify({ email, token, newPassword }) }),
   me: () => raw<{ user: CurrentUser }>("/auth/me").then((payload) => payload.user),
   updateProfile: (payload: Partial<Pick<CurrentUser, "fullName" | "studentCode" | "phoneNumber">>) => raw<{ user: CurrentUser }>("/auth/profile", { method: "PATCH", body: JSON.stringify(payload) }).then((result) => result.user),
+  getPostCatalog: () => raw<PostCatalog>("/posts/catalog"),
+  listPosts: (filters: PostListFilters = {}) => raw<PostListResponse>(`/posts${queryString(filters)}`),
+  listMyPosts: (filters: PostListFilters = {}) => raw<PostListResponse>(`/posts/mine${queryString(filters)}`),
+  getPost: (postId: string) => raw<PostSummary>(`/posts/${postId}`),
+  getPostMedia: (path: string) => mediaBlob(path),
+  createPost: (payload: CreatePostPayload) => raw<CreatedPost>("/posts", { method: "POST", body: JSON.stringify(payload) }),
+  uploadPostMedia: (postId: string, file: File) => {
+    const form = new FormData();
+    form.append("file", file);
+    form.append("mediaKind", "ITEM");
+    return raw(`/posts/${postId}/media`, { method: "POST", body: form });
+  },
   getAdminCatalog: () => raw<AdminCatalog>("/admin/catalog"),
   createAdminCategory: (payload: Required<Pick<AdminCategoryPayload, "name">> & AdminCategoryPayload) => raw<AdminCategory>("/admin/categories", { method: "POST", body: JSON.stringify(payload) }),
   updateAdminCategory: (id: string, payload: AdminCategoryPayload) => raw<AdminCategory>(`/admin/categories/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),

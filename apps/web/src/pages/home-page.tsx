@@ -2,6 +2,7 @@ import { ArrowDown, ArrowRight, CalendarCheck, Check, Clock3, MapPin, ScanSearch
 import { motion } from "motion/react";
 import { useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
+import { StoryPostForm } from "../components/story-post-form";
 import heroCampusImage from "../assets/fptu-da-nang-campus.jpg";
 
 type StorySide = "LOST" | "FOUND";
@@ -136,13 +137,7 @@ export function HomePage() {
         <StageMarker number="02" label="Mô tả nhanh" align="right" />
         <div className="input-story">
           <div className="story-heading story-heading--left stage-copy-card"><p className="story-index">Thông tin ban đầu</p><h2>{selected.title}</h2><p>{selected.description}</p><div className="stage-benefits"><span><Check size={15} /> Nhập nhanh trong vài phút</span><span><Check size={15} /> Có thể thêm ảnh minh chứng</span><span><Check size={15} /> Dữ liệu được chuyển sang bước so sánh</span></div></div>
-          <motion.div className="story-form-preview" aria-label={`Minh họa luồng ${selected.label}`} initial={{ opacity: 0, x: 36 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }} transition={{ duration: 0.6 }}>
-            <div className="preview-title"><span>{storySide}</span><small>Bản nháp báo tin</small></div>
-            <label>Tên vật phẩm<strong>{selected.item}</strong></label>
-            <div className="preview-row"><label><MapPin size={16} /> Địa điểm<strong>Tòa Alpha</strong></label><label><Clock3 size={16} /> Thời gian<strong>{selected.time}</strong></label></div>
-            <div className="image-placeholder"><Sparkles size={20} /><span>Thêm ảnh để mô tả rõ hơn</span></div>
-            <div className="preview-submit"><span>4 thông tin đã sẵn sàng</span><i><ArrowRight size={18} /></i></div>
-          </motion.div>
+          <StoryPostForm type={storySide} />
         </div>
         <div className="data-bridge" aria-hidden="true"><span>{selected.item}</span><span>Tòa Alpha</span><span>{selected.time}</span><i /></div>
         <StoryConnector direction="right-left" />

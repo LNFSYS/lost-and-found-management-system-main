@@ -123,7 +123,7 @@ async function ensureBusinessRefs(input: {
   visibilityMode?: VisibilityMode;
 }) {
   if (!input.categoryId || !await postRepository.findActiveCategory(input.categoryId)) {
-    throw new HttpError(422, "Danh muc khong hop le hoac da bi tat");
+    throw new HttpError(422, "Vui long chon danh muc cu the thuoc mot nhom chinh dang hoat dong");
   }
 
   if (input.areaId && !await postRepository.findActiveArea(input.areaId)) {
@@ -191,6 +191,10 @@ async function removeStoredFile(secureUrl: string) {
 }
 
 export const postService = {
+  getFormCatalog() {
+    return postRepository.getFormCatalog();
+  },
+
   async listBoard(filters: ListPostsQuery, viewer?: AccessTokenPayload) {
     const result = await postRepository.listBoard(filters);
     return { ...result, items: result.items.map((post) => serializePost(post, viewer)) };

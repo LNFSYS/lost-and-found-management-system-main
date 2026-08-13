@@ -10,6 +10,8 @@ import { LoginPage } from "./pages/login-page";
 import { ProfilePage } from "./pages/profile-page";
 import { RegisterPage } from "./pages/register-page";
 import { StaffPage } from "./pages/staff-page";
+import { PostsPage } from "./pages/posts-page";
+import { PostDetailPage } from "./pages/post-detail-page";
 import "./styles.css";
 
 const HomePage = lazy(async () => {
@@ -30,6 +32,8 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
             <Route element={<AppLayout />}>
               <Route path="/home" element={<Suspense fallback={<main className="center-state">Đang mở hành trình...</main>}><HomePage /></Suspense>} />
               <Route path="/profile" element={<ProfilePage />} />
+              <Route path="/posts" element={<PostsPage />} />
+              <Route path="/posts/:postId" element={<PostDetailPage />} />
               <Route element={<RouteGuard roles={["STAFF", "ADMIN"]} />}>
                 <Route path="/staff" element={<StaffPage />} />
               </Route>

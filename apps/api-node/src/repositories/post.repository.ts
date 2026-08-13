@@ -126,6 +126,15 @@ interface BuildingRefRow extends RowDataPacket {
   area_id: string;
 }
 
+interface CatalogRow extends RowDataPacket {
+  id: string;
+  name: string;
+  parent_id?: string | null;
+  area_id?: string;
+  address?: string;
+  opening_hours?: string | null;
+}
+
 const postSelect = `SELECT
   p.id, p.user_id, u.full_name AS owner_name, p.type, p.status, p.visibility_mode,
   p.title, p.description, p.category_id, c.name AS category_name, c.icon AS category_icon,
@@ -295,6 +304,25 @@ async function findPost(where: string, values: SqlValue[]) {
 }
 
 export const postRepository = {
+  async getFormCatalog() {
+    const [categories, areas, buildings, handoverPoints] = await Promise.all([
+      pool.execute<CatalogRow[]>(`SELECT c.id, c.name, c.parent_id
+        FROM item_categories c
+        LEFT JOIN item_categories parent ON parent.id = c.parent_id
+        WHERE c.is_active = TRUE AND (c.parent_id IS NULL OR parent.is_active = TRUE)
+        ORDER BY c.parent_id IS NOT NULL, c.sort_order, c.name`),
+      pool.execute<CatalogRow[]>("SELECT id, name FROM campus_areas WHERE is_active = TRUE ORDER BY sort_order, name"),
+      pool.execute<CatalogRow[]>("SELECT id, area_id, name FROM campus_buildings WHERE is_active = TRUE ORDER BY sort_order, name"),
+      pool.execute<CatalogRow[]>("SELECT id, name, address, opening_hours FROM handover_points WHERE is_active = TRUE ORDER BY name")
+    ]);
+    return {
+      categories: categories[0].map((row) => ({ id: row.id, name: row.name, parentId: row.parent_id ?? null })),
+      areas: areas[0].map((row) => ({ id: row.id, name: row.name })),
+      buildings: buildings[0].map((row) => ({ id: row.id, areaId: row.area_id!, name: row.name })),
+      handoverPoints: handoverPoints[0].map((row) => ({ id: row.id, name: row.name, address: row.address!, openingHours: row.opening_hours ?? null }))
+    };
+  },
+
   listBoard(filters: ListPostsQuery) {
     return listPosts(filters);
   },
@@ -444,7 +472,11 @@ export const postRepository = {
   },
 
   async findActiveCategory(categoryId: string) {
-    const [rows] = await pool.execute<IdRow[]>("SELECT id FROM item_categories WHERE id = ? AND is_active = TRUE LIMIT 1", [categoryId]);
+    const [rows] = await pool.execute<IdRow[]>(`SELECT child.id
+      FROM item_categories child
+      INNER JOIN item_categories parent ON parent.id = child.parent_id AND parent.is_active = TRUE
+      WHERE child.id = ? AND child.is_active = TRUE
+      LIMIT 1`, [categoryId]);
     return rows[0]?.id ?? null;
   },
 
