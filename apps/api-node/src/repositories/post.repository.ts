@@ -335,6 +335,24 @@ export const postRepository = {
     return findPost("p.id = ? AND p.deleted_at IS NULL AND p.status <> 'HIDDEN'", [postId]);
   },
 
+  async findVisibleByIds(postIds: string[]) {
+    const uniqueIds = [...new Set(postIds)].filter(Boolean);
+    if (!uniqueIds.length) return [];
+    const placeholders = uniqueIds.map(() => "?").join(", ");
+    const [rows] = await pool.execute<PostRow[]>(
+      `${postSelect}
+       WHERE p.id IN (${placeholders})
+         AND p.deleted_at IS NULL
+         AND p.status <> 'HIDDEN'`,
+      uniqueIds
+    );
+    const mediaByPost = await loadMedia(rows.map((row) => row.id));
+    const order = new Map(uniqueIds.map((postId, index) => [postId, index]));
+    return rows
+      .map((row) => mapPost(row, mediaByPost.get(row.id) ?? []))
+      .sort((left, right) => (order.get(left.id) ?? 0) - (order.get(right.id) ?? 0));
+  },
+
   findOwnedById(postId: string, ownerId: string) {
     return findPost("p.id = ? AND p.user_id = ? AND p.deleted_at IS NULL AND p.status <> 'HIDDEN'", [postId, ownerId]);
   },

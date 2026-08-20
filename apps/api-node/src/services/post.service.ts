@@ -15,6 +15,9 @@ import {
   type StoredMediaRecord,
   type VisibilityMode
 } from "../repositories/post.repository.js";
+import { matchingRepository } from "../repositories/matching.repository.js";
+import { matchingService } from "./matching.service.js";
+import { redactPrivateMatchExplanation, type MatchExplanation } from "./matching.engine.js";
 import type {
   CreatePostInput,
   ListOwnPostsQuery,
@@ -156,6 +159,62 @@ async function requireOwnedPost(postId: string, ownerId: string) {
   return post;
 }
 
+async function requireMatchAccess(postId: string, viewer: AccessTokenPayload) {
+  const post = await postRepository.findVisibleById(postId);
+  if (!post) throw new HttpError(404, "Không tìm thấy bài đăng");
+  if (post.userId !== viewer.sub && !canReview(viewer)) {
+    throw new HttpError(403, "Bạn không có quyền xem kết quả matching của bài đăng này");
+  }
+  return post;
+}
+
+async function refreshMatchingBestEffort(postId: string, trigger: "create" | "update") {
+  try {
+    await matchingService.runForPost(postId);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "unknown matching error";
+    console.warn(`[matching] ${trigger} refresh failed for post ${postId}: ${message}`);
+  }
+}
+
+function serializeMatchingResult(
+  source: PostRecord,
+  payload: Awaited<ReturnType<typeof matchingService.getStoredResults>>,
+  viewer: AccessTokenPayload
+) {
+  function visibleExplanation(candidate: PostRecord, explanation: MatchExplanation | null) {
+    if (!explanation || candidate.visibilityMode !== "PRIVATE_DETAILS" || canSeePrivatePost(viewer, candidate)) {
+      return explanation;
+    }
+    return redactPrivateMatchExplanation(explanation);
+  }
+
+  return {
+    source: serializePost(source, viewer),
+    matcherVersion: payload.matcherVersion,
+    calculatedAt: payload.calculatedAt,
+    thresholds: payload.thresholds,
+    weights: payload.weights,
+    results: payload.results.map(({ match, candidate }) => ({
+      matchId: match.id,
+      candidate: serializePost(candidate, viewer),
+      totalScore: match.totalScore,
+      scoreTier: match.scoreTier,
+      scores: {
+        text: match.textScore,
+        category: match.categoryScore,
+        location: match.locationScore,
+        time: match.timeScore,
+        image: match.imageScore,
+        ocr: match.ocrScore
+      },
+      explanation: visibleExplanation(candidate, match.explanation),
+      matcherVersion: match.matcherVersion,
+      calculatedAt: match.updatedAt
+    }))
+  };
+}
+
 function makeMediaStorage(postId: string, mediaId: string, extension: string) {
   const filename = `${mediaId}.${extension}`;
   const dir = path.resolve(mediaRoot, postId);
@@ -202,7 +261,15 @@ export const postService = {
 
   async listMine(ownerId: string, filters: ListOwnPostsQuery) {
     const result = await postRepository.listByOwner(ownerId, filters);
-    return { ...result, items: result.items.map((post) => serializePost(post, { sub: ownerId, email: "", roles: [], sessionVersion: 0 })) };
+    const summaries = await matchingService.listSummaries(result.items.map((post) => post.id));
+    const viewer = { sub: ownerId, email: "", roles: [], sessionVersion: 0 } satisfies AccessTokenPayload;
+    return {
+      ...result,
+      items: result.items.map((post) => ({
+        ...serializePost(post, viewer),
+        matchSummary: summaries.get(post.id)
+      }))
+    };
   },
 
   async getPost(postId: string, viewer?: AccessTokenPayload) {
@@ -234,6 +301,10 @@ export const postService = {
       expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
     });
     if (!post) throw new HttpError(500, "Khong tao duoc bai dang");
+    if (input.analysisSignals) {
+      await matchingRepository.replaceAnalysisTags(postId, input.analysisSignals);
+    }
+    await refreshMatchingBestEffort(postId, "create");
     return serializePost(post, viewer);
   },
 
@@ -262,7 +333,22 @@ export const postService = {
 
     await postRepository.updatePost(postId, update);
     const updated = await requireOwnedPost(postId, ownerId);
+    if (updated.status === "OPEN" || updated.status === "MATCHED") {
+      await refreshMatchingBestEffort(postId, "update");
+    }
     return serializePost(updated, viewer);
+  },
+
+  async listPostMatches(postId: string, viewer: AccessTokenPayload) {
+    const source = await requireMatchAccess(postId, viewer);
+    const payload = await matchingService.getStoredResults(postId);
+    return serializeMatchingResult(source, payload, viewer);
+  },
+
+  async recalculatePostMatches(postId: string, viewer: AccessTokenPayload) {
+    const source = await requireMatchAccess(postId, viewer);
+    const payload = await matchingService.runForPost(postId);
+    return serializeMatchingResult(source, payload, viewer);
   },
 
   async softDeletePost(postId: string, ownerId: string) {

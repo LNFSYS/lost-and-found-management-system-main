@@ -68,7 +68,12 @@ export const mediaParamSchema = z.object({ postId: uuid, mediaId: uuid });
 
 export const createPostSchema = z.object({
   type: postType,
-  ...basePostFields
+  ...basePostFields,
+  analysisSignals: z.object({
+    visualAttributes: z.array(z.string().trim().min(1).max(100)).max(12).default([]),
+    visibleText: z.array(z.string().trim().min(1).max(100)).max(12).default([]),
+    confidence: z.coerce.number().min(0).max(1)
+  }).optional()
 }).superRefine(validatePostShape);
 
 export const updatePostSchema = z.object({
@@ -107,8 +112,13 @@ export const uploadMediaSchema = z.object({
   sortOrder: z.coerce.number().int().min(0).max(999).optional()
 });
 
+export const analyzePostImageSchema = z.object({
+  type: postType
+});
+
 export type CreatePostInput = z.infer<typeof createPostSchema>;
 export type UpdatePostInput = z.infer<typeof updatePostSchema>;
 export type ListPostsQuery = z.infer<typeof listPostsQuerySchema>;
 export type ListOwnPostsQuery = z.infer<typeof listOwnPostsQuerySchema>;
 export type UploadMediaInput = z.infer<typeof uploadMediaSchema>;
+export type AnalyzePostImageInput = z.infer<typeof analyzePostImageSchema>;

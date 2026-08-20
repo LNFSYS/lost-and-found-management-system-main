@@ -1,13 +1,15 @@
-import { ArrowDown, ArrowRight, CalendarCheck, Check, Clock3, MapPin, ScanSearch, ShieldCheck, Sparkles } from "lucide-react";
+import { ArrowDown, ArrowRight, CalendarCheck, Check, Clock3, Image, LoaderCircle, MapPin, RotateCcw, ScanSearch, ShieldCheck, Sparkles } from "lucide-react";
 import { motion } from "motion/react";
-import { useState, type ReactNode } from "react";
-import { Link } from "react-router-dom";
-import { StoryPostForm } from "../components/story-post-form";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { StoryPostForm, type StoryPostCreatedEvent } from "../components/story-post-form";
+import { api, type ImageAnalysisResult, type PostMatchResult, type PostSummary } from "../services/api";
 import heroCampusImage from "../assets/fptu-da-nang-campus.jpg";
 
 type StorySide = "LOST" | "FOUND";
 type StageAlign = "left" | "center" | "right";
 type ConnectorDirection = "left-right" | "right-left" | "left-center" | "center-right" | "right-center";
+type WorkflowPhase = "idle" | "analyzing" | "draft-ready" | "searching" | "results" | "no-results";
 
 const storyCopy: Record<StorySide, { label: string; title: string; description: string; item: string; time: string }> = {
   LOST: { label: "Tôi làm mất đồ", title: "Gửi đi một dấu hiệu", description: "Mô tả điều bạn còn nhớ. Hệ thống sẽ lưu lại và tìm trong các báo nhặt được đang mở.", item: "Ví da màu đen", time: "Khoảng 14:10" },
@@ -58,13 +60,299 @@ function StoryStage({ children, className, id }: { children: ReactNode; classNam
   return <motion.section id={id} className={`story-stage ${className}`} {...stageMotion}>{children}</motion.section>;
 }
 
+function wait(milliseconds: number) {
+  return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
+}
+
+function postLocation(post: PostSummary) {
+  return [
+    post.location.building?.name,
+    post.location.area?.name,
+    post.location.roomText,
+    post.location.customLocation
+  ].filter(Boolean).join(" · ") || "Chưa công khai vị trí";
+}
+
+function WorkflowPostImage({ post }: { post: PostSummary }) {
+  const mediaPath = post.media[0]?.url;
+  const [source, setSource] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!mediaPath) {
+      setSource(null);
+      return;
+    }
+    let active = true;
+    let objectUrl: string | null = null;
+    api.getPostMedia(mediaPath)
+      .then((blob) => {
+        if (!active) return;
+        objectUrl = URL.createObjectURL(blob);
+        setSource(objectUrl);
+      })
+      .catch(() => { if (active) setSource(null); });
+    return () => {
+      active = false;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [mediaPath]);
+
+  return source
+    ? <img src={source} alt="" loading="lazy" />
+    : <span className="workflow-result-image__fallback"><Image aria-hidden="true" /></span>;
+}
+
+function WorkflowResultCard({ match }: { match: PostMatchResult }) {
+  const post = match.candidate;
+  return <Link className="workflow-result-card" to={`/posts/${post.id}`}>
+    <span className="workflow-result-image"><WorkflowPostImage post={post} /></span>
+    <span className="workflow-result-card__copy">
+      <small>{post.type} · {post.category?.name ?? "Chưa phân loại"}</small>
+      <strong>{post.title}</strong>
+      <span>{postLocation(post)}</span>
+      <span className="workflow-result-score">{Math.round(match.totalScore * 100)}% tương đồng</span>
+      <em>Xem chi tiết <ArrowRight size={15} /></em>
+    </span>
+  </Link>;
+}
+
+function ActiveImageAnalysisPanel({
+  phase,
+  previewUrls,
+  result,
+  onReviewDraft,
+  onReset
+}: {
+  phase: "analyzing" | "draft-ready";
+  previewUrls: string[];
+  result: ImageAnalysisResult | null;
+  onReviewDraft: () => void;
+  onReset: () => void;
+}) {
+  const isReady = phase === "draft-ready" && result;
+  const [activeImageIndex, setActiveImageIndex] = useState(0);
+  const [activeStep, setActiveStep] = useState(0);
+
+  useEffect(() => {
+    setActiveImageIndex(0);
+    setActiveStep(0);
+    if (phase !== "analyzing") return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const imageTimer = previewUrls.length > 1
+      ? window.setInterval(() => setActiveImageIndex((current) => (current + 1) % previewUrls.length), 1350)
+      : null;
+    const stepTimer = window.setInterval(() => setActiveStep((current) => (current + 1) % 4), 900);
+    return () => {
+      if (imageTimer) window.clearInterval(imageTimer);
+      window.clearInterval(stepTimer);
+    };
+  }, [phase, previewUrls.length]);
+
+  const analysisSteps = [
+    "Đọc hình dạng, màu sắc và chất liệu",
+    "Đối chiếu hãng, model và dòng chữ",
+    "Nhận diện phụ kiện và dấu hiệu riêng",
+    "Tổng hợp bản nháp từ mọi góc chụp"
+  ];
+
+  return <div className="analysis-layout workflow-analysis-layout" aria-busy={!isReady}>
+    <div className="story-heading story-heading--left stage-copy-card">
+      <p className="story-index">{isReady ? "Bản nháp đã sẵn sàng" : "Gemini đang hỗ trợ đọc ảnh"}</p>
+      <h2>{isReady ? "Những chi tiết nhìn thấy đã được đưa vào form." : "Ảnh đang được quét theo từng lớp nhận dạng."}</h2>
+      <p>{isReady
+        ? "Tên, mô tả và danh mục là gợi ý từ ảnh. Bạn vẫn là người kiểm tra, bổ sung vị trí, thời gian và quyết định đăng."
+        : "Hệ thống chỉ phân tích nội dung nhìn thấy trong ảnh, không suy đoán vị trí, thời gian hay quyền sở hữu."}</p>
+      <div className="workflow-analysis-actions">
+        {isReady && <button type="button" onClick={onReviewDraft}>Kiểm tra bản nháp <ArrowRight size={17} /></button>}
+        <button type="button" className="is-secondary" onClick={onReset}><RotateCcw size={16} /> Kết thúc phiên</button>
+      </div>
+    </div>
+    <div className={`workflow-image-scanner ${isReady ? "is-complete" : "is-scanning"}`} role="status" aria-live="polite">
+      <div className="workflow-image-scanner__visual">
+        <div className="workflow-image-scanner__media">
+          {previewUrls.length
+            ? previewUrls.map((url, index) => <img className={index === activeImageIndex ? "is-active" : ""} src={url} alt={`Góc chụp vật phẩm ${index + 1}`} key={url} />)
+            : <span><Image /></span>}
+        </div>
+        {!isReady && <div className="workflow-image-scanner__beam" aria-hidden="true"><i /></div>}
+        <span className="workflow-image-scanner__corner is-top-left" />
+        <span className="workflow-image-scanner__corner is-top-right" />
+        <span className="workflow-image-scanner__corner is-bottom-left" />
+        <span className="workflow-image-scanner__corner is-bottom-right" />
+        <strong className="workflow-image-scanner__status">
+          {isReady ? <><Check /> Đã tổng hợp {result.imageCount || previewUrls.length} ảnh</> : <><LoaderCircle /> Đang quét ảnh {activeImageIndex + 1}/{previewUrls.length}</>}
+        </strong>
+        {previewUrls.length > 1 && <div className="workflow-image-scanner__filmstrip" aria-hidden="true">
+          {previewUrls.map((url, index) => <span className={index === activeImageIndex ? "is-active" : ""} key={url}><img src={url} alt="" /><i>{index + 1}</i></span>)}
+        </div>}
+      </div>
+      <div className="workflow-analysis-readout" aria-live="polite">
+        {isReady ? <>
+          <span><small>Tên gợi ý</small><strong>{result.title}</strong></span>
+          <span><small>Danh mục</small><strong>{result.suggestedCategory?.name ?? "Cần người dùng chọn"}</strong></span>
+          <span><small>Độ tin cậy hỗ trợ</small><strong>{Math.round(result.confidence * 100)}%</strong></span>
+          <span><small>Nguyên tắc</small><strong>Người dùng kiểm tra lại</strong></span>
+        </> : analysisSteps.map((step, index) => <span className={index === activeStep ? "is-active" : ""} key={step}>
+          <small>0{index + 1}</small><strong>{step}</strong>
+        </span>)}
+      </div>
+    </div>
+  </div>;
+}
+
+function ActiveSearchPanel({
+  phase,
+  storySide,
+  createdPost,
+  suggestions,
+  error,
+  onReset
+}: {
+  phase: "searching" | "results" | "no-results";
+  storySide: StorySide;
+  createdPost: StoryPostCreatedEvent["post"] | null;
+  suggestions: PostMatchResult[];
+  error: string;
+  onReset: () => void;
+}) {
+  const searching = phase === "searching";
+  const oppositeType = storySide === "LOST" ? "FOUND" : "LOST";
+  return <div className="processing-inner">
+    <div className="processing-copy">
+      <p className="story-index">{searching ? "Đang đối chiếu dữ liệu thật" : "Đã hoàn tất lượt quét"}</p>
+            <h2>{searching ? `Đang chấm điểm các bài ${oppositeType} có khả năng liên quan.` : suggestions.length ? `Tìm thấy ${suggestions.length} ứng viên vượt ngưỡng lưu.` : "Chưa có ứng viên vượt ngưỡng matching."}</h2>
+      <p>Hệ thống so sánh mô tả, danh mục, vị trí, thời gian, tín hiệu ảnh và OCR. Điểm số chỉ hỗ trợ rà soát; quyền sở hữu vẫn cần bằng chứng và con người xác minh.</p>
+      <div className="processing-stats">
+        <span><strong>{createdPost ? "1" : "0"}</strong><small>bài vừa đăng</small></span>
+        <span><strong>{oppositeType}</strong><small>loại đang tìm</small></span>
+        <span><strong>{searching ? "..." : suggestions.length}</strong><small>ứng viên</small></span>
+      </div>
+      {error && <div className="workflow-search-error">{error}</div>}
+      {!searching && <button type="button" className="workflow-reset-button" onClick={onReset}><RotateCcw size={16} /> Kết thúc phiên</button>}
+    </div>
+    <div className={`scan-board workflow-scan-board ${searching ? "is-searching" : "is-complete"}`}>
+      <div className="scan-status">
+        {searching ? <LoaderCircle size={14} /> : <Check size={14} />}
+        <span>{searching ? "Đang quét báo cáo trong hệ thống" : "Đã hoàn tất lượt quét hiện tại"}</span>
+      </div>
+      {searching && <div className="workflow-scan-beam" aria-hidden="true"><i /></div>}
+      {(searching ? [0, 1, 2] : suggestions.slice(0, 3)).map((item, index) => typeof item === "number"
+        ? <article className="workflow-scan-placeholder" key={item}><small>{oppositeType} · ĐANG CHẤM ĐIỂM</small><strong>Đối chiếu ứng viên {index + 1}</strong><span>Text · danh mục · vị trí · thời gian · ảnh · OCR</span></article>
+        : <article className={index === 0 ? "is-candidate" : ""} key={item.matchId}>
+          <small>{item.candidate.type} · {item.candidate.category?.name ?? "Chưa phân loại"}</small>
+          <strong>{item.candidate.title}</strong>
+          <span>{postLocation(item.candidate)}</span>
+          {index === 0 && <b>{Math.round(item.totalScore * 100)}% · ứng viên cao nhất</b>}
+        </article>)}
+      {!searching && suggestions.length === 0 && <div className="workflow-no-candidates">
+        <ScanSearch />
+        <strong>Chưa tìm thấy ứng viên</strong>
+        <span>Bài của bạn vẫn ở trạng thái mở và có thể được đối chiếu khi có báo cáo mới.</span>
+      </div>}
+    </div>
+  </div>;
+}
+
 export function HomePage() {
+  const navigate = useNavigate();
   const [storySide, setStorySide] = useState<StorySide>("LOST");
+  const [workflowPhase, setWorkflowPhase] = useState<WorkflowPhase>("idle");
+  const [workflowSession, setWorkflowSession] = useState(0);
+  const [analysisFiles, setAnalysisFiles] = useState<File[]>([]);
+  const [analysisResult, setAnalysisResult] = useState<ImageAnalysisResult | null>(null);
+  const [createdPost, setCreatedPost] = useState<StoryPostCreatedEvent["post"] | null>(null);
+  const [suggestions, setSuggestions] = useState<PostMatchResult[]>([]);
+  const [workflowError, setWorkflowError] = useState("");
+  const workflowRequest = useRef(0);
   const selected = storyCopy[storySide];
+  const analysisPreviewUrls = useMemo(
+    () => analysisFiles.map((file) => URL.createObjectURL(file)),
+    [analysisFiles]
+  );
+
+  useEffect(() => () => {
+    analysisPreviewUrls.forEach((url) => URL.revokeObjectURL(url));
+  }, [analysisPreviewUrls]);
+
+  function scrollToStage(selector: string, delay = 0) {
+    window.setTimeout(() => {
+      document.querySelector(selector)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, delay);
+  }
+
+  function resetWorkflow() {
+    workflowRequest.current += 1;
+    setWorkflowPhase("idle");
+    setAnalysisFiles([]);
+    setAnalysisResult(null);
+    setCreatedPost(null);
+    setSuggestions([]);
+    setWorkflowError("");
+    setWorkflowSession((current) => current + 1);
+  }
 
   function chooseStory(side: StorySide) {
+    resetWorkflow();
     setStorySide(side);
-    document.querySelector("#quick-story")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    scrollToStage("#quick-story");
+  }
+
+  function startImageAnalysis(files: File[]) {
+    workflowRequest.current += 1;
+    setAnalysisFiles(files);
+    setAnalysisResult(null);
+    setCreatedPost(null);
+    setSuggestions([]);
+    setWorkflowError("");
+    setWorkflowPhase("analyzing");
+    scrollToStage("#system-analysis", 60);
+  }
+
+  function completeImageAnalysis(result: ImageAnalysisResult) {
+    setAnalysisResult(result);
+    setWorkflowPhase("draft-ready");
+    scrollToStage("#quick-story", 650);
+  }
+
+  function failImageAnalysis(message: string) {
+    setWorkflowError(message);
+    setWorkflowPhase("idle");
+    setAnalysisFiles([]);
+  }
+
+  function resetImageAnalysis() {
+    workflowRequest.current += 1;
+    setWorkflowPhase("idle");
+    setAnalysisFiles([]);
+    setAnalysisResult(null);
+    setWorkflowError("");
+  }
+
+  async function handlePostCreated(event: StoryPostCreatedEvent) {
+    const requestId = ++workflowRequest.current;
+    setCreatedPost(event.post);
+    setSuggestions([]);
+    setWorkflowError("");
+    setWorkflowPhase("searching");
+    scrollToStage("#matching-search", 80);
+
+    try {
+      const [response] = await Promise.all([
+        api.getPostMatches(event.post.id),
+        wait(1600)
+      ]);
+      if (requestId !== workflowRequest.current) return;
+      const items = response.results;
+      setSuggestions(items);
+      setWorkflowPhase(items.length ? "results" : "no-results");
+      window.setTimeout(() => {
+        if (requestId === workflowRequest.current) navigate(`/posts/${event.post.id}/matches`);
+      }, 650);
+    } catch (reason) {
+      if (requestId !== workflowRequest.current) return;
+      setWorkflowError(reason instanceof Error ? reason.message : "Không thể tải gợi ý lúc này.");
+      setWorkflowPhase("no-results");
+    }
   }
 
   return <div className="home-page">
@@ -137,7 +425,16 @@ export function HomePage() {
         <StageMarker number="02" label="Mô tả nhanh" align="right" />
         <div className="input-story">
           <div className="story-heading story-heading--left stage-copy-card"><p className="story-index">Thông tin ban đầu</p><h2>{selected.title}</h2><p>{selected.description}</p><div className="stage-benefits"><span><Check size={15} /> Nhập nhanh trong vài phút</span><span><Check size={15} /> Có thể thêm ảnh minh chứng</span><span><Check size={15} /> Dữ liệu được chuyển sang bước so sánh</span></div></div>
-          <StoryPostForm type={storySide} />
+          <StoryPostForm
+            key={`${storySide}-${workflowSession}`}
+            type={storySide}
+            onAnalysisStart={startImageAnalysis}
+            onAnalysisComplete={completeImageAnalysis}
+            onAnalysisError={failImageAnalysis}
+            onAnalysisReset={resetImageAnalysis}
+            onPostCreated={handlePostCreated}
+            onSessionReset={resetWorkflow}
+          />
         </div>
         <div className="data-bridge" aria-hidden="true"><span>{selected.item}</span><span>Tòa Alpha</span><span>{selected.time}</span><i /></div>
         <StoryConnector direction="right-left" />
@@ -145,7 +442,15 @@ export function HomePage() {
 
       <StoryStage className="story-section analysis-story story-stage--analysis" id="system-analysis">
         <StageMarker number="03" label="Hệ thống xử lý" align="left" />
-        <div className="analysis-layout">
+        {workflowPhase === "analyzing" || workflowPhase === "draft-ready"
+          ? <ActiveImageAnalysisPanel
+              phase={workflowPhase}
+              previewUrls={analysisPreviewUrls}
+              result={analysisResult}
+              onReviewDraft={() => scrollToStage("#quick-story")}
+              onReset={resetWorkflow}
+            />
+          : <div className="analysis-layout">
           <div className="story-heading story-heading--left stage-copy-card"><p className="story-index">Dữ liệu đi vào hệ thống</p><h2>Những chi tiết rời rạc được sắp xếp lại.</h2><p>Thông tin được chuẩn hóa thành các dấu hiệu có thể so sánh. Đây là bước chuẩn bị dữ liệu, chưa phải kết luận matching.</p><div className="stage-note"><Sparkles size={18} /><span>Mục tiêu là biến mô tả tự do thành các tín hiệu rõ ràng: tên đồ, nơi xảy ra, thời gian và đặc điểm nhận dạng.</span></div></div>
           <div className="analysis-pipeline">
             {[
@@ -155,14 +460,23 @@ export function HomePage() {
               { title: "Sẵn sàng so sánh", desc: "Đưa vào hàng chờ tìm báo cáo phù hợp." }
             ].map((step, index) => <motion.article key={step.title} initial={{ opacity: 0, y: 22 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: index * 0.11 }}><span>0{index + 1}</span><strong>{step.title}</strong><small>{step.desc}</small><i><Check size={15} /></i></motion.article>)}
           </div>
-        </div>
+        </div>}
         <StoryConnector direction="left-right" />
       </StoryStage>
 
       <StoryStage className="processing-story story-stage--search" id="matching-search">
         <StageMarker number="04" label="Tìm kiếm và so sánh" align="right" dark />
-        <div className="processing-inner">
-          <div className="processing-copy"><p className="story-index">Hệ thống tiếp nhận</p><h2>Phần còn lại để hệ thống tìm kiếm.</h2><p>Thông tin được kiểm tra, phân loại và so sánh với các báo cáo đang mở. Đây là gợi ý matching theo nhiều tín hiệu, không phải kết luận quyền sở hữu.</p><div className="processing-stats"><span><strong>24/7</strong><small>theo dõi báo cáo</small></span><span><strong>4</strong><small>tín hiệu chính</small></span><span><strong>1</strong><small>hàng chờ staff</small></span></div><div className="signal-list"><span><Check /> Dữ liệu hợp lệ</span><span><Check /> Cùng danh mục</span><span><Check /> Gần thời gian</span><span><Check /> Cùng khu vực</span></div></div>
+        {workflowPhase === "searching" || workflowPhase === "results" || workflowPhase === "no-results"
+          ? <ActiveSearchPanel
+              phase={workflowPhase}
+              storySide={storySide}
+              createdPost={createdPost}
+              suggestions={suggestions}
+              error={workflowError}
+              onReset={resetWorkflow}
+            />
+          : <div className="processing-inner">
+          <div className="processing-copy"><p className="story-index">Hệ thống tiếp nhận</p><h2>Phần còn lại để hệ thống tìm kiếm.</h2><p>Thông tin được kiểm tra, phân loại và so sánh với các báo cáo đang mở. Đây là gợi ý matching theo nhiều tín hiệu, không phải kết luận quyền sở hữu.</p><div className="processing-stats"><span><strong>24/7</strong><small>theo dõi báo cáo</small></span><span><strong>6</strong><small>nhóm tín hiệu</small></span><span><strong>1</strong><small>quyết định con người</small></span></div><div className="signal-list"><span><Check /> Mô tả &amp; OCR</span><span><Check /> Danh mục &amp; ảnh</span><span><Check /> Gần thời gian</span><span><Check /> Cùng khu vực</span></div></div>
           <div className="scan-board">
             <div className="scan-status"><ScanSearch size={14} /><span>Đang quét báo cáo phù hợp</span></div>
             <motion.div className="scan-line" aria-hidden="true" animate={{ top: ["7%", "91%", "91%", "7%"], opacity: [.25, 1, 1, .25] }} transition={{ duration: 3.2, repeat: Infinity, ease: "easeInOut", times: [0, .46, .54, 1] }}><i /></motion.div>
@@ -170,16 +484,50 @@ export function HomePage() {
             <article className="is-candidate"><small>FOUND #219</small><strong>Ví da màu đen</strong><span>Alpha · 14:18</span><b>Ứng viên phù hợp</b></article>
             <article><small>FOUND #203</small><strong>Ví màu nâu</strong><span>Alpha · 09:20</span></article>
           </div>
-        </div>
+        </div>}
         <StoryConnector direction="right-left" dark />
       </StoryStage>
 
       <StoryStage className="match-moment story-stage--match" id="potential-match">
         <StageMarker number="05" label="Gợi ý phù hợp" align="left" />
-        <div className="match-copy"><p className="story-index">Gợi ý phù hợp</p><h2>Có vẻ hai câu chuyện đang nói về cùng một món đồ.</h2><p>Mức tương đồng chỉ mang tính gợi ý. Hệ thống không tự động giao đồ dù điểm matching cao.</p></div>
-        <div className="match-stage"><article className="match-card match-card--lost"><span>LOST</span><h3>Ví da màu đen</h3><p>Alpha · 14:10</p></article><motion.div className="match-score" initial={{ scale: .72 }} whileInView={{ scale: 1 }} viewport={{ once: true }} transition={{ type: "spring", stiffness: 220 }}><ScanSearch size={24} /><strong>92%</strong><small>tương đồng</small></motion.div><article className="match-card match-card--found"><span>FOUND</span><h3>Ví da màu đen</h3><p>Alpha · 14:18</p></article></div>
-        <div className="match-alert"><ShieldCheck size={18} /><span>Gợi ý này sẽ được đưa vào danh sách cần staff xác minh trước khi liên hệ bàn giao.</span></div>
-        <div className="match-reasons"><span><Check /> Cùng danh mục</span><span><Check /> Cùng tòa Alpha</span><span><Check /> Cách nhau 8 phút</span><span><Check /> Mô tả tương đồng</span></div>
+        {workflowPhase === "results" ? <>
+          <div className="match-copy workflow-match-copy">
+            <p className="story-index">Kết quả từ dữ liệu đang mở</p>
+            <h2>Có {suggestions.length} bài {storySide === "LOST" ? "FOUND" : "LOST"} đạt ngưỡng matching để bạn đối chiếu.</h2>
+            <p>Mỗi ứng viên có tổng điểm, sáu điểm thành phần và lý do cụ thể. Hệ thống không kết luận quyền sở hữu và không tự động trao đồ.</p>
+            {createdPost && <Link className="workflow-created-post" to={`/posts/${createdPost.id}`}>
+              <span>Bài vừa đăng</span><strong>{createdPost.title}</strong><ArrowRight size={17} />
+            </Link>}
+          </div>
+          <div className="workflow-results-grid">
+            {suggestions.map((match) => <WorkflowResultCard key={match.matchId} match={match} />)}
+          </div>
+          <div className="match-alert"><ShieldCheck size={18} /><span>Mọi ứng viên cần được người dùng xem lại và staff xác minh trước quy trình claim hoặc bàn giao.</span></div>
+          <button type="button" className="workflow-reset-button workflow-reset-button--light" onClick={resetWorkflow}><RotateCcw size={16} /> Kết thúc phiên và trở về storytelling</button>
+        </> : workflowPhase === "no-results" ? <>
+          <div className="match-copy workflow-match-copy">
+            <p className="story-index">Chưa có ứng viên trong lượt quét này</p>
+            <h2>Bài đã được đăng và vẫn tiếp tục ở trạng thái mở.</h2>
+            <p>Khi có bài {storySide === "LOST" ? "FOUND" : "LOST"} cùng danh mục xuất hiện, bạn có thể xem lại trong bảng tin. Không có kết quả lúc này không đồng nghĩa món đồ không còn trong hệ thống.</p>
+          </div>
+          <div className="workflow-empty-match">
+            <ScanSearch />
+            <strong>0 ứng viên vượt ngưỡng matching</strong>
+            <span>{workflowError || "Bạn có thể tiếp tục theo dõi bài trong mục Bài đăng của tôi."}</span>
+            <Link to={createdPost ? `/posts/${createdPost.id}/matches` : "/my-posts"}>Mở kết quả matching <ArrowRight size={16} /></Link>
+          </div>
+          <button type="button" className="workflow-reset-button workflow-reset-button--light" onClick={resetWorkflow}><RotateCcw size={16} /> Kết thúc phiên</button>
+        </> : workflowPhase === "searching" ? <div className="workflow-match-waiting">
+          <LoaderCircle />
+          <p className="story-index">Lượt quét đang chạy</p>
+          <h2>Kết quả sẽ xuất hiện tại đây.</h2>
+          <p>Hệ thống đang chấm điểm bài đối ứng theo mô tả, danh mục, vị trí, thời gian, tag ảnh và OCR.</p>
+        </div> : <>
+          <div className="match-copy"><p className="story-index">Gợi ý phù hợp</p><h2>Có vẻ hai câu chuyện đang nói về cùng một món đồ.</h2><p>Mức tương đồng chỉ mang tính gợi ý. Hệ thống không tự động giao đồ dù điểm matching cao.</p></div>
+          <div className="match-stage"><article className="match-card match-card--lost"><span>LOST</span><h3>Ví da màu đen</h3><p>Alpha · 14:10</p></article><motion.div className="match-score" initial={{ scale: .72 }} whileInView={{ scale: 1 }} viewport={{ once: true }} transition={{ type: "spring", stiffness: 220 }}><ScanSearch size={24} /><strong>92%</strong><small>tương đồng</small></motion.div><article className="match-card match-card--found"><span>FOUND</span><h3>Ví da màu đen</h3><p>Alpha · 14:18</p></article></div>
+          <div className="match-alert"><ShieldCheck size={18} /><span>Gợi ý này sẽ được đưa vào danh sách cần staff xác minh trước khi liên hệ bàn giao.</span></div>
+          <div className="match-reasons"><span><Check /> Cùng danh mục</span><span><Check /> Cùng tòa Alpha</span><span><Check /> Cách nhau 8 phút</span><span><Check /> Mô tả tương đồng</span></div>
+        </>}
         <StoryConnector direction="left-center" />
       </StoryStage>
 
