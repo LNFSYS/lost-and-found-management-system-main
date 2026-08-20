@@ -65,5 +65,10 @@ export const env = {
     user: required("SMTP_USER"),
     pass: required("SMTP_PASS"),
     from: required("SMTP_FROM")
+  },
+  gemini: {
+    apiKey: process.env.GEMINI_API_KEY?.trim() || null,
+    model: process.env.GEMINI_MODEL?.trim() || "gemini-3.6-flash",
+    timeoutMs: number("GEMINI_TIMEOUT_MS", 30_000)
   }
 };

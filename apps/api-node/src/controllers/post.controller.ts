@@ -1,6 +1,8 @@
 import type { Request, Response } from "express";
 import { postService } from "../services/post.service.js";
+import { geminiImageService } from "../services/gemini-image.service.js";
 import {
+  analyzePostImageSchema,
   createPostSchema,
   idParamSchema,
   listOwnPostsQuerySchema,
@@ -15,7 +17,21 @@ function routeId(request: Request) {
   return idParamSchema.parse(request.params).id;
 }
 
+function uploadedAnalysisFiles(request: Request) {
+  if (request.file) return [request.file];
+  if (!request.files) return [];
+  if (Array.isArray(request.files)) return request.files;
+  return [...(request.files.files ?? []), ...(request.files.file ?? [])];
+}
+
 export const postController = {
+  async analyzeImage(request: Request, response: Response) {
+    const files = uploadedAnalysisFiles(request);
+    if (!files.length) throw new HttpError(400, "Cần gửi ít nhất một ảnh vật phẩm với field name là files.");
+    const input = analyzePostImageSchema.parse(request.body);
+    response.json(await geminiImageService.analyzePostImages(files, input.type));
+  },
+
   async getFormCatalog(_request: Request, response: Response) {
     response.json(await postService.getFormCatalog());
   },
@@ -30,6 +46,14 @@ export const postController = {
 
   async getPost(request: Request, response: Response) {
     response.json(await postService.getPost(routeId(request), request.auth));
+  },
+
+  async listMatches(request: Request, response: Response) {
+    response.json(await postService.listPostMatches(routeId(request), request.auth!));
+  },
+
+  async recalculateMatches(request: Request, response: Response) {
+    response.json(await postService.recalculatePostMatches(routeId(request), request.auth!));
   },
 
   async createPost(request: Request, response: Response) {

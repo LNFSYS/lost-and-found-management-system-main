@@ -1,4 +1,4 @@
-import { ArrowLeft, ArrowRight, CalendarClock, Clock3, Eye, LockKeyhole, MapPin, PackageCheck, Tag, UserRound } from "lucide-react";
+import { ArrowLeft, ArrowRight, CalendarClock, Clock3, Eye, LockKeyhole, MapPin, PackageCheck, ScanSearch, Tag, UserRound } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { PostCard, PostImage } from "./posts-page";
@@ -58,7 +58,10 @@ export function PostDetailPage() {
 
   const location = [post.location.building?.name, post.location.roomText, post.location.area?.name, post.location.customLocation].filter(Boolean).join(" · ");
   return <main className="post-detail-page">
-    <Link className="post-detail-back" to="/posts"><ArrowLeft /> Quay lại bài đăng</Link>
+    <div className="post-detail-topline">
+      <Link className="post-detail-back" to="/posts"><ArrowLeft /> Quay lại bài đăng</Link>
+      {post.canEdit && <Link className="post-detail-matches" to={`/posts/${post.id}/matches`}><ScanSearch /> Xem phân tích matching</Link>}
+    </div>
     <div className="post-detail-grid">
       <section className="post-detail-visual" aria-label="Ảnh vật phẩm"><PostImage post={post} detail /></section>
       <section className="post-detail-content">

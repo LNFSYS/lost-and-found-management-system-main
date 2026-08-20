@@ -1,4 +1,4 @@
-import { ArrowLeft, ArrowRight, CalendarClock, Files, ImageOff, LockKeyhole, MapPin, Plus, Search, SlidersHorizontal } from "lucide-react";
+import { ArrowLeft, ArrowRight, CalendarClock, Files, ImageOff, LockKeyhole, MapPin, Plus, ScanSearch, Search, SlidersHorizontal } from "lucide-react";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { api, type PostCatalog, type PostListFilters, type PostListResponse, type PostSummary } from "../services/api";
@@ -64,6 +64,11 @@ export function PostCard({ post }: { post: PostSummary }) {
         <p><CalendarClock /> {formatDate(post.lostFoundAt)}</p>
       </div>
       <p className="post-card__description">{post.description ?? "Chi tiết nhận dạng được giữ riêng để hỗ trợ xác minh quyền sở hữu."}</p>
+      {post.canEdit && post.matchSummary && <Link className="post-card__match-summary" to={`/posts/${post.id}/matches`}>
+        <ScanSearch />
+        <span><strong>{post.matchSummary.suggestionCount} gợi ý</strong><small>{post.matchSummary.topScore === null ? "Chưa có điểm" : `Cao nhất ${Math.round(post.matchSummary.topScore * 100)}%`}</small></span>
+        <ArrowRight />
+      </Link>}
       <footer>
         <div className="post-owner"><span>{initials(post.owner.fullName)}</span><strong>{post.owner.fullName}</strong></div>
         <Link className="post-detail-link" to={`/posts/${post.id}`}>Xem chi tiết <ArrowRight /></Link>
@@ -72,9 +77,9 @@ export function PostCard({ post }: { post: PostSummary }) {
   </article>;
 }
 
-export function PostsPage() {
+export function PostsPage({ initialTab = "explore" }: { initialTab?: BoardTab }) {
   const initialQuery = useMemo(() => new URLSearchParams(window.location.search), []);
-  const [tab, setTab] = useState<BoardTab>("explore");
+  const [tab, setTab] = useState<BoardTab>(initialTab);
   const [catalog, setCatalog] = useState<PostCatalog | null>(null);
   const [result, setResult] = useState<PostListResponse | null>(null);
   const [filters, setFilters] = useState<PostListFilters>({

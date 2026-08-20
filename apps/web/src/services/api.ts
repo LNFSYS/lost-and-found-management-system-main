@@ -23,8 +23,25 @@ export interface CreatePostPayload {
   lostFoundAt: string;
   handoverPointId?: string | null;
   visibilityMode?: "PUBLIC" | "PRIVATE_DETAILS";
+  analysisSignals?: {
+    visualAttributes: string[];
+    visibleText: string[];
+    confidence: number;
+  };
 }
 export interface CreatedPost { id: string; type: "LOST" | "FOUND"; title: string; status: string; createdAt: string; }
+export interface ImageAnalysisResult {
+  title: string;
+  description: string;
+  suggestedCategory: { id: string; name: string; parentId: string | null } | null;
+  visualAttributes: string[];
+  visibleText: string[];
+  confidence: number;
+  warnings: string[];
+  assistedBy: string;
+  model: string;
+  imageCount: number;
+}
 export interface PostSummary {
   id: string;
   type: "LOST" | "FOUND";
@@ -45,6 +62,51 @@ export interface PostSummary {
   media: Array<{ id: string; url: string; mediaKind: "ITEM" | "EVIDENCE" }>;
   canEdit: boolean;
   createdAt: string;
+  matchSummary?: {
+    candidateCount: number;
+    suggestionCount: number;
+    topScore: number | null;
+    topTier: MatchTier | null;
+    lastCalculatedAt: string | null;
+  };
+}
+export type MatchTier = "WEAK" | "SUGGESTION" | "NOTIFY" | "HIGH_CONFIDENCE";
+export interface MatchExplanation {
+  tier: MatchTier;
+  summary: string;
+  reasons: string[];
+  matchedTokens: string[];
+  matchedImageTags: string[];
+  matchedOcrTokens: string[];
+  locationReason: string;
+  categoryReason: string;
+  daysDiff: number | null;
+  penalties: string[];
+}
+export interface PostMatchResult {
+  matchId: string;
+  candidate: PostSummary;
+  totalScore: number;
+  scoreTier: MatchTier;
+  scores: {
+    text: number;
+    category: number;
+    location: number;
+    time: number;
+    image: number;
+    ocr: number;
+  };
+  explanation: MatchExplanation | null;
+  matcherVersion: string;
+  calculatedAt: string;
+}
+export interface PostMatchesResponse {
+  source: PostSummary;
+  matcherVersion: string;
+  calculatedAt: string | null;
+  thresholds: { weak: number; suggestion: number; notification: number; highConfidence: number };
+  weights: { text: number; category: number; location: number; time: number; image: number; ocr: number };
+  results: PostMatchResult[];
 }
 export interface PostListResponse { total: number; page: number; pageSize: number; items: PostSummary[]; }
 export interface PostListFilters {
@@ -127,12 +189,20 @@ export const api = {
   getPost: (postId: string) => raw<PostSummary>(`/posts/${postId}`),
   getPostMedia: (path: string) => mediaBlob(path),
   createPost: (payload: CreatePostPayload) => raw<CreatedPost>("/posts", { method: "POST", body: JSON.stringify(payload) }),
+  analyzePostImage: (type: "LOST" | "FOUND", files: File[]) => {
+    const form = new FormData();
+    form.append("type", type);
+    files.forEach((file) => form.append("files", file));
+    return raw<ImageAnalysisResult>("/posts/analyze-image", { method: "POST", body: form });
+  },
   uploadPostMedia: (postId: string, file: File) => {
     const form = new FormData();
     form.append("file", file);
     form.append("mediaKind", "ITEM");
     return raw(`/posts/${postId}/media`, { method: "POST", body: form });
   },
+  getPostMatches: (postId: string) => raw<PostMatchesResponse>(`/posts/${postId}/matches`),
+  recalculatePostMatches: (postId: string) => raw<PostMatchesResponse>(`/posts/${postId}/matches/recalculate`, { method: "POST" }),
   getAdminCatalog: () => raw<AdminCatalog>("/admin/catalog"),
   createAdminCategory: (payload: Required<Pick<AdminCategoryPayload, "name">> & AdminCategoryPayload) => raw<AdminCategory>("/admin/categories", { method: "POST", body: JSON.stringify(payload) }),
   updateAdminCategory: (id: string, payload: AdminCategoryPayload) => raw<AdminCategory>(`/admin/categories/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),

@@ -1,576 +1,324 @@
 # Tổng quan dự án FPTU Lost & Found System
 
-Cập nhật lần cuối: 09/08/2026
+Cập nhật: 21/08/2026
 
-## 1. Giới thiệu
+## 1. Định vị dự án
 
-FPTU Lost & Found System là hệ thống web/backend hỗ trợ quản lý quy trình báo mất, báo nhặt được, đối chiếu, xác minh và bàn giao đồ thất lạc trong khuôn viên FPT University Đà Nẵng.
+FPTU Lost & Found System là hệ thống web/backend hỗ trợ sinh viên và giảng viên FPT University Đà Nẵng đăng thông tin đồ bị mất hoặc nhặt được, tìm các báo cáo liên quan và theo dõi kết quả đối chiếu.
 
-Hệ thống được định vị là **MVP/campus pilot** cho quy trình Lost & Found trong trường, tập trung vào luồng nghiệp vụ chính:
+Codebase hiện tại là **MVP đang phát triển**, tập trung vào nền tảng authentication, quản lý bài LOST/FOUND, phân tích ảnh hỗ trợ và rule-based/hybrid matching. Các module claim, evidence verification, appointment, warehouse, handover operations và realtime mới có một phần schema từ project tham khảo; chưa có runtime API/UI hoàn chỉnh trong codebase này.
 
-```text
-Đăng LOST/FOUND
--> Gợi ý matching
--> Gửi claim kèm bằng chứng
--> Staff/Admin hoặc chủ bài FOUND review
--> Đặt lịch bàn giao
--> Quản lý điểm bàn giao/kho
--> Thông báo realtime/chat
--> Dashboard vận hành
-```
+Không mô tả dự án hiện tại là production-ready, production microservices hoặc custom-trained AI system.
 
-Dự án không nên được trình bày là hệ thống production-ready hoàn chỉnh, không claim mobile hoàn thiện và không claim custom AI training đã production. Mobile, custom AI training/MLOps và tích hợp camera campus là các hướng mở rộng.
+## 2. Bài toán
 
-## 2. Vấn đề cần giải quyết
+Quy trình Lost & Found thủ công trong campus thường gặp các vấn đề:
 
-Trong môi trường campus, đồ thất lạc thường được xử lý rời rạc qua bảo vệ, phòng ban, nhóm mạng xã hội hoặc trao đổi trực tiếp. Cách làm này gây ra nhiều vấn đề:
+- Thông tin mất/nhặt đồ nằm rải rác ở nhiều nhóm và phòng ban.
+- Người dùng khó tìm bài đối ứng nếu cách mô tả khác nhau.
+- Người nhặt được đồ không biết nên cung cấp thông tin nào mà vẫn bảo vệ chi tiết nhận dạng.
+- Dữ liệu danh mục và địa điểm không đồng nhất.
+- Việc trả đồ cần một quy trình xác minh của con người, không thể dựa hoàn toàn vào điểm matching.
 
-- Người mất đồ khó biết nên tìm ở đâu hoặc hỏi ai.
-- Người nhặt được đồ không có quy trình thống nhất để bàn giao.
-- Staff khó quản lý vật phẩm đang lưu giữ, thời hạn lưu kho và trạng thái xử lý.
-- Việc xác minh chủ sở hữu dễ cảm tính nếu không có bằng chứng rõ ràng.
-- Các bài báo mất và nhặt được khó được đối chiếu tự động.
-- Admin khó theo dõi hiệu quả vận hành, khu vực hay xảy ra thất lạc và các điểm bàn giao.
+MVP hiện tại giải quyết phần đầu của hành trình: tạo dữ liệu có cấu trúc, hỗ trợ điền bài từ ảnh, hiển thị board và tính các gợi ý tương đồng có giải thích.
 
-Hệ thống giải quyết vấn đề bằng cách gom toàn bộ quy trình Lost & Found vào một nền tảng có phân quyền, dữ liệu tập trung, matching có giải thích, evidence review, appointment, warehouse/handover và notification realtime.
+## 3. Actor và quyền hiện tại
 
-## 3. Mục tiêu sản phẩm
-
-Mục tiêu chính:
-
-- Giúp Student/Lecturer dễ đăng bài LOST/FOUND và tìm vật phẩm liên quan.
-- Giúp người nhặt được đồ bàn giao đúng nơi, hạn chế lộ thông tin nhạy cảm.
-- Giúp người mất đồ gửi claim có bằng chứng thay vì chỉ mô tả miệng.
-- Giúp Staff/Admin xác minh bằng chứng, điều phối lịch bàn giao và quản lý kho.
-- Giúp hệ thống gợi ý match dựa trên mô tả, danh mục, vị trí, thời gian, ảnh, OCR/tag.
-- Giúp ban vận hành có dashboard, báo cáo và cấu hình nghiệp vụ.
-
-Nguyên tắc quan trọng:
-
-- AI/OCR/matching chỉ hỗ trợ ra quyết định.
-- Evidence confidence là chỉ số hỗ trợ review, không phải xác nhận sở hữu tuyệt đối.
-- Quyết định trả đồ cuối cùng vẫn cần người có thẩm quyền review.
-
-## 4. Đối tượng sử dụng
-
-| Vai trò | Mục tiêu sử dụng | Quyền chính |
-| --- | --- | --- |
-| Guest | Xem bảng tin công khai, đăng ký/đăng nhập | Xem bài public, tìm kiếm cơ bản |
-| Student | Báo mất, báo nhặt được, gửi claim, nhận đồ | Đăng LOST/FOUND, upload ảnh/bằng chứng, chat, đặt lịch |
-| Lecturer | Tương tự Student nhưng thuộc nhóm giảng viên | Đăng bài, claim, chat, appointment |
-| Staff | Xử lý vận hành Lost & Found | Review claim, quản lý kho, điểm bàn giao, lịch hẹn, báo cáo vận hành |
-| Admin | Quản trị toàn hệ thống | Quản lý user, danh mục, khu vực, cấu hình, dashboard, moderation, warehouse |
-| System | Tự động hóa nghiệp vụ nền | Matching, notification, expiration job, warehouse alert, appointment reminder |
-
-## 5. Phạm vi MVP
-
-Phạm vi hiện tại của MVP:
-
-- Web app responsive cho Guest, Student/Lecturer, Staff và Admin.
-- Node.js API là backend core cho demo và runtime chính.
-- MySQL schema, migration, seed data và các job nền.
-- Rule-based/hybrid matching có Google Vision OCR/tag hỗ trợ khi provider được cấu hình.
-- Claim/evidence flow với review confidence.
-- Appointment, handover point và warehouse lifecycle.
-- Realtime notification/chat bằng Socket.IO.
-- Staff/Admin dashboard, config, report và moderation.
-- Java/Spring Boot service là business/admin extension, không phải microservice production hoàn chỉnh.
-- Expo mobile là prototype/MVP phụ, không phải trọng tâm Review 1 hoặc core deliverable hiện tại.
-
-Ngoài phạm vi core hiện tại:
-
-- Native mobile hardening: push notification, offline queue, device farm, packaging.
-- Custom trained AI model production, MLOps, model registry, deployed inference endpoint.
-- Tích hợp trực tiếp camera campus/NVR.
-- Production observability đầy đủ, load test lớn, backup/restore drill theo provider.
-- Enrollment verification nâng cao bằng nguồn dữ liệu chính thức của trường.
-
-## 6. Kiến trúc tổng quan
-
-```text
-React Web App
-  -> Node.js API
-      -> MySQL
-      -> Cloudinary/private media proxy
-      -> Google Vision OCR/tags
-      -> Socket.IO realtime
-      -> Scheduled jobs
-  -> Java/Spring Boot extension
-      -> Shared MySQL schema
-      -> JWT-compatible business/admin extension
-```
-
-### Frontend Web
-
-Web app dùng React + TypeScript + Vite. Đây là giao diện chính cho demo MVP:
-
-- Public board và post detail.
-- Create LOST/FOUND.
-- My posts.
-- Claim/evidence/appointment/chat.
-- Handover point map.
-- Staff dashboard.
-- Admin dashboard/config/report/warehouse.
-
-### Node.js API
-
-Node.js là core API và write owner chính của MVP. Node xử lý:
-
-- Auth, OTP, Google OAuth MVP, JWT/refresh token.
-- Posts, media upload, private media proxy.
-- Matching, match explanations, feedback.
-- Claims, evidence, proof vault, verification questions.
-- Appointments, warehouse, handover point.
-- Admin/staff operations.
-- Notification, chat, Socket.IO.
-- Migration, seed data, scheduled jobs.
-
-### Java/Spring Boot Extension
-
-Java service tồn tại để thành viên chuyên Java có phần backend/business logic phù hợp. Với MVP hiện tại:
-
-- Java là extension/business-service layer.
-- Node vẫn là owner core demo flow.
-- Java không nên được trình bày là production microservice hoàn chỉnh.
-- Nếu một flow được route sang Java trong tương lai, phải có một writer duy nhất cho flow đó và có integration test.
-
-### Database và media
-
-- MySQL là nguồn dữ liệu chính.
-- Cloudinary dùng cho ảnh/media; private media không trả raw URL cho user không có quyền.
-- Protected image được truy cập qua authenticated API proxy.
-- Các migration mới có feature flag mặc định tắt cho tính năng AI/private assistance trước khi bật ở môi trường demo/pilot.
-
-## 7. Module chức năng chính
-
-### 7.1 Auth và account
-
-Hệ thống hỗ trợ:
-
-- Đăng ký bằng email OTP.
-- Không bắt buộc email FPT/edu vì sinh viên hiện có thể không được cấp email FPT.
-- Đăng nhập email/password.
-- Google OAuth MVP.
-- Forgot/reset password.
-- Refresh token, logout và session invalidation khi account/role/password thay đổi.
-- Phân quyền theo role và audience: Student, Lecturer, Staff, Admin.
-
-### 7.2 Public board và post management
-
-Người dùng có thể:
-
-- Xem bảng tin LOST/FOUND công khai.
-- Search/filter/sort theo tên, trạng thái, danh mục, khu vực, thời gian.
-- Mở post detail bằng route riêng thay vì popup.
-- Tạo LOST/FOUND post.
-- Upload ảnh vật phẩm.
-- Chỉnh sửa, đóng hoặc xóa mềm bài của mình.
-- Báo cáo vi phạm bài đăng.
-
-FOUND post có thể có chế độ `PRIVATE_DETAILS` để hạn chế lộ thông tin nhạy cảm như vị trí chính xác, contact, mô tả nhận dạng hoặc ảnh gốc cho public viewer.
-
-### 7.3 Matching
-
-Matching hiện tại là rule-based/hybrid, không phải custom trained AI production model.
-
-Các tín hiệu chính:
-
-- Text similarity từ title/description.
-- Category.
-- Location/building/room.
-- Time proximity.
-- Image tags từ Google Vision nếu có.
-- OCR/serial-like tokens nếu có.
-- Penalty/cap khi khác category xa hoặc lệch thời gian lớn.
-
-Score tier:
-
-| Score | Ý nghĩa |
+| Actor/role | Khả năng hiện có |
 | --- | --- |
-| `< 45%` | Bỏ qua |
-| `45-59%` | Lưu candidate yếu, không popup |
-| `60-74%` | Hiển thị gợi ý |
-| `75-84%` | Notify nhẹ |
-| `>= 85%` | High confidence advisory, vẫn không tự trả đồ |
+| Guest | Truy cập trang auth; board hiện nằm sau route guard trong web hiện tại |
+| `USER` | Quyền nền được gán cho tài khoản đã đăng ký |
+| `STUDENT` | Đăng nhập, hồ sơ, tạo/quản lý bài, xem board và matching của bài được phép |
+| `LECTURER` | Cùng nhóm chức năng người dùng như Student |
+| `STAFF` | Qua được staff route guard; trang staff hiện là placeholder, chưa có API vận hành |
+| `ADMIN` | Quản lý category, area và building; truy cập admin route |
 
-Matching có explanation để Staff/Admin hoặc người dùng hiểu vì sao hai bài được gợi ý giống nhau: trùng token, danh mục, vị trí, thời gian, OCR/tag hoặc penalty.
+Backend luôn là nơi quyết định quyền. Frontend route guard chỉ hỗ trợ trải nghiệm và không thay thế authorization ở API.
 
-### 7.4 Claim và evidence verification
+## 4. Phạm vi hiện tại
 
-Claim chỉ áp dụng cho bài FOUND đủ điều kiện. Người claim phải cung cấp bằng chứng sở hữu.
+### 4.1 Đã triển khai
 
-Luồng chính:
+- Đăng ký bằng email OTP qua SMTP.
+- Đăng nhập email/password.
+- JWT access token và refresh token cookie `HttpOnly`.
+- Refresh, logout, forgot/reset password.
+- Xem và cập nhật profile cơ bản.
+- JWT middleware và role guard.
+- Tạo, cập nhật trạng thái và xóa mềm bài `LOST`/`FOUND`.
+- Board, tìm kiếm, lọc, sắp xếp, phân trang, bài của tôi và trang chi tiết.
+- Category hai cấp: nhóm chính và danh mục cụ thể.
+- Area/building/handover-point catalog cho form tạo bài.
+- Upload, đọc qua media proxy và xóa ảnh bài đăng.
+- Chế độ `PRIVATE_DETAILS` cho bài `FOUND` với serializer hạn chế dữ liệu public.
+- Gemini-assisted image analysis cho tối đa 5 ảnh, trả bản nháp có thể chỉnh sửa.
+- Rule-based/hybrid matching có text, category, location, time, image tags và safe OCR tags.
+- Lưu kết quả matching, score tier, explanation và manual recalculation có rate limit.
+- Admin CRUD category, area và building.
+- React Router cho các route auth, home, board, my posts, detail, matching, profile, staff và admin.
+
+### 4.2 Mới ở mức partial
+
+- Staff: đã có role guard và placeholder page, chưa có dashboard/API nghiệp vụ.
+- Admin dashboard: mới có số liệu và CRUD catalog, chưa có users/moderation/report/config toàn hệ thống.
+- Handover point: form catalog đọc được danh sách điểm đang hoạt động; chưa có trang bản đồ và admin management trong codebase mới.
+- Media privacy: proxy/authorization có nền tảng, nhưng storage là local filesystem nên chưa phù hợp nhiều máy hoặc deploy nhiều instance.
+- Database: có nhiều bảng dành cho flow tương lai, nhưng route/service chưa tồn tại.
+- Test: có unit test và Playwright UI tests; chưa có database integration/E2E cho toàn bộ endpoint hiện hành.
+
+### 4.3 Chưa triển khai runtime
+
+- Claim, claim evidence và ownership review confidence.
+- Appointment, handover completion và return feedback.
+- Warehouse lifecycle, retention và disposition.
+- Notification, Socket.IO chat và unread badge.
+- Admin user/role management, moderation, reports, config history.
+- Reputation/activity history.
+- Java business endpoints.
+- Expo/mobile app trong codebase mới.
+- Custom model training/MLOps.
+
+## 5. Kiến trúc hiện tại
 
 ```text
-User mở FOUND post
--> Gửi claim
--> Upload evidence/private proof
--> Chủ bài FOUND hoặc Staff/Admin review
--> Có thể yêu cầu bổ sung thông tin
--> Accept hoặc reject claim
--> Nếu accept thì mở appointment/chat
+React + TypeScript + Vite
+        |
+        | HTTP/JSON + HttpOnly refresh cookie
+        v
+Node.js + Express + TypeScript
+        |
+        +--> MySQL (schema, auth, posts, catalog, matching)
+        +--> Gmail/SMTP (OTP và reset password)
+        +--> Gemini API (phân tích ảnh tùy chọn)
+        +--> Local protected media directory (hiện tại)
+
+Java/Spring Boot
+        +--> Actuator health skeleton, chưa tham gia business flow
 ```
 
-Evidence verification gồm:
+### 5.1 Frontend
+
+Frontend nằm tại `apps/web` và dùng:
+
+- React 18 và TypeScript.
+- React Router cho navigation/route guard.
+- Vite cho dev/build.
+- Playwright cho browser tests.
+- Storytelling home kết hợp form tạo bài thực tế.
+
+Các route chính:
+
+| Route | Mục đích |
+| --- | --- |
+| `/login`, `/register` | Authentication |
+| `/forgot-password`, `/reset-password` | Khôi phục mật khẩu |
+| `/home` | Storytelling và tạo LOST/FOUND post |
+| `/posts` | Board |
+| `/my-posts` | Bài của người dùng hiện tại |
+| `/posts/:postId` | Chi tiết bài |
+| `/posts/:postId/matches` | Phân tích matching đã lưu |
+| `/profile` | Hồ sơ |
+| `/staff` | Placeholder đã guard |
+| `/admin` | Quản lý catalog dành cho Admin |
+
+### 5.2 Node.js API
+
+API nằm tại `apps/api-node` và chia theo route/controller/service/repository/validator.
+
+Route family hiện hành:
+
+- `/api/auth`: OTP, register, login, refresh, logout, password reset, profile.
+- `/api/posts`: board, catalog, mine, image analysis, CRUD post, matching, media.
+- `/api/admin`: CRUD category, area và building; toàn bộ route yêu cầu `ADMIN`.
+- `/api/health`: liveness cơ bản.
+
+Node.js là schema owner và write owner duy nhất.
+
+### 5.3 Java
+
+`apps/java-admin-service` chỉ có Spring Boot application và Actuator. Không có controller/service/repository nghiệp vụ. Chi tiết tại [node-java-service-boundary.md](node-java-service-boundary.md).
+
+## 6. Luồng hiện hành
+
+### 6.1 Đăng ký và đăng nhập
+
+```text
+Nhập email + thông tin tài khoản
+-> Yêu cầu OTP
+-> API tạo OTP đã hash, có hạn dùng và gửi qua SMTP
+-> Người dùng nhập OTP
+-> API tạo user + roles trong transaction
+-> Tạo access token + refresh session
+-> Web chuyển tới /home
+```
+
+Refresh token được lưu dạng hash trong database và gửi cho trình duyệt qua cookie `HttpOnly`. Logout revoke refresh token hiện tại.
+
+### 6.2 Tạo bài LOST/FOUND thủ công
+
+```text
+Chọn LOST hoặc FOUND
+-> Chọn nhóm chính
+-> Chọn danh mục cụ thể thuộc nhóm
+-> Nhập thời gian, vị trí, mô tả, liên hệ
+-> FOUND chọn nơi lưu/điểm bàn giao và có thể bật PRIVATE_DETAILS
+-> API validate quan hệ category/location/handover
+-> Tạo post OPEN
+-> Upload ảnh nếu có
+-> Chạy matching best-effort
+-> Mở trang kết quả matching hoặc My Posts
+```
+
+Lỗi matching không rollback bài đăng hợp lệ.
+
+### 6.3 Tạo bản nháp từ ảnh
+
+```text
+Chọn 1-5 ảnh
+-> Người dùng chủ động bấm Phân tích ảnh
+-> API kiểm tra MIME, chữ ký file, số lượng và tổng dung lượng
+-> Gemini trả title/description/category/tags/safe visible text
+-> Backend map category về danh mục con thật trong DB
+-> Web điền form nháp
+-> Người dùng kiểm tra/chỉnh sửa
+-> Chỉ khi bấm Đăng bài thì post mới được lưu
+```
+
+Gemini không tự suy luận quyền sở hữu, không tự đăng bài và không auto-return vật phẩm.
+
+### 6.4 Matching
+
+```text
+Post được tạo/cập nhật
+-> Lấy tập bài đối nghịch LOST/FOUND đang hoạt động
+-> Giới hạn candidate theo config
+-> Chuẩn hóa text tiếng Việt
+-> Tính component scores
+-> Áp dụng penalty/cap
+-> Lưu match_results từ weak threshold trở lên
+-> Trả score, tier và explanation cho actor có quyền
+```
 
-- Mô tả claim.
-- Ảnh/bằng chứng người claim cung cấp.
-- Private Proof Vault nếu người dùng có proof riêng.
-- Verification questions theo vật phẩm nếu bật.
-- Evidence Consistency Map cho reviewer.
-- Review confidence hỗ trợ đánh giá.
+Tier mặc định:
 
-Hệ thống không trả lời cho claimant biết từng câu đúng/sai theo kiểu lộ đáp án. Secret answer và private signal phải được bảo vệ.
-
-### 7.5 Appointment và handover
-
-Sau khi claim được accept, các bên có thể tạo lịch bàn giao.
-
-Appointment hỗ trợ:
-
-- Tạo lịch sau accepted claim.
-- Chọn điểm bàn giao trong campus hoặc nhập custom meeting location.
-- Accept/reject/reschedule/cancel.
-- Complete handover.
-- Upload proof image sau bàn giao.
-- Feedback sau khi hoàn tất.
-- Notification reminder.
-
-Mỗi claim chỉ có một active appointment tại một thời điểm để tránh xung đột.
-
-### 7.6 Handover point
-
-Trang điểm bàn giao giúp user biết nên đến đâu để nhận/trả đồ:
-
-- Hiển thị danh sách điểm bàn giao.
-- Hiển thị bản đồ campus bằng ảnh có marker.
-- Marker có vị trí tương ứng với khu vực/tòa nhà.
-- Có trạng thái active/temporary closed.
-- Có giờ hoạt động, người/đơn vị phụ trách và số vật phẩm đang lưu giữ.
-- Admin/Staff có thể tạo/sửa/tạm đóng/xóa mềm điểm bàn giao.
-
-### 7.7 Warehouse
-
-Warehouse dùng cho Staff/Admin quản lý vật phẩm đang lưu giữ.
-
-Chức năng chính:
-
-- Ghi nhận vật phẩm vào kho.
-- Gắn item với FOUND post hoặc handover point nếu có.
-- Theo dõi trạng thái: received/stored/overdue/disposed/donated/transferred/returned.
-- Tính retention deadline theo policy.
-- Cảnh báo gần hết hạn.
-- Cảnh báo capacity.
-- Xử lý quá hạn bằng dispose/donate/transfer/extend.
-- Chặn dispose/donate/transfer nếu còn claim hoặc appointment pending/active.
-- Lưu storage log/audit cho các thay đổi quan trọng.
-
-Retention policy có thể khác nhau theo loại vật phẩm, ví dụ giấy tờ/thẻ, điện tử/giá trị cao, đồ thường, đồ dễ hỏng/vệ sinh.
-
-### 7.8 Realtime notification và chat
-
-Realtime hỗ trợ:
-
-- Notification khi có match tốt.
-- Notification khi có claim mới.
-- Notification khi claim được accept/reject/cancel hoặc cần bổ sung.
-- Notification appointment.
-- Warehouse/operational alert.
-- Claim chat sau khi claim được accept.
-- Chat text/image.
-- Seen/read status.
-- Unread badge.
-
-Socket.IO dùng JWT auth, room isolation theo claim/user và có optional Redis adapter cho multi-instance deployment. Client vẫn có thể đọc notification đã lưu từ database nếu realtime bị gián đoạn.
-
-### 7.9 Staff dashboard
-
-Staff dashboard tập trung vào vận hành:
-
-- Claim/evidence cần xử lý.
-- Warehouse items.
-- Handover/appointment.
-- Overdue/capacity alerts.
-- Report/feedback liên quan vận hành.
-
-Staff có quyền thấp hơn Admin và không nên thấy các chức năng quá quyền như cấu hình hệ thống nhạy cảm hoặc quản lý toàn bộ user/role.
-
-### 7.10 Admin dashboard
-
-Admin có quyền quản trị rộng:
-
-- Dashboard metric.
-- Quản lý user.
-- Quản lý category.
-- Quản lý area/building/location.
-- Quản lý handover points.
-- Quản lý warehouse.
-- Moderation.
-- Report và CSV export.
-- Return feedback.
-- Config và config history/rollback.
-
-### 7.11 Reputation và feedback
-
-Hệ thống có reputation để khuyến khích hành vi tốt:
-
-- Cộng điểm khi claim/return thành công.
-- Trừ điểm với claim sai nhiều lần hoặc vi phạm.
-- Hiển thị lịch sử reputation cho user.
-- Cho feedback sau khi bàn giao hoàn tất.
-- Admin/Staff có thể review negative feedback/flag user.
-
-Reputation chỉ hỗ trợ đánh giá hành vi, không tự động quyết định trả đồ.
-
-## 8. Luồng nghiệp vụ chính
-
-### 8.1 Luồng người mất đồ
-
-Actor chính: Student/Lecturer.
-
-Điều kiện bắt đầu: người dùng đã đăng nhập và muốn tìm lại vật phẩm bị mất.
-
-1. Người dùng chọn đăng bài `LOST`.
-2. Người dùng nhập thông tin vật phẩm: tiêu đề, mô tả, danh mục, thời gian mất, khu vực/tòa nhà/phòng hoặc vị trí tự nhập.
-3. Người dùng tải ảnh vật phẩm nếu có. Với vật phẩm cần xác minh mạnh, người dùng có thể nhập dấu hiệu riêng như phụ kiện, vết xước, bốn số cuối serial hoặc mô tả nhận dạng mà người ngoài khó biết.
-4. Hệ thống validate dữ liệu: bài phải có danh mục, mô tả, contact, thời gian không ở tương lai và vị trí hợp lệ.
-5. Sau khi bài được tạo, hệ thống đưa bài vào hàng đợi matching để so với các bài `FOUND` đang mở.
-6. Matching tính điểm dựa trên mô tả, danh mục, vị trí, thời gian, ảnh, OCR/tag và các penalty nếu khác ngữ cảnh.
-7. Nếu có candidate đủ ngưỡng, hệ thống hiển thị gợi ý cho người mất đồ qua popup/notification hoặc trang gợi ý matching.
-8. Người dùng mở bài `FOUND` nghi là vật phẩm của mình để xem thông tin công khai. Nếu bài `FOUND` ở chế độ private-details, hệ thống chỉ hiển thị thông tin đã được redaction.
-9. Người dùng gửi claim, nhập mô tả sở hữu và tải bằng chứng như ảnh cũ, hóa đơn, serial, phụ kiện, đặc điểm riêng hoặc private proof.
-10. Claim chuyển sang trạng thái `PENDING`. Chủ bài `FOUND`, Staff hoặc Admin có thể review.
-11. Reviewer kiểm tra evidence, review confidence, Evidence Consistency Map và có thể yêu cầu bổ sung thông tin nếu chưa đủ.
-12. Nếu bằng chứng không đủ, claim bị reject hoặc yêu cầu thêm thông tin.
-13. Nếu bằng chứng đủ, claim được accept. Hệ thống mở luồng appointment/chat cho các bên liên quan.
-14. Người mất đồ và người giữ đồ/Staff thống nhất điểm bàn giao, thời gian và bằng chứng cần mang theo.
-15. Khi bàn giao xong, appointment được complete, bài đăng được cập nhật trạng thái phù hợp và hệ thống có thể ghi feedback/reputation.
-
-Kết quả đầu ra: người mất đồ nhận lại vật phẩm hoặc claim bị từ chối/yêu cầu bổ sung với lý do rõ ràng.
-
-### 8.2 Luồng người nhặt được đồ
-
-Actor chính: Student/Lecturer/Staff.
-
-Điều kiện bắt đầu: người dùng nhặt được vật phẩm hoặc Staff tiếp nhận vật phẩm tại điểm bàn giao/kho.
-
-1. Người nhặt được chọn đăng bài `FOUND`.
-2. Người dùng nhập tiêu đề, mô tả, danh mục, thời gian nhặt được và vị trí nhặt được.
-3. Người dùng chọn nơi vật phẩm đang được giữ: tự giữ tạm, điểm bàn giao, hoặc chuyển vào kho nếu Staff/Admin xử lý.
-4. Nếu vật phẩm có thông tin nhạy cảm, người dùng có thể chọn chế độ `PRIVATE_DETAILS` để tránh lộ vị trí chính xác, contact, ảnh gốc hoặc mô tả nhận dạng cho public viewer.
-5. Người dùng tải ảnh vật phẩm. Hệ thống validate định dạng, kích thước và chữ ký file.
-6. Sau khi bài được tạo, hệ thống enqueue matching với các bài `LOST` đang mở.
-7. Nếu có bài `LOST` tương tự, hệ thống hiển thị gợi ý phù hợp và có thể gửi notification theo score tier.
-8. Người mất đồ có thể gửi claim vào bài `FOUND`.
-9. Chủ bài `FOUND`, Staff hoặc Admin xem claim, evidence và review confidence.
-10. Nếu claim chưa đủ chứng cứ, reviewer yêu cầu bổ sung hoặc reject.
-11. Nếu claim hợp lý, reviewer accept claim. Việc accept vẫn là quyết định của con người, không phải do AI tự động.
-12. Sau khi accept, các bên tạo appointment hoặc chọn điểm bàn giao trong campus.
-13. Nếu vật phẩm đang ở kho, Staff cập nhật warehouse item và gắn với lịch bàn giao.
-14. Khi bàn giao hoàn tất, hệ thống ghi proof nếu có, cập nhật trạng thái appointment/post/warehouse và tạo feedback/reputation.
-
-Kết quả đầu ra: vật phẩm được bàn giao cho đúng người hoặc tiếp tục được lưu giữ/chờ claim hợp lệ.
-
-### 8.3 Luồng Staff xử lý claim
-
-Actor chính: Staff.
-
-Điều kiện bắt đầu: có claim mới, claim cần bổ sung thông tin hoặc vật phẩm đang được lưu tại điểm bàn giao/kho.
-
-1. Staff đăng nhập vào staff dashboard.
-2. Staff xem danh sách claim/evidence cần xử lý, các appointment sắp tới và warehouse alert.
-3. Staff mở claim detail để xem bài `FOUND`, người claim, bằng chứng đã gửi và lịch sử xử lý.
-4. Hệ thống hiển thị review confidence và Evidence Consistency Map cho Staff, gồm các tín hiệu như mô tả, vị trí, thời gian, ảnh, OCR/tag, private proof và câu hỏi xác minh.
-5. Staff kiểm tra xem claim có đủ bằng chứng sở hữu hay không. Nếu cần, Staff yêu cầu người claim bổ sung thông tin.
-6. Nếu bằng chứng yếu hoặc mâu thuẫn, Staff reject claim và ghi lý do.
-7. Nếu bằng chứng hợp lý, Staff accept claim hoặc hỗ trợ chủ bài `FOUND` xử lý claim.
-8. Sau khi claim được accept, Staff tạo hoặc xác nhận appointment tại điểm bàn giao phù hợp.
-9. Nếu vật phẩm đang trong kho, Staff kiểm tra warehouse item, vị trí lưu giữ và tình trạng vật phẩm trước khi bàn giao.
-10. Khi người nhận đến, Staff đối chiếu thông tin, cập nhật appointment complete, tải proof image nếu cần và cập nhật warehouse/post status.
-11. Hệ thống gửi notification cho các bên và ghi activity/audit log.
-
-Kết quả đầu ra: claim được xử lý minh bạch, có log và vật phẩm chỉ được bàn giao khi đủ điều kiện.
-
-### 8.4 Luồng quản lý kho
-
-Actor chính: Staff/Admin.
-
-Điều kiện bắt đầu: vật phẩm được chuyển vào kho hoặc cần theo dõi thời hạn lưu giữ.
-
-1. Staff/Admin tiếp nhận vật phẩm từ người nhặt được, điểm bàn giao hoặc bảo vệ.
-2. Staff/Admin tạo warehouse item với tên vật phẩm, mã lưu kho, danh mục, trạng thái, vị trí kệ/ngăn và mô tả ngắn.
-3. Nếu vật phẩm liên quan tới bài `FOUND`, Staff/Admin gắn warehouse item với bài tương ứng.
-4. Hệ thống xác định retention deadline theo policy: giấy tờ/thẻ, điện tử/giá trị cao, đồ thường, đồ dễ hỏng/vệ sinh.
-5. Hệ thống theo dõi sức chứa kho và cảnh báo khi gần đầy hoặc vật phẩm gần hết hạn lưu giữ.
-6. Khi có claim được accept, Staff kiểm tra item trong kho và đưa vào luồng appointment/handover.
-7. Nếu vật phẩm quá hạn nhưng còn claim hoặc appointment pending/active, hệ thống chặn dispose/donate/transfer.
-8. Nếu vật phẩm quá hạn và không còn ràng buộc xử lý, Staff/Admin chọn disposition hợp lệ: extend, transfer, donate hoặc dispose.
-9. Với mỗi thay đổi quan trọng, hệ thống ghi storage log/audit log.
-10. Admin/Staff có thể xem danh sách vật phẩm, lọc theo trạng thái, xuất CSV và theo dõi báo cáo.
-
-Kết quả đầu ra: kho có dữ liệu rõ ràng, vật phẩm không bị xử lý sai khi còn claim/appointment và mọi thay đổi đều có log.
-
-### 8.5 Luồng Admin quản trị
-
-Actor chính: Admin.
-
-Điều kiện bắt đầu: Admin cần quản trị dữ liệu nền, kiểm duyệt hoặc theo dõi hiệu quả vận hành.
-
-1. Admin đăng nhập vào admin dashboard.
-2. Admin xem tổng quan hệ thống: số bài LOST/FOUND, claim, item đã trả, khu vực hay mất đồ, warehouse status và report.
-3. Admin quản lý user, role, trạng thái tài khoản và các giới hạn quyền.
-4. Admin quản lý danh mục vật phẩm, khu vực, tòa nhà, điểm bàn giao và marker trên bản đồ campus.
-5. Admin kiểm duyệt bài viết, xử lý report và ẩn/xóa mềm nội dung vi phạm.
-6. Admin quản lý warehouse policy, retention period, capacity và các trạng thái disposition.
-7. Admin cấu hình matching threshold/weight, post expiration, notification/email rule và feature flags.
-8. Admin xem config history và rollback khi cần.
-9. Admin xem report, export CSV, theo dõi feedback tiêu cực và reputation issue.
-10. Các thao tác quan trọng được ghi log để phục vụ audit và review sau này.
-
-Kết quả đầu ra: hệ thống có dữ liệu nền ổn định, cấu hình rõ ràng, vận hành có kiểm soát và có bằng chứng audit.
-
-### 8.6 Luồng matching và notification nền
-
-Actor chính: System.
-
-Điều kiện bắt đầu: có bài LOST/FOUND mới, bài được cập nhật hoặc Admin yêu cầu re-run matching.
-
-1. Khi post được tạo/cập nhật, hệ thống đưa job matching vào hàng đợi nền.
-2. Worker lấy candidate theo phạm vi đã giới hạn, ưu tiên các bài khác loại `LOST` vs `FOUND`, còn mở và có liên quan về danh mục/vị trí/thời gian.
-3. Hệ thống tính từng thành phần điểm: text, category, location, time, image tags, OCR/serial-like tokens và penalty.
-4. Hệ thống tạo explanation để người dùng/reviewer hiểu lý do match.
-5. Match dưới ngưỡng thấp bị bỏ qua hoặc chỉ lưu nội bộ.
-6. Match đủ ngưỡng suggestion được hiển thị cho người dùng.
-7. Match tốt hơn có thể tạo notification, nhưng vẫn không tự đổi post sang returned/resolved.
-8. Người dùng có thể dismiss popup; hệ thống không mở lại liên tục ngay sau khi đóng.
-9. Admin có thể re-run matching khi thay đổi cấu hình hoặc dữ liệu.
-
-Kết quả đầu ra: người dùng nhận gợi ý phù hợp, reviewer có giải thích, hệ thống không tự ra quyết định sở hữu.
-
-### 8.7 Luồng hỗ trợ AI/private assistance
-
-Actor chính: User, Staff/Admin, System.
-
-Điều kiện bắt đầu: feature flag tương ứng đã bật trên schema demo/pilot đã qua migration/E2E.
-
-1. AI-assisted draft giúp user upload một ảnh và nhận draft mô tả có thể chỉnh sửa trước khi đăng.
-2. Search Companion hỏi thêm thông tin còn thiếu cho bài LOST, ví dụ màu sắc, phụ kiện, vị trí, thời gian, bốn số cuối serial.
-3. Finder Quick Scan cho người nhặt được chụp/upload ảnh, xem LOST candidates và tạo FOUND draft nếu chưa có match phù hợp.
-4. Private Proof Vault cho user lưu bằng chứng riêng tư như serial, hóa đơn, ảnh trước khi mất hoặc mô tả đặc điểm bí mật.
-5. Evidence Consistency Map cho reviewer xem độ nhất quán giữa claim, proof, post, matching và OCR/tag.
-6. Recovery Timeline hiển thị tiến trình xử lý bài/claim theo quyền của từng user.
-7. Campus Radar và Visual Hunt hỗ trợ Staff/Admin theo dạng decision support, không tự kết luận và không nhận diện danh tính người.
-
-Kết quả đầu ra: AI giúp giảm thao tác và tăng chất lượng review, nhưng toàn bộ quyết định sở hữu/bàn giao vẫn do con người xử lý.
-
-## 9. AI-assisted features hiện tại
-
-Các tính năng AI hỗ trợ user/staff hiện tại:
-
-| Tính năng | Mục đích | Ghi chú an toàn |
+| Score | Tier | Hành vi hiện tại |
 | --- | --- | --- |
-| AI-assisted draft | Gợi ý draft từ một ảnh khi user tạo bài | Không tự đăng bài |
-| Google Vision OCR/tag | Trích tag/OCR hỗ trợ matching | Phụ thuộc provider/config |
-| Private Proof Vault | Lưu private proof của user | Secret hash-only, media qua proxy |
-| Evidence Consistency Map | So sánh evidence và tín hiệu matching cho reviewer | Reviewer-only, human decision required |
-| Search Companion | Hỏi thêm thông tin cho bài LOST | Không lộ FOUND private details |
-| Recovery Timeline | Hiển thị hành trình xử lý bài/claim | Role-aware privacy |
-| Finder Quick Scan | Người nhặt upload/chụp ảnh để xem LOST candidates và tạo FOUND draft | Advisory, không auto-match |
-| Campus Radar | Phân tích aggregate mất đồ theo khu vực/sự kiện | Không dùng dữ liệu cá nhân |
-| Visual Hunt | Staff/Admin scan ảnh/video frame để tìm candidate | Không nhận diện mặt, không tự kết luận |
+| `< 45%` | Bỏ qua | Không lưu |
+| `45-59%` | `WEAK` | Lưu để phân tích, không tự notify |
+| `60-74%` | `SUGGESTION` | Hiển thị gợi ý |
+| `75-84%` | `NOTIFY` | Tier tư vấn; notification chưa triển khai |
+| `>= 85%` | `HIGH_CONFIDENCE` | Tương đồng cao nhưng vẫn cần con người xác minh |
 
-Feature flags cho các tính năng mới mặc định tắt sau migration và chỉ nên bật khi migration/E2E trên schema isolated đã pass.
+Các tín hiệu hiện tại gồm text, category, location, time, image tags và safe OCR tags. Explanation hiển thị điểm thành phần và lý do/cap có liên quan. Bài `PRIVATE_DETAILS` được redaction tín hiệu thô cho actor không đủ quyền.
 
-## 10. Security và privacy
+## 7. Dữ liệu và migration
 
-Các nguyên tắc bảo mật/chống lộ dữ liệu:
+Migration Node.js là nguồn schema duy nhất. `schema_migrations` lưu checksum để ngăn sửa migration đã chạy.
 
-- JWT auth và role guard cho API cần đăng nhập.
-- Staff có quyền thấp hơn Admin.
-- Private media không trả raw Cloudinary/storage URL cho user không có quyền.
-- Claim evidence chỉ hiển thị cho claimant, post owner, Staff/Admin có quyền.
-- Chat room được isolate theo claim.
-- Socket event phải xác thực và không phát sang user không liên quan.
-- Secret answer, private proof và ownership signal không lưu plaintext.
-- FOUND private details được backend redaction ở public view/suggestion/notification.
-- AI/matching không tự xác nhận chủ sở hữu.
-- Các response phụ thuộc người xem dùng chính sách chống cache nhầm dữ liệu riêng tư.
+Nhóm bảng đang được runtime sử dụng trực tiếp:
 
-## 11. Dữ liệu và cấu hình
+- `users`, `roles`, `user_roles`.
+- `email_otps`, `refresh_tokens`, `password_reset_tokens`.
+- `posts`, `post_media`, `ai_tags`, `match_results`.
+- `item_categories`, `campus_areas`, `campus_buildings`, `handover_points` ở mức catalog.
+- `config_entries` cho một số matching weights/thresholds đọc nội bộ.
 
-Các nhóm dữ liệu chính:
+Các bảng claim, appointment, warehouse, notification, chat, reputation, radar, proof vault và finder scan là schema foundation được mang sang để phát triển sau. Sự tồn tại của bảng không được dùng làm bằng chứng UC đã Done.
 
-- Users, roles, audience role.
-- Posts, post media, reports.
-- Match results, match feedback, match suggestion impressions.
-- Claims, claim evidence, private proofs, verification answers.
-- Appointments, appointment proof, return feedback.
-- Handover points, campus areas/buildings.
-- Warehouse items, storage logs, retention policies.
-- Notifications, chat rooms, chat messages.
-- Config entries, config history.
-- AI/Radar/Visual Hunt/Finder/Search Companion related records.
+Khi dùng shared cloud MySQL:
 
-Admin có thể cấu hình một số chính sách như expiration, matching threshold/weight, notification rule, retention policy và feature flags. Một số feature mới cần migration và E2E pass trước khi bật ở môi trường demo/pilot.
+1. Không sửa migration đã chạy.
+2. Chỉ thêm migration mới.
+3. Chỉ một người chạy migration sau review.
+4. Không chạy test destructive trên DB chung.
+5. Tách database dev/demo/test nếu có thể.
 
-## 12. Trạng thái kiểm thử và readiness
+## 8. Media storage
 
-Trạng thái hiện tại:
+Code hiện tại lưu file tại `UPLOAD_DIR` (mặc định `apps/api-node/uploads`) và lưu URI nội bộ dạng `private://post-media/...` trong DB. Client chỉ nhận URL proxy `/api/posts/:postId/media/:mediaId`.
 
-- Core web/backend đã có nhiều unit/API/E2E smoke coverage.
-- Có Playwright cho routing, post creation, claim, staff review, appointment, proof, feedback và admin navigation.
-- Có migration smoke script và OpenAPI drift check.
-- Có CI cho API/web/mobile typecheck, MySQL isolated smoke, Java build và một số E2E.
-- Một số verification vẫn phụ thuộc môi trường: schema isolated sạch checksum, Google Vision billing/quota, Maven local, provider backup/restore, phone-camera HTTPS rehearsal.
+Giới hạn hiện tại:
 
-Readiness nên trình bày là:
+- File không tự đồng bộ giữa máy của các thành viên.
+- Shared Aiven DB có thể tham chiếu file chỉ tồn tại trên máy người upload.
+- Restart/deploy sang máy mới có thể mất media nếu volume không persistent.
+- Scale nhiều API instance không an toàn nếu không có shared object storage.
 
-> Source/build/test gates cho MVP web/backend đang tốt, nhưng release/pilot thật vẫn cần chạy migration/E2E trên database isolated sạch, kiểm tra provider credential và rehearsal demo environment.
+Cloudinary/S3-compatible storage là việc cần làm trước shared staging/deployment. Sau khi chuyển, private media vẫn phải đi qua signed/authenticated access; không trả raw private URL.
 
-## 13. Ranh giới trình bày khi bảo vệ
+## 9. Security hiện tại
+
+- Password hash bằng bcrypt.
+- OTP và refresh token không lưu plaintext.
+- OTP có expiry và giới hạn số lần thử.
+- Auth endpoints có rate limit cơ bản.
+- Refresh token dùng cookie `HttpOnly`.
+- JWT session version được kiểm tra lại với DB.
+- `helmet` và CORS allowlist được cấu hình.
+- Zod validate request payload/query/params.
+- Admin API bắt buộc role `ADMIN`.
+- Owner guard áp dụng cho update/delete post và media.
+- Upload kiểm tra MIME, kích thước và file signature.
+- Gemini key chỉ dùng server-side.
+
+Khoảng trống cần hardening:
+
+- Bổ sung integration test với MySQL cho auth/post/media/matching permissions.
+- Chuyển media sang object storage dùng chung.
+- Chuẩn hóa lỗi file media không còn tồn tại thành 404 thay vì lỗi 500 không xử lý.
+- Bổ sung audit log cho admin catalog writes.
+- Thêm readiness check cho DB/SMTP/Gemini tùy môi trường.
+
+## 10. Kiểm thử
+
+Hiện có:
+
+- Unit tests cho auth validation/security, CORS và media signature.
+- Unit tests cho Gemini category mapping/multi-image behavior.
+- Unit tests cho matching score, tier, cap và redaction.
+- Playwright tests cho home responsive, board/filter/detail và storytelling create-post flow.
+- TypeScript build cho API và web.
+
+Chưa có:
+
+- API integration test chạy trên MySQL isolated.
+- E2E auth OTP thật với SMTP sandbox.
+- Concurrency tests cho claim/appointment vì runtime chưa triển khai.
+- Load test và query-plan benchmark.
+- CI workflow trong codebase mới.
+
+## 11. Roadmap hợp lý
+
+Thứ tự phát triển được đề xuất:
+
+1. Hoàn thiện shared object storage và media error handling.
+2. Thêm API integration tests + CI.
+3. Triển khai claim/evidence với privacy và transaction lock.
+4. Triển khai appointment/handover.
+5. Triển khai warehouse lifecycle.
+6. Thêm notification/realtime sau khi claim flow ổn định.
+7. Mở rộng admin/staff dashboard.
+8. Chỉ sau đó cân nhắc Java ownership cho một domain riêng.
+9. Mobile và custom model training để future scope.
+
+## 12. Cách trình bày đồ án
 
 Nên nói:
 
-- "MVP web/backend cho quy trình Lost & Found campus."
-- "Google Vision hỗ trợ OCR/tag."
-- "Rule-based/hybrid matching có score tier và explanation."
-- "Evidence confidence hỗ trợ human review."
-- "Node.js là core API, Java là business extension."
-- "Mobile/custom AI training/camera campus là future enhancement."
+> Nhóm đang xây dựng web/backend MVP cho Lost & Found campus. Phiên bản hiện tại đã hoàn thành authentication, quản lý bài LOST/FOUND, Gemini-assisted draft và rule-based/hybrid matching có giải thích. Các bước claim, verification, appointment và warehouse là roadmap tiếp theo; Java hiện là extension skeleton.
 
 Không nên nói:
 
-- "Production-ready hoàn chỉnh."
-- "Custom AI model đã train và deploy production."
-- "Mobile app hoàn chỉnh."
-- "Microservices production hoàn chỉnh."
-- "Hệ thống tự xác minh chắc chắn chủ sở hữu."
-- "Camera campus đã tích hợp thật" nếu chưa có quyền truy cập camera/NVR.
+- “Toàn bộ flow Lost & Found đã production-ready.”
+- “Hệ thống dùng custom AI model đã train.”
+- “Node và Java là production microservices hoàn chỉnh.”
+- “Media đã dùng Cloudinary” khi runtime còn lưu filesystem local.
+- “Mobile đã hoàn thành.”
 
-## 14. Hướng phát triển tiếp theo
+## 13. Tài liệu liên quan
 
-Các hướng phát triển hợp lý sau MVP:
-
-- Chạy benchmark dữ liệu lớn và tối ưu query/matching.
-- Bổ sung notification digest và chống spam popup tốt hơn.
-- Hoàn thiện mobile push/offline/device test.
-- Tích hợp nguồn enrollment chính thức nếu trường cung cấp.
-- Thu thập feedback label để huấn luyện model nhỏ cho reranking sau khi đủ dữ liệu.
-- Thêm model registry/inference endpoint khi custom AI thật sự đủ điều kiện.
-- Tích hợp camera campus/NVR ở dạng Campus Camera Assisted Search với phân quyền, audit log, privacy policy và không nhận diện danh tính người nếu chưa được phép.
-- Tăng coverage cho reconnect/offline, provider backup/restore và staging deployment.
-
-## 15. Tài liệu liên quan
-
-| File | Nội dung |
-| --- | --- |
-| `docs/Overall/architecture.md` | Kiến trúc kỹ thuật, API, migration, runtime boundary |
-| `docs/Overall/mvp-scope-and-future-work.md` | Phạm vi MVP và future work |
-| `docs/Overall/node-java-service-boundary.md` | Ranh giới Node.js và Java |
-| `docs/Overall/thesis-defense-guide-2026.md` | Script bảo vệ, demo flow, Q&A |
-| `docs/Requirements and Business Rules/requirements.md` | Functional/non-functional requirements |
-| `docs/Requirements and Business Rules/business-rules.md` | Business rules |
-| `docs/Requirements and Business Rules/traceability-matrix.md` | Traceability requirement/business rule/use case |
-| `docs/Checklist/master-dev-checklist.md` | Use case assignment/status chính |
-| `docs/Checklist/pending-tasks.md` | Backlog còn lại |
-| `docs/Checklist/release-checklist.md` | Checklist trước demo/release |
+- [Requirements](requirements.md)
+- [Business rules](business-rules.md)
+- [Traceability matrix](traceability-matrix.md)
+- [Use case checklist](use-case-checklist.md)
+- [Node.js/Java boundary](node-java-service-boundary.md)

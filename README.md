@@ -1,180 +1,194 @@
-# FPTU Lost & Found System (LNFS)
+# FPTU Lost & Found System
 
-Hệ thống quản lý đồ thất lạc dành cho FPT University Da Nang. LNFS hỗ trợ sinh viên, giảng viên, staff và admin đăng bài LOST/FOUND, tìm kiếm đồ vật, nhận gợi ý matching, gửi claim kèm bằng chứng, đặt lịch nhận đồ và quản lý đồ lưu kho.
+Web/backend MVP cho quy trình báo mất và báo nhặt đồ tại FPT University Đà Nẵng.
 
-## Phạm vi hệ thống
+Phiên bản hiện tại tập trung vào authentication, LOST/FOUND posts, Gemini-assisted image draft và rule-based/hybrid matching có giải thích. Claim, evidence review, appointment, warehouse và realtime là các sprint tiếp theo, chưa phải chức năng runtime hoàn chỉnh trong codebase mới.
 
-### Web application
+## Chức năng hiện có
 
-* Đăng ký, đăng nhập, OTP email, quên mật khẩu và quản lý hồ sơ.
-* Đăng/tìm kiếm/lọc bài LOST và FOUND.
-* Upload ảnh đồ vật và quản lý bài đăng cá nhân.
-* Matching suggestion giữa các bài LOST/FOUND.
-* Claim đồ vật, upload evidence và theo dõi trạng thái claim.
-* Appointment, handover point và quy trình nhận/trả đồ.
-* Realtime chat và notification.
-* Admin: quản lý user, role, category, khu vực, handover point, warehouse, cấu hình, moderation, dashboard và export statistics.
-* Feedback, reputation và activity history.
+- Đăng ký bằng email OTP qua Gmail/SMTP.
+- Đăng nhập, JWT access token, refresh token cookie, logout.
+- Quên/đặt lại mật khẩu và profile cơ bản.
+- Role guard cho User/Student/Lecturer/Staff/Admin.
+- Storytelling home tích hợp form tạo LOST/FOUND post.
+- Board, My Posts, tìm kiếm/lọc/sắp xếp, post detail.
+- Category hai cấp, area/building và handover-point catalog.
+- Upload/xóa ảnh bài đăng qua protected media endpoint.
+- `PRIVATE_DETAILS` cho bài FOUND.
+- Gemini-assisted multi-image analysis tạo bản nháp chỉnh sửa được.
+- Hybrid matching dùng text/category/location/time/image/safe OCR tags.
+- Lưu score tier, explanation và manual recalculation.
+- Admin CRUD category, area và building.
 
-### Mobile application
+## Chưa hoàn thành
 
-* Authentication, profile và avatar.
-* Xem board, tìm kiếm/lọc, xem chi tiết bài đăng.
-* Tạo và quản lý bài LOST/FOUND từ mobile.
-* Upload ảnh từ camera hoặc gallery.
-* Claim, evidence, appointment, handover map, realtime chat và notification.
+- Claim/evidence, appointment, warehouse, notification và Socket.IO chat.
+- Staff operations dashboard; route hiện tại mới là placeholder.
+- Admin user management, moderation, report, config và dashboard toàn hệ thống.
+- Shared object storage; media hiện lưu local filesystem.
+- Java business endpoints; Java hiện chỉ có health-check skeleton.
+- Mobile và custom-trained AI model.
 
-### AI/OCR assistance
+## Công nghệ
 
-* Phân tích ảnh đồ vật, OCR evidence, gợi ý tag/category.
-* Hỗ trợ matching và review confidence.
-* AI/OCR chỉ đóng vai trò hỗ trợ quyết định; không tự động xác nhận chủ sở hữu hoặc auto-accept claim.
+| Layer | Công nghệ |
+| --- | --- |
+| Web | React 18, TypeScript, Vite, React Router |
+| Core API | Node.js, Express, TypeScript |
+| Database | MySQL 8+ |
+| Email | SMTP/Gmail App Password |
+| Image assistance | Gemini API, tùy chọn |
+| Current media storage | Protected local filesystem |
+| Java | Spring Boot Actuator skeleton |
+| Tests | Node test runner, TypeScript, Playwright |
 
-## Architecture
+Node.js là runtime/write owner duy nhất. Xem [ranh giới Node.js và Java](docs/node-java-service-boundary.md).
 
-* **Frontend Web:** React + TypeScript.
-* **Mobile:** Mobile client sử dụng API chung của LNFS.
-* **Core API:** Node.js + Express.
-* **Business/Admin extension:** Java Spring Boot.
-* **Database:** MySQL 8+.
-* **Media storage:** Cloudinary.
-* **Realtime:** Socket.IO.
-* **Email:** Gmail SMTP với App Password.
+## Yêu cầu môi trường
 
-### Runtime ownership
+- Node.js 20+
+- npm 10+
+- MySQL 8+ hoặc Aiven MySQL
+- Gmail account đã bật 2-Step Verification và App Password nếu test email thật
+- Java 21 + Maven chỉ khi chạy Java health skeleton
 
-Node.js là core API và owner chính của authentication, posts, media, matching, Socket.IO, notifications, migrations và các write flow hiện tại.
+## Cấu hình
 
-Java Spring Boot được dùng cho các business/admin extension như claim transition, handover, warehouse và AI/OCR integration.
+1. Cài dependencies:
 
-Mỗi business flow chỉ có **một runtime writer**. Không được để Node.js và Java cùng ghi dữ liệu/state cho cùng một flow.
+```bash
+npm install
+```
 
-## Roles
+2. Tạo `.env` ở root từ `.env.example`.
 
-| Role       | Description                            |
-| ---------- | -------------------------------------- |
-| `USER`     | Người dùng đã đăng ký hệ thống         |
-| `STUDENT`  | Sinh viên FPT University               |
-| `LECTURER` | Giảng viên FPT University              |
-| `STAFF`    | Nhân viên hỗ trợ vận hành Lost & Found |
-| `ADMIN`    | Quản trị viên hệ thống                 |
+3. Điền các nhóm biến:
 
-## Requirements
+- `DB_*`: MySQL connection.
+- `JWT_ACCESS_SECRET`: chuỗi bí mật dài và riêng cho môi trường.
+- `SMTP_*`: SMTP host/user/App Password/from.
+- `GEMINI_*`: tùy chọn, chỉ đặt server-side.
+- `UPLOAD_DIR`: thư mục media local hiện tại.
 
-* Node.js 20+
-* MySQL 8+
-* Java 21 + Maven
-* Gmail account đã bật 2-Step Verification để tạo App Password
-* Cloudinary account nếu chạy upload media thật
+Không commit `.env`, CA certificate, password, API key hoặc token. Nếu secret từng xuất hiện trong ảnh/chat/log công khai, hãy rotate secret đó.
 
-## Configuration
-
-1. Tạo file `.env` từ `.env.example` tại root project.
-2. Điền cấu hình MySQL, JWT, SMTP, Cloudinary và các service cần thiết.
-3. Không commit `.env`, certificate, password, token hoặc credentials lên Git.
-
-Ví dụ cấu hình Gmail SMTP:
+### Gmail SMTP
 
 ```env
 SMTP_HOST=smtp.gmail.com
 SMTP_PORT=465
 SMTP_SECURE=true
-SMTP_USER=your-gmail-address@gmail.com
-SMTP_PASS=your-16-character-gmail-app-password
-SMTP_FROM="FPTU Lost & Found <your-gmail-address@gmail.com>"
+SMTP_USER=your-address@gmail.com
+SMTP_PASS=your-gmail-app-password
+SMTP_FROM="FPTU Lost & Found <your-address@gmail.com>"
 ```
 
-Không dùng mật khẩu Gmail chính. Vào Google Account → Security → 2-Step Verification → App passwords để tạo App Password.
+Không dùng mật khẩu Gmail chính.
 
-## Shared cloud database
-
-Nhóm dùng chung MySQL cloud cho môi trường development. Mỗi thành viên chạy web/API trên máy riêng, nhưng `.env` trỏ đến cùng database cloud.
-
-Ví dụ:
+### Gemini
 
 ```env
-DB_HOST=mysql-your-service.aivencloud.com
-DB_PORT=14025
+GEMINI_API_KEY=your-server-side-key
+GEMINI_MODEL=your-supported-gemini-model
+GEMINI_TIMEOUT_MS=30000
+```
+
+API key không được đặt trong biến `VITE_*`. Nếu provider chưa cấu hình hoặc lỗi, user vẫn có thể nhập form thủ công.
+
+### Aiven MySQL
+
+```env
+DB_HOST=your-service.aivencloud.com
+DB_PORT=your-port
 DB_NAME=defaultdb
-DB_USER=avnadmin
-DB_PASSWORD=your-cloud-password
+DB_USER=your-user
+DB_PASSWORD=your-password
 DB_SSL=true
 DB_SSL_CA_PATH=certs/aiven-ca.pem
 ```
 
-Quy tắc database chung:
+CA certificate và `.env` phải nằm ngoài Git. Không tắt TLS verification để né lỗi certificate.
 
-* Không dùng `DROP DATABASE`, `TRUNCATE` hoặc sửa schema thủ công.
-* Mọi thay đổi schema phải đi qua migration mới.
-* Chỉ một người chạy migration trên database chung sau khi đã review.
-* Không commit certificate hoặc credentials.
-* Dùng account demo riêng khi test; không dùng account admin cá nhân để test chung.
-* Nếu cần seed/demo data, dùng database riêng như `team_demo`.
-
-## Run locally
+## Migration
 
 ```bash
-npm install
 npm run check:env
 npm run migrate
+```
+
+Migration runner lưu checksum. Nếu gặp `Migration checksum mismatch`, không sửa/bypass migration đã chạy; hãy khôi phục nội dung gốc hoặc tạo migration mới.
+
+Quy tắc khi dùng DB chung:
+
+1. Chỉ một thành viên chạy migration sau khi PR được review.
+2. Không `DROP`, `TRUNCATE` hoặc sửa schema thủ công.
+3. Không chạy test destructive trên shared DB.
+4. Tách database dev/demo/test khi có thể.
+
+## Chạy local
+
+```bash
 npm run dev
 ```
 
-Default URLs:
+- Web: `http://localhost:5173`
+- API: `http://localhost:3001`
+- Health: `http://localhost:3001/api/health`
 
-* Web: `http://localhost:5173`
-* Node API health: `http://localhost:3001/api/health`
-* Java health service: `http://localhost:8081/actuator/health`
+Chạy riêng:
 
-## Testing
+```bash
+npm run dev:web
+npm run dev:api
+```
+
+Java health skeleton:
+
+```bash
+npm run dev:java
+```
+
+## Test và build
 
 ```bash
 npm test
 npm run build
+npm --workspace @lnfs/web run e2e:home
 ```
 
-Trước khi chuyển ticket sang Done:
+Playwright có thể cần cài browser lần đầu:
 
-1. Chạy test liên quan và tự test chức năng.
-2. Tạo branch theo format `feature/LNFS-xx-short-name`.
-3. Commit có Jira key, ví dụ: `feat(LNFS-52): add claim evidence validation`.
-4. Tạo Pull Request và gắn link PR vào Jira.
-5. Cập nhật checklist, status và test evidence trong ticket.
+```bash
+npx playwright install chromium
+```
 
-## Core API modules
+## Lưu ý media khi làm việc nhóm
 
-| Module                 | Main capabilities                                                              |
-| ---------------------- | ------------------------------------------------------------------------------ |
-| Authentication         | OTP registration, login, refresh token, logout, password reset, profile        |
-| Posts & Media          | LOST/FOUND posts, search/filter, upload/delete media, board                    |
-| Matching               | Normalize text, calculate match score, save suggestions and explanation        |
-| Claims                 | Submit claim, evidence, duplicate prevention, review workflow                  |
-| Handover & Appointment | Handover points, appointments, receipt/return flow                             |
-| Warehouse              | Stored items, condition logs, retention deadline, overdue handling             |
-| Realtime               | Claim chat, images, seen/unread, notifications                                 |
-| Admin                  | User/role, category, area, configuration, moderation, dashboard, report export |
-| AI/OCR                 | Image analysis, OCR, tags, category suggestion and review confidence           |
+Post media đang được ghi vào `UPLOAD_DIR` trên từng máy, trong khi metadata nằm trong MySQL. Nếu cả nhóm dùng chung Aiven DB, ảnh do máy A upload sẽ không tự xuất hiện trên máy B. Khi đó API có thể gặp file reference không tồn tại.
 
-## Security notes
+Giải pháp ngắn hạn là cùng test trên một API host có persistent volume. Giải pháp đúng trước staging là chuyển sang Cloudinary/S3-compatible shared object storage và vẫn bảo vệ private media bằng signed/authenticated access.
 
-* API không trả OTP, password hoặc refresh token trong JSON/log.
-* Refresh token chỉ lưu trong cookie `HttpOnly`.
-* `COOKIE_SECURE=false` chỉ dùng khi local HTTP.
-* Khi deploy HTTPS, đặt `COOKIE_SECURE=true` và cấu hình đúng `FRONTEND_URL`.
-* Media private không được public raw URL; chỉ truy cập qua cơ chế được xác thực.
-* Chỉ owner được sửa/xóa bài đăng của mình.
-* Admin-only endpoints phải kiểm tra role; `STAFF` không được có quyền tương đương `ADMIN`.
+## Cấu trúc
 
-## Team workflow
+```text
+apps/
+  api-node/            Node.js core API và migrations
+  web/                 React web app
+  java-admin-service/  Spring Boot health skeleton
+docs/                  Tài liệu phạm vi, requirement, rules và checklist
+scripts/               Kiểm tra môi trường
+```
 
-* Jira quản lý backlog, sprint, task và trạng thái công việc.
-* Discord dùng cho announcement, daily scrum, dev discussion và review.
-* Git dùng branch, commit và Pull Request để theo dõi contribution.
-* Mỗi người chỉ làm và đặc tả Use Case thuộc chức năng mình phụ trách.
-* Không chuyển ticket sang Done nếu chưa có commit/PR, test evidence và Jira checklist.
+## Tài liệu
 
-## Reference project
+Bắt đầu tại [docs/README.md](docs/README.md).
 
-Codebase này được xây mới, chỉ tham khảo project cũ về workspace structure, controller/service/repository separation, sequential migrations và API conventions.
+- [Project overview](docs/project-overview.md)
+- [Requirements](docs/requirements.md)
+- [Business rules](docs/business-rules.md)
+- [Traceability](docs/traceability-matrix.md)
+- [Use-case checklist](docs/use-case-checklist.md)
 
-Không sao chép `node_modules`, `.git`, `.env`, credentials, database dump, dữ liệu người dùng hoặc lịch sử commit.
+## Cách mô tả trung thực
+
+> Đây là web/backend MVP đang phát triển cho Lost & Found campus. Authentication, post management, Gemini-assisted draft và hybrid matching đã có; claim, verification, appointment, warehouse, realtime, Java business extension và mobile là các bước tiếp theo.
