@@ -1,104 +1,172 @@
-﻿# Use Case Checklist
+# Checklist Use Case
 
-| Done | UC | Use case |
-| --- | --- | --- |
-| [x] | UC-001 | Authenticate JWT in Node.js API |
-| [x] | UC-002 | Authorize Admin/Staff/User in Node.js API |
-| [ ] | UC-003 | Request additional claim information |
-| [ ] | UC-004 | Accept claim with row lock |
-| [ ] | UC-005 | Reject claim with reason |
-| [ ] | UC-006 | Cancel claim when in valid state |
-| [ ] | UC-007 | Lock claim writes during state transition |
-| [ ] | UC-008 | Create handover point in Java service |
-| [ ] | UC-009 | Update handover point in Java service |
-| [ ] | UC-010 | Toggle handover point in Java service |
-| [ ] | UC-011 | Confirm item received at handover point |
-| [ ] | UC-012 | Update item to stored status |
-| [ ] | UC-013 | Record item condition notes upon receipt |
-| [ ] | UC-014 | Confirm item returned to recipient |
-| [ ] | UC-015 | Write storage log for warehouse operations |
-| [ ] | UC-016 | Check warehouse item retention deadline |
-| [ ] | UC-017 | Determine eligibility for overdue item processing |
-| [ ] | UC-018 | Create overdue item disposal order |
-| [ ] | UC-019 | Create donation batch for items |
-| [ ] | UC-020 | Send warehouse alerts to staff/admin |
-| [ ] | UC-021 | Create return appointment after accepted claim |
-| [ ] | UC-022 | Reject appointment with reason |
-| [ ] | UC-023 | Reschedule or cancel return appointment |
-| [ ] | UC-024 | Complete appointment and update to resolved |
-| [ ] | UC-025 | Calculate reputation score after business event |
-| [ ] | UC-026 | Collect AI training data |
-| [ ] | UC-027 | Label match correct/incorrect data |
-| [ ] | UC-028 | Anonymize AI training data |
-| [ ] | UC-029 | Train AI model from labeled data |
-| [ ] | UC-030 | Evaluate and save AI model version |
-| [x] | UC-031 | Request registration OTP via email |
-| [x] | UC-032 | Verify OTP and create account |
-| [x] | UC-033 | Log in with email and password |
-| [x] | UC-034 | Refresh access token |
-| [x] | UC-035 | Log out and revoke refresh token |
-| [x] | UC-036 | Reset password via OTP |
-| [x] | UC-037 | Provide user profile API |
-| [ ] | UC-038 | Provide user avatar API |
-| [ ] | UC-039 | Provide activity, reputation, and post-return feedback review |
-| [x] | UC-040 | Create lost item post via API |
-| [x] | UC-041 | Create found item post via API |
-| [x] | UC-042 | Update post via API |
-| [x] | UC-043 | Close or soft-delete post via API |
-| [x] | UC-044 | Return post detail via API |
-| [x] | UC-045 | Return current user's posts |
-| [x] | UC-046 | Return public Lost & Found board |
-| [x] | UC-047 | Search, filter, and sort posts |
-| [x] | UC-048 | Upload post images |
-| [ ] | UC-049 | Upload claim evidence images |
-| [ ] | UC-050 | Delete post images from Cloudinary |
-| [ ] | UC-051 | Provide public config for client validation |
-| [ ] | UC-052 | Submit claim for a FOUND post |
-| [ ] | UC-053 | Prevent duplicate claims for same post |
-| [ ] | UC-054 | Control claim evidence view permissions |
-| [x] | UC-055 | Provide handover point list API |
-| [ ] | UC-056 | Manage handover points via Admin API |
-| [ ] | UC-057 | Store campus map image and handover point marker coordinates |
-| [ ] | UC-058 | Count stored items at handover point |
-| [ ] | UC-059 | Manage warehouse items via API |
-| [ ] | UC-060 | Update warehouse item status |
-| [ ] | UC-061 | Save warehouse item retention deadline |
-| [x] | UC-062 | Restrict staff permissions below admin |
-| [ ] | UC-063 | Manage users via Admin API |
-| [x] | UC-064 | Manage item categories via Admin API |
-| [x] | UC-065 | Manage campus areas and buildings via Admin API |
-| [ ] | UC-066 | Moderate posts and handle reports via Admin API |
-| [x] | UC-067 | Provide admin dashboard overview data |
-| [ ] | UC-068 | Run matching after post create or update |
-| [ ] | UC-069 | Normalize Vietnamese text for matching algorithm |
-| [ ] | UC-070 | Calculate tiered match score by text, category, location, time, image tags, and OCR |
-| [ ] | UC-071 | Save matching results |
-| [ ] | UC-072 | Return similar item suggestions |
-| [ ] | UC-073 | Send notification when new match found |
-| [ ] | UC-074 | Check match suggestions on 10-minute cycle |
-| [ ] | UC-075 | Re-run matching manually for admin |
-| [ ] | UC-076 | Explain why two posts match |
-| [ ] | UC-077 | Set up Socket.IO server |
-| [ ] | UC-078 | Authenticate socket via JWT |
-| [ ] | UC-079 | Create and join chat room by claim |
-| [ ] | UC-080 | Send and receive realtime messages |
-| [ ] | UC-081 | Send images in realtime chat |
-| [ ] | UC-082 | Display seen status and unread count in realtime |
-| [ ] | UC-083 | Send realtime notifications for chat, claim, and appointment |
-| [ ] | UC-084 | Export statistics report via API |
-| [ ] | UC-085 | Manage system configuration via API |
-| [ ] | UC-086 | Analyze item images with Google Vision |
-| [ ] | UC-087 | Extract OCR from evidence images |
-| [ ] | UC-088 | Suggest tags and categories from item images |
-| [ ] | UC-089 | Verify claim evidence uploaded by claimant |
-| [ ] | UC-090 | Calculate ownership review confidence percentage |
-| [ ] | UC-091 | Use AI tags as metadata for matching |
-| [ ] | UC-092 | Display review confidence percentage to finder/staff |
-| [ ] | UC-093 | Register, log in, and store token securely on mobile |
-| [ ] | UC-094 | View and update profile, avatar, activity, and reputation on mobile |
-| [ ] | UC-095 | View board, search, filter, sort, and open post detail on mobile |
-| [ ] | UC-096 | Create and manage LOST/FOUND posts on mobile |
-| [ ] | UC-097 | Upload images from camera/gallery with mobile validation |
-| [ ] | UC-098 | Submit claim, upload evidence, and view claim status on mobile |
-| [ ] | UC-099 | View handover map/points and create return appointment on mobile |
-| [ ] | UC-100 | Chat realtime, receive notifications, and handle offline/retry on mobile |
+Cập nhật: 21/08/2026
+
+## Quy ước
+
+- `[x] Done`: có runtime implementation trong codebase mới và có bằng chứng build/test phù hợp.
+- `[ ] Partial`: có một phần implementation nhưng chưa hoàn chỉnh end-to-end.
+- `[ ] Planned`: chưa có runtime; migration/schema không đủ để tick.
+- `[ ] Deferred`: cố ý để sau phạm vi web/backend hiện tại.
+
+Tổng quan audit: **33 Done, 2 Partial, 57 Planned, 8 Deferred**.
+
+## Authentication và authorization
+
+| Done | UC | Use case | Status | Evidence |
+| --- | --- | --- | --- | --- |
+| [x] | UC-001 | Xác thực JWT tại Node.js API | Done | `auth.middleware.ts` |
+| [x] | UC-002 | Phân quyền User/Student/Lecturer/Staff/Admin tại backend | Done | `requireAnyRole`, admin routes |
+| [ ] | UC-003 | Yêu cầu người claim bổ sung thông tin | Planned | Chưa có claim runtime |
+| [ ] | UC-004 | Chấp nhận claim với transaction/row lock | Planned | Chưa có claim runtime |
+| [ ] | UC-005 | Từ chối claim kèm lý do | Planned | Chưa có claim runtime |
+| [ ] | UC-006 | Hủy claim theo trạng thái hợp lệ | Planned | Chưa có claim runtime |
+| [ ] | UC-007 | Khóa ghi khi chuyển trạng thái claim | Planned | Chưa có claim runtime |
+
+## Handover, warehouse và appointment
+
+| Done | UC | Use case | Status | Evidence |
+| --- | --- | --- | --- | --- |
+| [ ] | UC-008 | Tạo điểm bàn giao | Planned | Schema only |
+| [ ] | UC-009 | Cập nhật điểm bàn giao | Planned | Schema only |
+| [ ] | UC-010 | Đóng/mở điểm bàn giao | Planned | Schema only |
+| [ ] | UC-011 | Xác nhận tiếp nhận vật phẩm tại điểm bàn giao | Planned | Chưa có runtime |
+| [ ] | UC-012 | Chuyển vật phẩm sang trạng thái lưu kho | Planned | Chưa có runtime |
+| [ ] | UC-013 | Ghi nhận tình trạng vật phẩm khi tiếp nhận | Planned | Chưa có runtime |
+| [ ] | UC-014 | Xác nhận trả vật phẩm cho người nhận | Planned | Chưa có runtime |
+| [ ] | UC-015 | Ghi storage log cho thao tác kho | Planned | Chưa có runtime |
+| [ ] | UC-016 | Kiểm tra thời hạn lưu kho | Planned | Chưa có runtime |
+| [ ] | UC-017 | Xác định vật phẩm đủ điều kiện xử lý quá hạn | Planned | Chưa có runtime |
+| [ ] | UC-018 | Tạo đơn xử lý/thanh lý vật phẩm quá hạn | Planned | Chưa có runtime |
+| [ ] | UC-019 | Tạo đợt quyên góp vật phẩm | Planned | Chưa có runtime |
+| [ ] | UC-020 | Gửi cảnh báo kho cho Staff/Admin | Planned | Chưa có runtime |
+| [ ] | UC-021 | Tạo lịch trả đồ sau accepted claim | Planned | Chưa có runtime |
+| [ ] | UC-022 | Từ chối lịch hẹn kèm lý do | Planned | Chưa có runtime |
+| [ ] | UC-023 | Đổi lịch hoặc hủy lịch trả đồ | Planned | Chưa có runtime |
+| [ ] | UC-024 | Hoàn tất lịch hẹn và cập nhật resolved | Planned | Chưa có runtime |
+| [ ] | UC-025 | Tính reputation sau business event | Planned | Chưa có runtime |
+
+## Custom AI training roadmap
+
+| Done | UC | Use case | Status | Evidence |
+| --- | --- | --- | --- | --- |
+| [ ] | UC-026 | Thu thập dữ liệu training hợp lệ | Planned | Chưa có pipeline |
+| [ ] | UC-027 | Gắn nhãn TRUE_MATCH/FALSE_MATCH | Planned | Schema foundation only |
+| [ ] | UC-028 | Ẩn danh dữ liệu training | Planned | Chưa có pipeline |
+| [ ] | UC-029 | Huấn luyện model từ dữ liệu đã gắn nhãn | Planned | Chưa có model artifact |
+| [ ] | UC-030 | Đánh giá và lưu phiên bản model | Planned | Chưa có evaluation pipeline |
+
+## Account và profile
+
+| Done | UC | Use case | Status | Evidence |
+| --- | --- | --- | --- | --- |
+| [x] | UC-031 | Yêu cầu OTP đăng ký qua email | Done | Auth route/service + SMTP |
+| [x] | UC-032 | Xác thực OTP và tạo tài khoản | Done | Transaction trong auth service |
+| [x] | UC-033 | Đăng nhập bằng email/password | Done | Login route/service |
+| [x] | UC-034 | Làm mới access token | Done | Refresh rotation transaction |
+| [x] | UC-035 | Đăng xuất và revoke refresh token | Done | Logout route/service |
+| [x] | UC-036 | Đặt lại mật khẩu bằng mã email | Done | Forgot/reset routes |
+| [x] | UC-037 | Xem và cập nhật profile cơ bản | Done | `/auth/me`, `/auth/profile` |
+| [ ] | UC-038 | Quản lý avatar người dùng | Planned | Chưa có route/storage |
+| [ ] | UC-039 | Xem activity, reputation và feedback sau trả đồ | Planned | Chưa có runtime |
+
+## LOST/FOUND posts và media
+
+| Done | UC | Use case | Status | Evidence |
+| --- | --- | --- | --- | --- |
+| [x] | UC-040 | Tạo bài LOST qua API | Done | Post create route/service/UI |
+| [x] | UC-041 | Tạo bài FOUND qua API | Done | Post create + FOUND validation |
+| [x] | UC-042 | Cập nhật bài của owner | Done | PATCH post + owner guard |
+| [x] | UC-043 | Đóng hoặc xóa mềm bài của owner | Done | Status update + DELETE |
+| [x] | UC-044 | Xem chi tiết bài bằng route riêng | Done | Post detail API/page |
+| [x] | UC-045 | Xem danh sách bài của tôi | Done | `/posts/mine`, `/my-posts` |
+| [x] | UC-046 | Xem board LOST/FOUND | Done | List board API/page |
+| [x] | UC-047 | Tìm kiếm, lọc, sắp xếp và phân trang bài | Done | Query validator/repository/UI |
+| [x] | UC-048 | Upload ảnh bài đăng | Done | Multer + media validation/proxy |
+| [ ] | UC-049 | Upload ảnh bằng chứng claim | Planned | Post `EVIDENCE` kind không phải claim flow |
+| [x] | UC-050 | Xóa ảnh bài đăng khỏi media storage hiện tại | Done | Owner-guarded delete; local storage |
+| [ ] | UC-051 | Cung cấp public config cho client validation | Planned | Chưa có public config route |
+| [ ] | UC-052 | Gửi claim cho bài FOUND | Planned | Schema only |
+| [ ] | UC-053 | Ngăn duplicate claim cho cùng bài | Planned | Constraint foundation, chưa có API |
+| [ ] | UC-054 | Kiểm soát quyền xem claim evidence/private data | Partial | Post privacy có; claim chưa có |
+
+## Catalog, staff và admin
+
+| Done | UC | Use case | Status | Evidence |
+| --- | --- | --- | --- | --- |
+| [x] | UC-055 | Lấy danh sách handover point đang hoạt động cho form | Done | `/posts/catalog` |
+| [ ] | UC-056 | Quản lý handover point qua Admin API | Planned | Chưa có route |
+| [ ] | UC-057 | Lưu campus map và marker point | Planned | Schema columns only |
+| [ ] | UC-058 | Đếm item lưu tại handover point | Planned | Chưa có runtime |
+| [ ] | UC-059 | Quản lý warehouse item qua API | Planned | Schema only |
+| [ ] | UC-060 | Cập nhật trạng thái warehouse item | Planned | Schema only |
+| [ ] | UC-061 | Lưu retention deadline cho warehouse item | Planned | Schema only |
+| [x] | UC-062 | Giới hạn Staff thấp hơn Admin | Done | Backend/frontend guards; Staff page còn placeholder |
+| [ ] | UC-063 | Quản lý user qua Admin API | Planned | Chưa có route |
+| [x] | UC-064 | Quản lý nhóm và danh mục vật phẩm | Done | Admin catalog API/UI |
+| [x] | UC-065 | Quản lý area và building | Done | Admin catalog API/UI |
+| [ ] | UC-066 | Moderate post và xử lý report | Planned | Chưa có route |
+| [ ] | UC-067 | Hiển thị admin dashboard overview toàn hệ thống | Partial | Mới có catalog statistics |
+
+## Hybrid matching
+
+| Done | UC | Use case | Status | Evidence |
+| --- | --- | --- | --- | --- |
+| [x] | UC-068 | Chạy matching sau khi tạo/cập nhật post | Done | Best-effort hook trong post service |
+| [x] | UC-069 | Chuẩn hóa text tiếng Việt cho matching | Done | Matching engine + tests |
+| [x] | UC-070 | Tính tiered score từ text/category/location/time/image/OCR | Done | Matching engine + tests |
+| [x] | UC-071 | Lưu kết quả matching | Done | Matching repository + `match_results` |
+| [x] | UC-072 | Trả danh sách bài tương tự | Done | Match API/page |
+| [ ] | UC-073 | Gửi notification khi có match mới | Planned | Chưa có notification runtime |
+| [ ] | UC-074 | Kiểm tra gợi ý theo chu kỳ 10 phút | Planned | Chưa có scheduler/client polling |
+| [x] | UC-075 | Tính lại matching theo quyền và rate limit | Done | Recalculate endpoint |
+| [x] | UC-076 | Giải thích lý do và điểm thành phần của match | Done | Explanation JSON + UI |
+
+## Realtime, report và configuration
+
+| Done | UC | Use case | Status | Evidence |
+| --- | --- | --- | --- | --- |
+| [ ] | UC-077 | Khởi tạo Socket.IO server | Planned | Không có dependency/runtime |
+| [ ] | UC-078 | Xác thực socket bằng JWT | Planned | Chưa có socket server |
+| [ ] | UC-079 | Tạo/join claim chat room | Planned | Chưa có claim/socket runtime |
+| [ ] | UC-080 | Gửi/nhận realtime message | Planned | Chưa có runtime |
+| [ ] | UC-081 | Gửi ảnh trong realtime chat | Planned | Chưa có runtime |
+| [ ] | UC-082 | Hiển thị seen và unread realtime | Planned | Chưa có runtime |
+| [ ] | UC-083 | Gửi realtime notification cho chat/claim/appointment | Planned | Chưa có runtime |
+| [ ] | UC-084 | Export báo cáo thống kê | Planned | Chưa có route |
+| [ ] | UC-085 | Quản lý system configuration | Planned | Matching chỉ đọc config nội bộ |
+
+## Gemini-assisted analysis và evidence support
+
+| Done | UC | Use case | Status | Evidence |
+| --- | --- | --- | --- | --- |
+| [x] | UC-086 | Phân tích ảnh vật phẩm bằng Gemini provider | Done | Gemini service/tests/UI |
+| [ ] | UC-087 | Trích OCR từ claim evidence | Planned | Chưa có claim evidence runtime |
+| [x] | UC-088 | Gợi ý tag và danh mục từ ảnh post | Done | Gemini mapping + tests |
+| [ ] | UC-089 | Đánh giá claim evidence | Planned | Chưa có runtime |
+| [ ] | UC-090 | Tính ownership review confidence | Planned | Chưa có runtime |
+| [x] | UC-091 | Dùng image/safe OCR tags làm tín hiệu matching | Done | AI tags + matching engine |
+| [ ] | UC-092 | Hiển thị review confidence cho finder/staff | Planned | Chưa có claim review UI |
+
+## Mobile
+
+| Done | UC | Use case | Status | Evidence |
+| --- | --- | --- | --- | --- |
+| [ ] | UC-093 | Đăng ký/đăng nhập và lưu phiên trên mobile | Deferred | Không có mobile workspace |
+| [ ] | UC-094 | Xem/cập nhật profile, avatar, activity, reputation trên mobile | Deferred | Không có mobile workspace |
+| [ ] | UC-095 | Xem/search/filter board và post detail trên mobile | Deferred | Không có mobile workspace |
+| [ ] | UC-096 | Tạo/quản lý LOST/FOUND post trên mobile | Deferred | Không có mobile workspace |
+| [ ] | UC-097 | Upload ảnh từ camera/gallery trên mobile | Deferred | Không có mobile workspace |
+| [ ] | UC-098 | Gửi claim/evidence và xem trạng thái trên mobile | Deferred | Không có mobile/claim runtime |
+| [ ] | UC-099 | Xem handover map và tạo appointment trên mobile | Deferred | Không có mobile/appointment runtime |
+| [ ] | UC-100 | Chat realtime, notification và offline/retry trên mobile | Deferred | Không có mobile/realtime runtime |
+
+## Điều kiện tick Done
+
+Không tick UC chỉ vì migration đã có table/column. Một UC cần tối thiểu:
+
+1. Route/service/repository hoặc UI thực thi đúng mục tiêu.
+2. Backend validation và authorization phù hợp.
+3. Build pass.
+4. Test trực tiếp hoặc bằng chứng kiểm tra tái lập được.
+5. Requirement, business rule và traceability đã đồng bộ.

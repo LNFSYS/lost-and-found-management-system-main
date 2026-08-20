@@ -1,70 +1,71 @@
-# Traceability Matrix
+# Ma trận truy vết
 
-Last audit: 2026-08-01
+Cập nhật: 21/08/2026
 
-This document links Business Rules, Requirements, and the canonical 100-UC set in `docs/Checklist/master-dev-checklist.md`. Each UC has exactly one primary owner.
+Ma trận này liên kết business rule, requirement, use case và bằng chứng code của **codebase mới**. Bảng tồn tại trong migration nhưng không có route/service không được xem là implementation evidence.
 
-| BR | Requirement | UC | Status |
-| --- | --- | --- | --- |
-| BR-01 | FR-AUTH-01, NFR-SEC-01 | UC-031, UC-032 | Implemented |
-| BR-02 | FR-AUTH-02, NFR-SEC-01 | UC-033, UC-034, UC-035, UC-036 | Implemented |
-| BR-03 | FR-ROLE-01, NFR-SEC-02 | UC-001, UC-002, UC-033, UC-062 | Implemented |
-| BR-04 | FR-ROLE-01, FR-WAREHOUSE-01, FR-ADMIN-01 | UC-002, UC-059, UC-060, UC-062, UC-063, UC-066 | Partial |
-| BR-05 | FR-BOARD-01, NFR-PERF-01 | UC-044, UC-046, UC-047 | Implemented |
-| BR-06 | FR-POST-01 | UC-040, UC-041, UC-042, UC-043 | Implemented |
-| BR-07 | FR-POST-01 | UC-040, UC-041 | Implemented |
-| BR-08 | FR-POST-01, FR-HANDOVER-01 | UC-040, UC-041, UC-055, UC-058 | Implemented |
-| BR-09 | FR-MEDIA-01, NFR-PRIV-01 | UC-048, UC-049, UC-050, UC-051, UC-087 | Implemented for MVP |
-| BR-10 | FR-MEDIA-01, FR-CLAIM-01, NFR-PRIV-01, NFR-RT-01 | UC-049, UC-054, UC-078, UC-079, UC-083 | Implemented for MVP |
-| BR-11 | FR-AI-01, FR-AI-02, FR-CLAIM-03, NFR-AI-01 | UC-070, UC-076, UC-089, UC-090, UC-092 | Implemented |
-| BR-12 | FR-MATCH-01, FR-NOTI-01, NFR-PERF-01 | UC-068, UC-069, UC-070, UC-071, UC-072, UC-073, UC-076 | Implemented |
-| BR-13 | FR-MATCH-01, FR-NOTI-01 | UC-073, UC-074, UC-083 | Implemented |
-| BR-14 | FR-CLAIM-01 | UC-052, UC-053 | Implemented |
-| BR-15 | FR-CLAIM-02, NFR-AUDIT-01 | UC-003, UC-004, UC-005, UC-006, UC-007 | Implemented |
-| BR-16 | FR-CLAIM-03, NFR-AI-01 | UC-089, UC-090, UC-092 | Implemented |
-| BR-17 | FR-HANDOVER-01 | UC-008, UC-009, UC-010, UC-055, UC-056, UC-057, UC-058 | Implemented |
-| BR-18 | FR-WAREHOUSE-01, NFR-DATA-01, NFR-AUDIT-01 | UC-011, UC-012, UC-013, UC-014, UC-015, UC-059, UC-060 | Implemented |
-| BR-19 | FR-WAREHOUSE-01, FR-WAREHOUSE-02 | UC-016, UC-017, UC-061 | Implemented |
-| BR-20 | FR-WAREHOUSE-02, FR-NOTI-01 | UC-018, UC-019, UC-020 | Implemented for MVP |
-| BR-21 | FR-APPT-01 | UC-021, UC-022, UC-023, UC-024 | Implemented |
-| BR-22 | FR-RT-01, NFR-RT-01, NFR-SEC-02 | UC-077, UC-078, UC-079 | Implemented |
-| BR-23 | FR-RT-01, NFR-RT-01 | UC-079, UC-080, UC-081, UC-082 | Implemented |
-| BR-24 | FR-NOTI-01, NFR-PRIV-01 | UC-020, UC-073, UC-083 | Partial |
-| BR-25 | FR-HANDOVER-01, FR-ADMIN-01, NFR-SEC-02 | UC-056, UC-063, UC-064, UC-065, UC-066, UC-067, UC-084, UC-085 | Partial |
-| BR-26 | FR-REP-01, NFR-AI-01 | UC-025, UC-039 | Implemented |
-| BR-27 | FR-AI-02, NFR-AI-01 | UC-026, UC-027, UC-028, UC-029, UC-030 | Partial foundation |
-| BR-28 | FR-MOBILE-01, NFR-SEC-02, NFR-RT-01 | UC-093, UC-094, UC-095, UC-096, UC-097, UC-098, UC-099, UC-100 | Partial |
-| BR-29 | FR-DEMO-01 | UC-031, UC-032, UC-040, UC-041, UC-059 | Implemented |
-| BR-30 | NFR-AUDIT-01, NFR-DATA-01, NFR-PERF-01, NFR-RT-01, NFR-PRIV-01 | UC-007, UC-015, UC-054, UC-071, UC-078, UC-089 | Core smoke implemented; browser/load hardening pending |
-| BR-31 | FR-AI-03, FR-CLAIM-01, FR-CLAIM-03, NFR-AI-01, NFR-AI-02 | UC-049, UC-052, UC-054, UC-089, UC-090, UC-092 | Implemented for MVP |
-| BR-32 | FR-AI-04, FR-NOTI-01, NFR-AI-02, NFR-PRIV-01 | UC-067, UC-073, UC-083, UC-084, UC-085 | Implemented for MVP |
-| BR-33 | FR-AI-05, FR-MATCH-01, NFR-AI-01, NFR-AI-02 | UC-059, UC-070, UC-076, UC-084, UC-086, UC-091 | Implemented for MVP |
-| BR-34 | FR-AI-03, FR-AI-04, FR-AI-05, FR-ADMIN-01, NFR-SEC-02 | UC-062, UC-066, UC-070, UC-084, UC-085 | Implemented |
+## 1. Implemented/partial traceability
 
-## UC Count
+| Business rules | Requirements | Use cases | Status | Code/test evidence |
+| --- | --- | --- | --- | --- |
+| BR-01, BR-02 | FR-AUTH-01 | UC-031, UC-032 | Implemented | `auth.routes.ts`, `auth.service.ts`, `auth.repository.ts`, `001_auth.sql` |
+| BR-03, BR-04, BR-05 | FR-AUTH-02, FR-AUTH-03 | UC-033 đến UC-036 | Implemented | Auth service/repository, `security.test.ts`, `auth.validator.test.ts` |
+| BR-06, BR-26 | FR-ROLE-01 | UC-001, UC-002, UC-062 | Implemented | `auth.middleware.ts`, `admin.routes.ts`, `route-guard.tsx` |
+| BR-07, BR-08, BR-09 | FR-POST-01, FR-POST-02 | UC-040 đến UC-043 | Implemented | `post.routes.ts`, `post.service.ts`, `post.validator.ts`, validator tests |
+| BR-10, BR-11 | FR-BOARD-01, FR-PRIVPOST-01 | UC-044 đến UC-047, UC-054 | Partial | Post serializer/repository; claim privacy chưa có |
+| BR-12, BR-13 | FR-CATALOG-01, FR-ADMIN-01 | UC-055, UC-064, UC-065 | Implemented | `admin-catalog.*`, `admin-page.tsx`, catalog queries |
+| BR-14, BR-15 | FR-MEDIA-01 | UC-048, UC-050 | Implemented local | `media.ts`, media tests, post media route/service |
+| BR-16, BR-17, BR-18 | FR-AI-01, FR-AI-02 | UC-086, UC-088, UC-091 | Implemented/partial privacy hardening | `gemini-image.service.ts`, Gemini tests, `story-post-form.tsx` |
+| BR-19, BR-20 | FR-MATCH-01 | UC-068 | Implemented | `matching.service.ts`, candidate repository queries |
+| BR-21, BR-22, BR-23 | FR-MATCH-02 | UC-069, UC-070, UC-091 | Implemented | `matching.engine.ts`, matching engine tests |
+| BR-24, BR-25 | FR-MATCH-03 | UC-071, UC-072, UC-075, UC-076 | Implemented | `matching.repository.ts`, post match routes, `post-matches-page.tsx` |
+| BR-27 | NFR-DATA-01 | N/A | Implemented | `run-migrations.ts`, `schema_migrations` checksum |
+| BR-28 | FR-JAVA-01, FR-JAVA-02 | N/A | Skeleton/Planned | Java app + Java README; không có business controller |
 
-| Metric | Value |
-| --- | --- |
-| Total canonical UC | 100 |
-| Lowest UC | UC-001 |
-| Highest UC | UC-100 |
-| Deprecated old UC above UC-100 | Not used |
+## 2. Planned traceability
 
-## Private Assistance Traceability (2026-08-03)
+| Business rules | Requirements | Use cases | Status | Required evidence before Done |
+| --- | --- | --- | --- | --- |
+| BR-29, BR-30 | FR-MEDIA-02, NFR-PORT-01 | UC-048, UC-050 | Planned | Object-storage adapter, migration/compatibility, missing-object test |
+| BR-31 | FR-ADMIN-01, NFR-AUDIT | UC-064, UC-065 | Planned | Audit table/repository, actor test |
+| BR-32 | FR-STAFF-01 | UC-062 | Partial | Staff API/UI + role matrix integration test |
+| BR-33, BR-34 | FR-CLAIM-01, FR-CLAIM-02 | UC-003 đến UC-007, UC-052, UC-053 | Planned | Claim routes/service/repository, race-condition test |
+| BR-35, BR-36 | FR-EVIDENCE-01 | UC-049, UC-054, UC-087 đến UC-092 | Planned | Protected evidence proxy, privacy/authorization tests |
+| BR-37 | FR-APPT-01 | UC-021 đến UC-024 | Planned | Appointment API/state machine/concurrency test |
+| BR-38 | FR-WAREHOUSE-01 | UC-011 đến UC-020, UC-059 đến UC-061 | Planned | Warehouse API, disposition guard and lifecycle tests |
+| BR-39 | FR-RT-01 | UC-077 đến UC-083 | Planned | Socket server, JWT room tests, reconnect/unread tests |
+| BR-40 | FR-TRAIN-01 | UC-026 đến UC-030 | Planned | Dataset policy, training/eval pipeline and model artifact |
+| BR-41 | FR-MOBILE-01 | UC-093 đến UC-100 | Deferred | Mobile workspace, API contract tests and device verification |
 
-| Business rule | Requirements | Use cases | Evidence |
-| --- | --- | --- | --- |
-| BR-35 | FR-CLAIM-09, NFR-PRIV-01, NFR-SEC-01 | UC-045, UC-048, UC-049, UC-054 | Migrations 034-035, `proof-vault.*`, authenticated media proxy, private-assistance E2E |
-| BR-36 | FR-CLAIM-09, NFR-DATA-01 | UC-048, UC-049, UC-054 | Transactional attach, proof row lock, archive-safe claim snapshot |
-| BR-37 | FR-POST-07, NFR-PRIV-01 | UC-020, UC-022, UC-023, UC-076 | Backend serializer tests, generic private match notification |
-| BR-38 | FR-AI-06, FR-CLAIM-10, NFR-AI-01, NFR-AI-02 | UC-049, UC-054, UC-070, UC-076, UC-089 | OCR redaction tests, reviewer-only map, feature flags |
+## 3. Frontend route evidence
 
-## User Recovery Assistance Traceability (2026-08-03)
+| User capability | Route | Evidence |
+| --- | --- | --- |
+| Authentication | `/login`, `/register`, `/forgot-password`, `/reset-password` | Auth pages, `auth-context.tsx` |
+| Story/create post | `/home` | `home-page.tsx`, `story-post-form.tsx`, Playwright story tests |
+| Board/my posts | `/posts`, `/my-posts` | `posts-page.tsx`, posts Playwright tests |
+| Post detail | `/posts/:postId` | `post-detail-page.tsx` |
+| Matching detail | `/posts/:postId/matches` | `post-matches-page.tsx` |
+| Profile | `/profile` | `profile-page.tsx` |
+| Staff | `/staff` | Guarded placeholder only |
+| Admin catalog | `/admin` | `admin-page.tsx` |
 
-| Business rule | Requirements | Use cases | Evidence |
-| --- | --- | --- | --- |
-| BR-39 | FR-AI-07, FR-MATCH-01, NFR-AI-01, NFR-PRIV-01 | UC-040, UC-041, UC-068, UC-070, UC-076 | Migration 036, `search-companion.*`, advisory preview tests, owner/active-LOST guards |
-| BR-40 | FR-POST-08, FR-AI-01, FR-MATCH-01, NFR-AI-01, NFR-AI-02 | UC-040, UC-041, UC-068, UC-070, UC-076, UC-086 | Migration 036, `finder-quick-scan.*`, media/Safe Search tests, terminal-session regression and locked idempotent publish |
-| BR-41 | FR-RECOVERY-01, FR-NOTI-01, NFR-PRIV-01, NFR-AUDIT-01 | UC-021, UC-024, UC-045, UC-052, UC-054, UC-059, UC-073 | Migration 036, `recovery-timeline.*`, authorization query and privacy unit tests |
+## 4. Verification map
 
-Migrations 035-036 have a schema regression test proving all seven assistance flags default to disabled until release gates pass.
+| Check | Command | Coverage |
+| --- | --- | --- |
+| API unit tests | `npm --workspace @lnfs/api-node test` | Auth validation/security, CORS, media, Gemini, matching |
+| Web typecheck | `npm --workspace @lnfs/web run lint` | TypeScript frontend |
+| API + web build | `npm run build` | Compile/bundle |
+| Browser tests | `npm --workspace @lnfs/web run e2e:home` | Home, board, detail, create-post UI |
+| Migration | `npm run migrate` | Apply pending migrations to configured DB; không dùng shared DB cho destructive test |
+
+## 5. Consistency rule
+
+Khi đổi một UC thành Done, phải cập nhật đồng thời:
+
+1. [use-case-checklist.md](use-case-checklist.md)
+2. [requirements.md](requirements.md)
+3. [business-rules.md](business-rules.md)
+4. Ma trận này
+5. Test evidence hoặc command tái lập được
