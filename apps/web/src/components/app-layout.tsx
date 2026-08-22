@@ -18,7 +18,7 @@ export function AppLayout() {
         {isAdmin && <NavLink to="/admin"><LayoutDashboard size={18} /> Quản trị</NavLink>}
         {user?.roles.some((role) => role === "STAFF" || role === "ADMIN") && <NavLink to="/staff"><ShieldCheck size={18} /> Khu vực nội bộ</NavLink>}
       </nav>
-      <button className="icon-text-button" onClick={() => void logout()}><LogOut size={18} /> Đăng xuất</button>
+      <button className="icon-text-button" onClick={() => { void logout().catch(() => undefined); }}><LogOut size={18} /> Đăng xuất</button>
     </header>
     <main className="workspace"><Outlet /></main>
   </div>;

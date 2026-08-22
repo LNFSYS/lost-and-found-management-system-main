@@ -58,7 +58,7 @@ export const authService = {
     if (await userRepository.findByEmail(normalizedEmail)) throw new HttpError(409, "Email đã được đăng ký");
     const otp = randomOtp();
     await authRepository.invalidateRegistrationOtps(normalizedEmail);
-    await authRepository.createRegistrationOtp({ id: id(), email: normalizedEmail, otpHash: await bcrypt.hash(otp, env.bcryptSaltRounds), expiresAt: new Date(Date.now() + env.otpTtlMinutes * 60_000) });
+    await authRepository.createRegistrationOtp({ id: id(), email: normalizedEmail, otpHash: await bcrypt.hash(otp, env.bcryptSaltRounds), expiresAt: new Date(Date.now() + env.otpTtlMinutes * 60_000), maxAttempts: env.otpMaxAttempts });
     await emailService.sendRegistrationOtp(input.email.trim(), otp);
     return { delivered: true, expiresInMinutes: env.otpTtlMinutes };
   },
@@ -111,7 +111,7 @@ export const authService = {
     if (!record || record.user.status !== "ACTIVE") return { delivered: true };
     const token = randomOtp();
     await authRepository.invalidatePasswordResets(record.user.id);
-    await authRepository.createPasswordReset({ id: id(), userId: record.user.id, tokenHash: await bcrypt.hash(token, env.bcryptSaltRounds), expiresAt: new Date(Date.now() + env.otpTtlMinutes * 60_000) });
+    await authRepository.createPasswordReset({ id: id(), userId: record.user.id, tokenHash: await bcrypt.hash(token, env.bcryptSaltRounds), expiresAt: new Date(Date.now() + env.otpTtlMinutes * 60_000), maxAttempts: env.otpMaxAttempts });
     await emailService.sendPasswordResetOtp(record.user.email, token);
     return { delivered: true };
   },

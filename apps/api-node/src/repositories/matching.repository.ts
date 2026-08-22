@@ -298,10 +298,10 @@ export const matchingRepository = {
     visualAttributes: string[];
     visibleText: string[];
     confidence: number;
-  }) {
+  }, transaction?: PoolConnection) {
     const visual = [...new Set(input.visualAttributes.map((value) => value.trim()).filter(Boolean))].slice(0, 12);
     const ocr = [...new Set(input.visibleText.map((value) => value.trim()).filter(Boolean))].slice(0, 12);
-    await withTransaction(async (connection) => {
+    const replace = async (connection: PoolConnection) => {
       await connection.execute(
         "DELETE FROM ai_tags WHERE post_id = ? AND source IN ('VISION_LABEL', 'VISION_OBJECT', 'OCR')",
         [postId]
@@ -318,6 +318,8 @@ export const matchingRepository = {
           [id(), postId, tag, input.confidence]
         );
       }
-    });
+    };
+    if (transaction) return replace(transaction);
+    return withTransaction(replace);
   }
 };

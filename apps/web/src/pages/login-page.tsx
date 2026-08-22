@@ -1,5 +1,5 @@
 import { ArrowRight, KeyRound, Mail } from "lucide-react";
-import { type FormEvent, type ReactNode, useState } from "react";
+import { type FormEvent, type ReactNode, useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/auth-context";
 
@@ -7,10 +7,21 @@ export function LoginPage() {
   const { login } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const routeState = location.state as { from?: string; message?: string } | null;
+  const [redirectTo] = useState(routeState?.from ?? "/home");
+  const [notice] = useState(routeState?.message ?? "");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
+
+  useEffect(() => {
+    if (!routeState?.message) return;
+    navigate(`${location.pathname}${location.search}`, {
+      replace: true,
+      state: routeState.from ? { from: routeState.from } : null
+    });
+  }, [location.pathname, location.search, navigate, routeState?.from, routeState?.message]);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -18,7 +29,7 @@ export function LoginPage() {
     setPending(true);
     try {
       await login(email, password);
-      navigate((location.state as { from?: string } | null)?.from ?? "/home", { replace: true });
+      navigate(redirectTo, { replace: true });
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Không thể đăng nhập");
     } finally {
@@ -27,7 +38,7 @@ export function LoginPage() {
   }
 
   return <AuthFrame eyebrow="FPTU LOST & FOUND" title="Đăng nhập để tiếp tục" subtitle="Theo dõi hành trình Lost & Found bằng một tài khoản đã xác thực.">
-    <form onSubmit={submit} className="form-stack"><Field icon={<Mail size={18} />} label="Email"><input autoComplete="email" type="email" value={email} onChange={(event) => setEmail(event.target.value)} required /></Field><Field icon={<KeyRound size={18} />} label="Mật khẩu"><input autoComplete="current-password" type="password" value={password} onChange={(event) => setPassword(event.target.value)} required /></Field>{error && <p className="form-error" role="alert">{error}</p>}<button className="primary-button" disabled={pending}>{pending ? "Đang đăng nhập..." : <>Đăng nhập <ArrowRight size={18} /></>}</button></form>
+    <form onSubmit={submit} className="form-stack"><Field icon={<Mail size={18} />} label="Email"><input autoComplete="email" type="email" value={email} onChange={(event) => setEmail(event.target.value)} required /></Field><Field icon={<KeyRound size={18} />} label="Mật khẩu"><input autoComplete="current-password" type="password" value={password} onChange={(event) => setPassword(event.target.value)} required /></Field>{notice && <p className="form-note" role="status">{notice}</p>}{error && <p className="form-error" role="alert">{error}</p>}<button className="primary-button" disabled={pending}>{pending ? "Đang đăng nhập..." : <>Đăng nhập <ArrowRight size={18} /></>}</button></form>
     <div className="form-links"><Link to="/forgot-password">Quên mật khẩu?</Link><span>Chưa có tài khoản? <Link to="/register">Đăng ký</Link></span></div>
   </AuthFrame>;
 }

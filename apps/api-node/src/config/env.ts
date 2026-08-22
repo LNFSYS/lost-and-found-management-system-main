@@ -27,12 +27,16 @@ function number(name: string, fallback: number): number {
   return parsed;
 }
 
-function bool(name: string, fallback: boolean): boolean {
-  const value = process.env[name]?.trim().toLowerCase();
-  if (!value) return fallback;
-  if (["true", "1", "yes"].includes(value)) return true;
-  if (["false", "0", "no"].includes(value)) return false;
+export function parseBooleanEnv(value: string | undefined, fallback: boolean, name = "value"): boolean {
+  const normalized = value?.trim().toLowerCase();
+  if (!normalized) return fallback;
+  if (["true", "1", "yes"].includes(normalized)) return true;
+  if (["false", "0", "no"].includes(normalized)) return false;
   throw new Error(`${name} must be true or false`);
+}
+
+function bool(name: string, fallback: boolean): boolean {
+  return parseBooleanEnv(process.env[name], fallback, name);
 }
 
 export const env = {

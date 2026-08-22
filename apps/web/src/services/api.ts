@@ -178,7 +178,13 @@ export const api = {
   requestRegistrationOtp: (email: string) => raw<{ delivered: boolean; expiresInMinutes: number }>("/auth/register/request-otp", { method: "POST", body: JSON.stringify({ email }) }),
   register: async (payload: { email: string; otp: string; password: string; fullName: string; audienceRole: "STUDENT" | "LECTURER"; studentCode?: string; phoneNumber?: string }) => storeSession(await raw<SessionResponse>("/auth/register", { method: "POST", body: JSON.stringify(payload) })),
   login: async (email: string, password: string) => storeSession(await raw<SessionResponse>("/auth/login", { method: "POST", body: JSON.stringify({ email, password }) })),
-  logout: async () => { await raw<void>("/auth/logout", { method: "POST" }); accessToken = null; },
+  logout: async () => {
+    try {
+      await raw<void>("/auth/logout", { method: "POST" });
+    } finally {
+      accessToken = null;
+    }
+  },
   forgotPassword: (email: string) => raw<{ delivered: boolean; message: string }>("/auth/forgot-password", { method: "POST", body: JSON.stringify({ email }) }),
   resetPassword: (email: string, token: string, newPassword: string) => raw<{ reset: boolean }>("/auth/reset-password", { method: "POST", body: JSON.stringify({ email, token, newPassword }) }),
   me: () => raw<{ user: CurrentUser }>("/auth/me").then((payload) => payload.user),

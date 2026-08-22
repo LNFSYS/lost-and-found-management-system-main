@@ -12,8 +12,8 @@ export const authRepository = {
   async invalidateRegistrationOtps(email: string) {
     await pool.execute("UPDATE email_otps SET consumed_at = UTC_TIMESTAMP() WHERE normalized_email = ? AND purpose = 'REGISTER' AND consumed_at IS NULL", [email]);
   },
-  async createRegistrationOtp(input: { id: string; email: string; otpHash: string; expiresAt: Date }) {
-    await pool.execute("INSERT INTO email_otps (id, normalized_email, otp_hash, purpose, expires_at) VALUES (?, ?, ?, 'REGISTER', ?)", [input.id, input.email, input.otpHash, input.expiresAt]);
+  async createRegistrationOtp(input: { id: string; email: string; otpHash: string; expiresAt: Date; maxAttempts: number }, queryable: Queryable = pool) {
+    await queryable.execute("INSERT INTO email_otps (id, normalized_email, otp_hash, purpose, expires_at, max_attempts) VALUES (?, ?, ?, 'REGISTER', ?, ?)", [input.id, input.email, input.otpHash, input.expiresAt, input.maxAttempts]);
   },
   async findLatestRegistrationOtpForUpdate(email: string, connection: Queryable) {
     const [rows] = await connection.execute<OtpRow[]>("SELECT * FROM email_otps WHERE normalized_email = ? AND purpose = 'REGISTER' ORDER BY created_at DESC LIMIT 1 FOR UPDATE", [email]);
@@ -28,8 +28,8 @@ export const authRepository = {
   async invalidatePasswordResets(userId: string) {
     await pool.execute("UPDATE password_reset_tokens SET consumed_at = UTC_TIMESTAMP() WHERE user_id = ? AND consumed_at IS NULL", [userId]);
   },
-  async createPasswordReset(input: { id: string; userId: string; tokenHash: string; expiresAt: Date }) {
-    await pool.execute("INSERT INTO password_reset_tokens (id, user_id, token_hash, expires_at) VALUES (?, ?, ?, ?)", [input.id, input.userId, input.tokenHash, input.expiresAt]);
+  async createPasswordReset(input: { id: string; userId: string; tokenHash: string; expiresAt: Date; maxAttempts: number }, queryable: Queryable = pool) {
+    await queryable.execute("INSERT INTO password_reset_tokens (id, user_id, token_hash, expires_at, max_attempts) VALUES (?, ?, ?, ?, ?)", [input.id, input.userId, input.tokenHash, input.expiresAt, input.maxAttempts]);
   },
   async findLatestPasswordResetForUpdate(userId: string, connection: Queryable) {
     const [rows] = await connection.execute<ResetRow[]>("SELECT * FROM password_reset_tokens WHERE user_id = ? ORDER BY created_at DESC LIMIT 1 FOR UPDATE", [userId]);

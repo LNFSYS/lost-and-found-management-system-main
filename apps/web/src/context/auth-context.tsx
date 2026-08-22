@@ -18,7 +18,13 @@ export function AuthProvider({ children }: PropsWithChildren) {
   const value = useMemo<AuthContextValue>(() => ({
     user, ready,
     async login(email, password) { setUser(await api.login(email, password)); },
-    async logout() { await api.logout(); setUser(null); },
+    async logout() {
+      try {
+        await api.logout();
+      } finally {
+        setUser(null);
+      }
+    },
     async refreshUser() { setUser(await api.me()); },
     async updateProfile(input) { setUser(await api.updateProfile(input)); }
   }), [user, ready]);

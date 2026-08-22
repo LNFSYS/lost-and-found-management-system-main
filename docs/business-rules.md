@@ -1,6 +1,6 @@
 # Luật nghiệp vụ
 
-Cập nhật: 21/08/2026
+Cập nhật: 23/08/2026
 
 ## 1. Quy ước
 
@@ -46,7 +46,7 @@ Cập nhật: 21/08/2026
 | ID | Business rule | UC | Status |
 | --- | --- | --- | --- |
 | BR-29 | Shared DB không được tham chiếu file chỉ tồn tại trên một máy; media phải dùng persistent shared object storage. | UC-048, UC-050 | Planned |
-| BR-30 | Nếu metadata media tồn tại nhưng file/object đã mất, API phải trả 404 có kiểm soát thay vì 500 unhandled. | UC-048 | Planned |
+| BR-30 | Nếu metadata media tồn tại nhưng file/object đã mất, API phải trả 404 có kiểm soát thay vì 500 unhandled. | UC-048 | Enforced cho local post media |
 | BR-31 | Admin catalog writes cần audit actor, action, before/after và timestamp. | UC-064, UC-065 | Planned |
 | BR-32 | Staff page chỉ được công bố hoàn thành khi có ít nhất một operational flow và backend role matrix test. | UC-062 | Planned |
 

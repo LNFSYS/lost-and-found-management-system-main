@@ -1,6 +1,6 @@
 # Yêu cầu chức năng và phi chức năng
 
-Cập nhật: 21/08/2026
+Cập nhật: 23/08/2026
 
 ## 1. Quy ước trạng thái
 
@@ -93,7 +93,7 @@ Migrations chỉ là bằng chứng schema, không đủ để đánh dấu mộ
 | NFR-PORT-01 | Media phải tồn tại sau restart/deploy và truy cập được từ mọi API instance. | P0 | Not met với local storage |
 | NFR-TEST-01 | API/web phải build; logic quan trọng có unit/browser tests. | P0 | Partial |
 | NFR-CI-01 | Pull request phải tự động chạy test/build với MySQL isolated. | P1 | Planned |
-| NFR-OBS-01 | API có structured request log, readiness và graceful shutdown. | P1 | Planned trong codebase mới |
+| NFR-OBS-01 | API có structured request log, readiness và graceful shutdown. | P1 | Partial; DB readiness đã triển khai, logging/shutdown cần verify thêm |
 | NFR-AUDIT-01 | Thao tác quản trị và transition nghiệp vụ nhạy cảm phải lưu actor, action, before/after và timestamp. | P1 | Planned |
 | NFR-AI-01 | AI/matching chỉ là decision support; human verification bắt buộc trước khi trả đồ. | P0 | Implemented trong module hiện tại |
 

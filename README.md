@@ -116,7 +116,9 @@ npm run check:env
 npm run migrate
 ```
 
-Migration runner lưu checksum. Nếu gặp `Migration checksum mismatch`, không sửa/bypass migration đã chạy; hãy khôi phục nội dung gốc hoặc tạo migration mới.
+Migration runner lưu checksum sau khi toàn bộ file migration chạy thành công. Vì MySQL DDL có thể auto-commit, runner còn lưu trạng thái vào `schema_migration_attempts`. Nếu một lần chạy bị dở dang, runner sẽ dừng và yêu cầu kiểm tra/reconcile schema thủ công; hệ thống không tự rollback hoặc tự chạy lại một migration có khả năng đã áp dụng một phần.
+
+Nếu gặp `Migration checksum mismatch`, không sửa/bypass migration đã chạy; hãy khôi phục nội dung gốc hoặc tạo migration mới. Nếu gặp `incomplete attempt`, đọc migration được nêu trong lỗi, đối chiếu schema thực tế rồi chỉ xóa attempt marker sau khi đã xử lý an toàn.
 
 Quy tắc khi dùng DB chung:
 
@@ -133,7 +135,8 @@ npm run dev
 
 - Web: `http://localhost:5173`
 - API: `http://localhost:3001`
-- Health: `http://localhost:3001/api/health`
+- Liveness: `http://localhost:3001/api/health`
+- Readiness (kiểm tra DB): `http://localhost:3001/api/ready`
 
 Chạy riêng:
 
@@ -155,6 +158,20 @@ npm test
 npm run build
 npm --workspace @lnfs/web run e2e:home
 ```
+
+DB integration tests chỉ được chạy với một MySQL local riêng; script từ chối host remote/Aiven và yêu cầu tên database kết thúc bằng `_test`:
+
+```powershell
+$env:LNFS_DB_INTEGRATION="1"
+$env:LNFS_TEST_DB_HOST="127.0.0.1"
+$env:LNFS_TEST_DB_PORT="3306"
+$env:LNFS_TEST_DB_NAME="lnfs_integration_test"
+$env:LNFS_TEST_DB_USER="your_test_user"
+$env:LNFS_TEST_DB_PASSWORD="your_test_password"
+npm --workspace @lnfs/api-node run test:db-integration
+```
+
+Không trỏ các biến `LNFS_TEST_DB_*` vào Aiven/shared DB.
 
 Playwright có thể cần cài browser lần đầu:
 

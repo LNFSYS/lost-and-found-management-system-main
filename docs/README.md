@@ -1,6 +1,6 @@
 # Tài liệu FPTU Lost & Found System
 
-Cập nhật: 21/08/2026
+Cập nhật: 23/08/2026
 
 Thư mục này là bộ tài liệu chính của codebase mới tại `fptu-lost-found-system-main`. Không dùng tài liệu của repository cũ để xác nhận một chức năng đã hoàn thành.
 
@@ -44,16 +44,17 @@ Chưa hoàn thành ở runtime:
 - Shared object storage. Dùng chung cloud DB trong khi lưu ảnh local có thể tạo metadata ảnh không tồn tại trên máy khác.
 - Mobile và custom-trained AI model.
 
-## Bằng chứng audit 21/08/2026
+## Bằng chứng kiểm tra 23/08/2026
 
-- `npm test`: pass 23/23 API unit tests và frontend TypeScript check.
+- API tests: 42 pass; DB integration suite được safety-skip vì chưa cấu hình MySQL local `_test`.
+- Frontend TypeScript check: pass.
 - `npm run build`: API và web production build pass.
-- `npm --workspace @lnfs/web run e2e:home`: pass 10/10 Playwright tests.
+- `npm --workspace @lnfs/web run e2e:home`: pass 12/12 Playwright tests.
 - `npm run build:java`: chưa chạy được trên máy audit vì chưa cài Maven (`mvn` không có trong `PATH`).
 - Checklist chứa đúng 100 ID duy nhất từ `UC-001` đến `UC-100`.
 - Kiểm tra link Markdown nội bộ: không có link hỏng.
 
-Browser tests hiện chủ yếu kiểm tra UI với API mock; chúng không thay thế MySQL integration tests.
+Browser tests hiện chủ yếu kiểm tra UI với API mock. MySQL integration suite có guard local-only và cần được chạy riêng trên database có tên kết thúc bằng `_test`; tuyệt đối không chạy trên Aiven/shared DB.
 
 ## Quy tắc cập nhật
 

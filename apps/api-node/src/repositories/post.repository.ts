@@ -1,4 +1,5 @@
 import type { ResultSetHeader, RowDataPacket } from "mysql2";
+import type { PoolConnection } from "mysql2/promise";
 import { pool } from "../config/db.js";
 import { normalizeVietnameseText } from "../utils/text.js";
 import type { ListOwnPostsQuery, ListPostsQuery } from "../validators/post.validator.js";
@@ -9,6 +10,12 @@ export type VisibilityMode = "PUBLIC" | "PRIVATE_DETAILS";
 export type MediaKind = "ITEM" | "EVIDENCE";
 
 type SqlValue = string | number | Date | null;
+type Queryable = Pick<PoolConnection, "execute">;
+
+interface LockedPostRow extends RowDataPacket {
+  id: string;
+  status: PostStatus;
+}
 
 export interface PostMediaRecord {
   id: string;
@@ -257,10 +264,10 @@ function buildListWhere(filters: ListPostsQuery | ListOwnPostsQuery, ownerId?: s
   return { sql: where.join(" AND "), values };
 }
 
-async function loadMedia(postIds: string[]) {
+async function loadMedia(postIds: string[], queryable: Queryable = pool) {
   if (!postIds.length) return new Map<string, PostMediaRecord[]>();
   const placeholders = postIds.map(() => "?").join(", ");
-  const [rows] = await pool.execute<MediaRow[]>(
+  const [rows] = await queryable.execute<MediaRow[]>(
     `SELECT id, post_id, media_kind, resource_type, format, bytes, sort_order, created_at
      FROM post_media
      WHERE post_id IN (${placeholders})
@@ -295,11 +302,11 @@ async function listPosts(filters: ListPostsQuery | ListOwnPostsQuery, ownerId?: 
   };
 }
 
-async function findPost(where: string, values: SqlValue[]) {
-  const [rows] = await pool.execute<PostRow[]>(`${postSelect} WHERE ${where} LIMIT 1`, values);
+async function findPost(where: string, values: SqlValue[], queryable: Queryable = pool) {
+  const [rows] = await queryable.execute<PostRow[]>(`${postSelect} WHERE ${where} LIMIT 1`, values);
   const row = rows[0];
   if (!row) return null;
-  const mediaByPost = await loadMedia([row.id]);
+  const mediaByPost = await loadMedia([row.id], queryable);
   return mapPost(row, mediaByPost.get(row.id) ?? []);
 }
 
@@ -353,8 +360,8 @@ export const postRepository = {
       .sort((left, right) => (order.get(left.id) ?? 0) - (order.get(right.id) ?? 0));
   },
 
-  findOwnedById(postId: string, ownerId: string) {
-    return findPost("p.id = ? AND p.user_id = ? AND p.deleted_at IS NULL AND p.status <> 'HIDDEN'", [postId, ownerId]);
+  findOwnedById(postId: string, ownerId: string, queryable: Queryable = pool) {
+    return findPost("p.id = ? AND p.user_id = ? AND p.deleted_at IS NULL AND p.status <> 'HIDDEN'", [postId, ownerId], queryable);
   },
 
   async createPost(input: {
@@ -375,8 +382,8 @@ export const postRepository = {
     lostFoundAt: Date;
     handoverPointId?: string | null;
     expiresAt: Date;
-  }) {
-    await pool.execute(
+  }, queryable: Queryable = pool) {
+    await queryable.execute(
       `INSERT INTO posts (
         id, user_id, type, visibility_mode, status, title, title_normalized,
         description, description_normalized, category_id, area_id, building_id,
@@ -389,7 +396,6 @@ export const postRepository = {
         input.contactInfo, input.lostFoundAt, input.handoverPointId ?? null, input.expiresAt
       ]
     );
-    return this.findOwnedById(input.id, input.userId);
   },
 
   async updatePost(postId: string, input: {
@@ -438,8 +444,16 @@ export const postRepository = {
     return result.affectedRows > 0;
   },
 
-  async countMedia(postId: string) {
-    const [rows] = await pool.execute<CountRow[]>("SELECT COUNT(*) AS total FROM post_media WHERE post_id = ?", [postId]);
+  async lockOwnedPostForMedia(postId: string, ownerId: string, queryable: Queryable) {
+    const [rows] = await queryable.execute<LockedPostRow[]>(
+      "SELECT id, status FROM posts WHERE id = ? AND user_id = ? AND deleted_at IS NULL AND status <> 'HIDDEN' LIMIT 1 FOR UPDATE",
+      [postId, ownerId]
+    );
+    return rows[0] ? { id: rows[0].id, status: rows[0].status } : null;
+  },
+
+  async countMedia(postId: string, queryable: Queryable = pool) {
+    const [rows] = await queryable.execute<CountRow[]>("SELECT COUNT(*) AS total FROM post_media WHERE post_id = ?", [postId]);
     return Number(rows[0]?.total ?? 0);
   },
 
@@ -452,23 +466,23 @@ export const postRepository = {
     format: string;
     bytes: number;
     sortOrder: number;
-  }) {
-    await pool.execute(
+  }, queryable: Queryable = pool) {
+    await queryable.execute(
       `INSERT INTO post_media (id, post_id, secure_url, public_id, resource_type, media_kind, format, bytes, sort_order)
        VALUES (?, ?, ?, ?, 'image', ?, ?, ?, ?)`,
       [input.id, input.postId, input.secureUrl, input.publicId, input.mediaKind, input.format, input.bytes, input.sortOrder]
     );
   },
 
-  async findMedia(postId: string, mediaId: string): Promise<StoredMediaRecord | null> {
-    const [rows] = await pool.execute<StoredMediaRow[]>(
+  async findMedia(postId: string, mediaId: string, queryable: Queryable = pool, forUpdate = false): Promise<StoredMediaRecord | null> {
+    const [rows] = await queryable.execute<StoredMediaRow[]>(
       `SELECT pm.id, pm.post_id, pm.secure_url, pm.public_id, pm.media_kind, pm.resource_type, pm.format, pm.bytes,
               pm.sort_order, pm.created_at, p.user_id AS owner_id, p.status AS post_status,
               p.visibility_mode AS post_visibility_mode, p.deleted_at AS post_deleted_at
        FROM post_media pm
        INNER JOIN posts p ON p.id = pm.post_id
        WHERE pm.id = ? AND pm.post_id = ?
-       LIMIT 1`,
+       LIMIT 1${forUpdate ? " FOR UPDATE" : ""}`,
       [mediaId, postId]
     );
     const row = rows[0];
@@ -484,8 +498,8 @@ export const postRepository = {
     };
   },
 
-  async deleteMedia(postId: string, mediaId: string) {
-    const [result] = await pool.execute<ResultSetHeader>("DELETE FROM post_media WHERE id = ? AND post_id = ?", [mediaId, postId]);
+  async deleteMedia(postId: string, mediaId: string, queryable: Queryable = pool) {
+    const [result] = await queryable.execute<ResultSetHeader>("DELETE FROM post_media WHERE id = ? AND post_id = ?", [mediaId, postId]);
     return result.affectedRows > 0;
   },
 

@@ -1,17 +1,17 @@
 import type { Request, Response } from "express";
 import { ZodError } from "zod";
 import { authService } from "../services/auth.service.js";
+import { env } from "../config/env.js";
+import { refreshCookieName, refreshCookieOptions } from "../utils/auth-cookie.js";
 import { HttpError } from "../utils/http-error.js";
 import { forgotPasswordSchema, loginSchema, registerSchema, requestOtpSchema, resetPasswordSchema, updateProfileSchema } from "../validators/auth.validator.js";
 
-const refreshCookie = "lnfs_refresh";
-
 function meta(request: Request) { return { userAgent: request.header("user-agent") ?? undefined, ipAddress: request.ip }; }
 function setRefreshCookie(response: Response, token: string, expiresAt: Date) {
-  response.cookie(refreshCookie, token, { httpOnly: true, secure: process.env.COOKIE_SECURE === "true" || process.env.NODE_ENV === "production", sameSite: "lax", expires: expiresAt, path: "/api/auth" });
+  response.cookie(refreshCookieName, token, refreshCookieOptions(expiresAt));
 }
-function clearRefreshCookie(response: Response) { response.clearCookie(refreshCookie, { httpOnly: true, sameSite: "lax", path: "/api/auth" }); }
-function toClientSession(result: Awaited<ReturnType<typeof authService.login>>) { return { user: result.user, accessToken: result.accessToken, accessTokenExpiresIn: process.env.JWT_ACCESS_EXPIRES_IN ?? "15m" }; }
+function clearRefreshCookie(response: Response) { response.clearCookie(refreshCookieName, refreshCookieOptions()); }
+function toClientSession(result: Awaited<ReturnType<typeof authService.login>>) { return { user: result.user, accessToken: result.accessToken, accessTokenExpiresIn: env.jwtAccessExpiresIn }; }
 
 export const authController = {
   async requestRegistrationOtp(request: Request, response: Response) {
@@ -28,12 +28,12 @@ export const authController = {
     response.json(toClientSession(result));
   },
   async refresh(request: Request, response: Response) {
-    const result = await authService.refresh(request.cookies?.[refreshCookie], meta(request));
+    const result = await authService.refresh(request.cookies?.[refreshCookieName], meta(request));
     setRefreshCookie(response, result.refreshToken, result.refreshExpiresAt);
     response.json(toClientSession(result));
   },
   async logout(request: Request, response: Response) {
-    await authService.logout(request.cookies?.[refreshCookie]);
+    await authService.logout(request.cookies?.[refreshCookieName]);
     clearRefreshCookie(response);
     response.status(204).send();
   },
@@ -55,6 +55,9 @@ export const authController = {
 };
 
 export function errorHandler(error: unknown, _request: Request, response: Response, _next: unknown) {
+  if (error instanceof SyntaxError && (error as SyntaxError & { type?: string }).type === "entity.parse.failed") {
+    return response.status(400).json({ message: "Nội dung JSON không hợp lệ" });
+  }
   if (error instanceof ZodError) return response.status(422).json({ message: "Dữ liệu nhập chưa hợp lệ", errors: error.flatten().fieldErrors });
   if (error instanceof HttpError) return response.status(error.status).json({ message: error.message });
   console.error("Unhandled API error", error instanceof Error ? error.message : "unknown error");

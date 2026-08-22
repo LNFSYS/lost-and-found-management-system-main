@@ -1,11 +1,13 @@
 import type { Express } from "express";
-import { access, mkdir, unlink, writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { withTransaction } from "../config/db.js";
 import { env } from "../config/env.js";
 import type { AccessTokenPayload } from "../types/auth.js";
 import { HttpError } from "../utils/http-error.js";
 import { id } from "../utils/security.js";
 import { mediaContentType, mediaPolicy, validateImageUpload } from "../utils/media.js";
+import { ensureStoredFileExists, removeStoredFileIfPresent } from "../utils/media-storage.js";
 import {
   normalizePostText,
   postRepository,
@@ -98,7 +100,7 @@ function serializePost(post: PostRecord, viewer?: AccessTokenPayload) {
   };
 }
 
-function ensureWritableStatus(post: PostRecord) {
+function ensureWritableStatus(post: Pick<PostRecord, "status">) {
   if (post.status === "RESOLVED" || post.status === "CLOSED" || post.status === "EXPIRED") {
     throw new HttpError(409, "Bai dang da ket thuc, khong the cap nhat noi dung");
   }
@@ -242,11 +244,7 @@ function mediaPathFromSecureUrl(secureUrl: string) {
 }
 
 async function removeStoredFile(secureUrl: string) {
-  try {
-    await unlink(mediaPathFromSecureUrl(secureUrl));
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-  }
+  await removeStoredFileIfPresent(mediaPathFromSecureUrl(secureUrl));
 }
 
 export const postService = {
@@ -281,29 +279,33 @@ export const postService = {
   async createPost(ownerId: string, input: CreatePostInput, viewer: AccessTokenPayload) {
     await ensureBusinessRefs(input);
     const postId = id();
-    const post = await postRepository.createPost({
-      id: postId,
-      userId: ownerId,
-      type: input.type,
-      visibilityMode: input.type === "FOUND" ? input.visibilityMode ?? "PUBLIC" : "PUBLIC",
-      title: input.title,
-      titleNormalized: normalizePostText(input.title),
-      description: input.description,
-      descriptionNormalized: normalizePostText(input.description),
-      categoryId: input.categoryId,
-      areaId: input.areaId ?? null,
-      buildingId: input.buildingId ?? null,
-      roomText: input.roomText ?? null,
-      customLocation: input.customLocation ?? null,
-      contactInfo: input.contactInfo,
-      lostFoundAt: input.lostFoundAt,
-      handoverPointId: input.handoverPointId ?? null,
-      expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+    const post = await withTransaction(async (connection) => {
+      await postRepository.createPost({
+        id: postId,
+        userId: ownerId,
+        type: input.type,
+        visibilityMode: input.type === "FOUND" ? input.visibilityMode ?? "PUBLIC" : "PUBLIC",
+        title: input.title,
+        titleNormalized: normalizePostText(input.title),
+        description: input.description,
+        descriptionNormalized: normalizePostText(input.description),
+        categoryId: input.categoryId,
+        areaId: input.areaId ?? null,
+        buildingId: input.buildingId ?? null,
+        roomText: input.roomText ?? null,
+        customLocation: input.customLocation ?? null,
+        contactInfo: input.contactInfo,
+        lostFoundAt: input.lostFoundAt,
+        handoverPointId: input.handoverPointId ?? null,
+        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+      }, connection);
+      if (input.analysisSignals) {
+        await matchingRepository.replaceAnalysisTags(postId, input.analysisSignals, connection);
+      }
+      const created = await postRepository.findOwnedById(postId, ownerId, connection);
+      if (!created) throw new HttpError(500, "Không tạo được bài đăng");
+      return created;
     });
-    if (!post) throw new HttpError(500, "Khong tao duoc bai dang");
-    if (input.analysisSignals) {
-      await matchingRepository.replaceAnalysisTags(postId, input.analysisSignals);
-    }
     await refreshMatchingBestEffort(postId, "create");
     return serializePost(post, viewer);
   },
@@ -359,25 +361,30 @@ export const postService = {
   async uploadMedia(postId: string, ownerId: string, input: UploadMediaInput, file: Express.Multer.File, viewer: AccessTokenPayload) {
     const post = await requireOwnedPost(postId, ownerId);
     ensureWritableStatus(post);
-    const mediaCount = await postRepository.countMedia(postId);
-    if (mediaCount >= mediaPolicy.maxPerPost) throw new HttpError(409, `Moi bai dang chi duoc toi da ${mediaPolicy.maxPerPost} anh`);
-
     const image = validateImageUpload(file);
     const mediaId = id();
     const storage = makeMediaStorage(postId, mediaId, image.extension);
 
     await mkdir(storage.dir, { recursive: true });
     await writeFile(storage.filePath, file.buffer, { flag: "wx" });
+    let mediaCount = 0;
     try {
-      await postRepository.createMedia({
-        id: mediaId,
-        postId,
-        secureUrl: storage.secureUrl,
-        publicId: storage.publicId,
-        mediaKind: input.mediaKind as MediaKind,
-        format: image.format,
-        bytes: image.bytes,
-        sortOrder: input.sortOrder ?? mediaCount
+      await withTransaction(async (connection) => {
+        const lockedPost = await postRepository.lockOwnedPostForMedia(postId, ownerId, connection);
+        if (!lockedPost) throw new HttpError(404, "Không tìm thấy bài đăng của bạn");
+        ensureWritableStatus(lockedPost);
+        mediaCount = await postRepository.countMedia(postId, connection);
+        if (mediaCount >= mediaPolicy.maxPerPost) throw new HttpError(409, `Mỗi bài đăng chỉ được tối đa ${mediaPolicy.maxPerPost} ảnh`);
+        await postRepository.createMedia({
+          id: mediaId,
+          postId,
+          secureUrl: storage.secureUrl,
+          publicId: storage.publicId,
+          mediaKind: input.mediaKind as MediaKind,
+          format: image.format,
+          bytes: image.bytes,
+          sortOrder: input.sortOrder ?? mediaCount
+        }, connection);
       });
     } catch (error) {
       await removeStoredFile(storage.secureUrl).catch(() => undefined);
@@ -404,7 +411,7 @@ export const postService = {
     if (privateMedia && !canSeePrivateMedia(viewer, media)) throw new HttpError(403, "Ban khong co quyen xem media nay");
 
     const filePath = mediaPathFromSecureUrl(media.secureUrl);
-    await access(filePath);
+    await ensureStoredFileExists(filePath);
     return {
       filePath,
       contentType: mediaContentType((media.format ?? "jpg") as "jpg" | "png" | "webp"),
@@ -413,11 +420,18 @@ export const postService = {
   },
 
   async deleteMedia(postId: string, mediaId: string, ownerId: string) {
-    await requireOwnedPost(postId, ownerId);
-    const media = await postRepository.findMedia(postId, mediaId);
-    if (!media) throw new HttpError(404, "Khong tim thay media");
-    const deleted = await postRepository.deleteMedia(postId, mediaId);
-    if (!deleted) throw new HttpError(404, "Khong tim thay media");
-    await removeStoredFile(media.secureUrl);
+    const secureUrl = await withTransaction(async (connection) => {
+      const media = await postRepository.findMedia(postId, mediaId, connection, true);
+      if (!media || media.ownerId !== ownerId) throw new HttpError(404, "Không tìm thấy media");
+      const deleted = await postRepository.deleteMedia(postId, mediaId, connection);
+      if (!deleted) throw new HttpError(404, "Không tìm thấy media");
+      return media.secureUrl;
+    });
+    try {
+      await removeStoredFile(secureUrl);
+    } catch {
+      // Metadata is already gone, so a filesystem failure can only leave an inaccessible orphan for later cleanup.
+      console.warn(`[media] local file cleanup failed after deleting media ${mediaId}`);
+    }
   }
 };

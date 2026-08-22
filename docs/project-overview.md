@@ -1,6 +1,6 @@
 # Tổng quan dự án FPTU Lost & Found System
 
-Cập nhật: 21/08/2026
+Cập nhật: 23/08/2026
 
 ## 1. Định vị dự án
 
@@ -64,7 +64,7 @@ Backend luôn là nơi quyết định quyền. Frontend route guard chỉ hỗ 
 - Handover point: form catalog đọc được danh sách điểm đang hoạt động; chưa có trang bản đồ và admin management trong codebase mới.
 - Media privacy: proxy/authorization có nền tảng, nhưng storage là local filesystem nên chưa phù hợp nhiều máy hoặc deploy nhiều instance.
 - Database: có nhiều bảng dành cho flow tương lai, nhưng route/service chưa tồn tại.
-- Test: có unit test và Playwright UI tests; chưa có database integration/E2E cho toàn bộ endpoint hiện hành.
+- Test: có unit test, Playwright UI tests và DB integration suite opt-in có guard local-only; chưa có integration coverage cho toàn bộ endpoint hiện hành.
 
 ### 4.3 Chưa triển khai runtime
 
@@ -131,6 +131,7 @@ Route family hiện hành:
 - `/api/posts`: board, catalog, mine, image analysis, CRUD post, matching, media.
 - `/api/admin`: CRUD category, area và building; toàn bộ route yêu cầu `ADMIN`.
 - `/api/health`: liveness cơ bản.
+- `/api/ready`: readiness kiểm tra kết nối MySQL và trả `503` không lộ chi tiết kết nối khi DB chưa sẵn sàng.
 
 Node.js là schema owner và write owner duy nhất.
 
@@ -213,7 +214,7 @@ Các tín hiệu hiện tại gồm text, category, location, time, image tags v
 
 ## 7. Dữ liệu và migration
 
-Migration Node.js là nguồn schema duy nhất. `schema_migrations` lưu checksum để ngăn sửa migration đã chạy.
+Migration Node.js là nguồn schema duy nhất. `schema_migrations` chỉ lưu checksum sau khi toàn bộ file chạy thành công. `schema_migration_attempts` ghi `RUNNING`/`FAILED`/`APPLIED` để phát hiện lần chạy có thể đã áp dụng DDL một phần; runner dừng và yêu cầu reconcile thủ công thay vì tuyên bố rollback an toàn hoặc tự retry phá dữ liệu.
 
 Nhóm bảng đang được runtime sử dụng trực tiếp:
 
@@ -263,11 +264,10 @@ Cloudinary/S3-compatible storage là việc cần làm trước shared staging/d
 
 Khoảng trống cần hardening:
 
-- Bổ sung integration test với MySQL cho auth/post/media/matching permissions.
+- Chạy và mở rộng DB integration suite trên MySQL local `_test` cho auth/post/media/matching permissions; suite từ chối Aiven/shared DB.
 - Chuyển media sang object storage dùng chung.
-- Chuẩn hóa lỗi file media không còn tồn tại thành 404 thay vì lỗi 500 không xử lý.
 - Bổ sung audit log cho admin catalog writes.
-- Thêm readiness check cho DB/SMTP/Gemini tùy môi trường.
+- Readiness hiện kiểm tra DB; SMTP/Gemini vẫn là dependency tùy chọn và chưa nằm trong readiness gate.
 
 ## 10. Kiểm thử
 
@@ -276,12 +276,16 @@ Hiện có:
 - Unit tests cho auth validation/security, CORS và media signature.
 - Unit tests cho Gemini category mapping/multi-image behavior.
 - Unit tests cho matching score, tier, cap và redaction.
+- HTTP integration tests cho malformed JSON, API 404 và liveness/readiness.
+- Test transaction cho post/analysis tags, media slot locking và lỗi filesystem.
+- DB integration suite opt-in, có guard chỉ cho MySQL local và database hậu tố `_test`.
 - Playwright tests cho home responsive, board/filter/detail và storytelling create-post flow.
+- Playwright tests cho thông báo reset password và logout khi API lỗi.
 - TypeScript build cho API và web.
 
 Chưa có:
 
-- API integration test chạy trên MySQL isolated.
+- Bằng chứng chạy DB integration suite trên một MySQL isolated thực tế của team.
 - E2E auth OTP thật với SMTP sandbox.
 - Concurrency tests cho claim/appointment vì runtime chưa triển khai.
 - Load test và query-plan benchmark.
@@ -291,8 +295,8 @@ Chưa có:
 
 Thứ tự phát triển được đề xuất:
 
-1. Hoàn thiện shared object storage và media error handling.
-2. Thêm API integration tests + CI.
+1. Hoàn thiện shared object storage; lỗi file local bị mất hiện đã trả 404 có kiểm soát.
+2. Chạy/mở rộng DB integration tests và thêm CI khi team nhận phần DevOps.
 3. Triển khai claim/evidence với privacy và transaction lock.
 4. Triển khai appointment/handover.
 5. Triển khai warehouse lifecycle.
