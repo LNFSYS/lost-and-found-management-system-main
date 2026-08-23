@@ -86,6 +86,10 @@ function isOverdue(item: WarehouseItem) {
   return Boolean(item.retentionDeadline && new Date(item.retentionDeadline).getTime() < Date.now() && !["RETURNED", "DISPOSED", "DONATED", "TRANSFERRED"].includes(item.status));
 }
 
+function isActiveWarehouseItem(item: WarehouseItem) {
+  return ["PENDING_APPROVAL", "RECEIVED", "STORED", "CLAIMED", "EXPIRED"].includes(item.status);
+}
+
 function StatCard({ icon, value, label }: { icon: ReactNode; value: number; label: string }) {
   return <article className="admin-stat warehouse-stat">
     <span>{icon}</span>
@@ -142,6 +146,43 @@ export function StaffPage() {
       page: 1,
       pageSize: 12
     }));
+  }
+
+  function upsertDashboardItem(item: WarehouseItem, previous?: WarehouseItem | null) {
+    setDashboard((current) => {
+      if (!current) return current;
+      const existing = previous ?? current.items.find((value) => value.id === item.id) ?? null;
+      const existed = current.items.some((value) => value.id === item.id);
+      const items = existed
+        ? current.items.map((value) => value.id === item.id ? item : value)
+        : [item, ...current.items].slice(0, current.pageSize);
+      const receivedDelta = (item.status === "RECEIVED" ? 1 : 0) - (existing?.status === "RECEIVED" ? 1 : 0);
+      const storedDelta = (item.status === "STORED" ? 1 : 0) - (existing?.status === "STORED" ? 1 : 0);
+      const returnedDelta = (item.status === "RETURNED" ? 1 : 0) - (existing?.status === "RETURNED" ? 1 : 0);
+      const activeDelta = (isActiveWarehouseItem(item) ? 1 : 0) - (existing && isActiveWarehouseItem(existing) ? 1 : 0);
+      return {
+        ...current,
+        total: current.total + (existed ? 0 : 1),
+        stats: {
+          ...current.stats,
+          totalItems: current.stats.totalItems + (existed ? 0 : 1),
+          activeItems: Math.max(0, current.stats.activeItems + activeDelta),
+          receivedItems: Math.max(0, current.stats.receivedItems + receivedDelta),
+          storedItems: Math.max(0, current.stats.storedItems + storedDelta),
+          returnedItems: Math.max(0, current.stats.returnedItems + returnedDelta)
+        },
+        handoverCounts: current.handoverCounts.map((point) => {
+          if (existed || point.handoverPointId !== item.handoverPoint?.id) return point;
+          return {
+            ...point,
+            itemCount: point.itemCount + (isActiveWarehouseItem(item) ? 1 : 0),
+            storedCount: point.storedCount + (item.status === "STORED" ? 1 : 0),
+            overdueCount: point.overdueCount + (isOverdue(item) ? 1 : 0)
+          };
+        }),
+        items
+      };
+    });
   }
 
   async function loadInitial() {
@@ -204,16 +245,17 @@ export function StaffPage() {
         receivedAt: createForm.receivedAt ? new Date(createForm.receivedAt).toISOString() : undefined
       };
       const created = await api.createWarehouseItem(payload);
+      upsertDashboardItem(created);
       setNotice("Da tiep nhan vat pham");
       setCreateForm({ ...emptyCreateForm, handoverPointId: createForm.handoverPointId });
       setSelectedItemId(created.id);
+      setLogs([]);
       setUpdateForm({
         status: nextStatus(created.status),
         conditionNotes: created.conditionNotes ?? "",
         storageCode: created.storageCode ?? "",
         note: ""
       });
-      await Promise.all([loadDashboard(), loadLogs(created.id, true)]);
     } catch (reason) {
       setError(messageOf(reason, "Khong the tiep nhan vat pham"));
     } finally {
@@ -257,6 +299,7 @@ export function StaffPage() {
         storageCode: clean(updateForm.storageCode),
         note: clean(updateForm.note)
       });
+      upsertDashboardItem(updated, selectedItem);
       setNotice("Da cap nhat trang thai kho");
       setUpdateForm({
         status: nextStatus(updated.status),
@@ -264,7 +307,7 @@ export function StaffPage() {
         storageCode: updated.storageCode ?? "",
         note: ""
       });
-      await Promise.all([loadDashboard(), loadLogs(updated.id, true)]);
+      await loadLogs(updated.id, true).catch(() => undefined);
     } catch (reason) {
       setError(messageOf(reason, "Khong the cap nhat trang thai kho"));
     } finally {
