@@ -340,15 +340,17 @@ export const warehouseRepository = {
 
   async listItems(input: { q?: string; status?: WarehouseStatus; handoverPointId?: string; page: number; pageSize: number }) {
     const { where, values } = listWhere(input);
-    const offset = (input.page - 1) * input.pageSize;
+    const pageSize = Math.max(1, Math.min(50, Number(input.pageSize) || 12));
+    const page = Math.max(1, Number(input.page) || 1);
+    const offset = (page - 1) * pageSize;
     const [rows] = await pool.execute<WarehouseItemRow[]>(
       `${itemSelect} WHERE ${where}
       ORDER BY wi.status IN (${activeWarehouseStatusSql}) DESC,
         wi.retention_deadline IS NULL,
         wi.retention_deadline ASC,
         wi.received_at DESC
-      LIMIT ? OFFSET ?`,
-      [...values, input.pageSize, offset]
+      LIMIT ${pageSize} OFFSET ${offset}`,
+      values
     );
     const [countRows] = await pool.execute<CountRow[]>(`SELECT COUNT(*) AS total FROM warehouse_items wi WHERE ${where}`, values);
     return { total: Number(countRows[0]?.total ?? 0), items: rows.map(mapItem) };
