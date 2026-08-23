@@ -18,25 +18,25 @@ const staffSession = {
 
 const catalog = {
   categories: [
-    { id: "cat-parent", name: "Giay to", parentId: null },
-    { id: "cat-card", name: "The sinh vien", parentId: "cat-parent" }
+    { id: "cat-parent", name: "Giấy tờ", parentId: null },
+    { id: "cat-card", name: "Thẻ sinh viên", parentId: "cat-parent" }
   ],
   areas: [{ id: "area-1", name: "Khu Alpha" }],
-  buildings: [{ id: "building-1", areaId: "area-1", name: "Sanh A" }],
-  handoverPoints: [{ id: "hp-1", name: "Quay dich vu", address: "Tang 1", openingHours: "08:00-17:00" }]
+  buildings: [{ id: "building-1", areaId: "area-1", name: "Sảnh A" }],
+  handoverPoints: [{ id: "hp-1", name: "Quầy dịch vụ", address: "Tầng 1", openingHours: "08:00-17:00" }]
 };
 
 const item = {
   id: "item-1",
   postId: null,
-  handoverPoint: { id: "hp-1", name: "Quay dich vu", address: "Tang 1" },
-  itemName: "Vi da mau nau",
-  description: "Co the sinh vien ben trong",
-  category: { id: "cat-card", name: "The sinh vien" },
-  location: { area: { id: "area-1", name: "Khu Alpha" }, building: { id: "building-1", name: "Sanh A" }, roomText: "Sanh tang 1" },
-  finder: { userId: null, userName: null, name: "Nguyen An", contact: "an@example.com" },
+  handoverPoint: { id: "hp-1", name: "Quầy dịch vụ", address: "Tầng 1" },
+  itemName: "Ví da màu nâu",
+  description: "Có thẻ sinh viên bên trong",
+  category: { id: "cat-card", name: "Thẻ sinh viên" },
+  location: { area: { id: "area-1", name: "Khu Alpha" }, building: { id: "building-1", name: "Sảnh A" }, roomText: "Sảnh tầng 1" },
+  finder: { userId: null, userName: null, name: "Nguyễn An", contact: "an@example.com" },
   status: "RECEIVED",
-  conditionNotes: "Con tot",
+  conditionNotes: "Còn tốt",
   storageCode: null,
   receivedAt: "2026-08-23T09:00:00.000Z",
   returnedAt: null,
@@ -50,7 +50,7 @@ const item = {
 function dashboard() {
   return {
     stats: { totalItems: 1, activeItems: 1, receivedItems: 1, storedItems: 0, returnedItems: 0, overdueItems: 0 },
-    handoverCounts: [{ handoverPointId: "hp-1", name: "Quay dich vu", address: "Tang 1", itemCount: 1, storedCount: 0, overdueCount: 0 }],
+    handoverCounts: [{ handoverPointId: "hp-1", name: "Quầy dịch vụ", address: "Tầng 1", itemCount: 1, storedCount: 0, overdueCount: 0 }],
     total: 1,
     page: 1,
     pageSize: 12,
@@ -67,7 +67,7 @@ async function prepare(page: Page, calls: { created?: unknown; patched?: unknown
       return route.fulfill({
         status: 201,
         contentType: "application/json",
-        body: JSON.stringify({ ...item, id: "item-created", itemName: "The sinh vien", conditionNotes: "Nguyen ven", retentionDeadline: "2026-12-21T09:00:00.000Z" })
+        body: JSON.stringify({ ...item, id: "item-created", itemName: "Thẻ sinh viên", conditionNotes: "Nguyên vẹn", retentionDeadline: "2026-12-21T09:00:00.000Z" })
       });
     }
     return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(dashboard()) });
@@ -88,12 +88,12 @@ async function prepare(page: Page, calls: { created?: unknown; patched?: unknown
         id: "log-1",
         warehouseItemId: "item-1",
         postId: null,
-        handoverPoint: { id: "hp-1", name: "Quay dich vu" },
+        handoverPoint: { id: "hp-1", name: "Quầy dịch vụ" },
         actor: { id: "staff-1", fullName: "Staff Demo" },
         action: "STORED",
         fromStatus: "RECEIVED",
         toStatus: "STORED",
-        conditionNotes: "Con tot",
+        conditionNotes: "Còn tốt",
         storageCode: "A1-04",
         note: "Move to shelf",
         createdAt: "2026-08-23T10:00:00.000Z"
@@ -107,19 +107,19 @@ test("staff can see warehouse counts and receive an item with condition notes", 
   await prepare(page, calls);
   await page.goto("/staff");
 
-  await expect(page.getByRole("heading", { name: "Kho noi bo" })).toBeVisible();
-  await expect(page.getByText("Vi da mau nau")).toBeVisible();
-  await expect(page.locator(".warehouse-counts").getByText("Quay dich vu")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Kho nội bộ" })).toBeVisible();
+  await expect(page.getByText("Ví da màu nâu")).toBeVisible();
+  await expect(page.locator(".warehouse-counts").getByText("Quầy dịch vụ")).toBeVisible();
 
   const receive = page.locator(".warehouse-receive-panel");
-  await receive.getByLabel("Ten vat pham").fill("The sinh vien");
-  await receive.getByLabel("Tinh trang khi nhan").fill("Nguyen ven");
-  await receive.getByLabel("Danh muc").selectOption("cat-card");
-  await receive.getByRole("button", { name: "Tiep nhan" }).click();
+  await receive.getByLabel("Tên vật phẩm").fill("Thẻ sinh viên");
+  await receive.getByLabel("Tình trạng khi nhận").fill("Nguyên vẹn");
+  await receive.getByLabel("Danh mục").selectOption("cat-card");
+  await receive.getByRole("button", { name: "Tiếp nhận" }).click();
 
-  await expect(page.getByText("Da tiep nhan vat pham")).toBeVisible();
-  expect(calls.created?.itemName).toBe("The sinh vien");
-  expect(calls.created?.conditionNotes).toBe("Nguyen ven");
+  await expect(page.getByText("Đã tiếp nhận vật phẩm")).toBeVisible();
+  expect(calls.created?.itemName).toBe("Thẻ sinh viên");
+  expect(calls.created?.conditionNotes).toBe("Nguyên vẹn");
   expect(calls.created?.handoverPointId).toBe("hp-1");
 });
 
@@ -128,14 +128,14 @@ test("staff can open storage logs and update item state", async ({ page }) => {
   await prepare(page, calls);
   await page.goto("/staff");
 
-  await page.getByRole("button", { name: "Chon" }).click();
+  await page.getByRole("button", { name: "Chọn" }).click();
   const detail = page.locator(".warehouse-detail-panel");
-  await expect(detail.getByText("Da tiep nhan -> Dang luu kho")).toBeVisible();
-  await detail.getByLabel("Ma luu kho").fill("A1-04");
-  await detail.getByLabel("Ghi chu log").fill("Move to shelf");
-  await detail.getByRole("button", { name: "Luu trang thai" }).click();
+  await expect(detail.getByText("Đã tiếp nhận -> Đang lưu kho")).toBeVisible();
+  await detail.getByLabel("Mã lưu kho").fill("A1-04");
+  await detail.getByLabel("Ghi chú nhật ký").fill("Move to shelf");
+  await detail.getByRole("button", { name: "Lưu trạng thái" }).click();
 
-  await expect(page.getByText("Da cap nhat trang thai kho")).toBeVisible();
+  await expect(page.getByText("Đã cập nhật trạng thái kho")).toBeVisible();
   expect(calls.patched?.status).toBe("STORED");
   expect(calls.patched?.storageCode).toBe("A1-04");
   expect(calls.patched?.note).toBe("Move to shelf");

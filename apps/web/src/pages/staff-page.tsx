@@ -25,14 +25,14 @@ import {
 type PendingAction = "" | "load" | "create" | "update" | "logs";
 
 const statusOptions: Array<{ value: WarehouseStatus; label: string }> = [
-  { value: "RECEIVED", label: "Da tiep nhan" },
-  { value: "STORED", label: "Dang luu kho" },
-  { value: "CLAIMED", label: "Dang doi nhan" },
-  { value: "RETURNED", label: "Da tra" },
-  { value: "EXPIRED", label: "Qua han" },
-  { value: "DISPOSED", label: "Da xu ly" },
-  { value: "DONATED", label: "Da quyen gop" },
-  { value: "TRANSFERRED", label: "Da chuyen giao" }
+  { value: "RECEIVED", label: "Đã tiếp nhận" },
+  { value: "STORED", label: "Đang lưu kho" },
+  { value: "CLAIMED", label: "Đang đợi nhận" },
+  { value: "RETURNED", label: "Đã trả" },
+  { value: "EXPIRED", label: "Quá hạn" },
+  { value: "DISPOSED", label: "Đã xử lý" },
+  { value: "DONATED", label: "Đã quyên góp" },
+  { value: "TRANSFERRED", label: "Đã chuyển giao" }
 ];
 
 const emptyCreateForm = {
@@ -62,17 +62,17 @@ function clean(value: string) {
 }
 
 function formatDate(value: string | null) {
-  if (!value) return "Chua co";
+  if (!value) return "Chưa có";
   return new Intl.DateTimeFormat("vi-VN", { dateStyle: "medium" }).format(new Date(value));
 }
 
 function formatDateTime(value: string | null) {
-  if (!value) return "Chua co";
+  if (!value) return "Chưa có";
   return new Intl.DateTimeFormat("vi-VN", { dateStyle: "short", timeStyle: "short" }).format(new Date(value));
 }
 
 function statusLabel(status: WarehouseStatus | string | null) {
-  return statusOptions.find((item) => item.value === status)?.label ?? status ?? "Chua ro";
+  return statusOptions.find((item) => item.value === status)?.label ?? status ?? "Chưa rõ";
 }
 
 function nextStatus(status: WarehouseStatus): WarehouseStatus {
@@ -191,7 +191,7 @@ export function StaffPage() {
     try {
       await Promise.all([loadCatalog(), loadDashboard()]);
     } catch (reason) {
-      setError(messageOf(reason, "Khong the tai du lieu kho"));
+      setError(messageOf(reason, "Không thể tải dữ liệu kho"));
     } finally {
       setPendingAction("");
     }
@@ -205,7 +205,7 @@ export function StaffPage() {
     try {
       await loadDashboard();
     } catch (reason) {
-      setError(messageOf(reason, "Khong the lam moi du lieu kho"));
+      setError(messageOf(reason, "Không thể làm mới dữ liệu kho"));
     } finally {
       if (!silent) setPendingAction("");
     }
@@ -218,7 +218,7 @@ export function StaffPage() {
     try {
       await loadDashboard(filters);
     } catch (reason) {
-      setError(messageOf(reason, "Khong the loc danh sach kho"));
+      setError(messageOf(reason, "Không thể lọc danh sách kho"));
     } finally {
       setPendingAction("");
     }
@@ -246,7 +246,7 @@ export function StaffPage() {
       };
       const created = await api.createWarehouseItem(payload);
       upsertDashboardItem(created);
-      setNotice("Da tiep nhan vat pham");
+      setNotice("Đã tiếp nhận vật phẩm");
       setCreateForm({ ...emptyCreateForm, handoverPointId: createForm.handoverPointId });
       setSelectedItemId(created.id);
       setLogs([]);
@@ -257,7 +257,7 @@ export function StaffPage() {
         note: ""
       });
     } catch (reason) {
-      setError(messageOf(reason, "Khong the tiep nhan vat pham"));
+      setError(messageOf(reason, "Không thể tiếp nhận vật phẩm"));
     } finally {
       setPendingAction("");
     }
@@ -269,7 +269,7 @@ export function StaffPage() {
     try {
       setLogs(await api.getWarehouseLogs(itemId));
     } catch (reason) {
-      setError(messageOf(reason, "Khong the tai storage log"));
+      setError(messageOf(reason, "Không thể tải nhật ký kho"));
     } finally {
       if (!silent) setPendingAction("");
     }
@@ -300,7 +300,7 @@ export function StaffPage() {
         note: clean(updateForm.note)
       });
       upsertDashboardItem(updated, selectedItem);
-      setNotice("Da cap nhat trang thai kho");
+      setNotice("Đã cập nhật trạng thái kho");
       setUpdateForm({
         status: nextStatus(updated.status),
         conditionNotes: updated.conditionNotes ?? "",
@@ -309,28 +309,28 @@ export function StaffPage() {
       });
       await loadLogs(updated.id, true).catch(() => undefined);
     } catch (reason) {
-      setError(messageOf(reason, "Khong the cap nhat trang thai kho"));
+      setError(messageOf(reason, "Không thể cập nhật trạng thái kho"));
     } finally {
       setPendingAction("");
     }
   }
 
-  if (pendingAction === "load" && !dashboard) return <main className="center-state"><LoaderCircle className="spin-icon" /> Dang tai khu vuc kho...</main>;
+  if (pendingAction === "load" && !dashboard) return <main className="center-state"><LoaderCircle className="spin-icon" /> Đang tải khu vực kho...</main>;
 
   return <section className="warehouse-page">
     <header className="admin-hero warehouse-hero">
       <div>
-        <p className="eyebrow">STAFF WAREHOUSE</p>
-        <h1>Kho noi bo</h1>
+        <p className="eyebrow">KHO NHÂN VIÊN</p>
+        <h1>Kho nội bộ</h1>
       </div>
-      <button type="button" className="secondary-button" onClick={() => void refresh()} disabled={pendingAction === "load"}><RefreshCw size={17} /> Lam moi</button>
+      <button type="button" className="secondary-button" onClick={() => void refresh()} disabled={pendingAction === "load"}><RefreshCw size={17} /> Làm mới</button>
     </header>
 
-    <div className="admin-stats warehouse-stats" aria-label="Thong ke kho">
-      <StatCard icon={<Archive size={20} />} value={dashboard?.stats.activeItems ?? 0} label="Dang giu" />
-      <StatCard icon={<ClipboardCheck size={20} />} value={dashboard?.stats.receivedItems ?? 0} label="Moi tiep nhan" />
-      <StatCard icon={<PackageCheck size={20} />} value={dashboard?.stats.storedItems ?? 0} label="Dang luu kho" />
-      <StatCard icon={<Clock3 size={20} />} value={dashboard?.stats.overdueItems ?? 0} label="Qua deadline" />
+    <div className="admin-stats warehouse-stats" aria-label="Thống kê kho">
+      <StatCard icon={<Archive size={20} />} value={dashboard?.stats.activeItems ?? 0} label="Đang giữ" />
+      <StatCard icon={<ClipboardCheck size={20} />} value={dashboard?.stats.receivedItems ?? 0} label="Mới tiếp nhận" />
+      <StatCard icon={<PackageCheck size={20} />} value={dashboard?.stats.storedItems ?? 0} label="Đang lưu kho" />
+      <StatCard icon={<Clock3 size={20} />} value={dashboard?.stats.overdueItems ?? 0} label="Quá hạn" />
     </div>
 
     {notice && <p className="form-note admin-message">{notice}</p>}
@@ -340,63 +340,63 @@ export function StaffPage() {
       <aside className="admin-panel admin-panel--form warehouse-receive-panel">
         <div className="admin-panel-heading">
           <span><ClipboardCheck size={18} /></span>
-          <div><p className="eyebrow">RECEIVE</p><h2>Tiep nhan vat pham</h2></div>
+          <div><p className="eyebrow">TIẾP NHẬN</p><h2>Tiếp nhận vật phẩm</h2></div>
         </div>
         <form className="admin-form" onSubmit={submitCreate}>
-          <label className="input-field"><span>Diem ban giao</span><select value={createForm.handoverPointId} onChange={(event) => setCreateForm({ ...createForm, handoverPointId: event.target.value })} required>
-            <option value="">Chon diem ban giao</option>
+          <label className="input-field"><span>Điểm bàn giao</span><select value={createForm.handoverPointId} onChange={(event) => setCreateForm({ ...createForm, handoverPointId: event.target.value })} required>
+            <option value="">Chọn điểm bàn giao</option>
             {catalog?.handoverPoints.map((point) => <option key={point.id} value={point.id}>{point.name} - {point.address}</option>)}
           </select></label>
-          <label className="input-field"><span>Ten vat pham</span><input value={createForm.itemName} onChange={(event) => setCreateForm({ ...createForm, itemName: event.target.value })} placeholder="Vi du: Vi da mau nau" required /></label>
-          <label className="input-field"><span>Danh muc</span><select value={createForm.categoryId} onChange={(event) => setCreateForm({ ...createForm, categoryId: event.target.value })}>
-            <option value="">Chua phan loai</option>
+          <label className="input-field"><span>Tên vật phẩm</span><input value={createForm.itemName} onChange={(event) => setCreateForm({ ...createForm, itemName: event.target.value })} placeholder="Ví dụ: Ví da màu nâu" required /></label>
+          <label className="input-field"><span>Danh mục</span><select value={createForm.categoryId} onChange={(event) => setCreateForm({ ...createForm, categoryId: event.target.value })}>
+            <option value="">Chưa phân loại</option>
             {leafCategories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
           </select></label>
-          <label className="input-field"><span>Mo ta</span><textarea value={createForm.description} onChange={(event) => setCreateForm({ ...createForm, description: event.target.value })} rows={3} placeholder="Mo ta ngan ve vat pham" /></label>
-          <label className="input-field"><span>Tinh trang khi nhan</span><textarea value={createForm.conditionNotes} onChange={(event) => setCreateForm({ ...createForm, conditionNotes: event.target.value })} rows={3} placeholder="Tinh trang, phu kien, vet xuoc..." required /></label>
+          <label className="input-field"><span>Mô tả</span><textarea value={createForm.description} onChange={(event) => setCreateForm({ ...createForm, description: event.target.value })} rows={3} placeholder="Mô tả ngắn về vật phẩm" /></label>
+          <label className="input-field"><span>Tình trạng khi nhận</span><textarea value={createForm.conditionNotes} onChange={(event) => setCreateForm({ ...createForm, conditionNotes: event.target.value })} rows={3} placeholder="Tình trạng, phụ kiện, vết xước..." required /></label>
           <div className="warehouse-form-pair">
-            <label className="input-field"><span>Khu vuc</span><select value={createForm.areaId} onChange={(event) => setCreateForm({ ...createForm, areaId: event.target.value, buildingId: "" })}>
-              <option value="">Chua ro</option>
+            <label className="input-field"><span>Khu vực</span><select value={createForm.areaId} onChange={(event) => setCreateForm({ ...createForm, areaId: event.target.value, buildingId: "" })}>
+              <option value="">Chưa rõ</option>
               {catalog?.areas.map((area) => <option key={area.id} value={area.id}>{area.name}</option>)}
             </select></label>
-            <label className="input-field"><span>Dia diem</span><select value={createForm.buildingId} onChange={(event) => setCreateForm({ ...createForm, buildingId: event.target.value })}>
-              <option value="">Chua ro</option>
+            <label className="input-field"><span>Địa điểm</span><select value={createForm.buildingId} onChange={(event) => setCreateForm({ ...createForm, buildingId: event.target.value })}>
+              <option value="">Chưa rõ</option>
               {availableBuildings.map((building) => <option key={building.id} value={building.id}>{building.name}</option>)}
             </select></label>
           </div>
           <div className="warehouse-form-pair">
-            <label className="input-field"><span>Phong/vi tri</span><input value={createForm.roomText} onChange={(event) => setCreateForm({ ...createForm, roomText: event.target.value })} placeholder="Sanh tang 1" /></label>
-            <label className="input-field"><span>Ma luu kho</span><input value={createForm.storageCode} onChange={(event) => setCreateForm({ ...createForm, storageCode: event.target.value })} placeholder="A1-02" /></label>
+            <label className="input-field"><span>Phòng/vị trí</span><input value={createForm.roomText} onChange={(event) => setCreateForm({ ...createForm, roomText: event.target.value })} placeholder="Sảnh tầng 1" /></label>
+            <label className="input-field"><span>Mã lưu kho</span><input value={createForm.storageCode} onChange={(event) => setCreateForm({ ...createForm, storageCode: event.target.value })} placeholder="A1-02" /></label>
           </div>
           <div className="warehouse-form-pair">
-            <label className="input-field"><span>Nguoi giao</span><input value={createForm.finderName} onChange={(event) => setCreateForm({ ...createForm, finderName: event.target.value })} placeholder="Ho ten" /></label>
-            <label className="input-field"><span>Lien he</span><input value={createForm.finderContact} onChange={(event) => setCreateForm({ ...createForm, finderContact: event.target.value })} placeholder="Email/SDT" /></label>
+            <label className="input-field"><span>Người giao</span><input value={createForm.finderName} onChange={(event) => setCreateForm({ ...createForm, finderName: event.target.value })} placeholder="Họ tên" /></label>
+            <label className="input-field"><span>Liên hệ</span><input value={createForm.finderContact} onChange={(event) => setCreateForm({ ...createForm, finderContact: event.target.value })} placeholder="Email/SĐT" /></label>
           </div>
-          <label className="input-field"><span>Thoi gian nhan</span><input type="datetime-local" value={createForm.receivedAt} onChange={(event) => setCreateForm({ ...createForm, receivedAt: event.target.value })} /></label>
-          <button className="primary-button" disabled={pendingAction === "create"}><ClipboardCheck size={17} /> Tiep nhan</button>
+          <label className="input-field"><span>Thời gian nhận</span><input type="datetime-local" value={createForm.receivedAt} onChange={(event) => setCreateForm({ ...createForm, receivedAt: event.target.value })} /></label>
+          <button className="primary-button" disabled={pendingAction === "create"}><ClipboardCheck size={17} /> Tiếp nhận</button>
         </form>
       </aside>
 
       <section className="warehouse-main">
         <form className="warehouse-filter-bar" onSubmit={submitFilters}>
-          <label className="input-field"><span>Tim item</span><input aria-label="Tim item kho" value={filters.q} onChange={(event) => setFilters({ ...filters, q: event.target.value })} placeholder="Ten, mo ta, ma kho..." /></label>
-          <label className="input-field"><span>Trang thai</span><select value={filters.status} onChange={(event) => setFilters({ ...filters, status: event.target.value })}>
-            <option value="">Tat ca</option>
+          <label className="input-field"><span>Tìm vật phẩm</span><input aria-label="Tìm vật phẩm trong kho" value={filters.q} onChange={(event) => setFilters({ ...filters, q: event.target.value })} placeholder="Tên, mô tả, mã kho..." /></label>
+          <label className="input-field"><span>Trạng thái</span><select value={filters.status} onChange={(event) => setFilters({ ...filters, status: event.target.value })}>
+            <option value="">Tất cả</option>
             {statusOptions.map((status) => <option key={status.value} value={status.value}>{status.label}</option>)}
           </select></label>
-          <label className="input-field"><span>Diem ban giao</span><select value={filters.handoverPointId} onChange={(event) => setFilters({ ...filters, handoverPointId: event.target.value })}>
-            <option value="">Tat ca</option>
+          <label className="input-field"><span>Điểm bàn giao</span><select value={filters.handoverPointId} onChange={(event) => setFilters({ ...filters, handoverPointId: event.target.value })}>
+            <option value="">Tất cả</option>
             {catalog?.handoverPoints.map((point) => <option key={point.id} value={point.id}>{point.name}</option>)}
           </select></label>
-          <button className="secondary-button"><Search size={17} /> Tim</button>
+          <button className="secondary-button"><Search size={17} /> Tìm</button>
         </form>
 
-        <section className="warehouse-counts" aria-label="So item tai diem ban giao">
+        <section className="warehouse-counts" aria-label="Số vật phẩm tại điểm bàn giao">
           {dashboard?.handoverCounts.map((point) => <article key={point.handoverPointId}>
             <MapPin size={17} />
             <strong>{point.itemCount}</strong>
             <span>{point.name}</span>
-            <small>{point.storedCount} stored - {point.overdueCount} overdue</small>
+            <small>{point.storedCount} đang lưu kho - {point.overdueCount} quá hạn</small>
           </article>)}
         </section>
 
@@ -404,51 +404,51 @@ export function StaffPage() {
           {dashboard?.items.map((item) => <article className={`warehouse-item-card ${selectedItemId === item.id ? "is-selected" : ""}`} key={item.id}>
             <div className="warehouse-item-card__top">
               <span className={`warehouse-status warehouse-status--${item.status.toLowerCase()}`}>{statusLabel(item.status)}</span>
-              <button type="button" className="secondary-button warehouse-select-button" onClick={() => selectItem(item)}><History size={15} /> Chon</button>
+              <button type="button" className="secondary-button warehouse-select-button" onClick={() => selectItem(item)}><History size={15} /> Chọn</button>
             </div>
             <h2>{item.itemName}</h2>
-            <p>{item.description || "Khong co mo ta"}</p>
+            <p>{item.description || "Không có mô tả"}</p>
             <dl>
-              <ItemMeta label="Deadline" value={<span className={isOverdue(item) ? "warehouse-deadline is-overdue" : "warehouse-deadline"}>{formatDate(item.retentionDeadline)}</span>} />
-              <ItemMeta label="Ma kho" value={item.storageCode || "Chua co"} />
-              <ItemMeta label="Diem nhan" value={item.handoverPoint?.name ?? "Chua ro"} />
-              <ItemMeta label="Log" value={`${item.logCount} lan`} />
+              <ItemMeta label="Hạn lưu giữ" value={<span className={isOverdue(item) ? "warehouse-deadline is-overdue" : "warehouse-deadline"}>{formatDate(item.retentionDeadline)}</span>} />
+              <ItemMeta label="Mã kho" value={item.storageCode || "Chưa có"} />
+              <ItemMeta label="Điểm nhận" value={item.handoverPoint?.name ?? "Chưa rõ"} />
+              <ItemMeta label="Nhật ký" value={`${item.logCount} lần`} />
             </dl>
           </article>)}
-          {!dashboard?.items.length && <div className="warehouse-empty"><Archive size={42} /><strong>Chua co item phu hop</strong></div>}
+          {!dashboard?.items.length && <div className="warehouse-empty"><Archive size={42} /><strong>Chưa có vật phẩm phù hợp</strong></div>}
         </div>
       </section>
 
       <aside className="admin-panel warehouse-detail-panel">
         <div className="admin-panel-heading">
           <span><Save size={18} /></span>
-          <div><p className="eyebrow">STATE</p><h2>Cap nhat va log</h2></div>
+          <div><p className="eyebrow">TRẠNG THÁI</p><h2>Cập nhật và nhật ký</h2></div>
         </div>
         {selectedItem ? <>
           <div className="warehouse-selected-summary">
             <span className={`warehouse-status warehouse-status--${selectedItem.status.toLowerCase()}`}>{statusLabel(selectedItem.status)}</span>
             <h3>{selectedItem.itemName}</h3>
-            <p>Deadline: {formatDate(selectedItem.retentionDeadline)} - Nhan luc {formatDateTime(selectedItem.receivedAt)}</p>
+            <p>Hạn lưu giữ: {formatDate(selectedItem.retentionDeadline)} - Nhận lúc {formatDateTime(selectedItem.receivedAt)}</p>
           </div>
           <form className="admin-form" onSubmit={submitUpdate}>
-            <label className="input-field"><span>Trang thai moi</span><select value={updateForm.status} onChange={(event) => setUpdateForm({ ...updateForm, status: event.target.value as WarehouseStatus })}>
+            <label className="input-field"><span>Trạng thái mới</span><select value={updateForm.status} onChange={(event) => setUpdateForm({ ...updateForm, status: event.target.value as WarehouseStatus })}>
               {statusOptions.map((status) => <option key={status.value} value={status.value}>{status.label}</option>)}
             </select></label>
-            <label className="input-field"><span>Ma luu kho</span><input value={updateForm.storageCode} onChange={(event) => setUpdateForm({ ...updateForm, storageCode: event.target.value })} placeholder="Bat buoc khi STORED" /></label>
-            <label className="input-field"><span>Tinh trang</span><textarea value={updateForm.conditionNotes} onChange={(event) => setUpdateForm({ ...updateForm, conditionNotes: event.target.value })} rows={3} /></label>
-            <label className="input-field"><span>Ghi chu log</span><textarea value={updateForm.note} onChange={(event) => setUpdateForm({ ...updateForm, note: event.target.value })} rows={2} placeholder="Ly do cap nhat" /></label>
-            <button className="primary-button" disabled={pendingAction === "update"}><CheckCircle2 size={17} /> Luu trang thai</button>
+            <label className="input-field"><span>Mã lưu kho</span><input value={updateForm.storageCode} onChange={(event) => setUpdateForm({ ...updateForm, storageCode: event.target.value })} placeholder="Bắt buộc khi chuyển sang Đang lưu kho" /></label>
+            <label className="input-field"><span>Tình trạng</span><textarea value={updateForm.conditionNotes} onChange={(event) => setUpdateForm({ ...updateForm, conditionNotes: event.target.value })} rows={3} /></label>
+            <label className="input-field"><span>Ghi chú nhật ký</span><textarea value={updateForm.note} onChange={(event) => setUpdateForm({ ...updateForm, note: event.target.value })} rows={2} placeholder="Lý do cập nhật" /></label>
+            <button className="primary-button" disabled={pendingAction === "update"}><CheckCircle2 size={17} /> Lưu trạng thái</button>
           </form>
           <div className="warehouse-log-list">
-            <div className="admin-list-heading"><div><p className="eyebrow">STORAGE LOG</p><h2>Lich su</h2></div><strong>{logs.length}</strong></div>
-            {pendingAction === "logs" && <p className="admin-hint">Dang tai log...</p>}
+            <div className="admin-list-heading"><div><p className="eyebrow">NHẬT KÝ KHO</p><h2>Lịch sử</h2></div><strong>{logs.length}</strong></div>
+            {pendingAction === "logs" && <p className="admin-hint">Đang tải nhật ký...</p>}
             {logs.map((log) => <article key={log.id}>
               <strong>{statusLabel(log.fromStatus)} -&gt; {statusLabel(log.toStatus)}</strong>
-              <span>{log.actor.fullName ?? "Staff"} - {formatDateTime(log.createdAt)}</span>
+              <span>{log.actor.fullName ?? "Nhân viên"} - {formatDateTime(log.createdAt)}</span>
               {(log.storageCode || log.conditionNotes || log.note) && <p>{[log.storageCode, log.conditionNotes, log.note].filter(Boolean).join(" | ")}</p>}
             </article>)}
           </div>
-        </> : <div className="warehouse-empty warehouse-empty--compact"><History size={38} /><strong>Chon mot item de xem log</strong></div>}
+        </> : <div className="warehouse-empty warehouse-empty--compact"><History size={38} /><strong>Chọn một vật phẩm để xem nhật ký</strong></div>}
       </aside>
     </div>
   </section>;

@@ -29,13 +29,25 @@ const transitionMap: Record<WarehouseStatus, WarehouseStatus[]> = {
   TRANSFERRED: []
 };
 
+const warehouseStatusLabels: Record<WarehouseStatus, string> = {
+  PENDING_APPROVAL: "Chờ duyệt",
+  RECEIVED: "Đã tiếp nhận",
+  STORED: "Đang lưu kho",
+  CLAIMED: "Đang đợi nhận",
+  RETURNED: "Đã trả",
+  EXPIRED: "Quá hạn",
+  DISPOSED: "Đã xử lý",
+  DONATED: "Đã quyên góp",
+  TRANSFERRED: "Đã chuyển giao"
+};
+
 function clean(value: string | null | undefined) {
   const next = value?.trim();
   return next ? next : null;
 }
 
 function ensureNotFuture(value: Date) {
-  if (value.getTime() > Date.now() + 60_000) throw new HttpError(400, "Thoi gian tiep nhan khong duoc o tuong lai");
+  if (value.getTime() > Date.now() + 60_000) throw new HttpError(400, "Thời gian tiếp nhận không được ở tương lai");
 }
 
 function includesKeyword(text: string, keywords: string[]) {
@@ -73,7 +85,7 @@ async function retentionDaysForCategory(categoryId: string | null | undefined) {
     return warehouseRepository.getConfigInt("warehouse.retention_days_default", retentionFallbacks["warehouse.retention_days_default"]);
   }
   const category = await warehouseRepository.findCategoryNames(categoryId);
-  if (!category) throw new HttpError(404, "Khong tim thay danh muc vat pham");
+  if (!category) throw new HttpError(404, "Không tìm thấy danh mục vật phẩm");
   const key = retentionConfigKeyForCategory(category);
   return warehouseRepository.getConfigInt(key, retentionFallbacks[key]);
 }
@@ -83,11 +95,11 @@ async function resolveLocation(input: Pick<CreateWarehouseItemInput, "areaId" | 
   const buildingId = input.buildingId ?? null;
   if (buildingId) {
     const building = await warehouseRepository.findBuildingById(buildingId);
-    if (!building) throw new HttpError(404, "Khong tim thay dia diem");
-    if (areaId && areaId !== building.areaId) throw new HttpError(400, "Dia diem khong thuoc khu vuc da chon");
+    if (!building) throw new HttpError(404, "Không tìm thấy địa điểm");
+    if (areaId && areaId !== building.areaId) throw new HttpError(400, "Địa điểm không thuộc khu vực đã chọn");
     areaId = building.areaId;
   }
-  if (areaId && !await warehouseRepository.findAreaById(areaId)) throw new HttpError(404, "Khong tim thay khu vuc");
+  if (areaId && !await warehouseRepository.findAreaById(areaId)) throw new HttpError(404, "Không tìm thấy khu vực");
   return { areaId, buildingId };
 }
 
@@ -113,9 +125,9 @@ export const warehouseService = {
   },
 
   async createItem(input: CreateWarehouseItemInput, actorId: string) {
-    if (!await warehouseRepository.findHandoverPointById(input.handoverPointId)) throw new HttpError(404, "Khong tim thay diem ban giao");
-    if (input.postId && !await warehouseRepository.findPostById(input.postId)) throw new HttpError(404, "Khong tim thay bai dang lien quan");
-    if (input.categoryId && !await warehouseRepository.findCategoryNames(input.categoryId)) throw new HttpError(404, "Khong tim thay danh muc vat pham");
+    if (!await warehouseRepository.findHandoverPointById(input.handoverPointId)) throw new HttpError(404, "Không tìm thấy điểm bàn giao");
+    if (input.postId && !await warehouseRepository.findPostById(input.postId)) throw new HttpError(404, "Không tìm thấy bài đăng liên quan");
+    if (input.categoryId && !await warehouseRepository.findCategoryNames(input.categoryId)) throw new HttpError(404, "Không tìm thấy danh mục vật phẩm");
 
     const receivedAt = input.receivedAt ?? new Date();
     ensureNotFuture(receivedAt);
@@ -156,12 +168,12 @@ export const warehouseService = {
         toStatus: "RECEIVED",
         conditionNotes,
         storageCode,
-        note: "Item received"
+        note: "Đã tiếp nhận vật phẩm"
       }, connection);
     });
 
     const item = await warehouseRepository.findItemById(warehouseItemId);
-    if (!item) throw new HttpError(500, "Khong the doc lai vat pham vua tao");
+    if (!item) throw new HttpError(500, "Không thể đọc lại vật phẩm vừa tạo");
     return item;
   },
 
@@ -169,18 +181,18 @@ export const warehouseService = {
     let action: StorageLogAction = "CONDITION_UPDATED";
     await withTransaction(async (connection) => {
       const current = await warehouseRepository.lockItemForUpdate(itemId, connection);
-      if (!current) throw new HttpError(404, "Khong tim thay vat pham trong kho");
+      if (!current) throw new HttpError(404, "Không tìm thấy vật phẩm trong kho");
 
       const nextStatus = input.status ?? current.status;
       const statusChanged = input.status !== undefined && input.status !== current.status;
       if (statusChanged && !canTransitionWarehouseStatus(current.status, nextStatus)) {
-        throw new HttpError(400, `Khong the chuyen trang thai tu ${current.status} sang ${nextStatus}`);
+        throw new HttpError(400, `Không thể chuyển trạng thái từ ${warehouseStatusLabels[current.status]} sang ${warehouseStatusLabels[nextStatus]}`);
       }
 
       const conditionNotes = input.conditionNotes !== undefined ? clean(input.conditionNotes) : undefined;
       const storageCode = input.storageCode !== undefined ? clean(input.storageCode) : undefined;
       const nextStorageCode = storageCode !== undefined ? storageCode : current.storageCode;
-      if (nextStatus === "STORED" && !nextStorageCode) throw new HttpError(400, "Can ma vi tri luu kho khi chuyen sang STORED");
+      if (nextStatus === "STORED" && !nextStorageCode) throw new HttpError(400, "Cần mã vị trí lưu kho khi chuyển sang Đang lưu kho");
 
       action = statusChanged ? nextStatus : "CONDITION_UPDATED";
       const returnedAt = statusChanged && nextStatus === "RETURNED" ? new Date() : undefined;
@@ -206,12 +218,12 @@ export const warehouseService = {
     });
 
     const item = await warehouseRepository.findItemById(itemId);
-    if (!item) throw new HttpError(404, "Khong tim thay vat pham trong kho");
+    if (!item) throw new HttpError(404, "Không tìm thấy vật phẩm trong kho");
     return item;
   },
 
   async listLogs(itemId: string) {
-    if (!await warehouseRepository.findItemById(itemId)) throw new HttpError(404, "Khong tim thay vat pham trong kho");
+    if (!await warehouseRepository.findItemById(itemId)) throw new HttpError(404, "Không tìm thấy vật phẩm trong kho");
     return warehouseRepository.listLogs(itemId);
   }
 };
