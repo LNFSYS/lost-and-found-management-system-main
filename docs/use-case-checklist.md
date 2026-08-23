@@ -1,6 +1,6 @@
 # Checklist Use Case
 
-Cập nhật: 21/08/2026
+Cập nhật: 23/08/2026
 
 ## Quy ước
 
@@ -9,7 +9,7 @@ Cập nhật: 21/08/2026
 - `[ ] Planned`: chưa có runtime; migration/schema không đủ để tick.
 - `[ ] Deferred`: cố ý để sau phạm vi web/backend hiện tại.
 
-Tổng quan audit: **33 Done, 2 Partial, 57 Planned, 8 Deferred**.
+Tổng quan audit: **42 Done, 2 Partial, 48 Planned, 8 Deferred**.
 
 ## Authentication và authorization
 
@@ -30,11 +30,11 @@ Tổng quan audit: **33 Done, 2 Partial, 57 Planned, 8 Deferred**.
 | [ ] | UC-008 | Tạo điểm bàn giao | Planned | Schema only |
 | [ ] | UC-009 | Cập nhật điểm bàn giao | Planned | Schema only |
 | [ ] | UC-010 | Đóng/mở điểm bàn giao | Planned | Schema only |
-| [ ] | UC-011 | Xác nhận tiếp nhận vật phẩm tại điểm bàn giao | Planned | Chưa có runtime |
-| [ ] | UC-012 | Chuyển vật phẩm sang trạng thái lưu kho | Planned | Chưa có runtime |
-| [ ] | UC-013 | Ghi nhận tình trạng vật phẩm khi tiếp nhận | Planned | Chưa có runtime |
-| [ ] | UC-014 | Xác nhận trả vật phẩm cho người nhận | Planned | Chưa có runtime |
-| [ ] | UC-015 | Ghi storage log cho thao tác kho | Planned | Chưa có runtime |
+| [x] | UC-011 | Xác nhận tiếp nhận vật phẩm tại điểm bàn giao | Done | Staff warehouse API/UI tạo `warehouse_items` và log `RECEIVED` |
+| [x] | UC-012 | Chuyển vật phẩm sang trạng thái lưu kho | Done | PATCH warehouse status `STORED`, yêu cầu storage code |
+| [x] | UC-013 | Ghi nhận tình trạng vật phẩm khi tiếp nhận | Done | Condition notes bắt buộc khi receive và hiển thị trên Staff UI |
+| [x] | UC-014 | Xác nhận trả vật phẩm cho người nhận | Done | State transition `RETURNED` ghi `returned_at` và storage log |
+| [x] | UC-015 | Ghi storage log cho thao tác kho | Done | `storage_logs` lưu actor, action, from/to status, note |
 | [ ] | UC-016 | Kiểm tra thời hạn lưu kho | Planned | Chưa có runtime |
 | [ ] | UC-017 | Xác định vật phẩm đủ điều kiện xử lý quá hạn | Planned | Chưa có runtime |
 | [ ] | UC-018 | Tạo đơn xử lý/thanh lý vật phẩm quá hạn | Planned | Chưa có runtime |
@@ -97,10 +97,10 @@ Tổng quan audit: **33 Done, 2 Partial, 57 Planned, 8 Deferred**.
 | [x] | UC-055 | Lấy danh sách handover point đang hoạt động cho form | Done | `/posts/catalog` |
 | [ ] | UC-056 | Quản lý handover point qua Admin API | Planned | Chưa có route |
 | [ ] | UC-057 | Lưu campus map và marker point | Planned | Schema columns only |
-| [ ] | UC-058 | Đếm item lưu tại handover point | Planned | Chưa có runtime |
-| [ ] | UC-059 | Quản lý warehouse item qua API | Planned | Schema only |
-| [ ] | UC-060 | Cập nhật trạng thái warehouse item | Planned | Schema only |
-| [ ] | UC-061 | Lưu retention deadline cho warehouse item | Planned | Schema only |
+| [x] | UC-058 | Đếm item lưu tại handover point | Done | Staff dashboard trả `handoverCounts` theo điểm bàn giao |
+| [x] | UC-059 | Quản lý warehouse item qua API | Done | `/api/staff/warehouse-items` list/create |
+| [x] | UC-060 | Cập nhật trạng thái warehouse item | Done | PATCH `/api/staff/warehouse-items/:id` theo state machine |
+| [x] | UC-061 | Lưu retention deadline cho warehouse item | Done | Deadline tính từ `received_at` theo retention config/category |
 | [x] | UC-062 | Giới hạn Staff thấp hơn Admin | Done | Backend/frontend guards; Staff page còn placeholder |
 | [ ] | UC-063 | Quản lý user qua Admin API | Planned | Chưa có route |
 | [x] | UC-064 | Quản lý nhóm và danh mục vật phẩm | Done | Admin catalog API/UI |

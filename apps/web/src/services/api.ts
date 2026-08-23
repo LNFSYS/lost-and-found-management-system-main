@@ -4,6 +4,87 @@ export interface AdminCategory { id: string; name: string; icon: string | null; 
 export interface AdminArea { id: string; name: string; description: string | null; isActive: boolean; sortOrder: number; buildingCount: number; createdAt: string; }
 export interface AdminBuilding { id: string; areaId: string; areaName: string; name: string; isActive: boolean; sortOrder: number; createdAt: string; }
 export interface AdminCatalog { stats: { totalPosts: number; processingPosts: number; totalUsers: number; returnedPosts: number }; categories: AdminCategory[]; areas: AdminArea[]; buildings: AdminBuilding[]; }
+export type WarehouseStatus = "PENDING_APPROVAL" | "RECEIVED" | "STORED" | "CLAIMED" | "RETURNED" | "EXPIRED" | "DISPOSED" | "DONATED" | "TRANSFERRED";
+export interface WarehouseCatalog {
+  categories: Array<{ id: string; name: string; parentId: string | null }>;
+  areas: Array<{ id: string; name: string }>;
+  buildings: Array<{ id: string; areaId: string; name: string }>;
+  handoverPoints: Array<{ id: string; name: string; address: string; openingHours: string | null }>;
+}
+export interface WarehouseItem {
+  id: string;
+  postId: string | null;
+  handoverPoint: { id: string; name: string | null; address: string | null } | null;
+  itemName: string;
+  description: string | null;
+  category: { id: string; name: string | null } | null;
+  location: {
+    area: { id: string; name: string | null } | null;
+    building: { id: string; name: string | null } | null;
+    roomText: string | null;
+  };
+  finder: { userId: string | null; userName: string | null; name: string | null; contact: string | null };
+  status: WarehouseStatus;
+  conditionNotes: string | null;
+  storageCode: string | null;
+  receivedAt: string;
+  returnedAt: string | null;
+  retentionDeadline: string | null;
+  createdBy: { id: string; fullName: string | null };
+  createdAt: string;
+  updatedAt: string;
+  logCount: number;
+}
+export interface WarehouseStorageLog {
+  id: string;
+  warehouseItemId: string | null;
+  postId: string | null;
+  handoverPoint: { id: string; name: string | null } | null;
+  actor: { id: string; fullName: string | null };
+  action: WarehouseStatus | "OVERDUE_MARKED" | "CONDITION_UPDATED";
+  fromStatus: string | null;
+  toStatus: string | null;
+  conditionNotes: string | null;
+  storageCode: string | null;
+  note: string | null;
+  createdAt: string;
+}
+export interface WarehouseDashboard {
+  stats: { totalItems: number; activeItems: number; receivedItems: number; storedItems: number; returnedItems: number; overdueItems: number };
+  handoverCounts: Array<{ handoverPointId: string; name: string; address: string; itemCount: number; storedCount: number; overdueCount: number }>;
+  total: number;
+  page: number;
+  pageSize: number;
+  items: WarehouseItem[];
+}
+export interface WarehouseFilters {
+  q?: string;
+  status?: WarehouseStatus | "";
+  handoverPointId?: string;
+  page?: number;
+  pageSize?: number;
+}
+export interface CreateWarehouseItemPayload {
+  postId?: string | null;
+  handoverPointId: string;
+  itemName: string;
+  description?: string | null;
+  categoryId?: string | null;
+  areaId?: string | null;
+  buildingId?: string | null;
+  roomText?: string | null;
+  finderName?: string | null;
+  finderContact?: string | null;
+  conditionNotes: string;
+  storageCode?: string | null;
+  receivedAt?: string;
+}
+export interface UpdateWarehouseItemPayload {
+  status?: WarehouseStatus;
+  conditionNotes?: string | null;
+  storageCode?: string | null;
+  note?: string | null;
+}
 export interface PostCatalog {
   categories: Array<{ id: string; name: string; parentId: string | null }>;
   areas: Array<{ id: string; name: string }>;
@@ -156,7 +237,7 @@ export async function refreshSession() {
 
 function storeSession(session: SessionResponse) { accessToken = session.accessToken; return session.user; }
 
-function queryString(filters: PostListFilters) {
+function queryString(filters: object) {
   const query = new URLSearchParams();
   Object.entries(filters).forEach(([key, value]) => {
     if (value !== undefined && value !== "") query.set(key, String(value));
@@ -218,5 +299,10 @@ export const api = {
   deleteAdminArea: (id: string) => raw<void>(`/admin/areas/${id}`, { method: "DELETE" }),
   createAdminBuilding: (payload: Required<Pick<AdminBuildingPayload, "name" | "areaId">> & AdminBuildingPayload) => raw<AdminBuilding>("/admin/buildings", { method: "POST", body: JSON.stringify(payload) }),
   updateAdminBuilding: (id: string, payload: AdminBuildingPayload) => raw<AdminBuilding>(`/admin/buildings/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
-  deleteAdminBuilding: (id: string) => raw<void>(`/admin/buildings/${id}`, { method: "DELETE" })
+  deleteAdminBuilding: (id: string) => raw<void>(`/admin/buildings/${id}`, { method: "DELETE" }),
+  getWarehouseCatalog: () => raw<WarehouseCatalog>("/staff/warehouse-items/catalog"),
+  listWarehouseItems: (filters: WarehouseFilters = {}) => raw<WarehouseDashboard>(`/staff/warehouse-items${queryString(filters)}`),
+  createWarehouseItem: (payload: CreateWarehouseItemPayload) => raw<WarehouseItem>("/staff/warehouse-items", { method: "POST", body: JSON.stringify(payload) }),
+  updateWarehouseItem: (id: string, payload: UpdateWarehouseItemPayload) => raw<WarehouseItem>(`/staff/warehouse-items/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
+  getWarehouseLogs: (id: string) => raw<{ logs: WarehouseStorageLog[] }>(`/staff/warehouse-items/${id}/logs`).then((payload) => payload.logs)
 };

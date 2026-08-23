@@ -55,8 +55,8 @@ Migrations chỉ là bằng chứng schema, không đủ để đánh dấu mộ
 | --- | --- | --- | --- | --- |
 | FR-ADMIN-01 | Admin có thể CRUD/toggle nhóm danh mục, danh mục con, area và building. | UC-064, UC-065 | P0 | Implemented |
 | FR-ADMIN-02 | Admin có dashboard toàn hệ thống, user management, moderation, report/export và config management. | UC-063, UC-066, UC-067, UC-084, UC-085 | P1 | Partial; mới có catalog statistics |
-| FR-STAFF-01 | Staff có dashboard vận hành với quyền thấp hơn Admin. | UC-002, UC-062 | P1 | Partial; guard có, page là placeholder |
-| FR-HANDOVER-01 | User xem điểm bàn giao; Admin quản lý marker, giờ hoạt động và số item lưu giữ. | UC-008, UC-009, UC-010, UC-055, UC-056, UC-057, UC-058 | P1 | Partial; catalog read-only có |
+| FR-STAFF-01 | Staff có dashboard vận hành với quyền thấp hơn Admin. | UC-002, UC-062 | P1 | Implemented cho warehouse operations; user/admin domains khác vẫn tách quyền |
+| FR-HANDOVER-01 | User xem điểm bàn giao; Admin quản lý marker, giờ hoạt động và số item lưu giữ. | UC-008, UC-009, UC-010, UC-055, UC-056, UC-057, UC-058 | P1 | Partial; đã có catalog read-only và item count theo handover point |
 
 ### 2.5 Core workflow tiếp theo
 
@@ -66,7 +66,7 @@ Migrations chỉ là bằng chứng schema, không đủ để đánh dấu mộ
 | FR-CLAIM-02 | Reviewer yêu cầu thêm thông tin, accept/reject/cancel theo state machine và transaction lock. | UC-003, UC-004, UC-005, UC-006, UC-007 | P0 | Planned |
 | FR-EVIDENCE-01 | Hệ thống cung cấp advisory evidence confidence cho reviewer nhưng không auto-verify ownership. | UC-087, UC-089, UC-090, UC-092 | P1 | Planned |
 | FR-APPT-01 | Accepted claim có thể tạo, reject, reschedule/cancel và complete appointment. | UC-021, UC-022, UC-023, UC-024 | P1 | Planned |
-| FR-WAREHOUSE-01 | Staff/Admin quản lý receive/store/return, storage log và retention/disposition. | UC-011 đến UC-020, UC-059 đến UC-061 | P1 | Planned |
+| FR-WAREHOUSE-01 | Staff/Admin quản lý receive/store/return, storage log và retention/disposition. | UC-011 đến UC-020, UC-059 đến UC-061 | P1 | Partial; receive/store/return, storage log và retention deadline đã có; disposition UC-016 đến UC-020 còn Planned |
 | FR-RT-01 | Socket.IO hỗ trợ JWT, room isolation, chat text/image, seen/unread và notification. | UC-077 đến UC-083 | P1 | Planned |
 | FR-REP-01 | Hệ thống ghi reputation và feedback sau business event hợp lệ. | UC-025, UC-039 | P2 | Planned |
 
@@ -94,7 +94,7 @@ Migrations chỉ là bằng chứng schema, không đủ để đánh dấu mộ
 | NFR-TEST-01 | API/web phải build; logic quan trọng có unit/browser tests. | P0 | Partial |
 | NFR-CI-01 | Pull request phải tự động chạy test/build với MySQL isolated. | P1 | Planned |
 | NFR-OBS-01 | API có structured request log, readiness và graceful shutdown. | P1 | Partial; DB readiness đã triển khai, logging/shutdown cần verify thêm |
-| NFR-AUDIT-01 | Thao tác quản trị và transition nghiệp vụ nhạy cảm phải lưu actor, action, before/after và timestamp. | P1 | Planned |
+| NFR-AUDIT-01 | Thao tác quản trị và transition nghiệp vụ nhạy cảm phải lưu actor, action, before/after và timestamp. | P1 | Partial; warehouse transitions đã ghi actor/action/from-to/timestamp, admin catalog audit còn Planned |
 | NFR-AI-01 | AI/matching chỉ là decision support; human verification bắt buộc trước khi trả đồ. | P0 | Implemented trong module hiện tại |
 
 ## 4. Release gate cho trạng thái Done

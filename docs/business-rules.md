@@ -40,6 +40,8 @@ Cập nhật: 23/08/2026
 | BR-26 | Staff có quyền thấp hơn Admin. Việc frontend ẩn menu không thay thế backend guard. | UC-002, UC-062 | Enforced cho route hiện tại |
 | BR-27 | Migration đã chạy không được sửa; checksum mismatch phải dừng migration. | N/A | Enforced |
 | BR-28 | Node.js là write owner duy nhất. Java không được ghi business state khi chưa có domain ownership và integration test. | UC-001, UC-002 | Enforced theo kiến trúc hiện tại |
+| BR-32 | Staff page chỉ được công bố hoàn thành khi có ít nhất một operational flow và backend role matrix test. | UC-062 | Enforced cho warehouse operations |
+| BR-42 | Warehouse receive/store/return chỉ cho Staff/Admin và mỗi transition phải ghi storage log có actor, action, from/to status, condition/note và timestamp. | UC-011 đến UC-015, UC-059 đến UC-061 | Enforced |
 
 ## 3. Rules cần hoàn thiện gần nhất
 
@@ -48,7 +50,6 @@ Cập nhật: 23/08/2026
 | BR-29 | Shared DB không được tham chiếu file chỉ tồn tại trên một máy; media phải dùng persistent shared object storage. | UC-048, UC-050 | Planned |
 | BR-30 | Nếu metadata media tồn tại nhưng file/object đã mất, API phải trả 404 có kiểm soát thay vì 500 unhandled. | UC-048 | Enforced cho local post media |
 | BR-31 | Admin catalog writes cần audit actor, action, before/after và timestamp. | UC-064, UC-065 | Planned |
-| BR-32 | Staff page chỉ được công bố hoàn thành khi có ít nhất một operational flow và backend role matrix test. | UC-062 | Planned |
 
 ## 4. Rules cho flow tương lai
 

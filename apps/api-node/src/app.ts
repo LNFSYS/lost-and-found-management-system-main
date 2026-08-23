@@ -9,6 +9,7 @@ import { isOriginAllowed, parseAllowedOrigins } from "./config/cors.js";
 import { adminRoutes } from "./routes/admin.routes.js";
 import { authRoutes } from "./routes/auth.routes.js";
 import { postRoutes } from "./routes/post.routes.js";
+import { staffRoutes } from "./routes/staff.routes.js";
 
 interface AppDependencies {
   checkReadiness?: () => Promise<void>;
@@ -37,6 +38,7 @@ export function createApp({ checkReadiness = async () => { await pool.query("SEL
   });
   app.use("/api/auth", authRoutes);
   app.use("/api/posts", postRoutes);
+  app.use("/api/staff", staffRoutes);
   app.use("/api/admin", adminRoutes);
   app.use("/api", (_request, response) => response.status(404).json({ message: "Không tìm thấy endpoint" }));
   app.use(errorHandler);
