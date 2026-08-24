@@ -4,6 +4,33 @@ export interface AdminCategory { id: string; name: string; icon: string | null; 
 export interface AdminArea { id: string; name: string; description: string | null; isActive: boolean; sortOrder: number; buildingCount: number; createdAt: string; }
 export interface AdminBuilding { id: string; areaId: string; areaName: string; name: string; isActive: boolean; sortOrder: number; createdAt: string; }
 export interface AdminCatalog { stats: { totalPosts: number; processingPosts: number; totalUsers: number; returnedPosts: number }; categories: AdminCategory[]; areas: AdminArea[]; buildings: AdminBuilding[]; }
+export type AdminAccessRole = "ADMIN" | "STAFF" | "USER";
+export type AdminUserStatus = "ACTIVE" | "DISABLED";
+export interface AdminUser {
+  id: string;
+  email: string;
+  fullName: string;
+  studentCode: string | null;
+  phoneNumber: string | null;
+  status: AdminUserStatus;
+  roles: Role[];
+  accessRole: AdminAccessRole;
+  createdAt: string;
+  updatedAt: string;
+}
+export interface AdminUserListResponse { total: number; page: number; pageSize: number; items: AdminUser[]; }
+export interface AdminUserFilters { q?: string; role?: AdminAccessRole | ""; status?: AdminUserStatus | ""; page?: number; pageSize?: number; }
+export interface CreateAdminUserPayload {
+  email: string;
+  password: string;
+  fullName: string;
+  studentCode?: string | null;
+  phoneNumber?: string | null;
+  audienceRole?: "STUDENT" | "LECTURER" | null;
+  accessRole: AdminAccessRole;
+  status: AdminUserStatus;
+}
+export type UpdateAdminUserPayload = Partial<Pick<AdminUser, "email" | "fullName" | "studentCode" | "phoneNumber">>;
 export type WarehouseStatus = "PENDING_APPROVAL" | "RECEIVED" | "STORED" | "CLAIMED" | "RETURNED" | "EXPIRED" | "DISPOSED" | "DONATED" | "TRANSFERRED";
 export interface WarehouseCatalog {
   categories: Array<{ id: string; name: string; parentId: string | null }>;
@@ -300,6 +327,13 @@ export const api = {
   createAdminBuilding: (payload: Required<Pick<AdminBuildingPayload, "name" | "areaId">> & AdminBuildingPayload) => raw<AdminBuilding>("/admin/buildings", { method: "POST", body: JSON.stringify(payload) }),
   updateAdminBuilding: (id: string, payload: AdminBuildingPayload) => raw<AdminBuilding>(`/admin/buildings/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
   deleteAdminBuilding: (id: string) => raw<void>(`/admin/buildings/${id}`, { method: "DELETE" }),
+  listAdminUsers: (filters: AdminUserFilters = {}) => raw<AdminUserListResponse>(`/admin/users${queryString(filters)}`),
+  getAdminUser: (id: string) => raw<AdminUser>(`/admin/users/${id}`),
+  createAdminUser: (payload: CreateAdminUserPayload) => raw<AdminUser>("/admin/users", { method: "POST", body: JSON.stringify(payload) }),
+  updateAdminUser: (id: string, payload: UpdateAdminUserPayload) => raw<AdminUser>(`/admin/users/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
+  changeAdminUserRole: (id: string, accessRole: AdminAccessRole) => raw<AdminUser>(`/admin/users/${id}/role`, { method: "PATCH", body: JSON.stringify({ accessRole }) }),
+  changeAdminUserStatus: (id: string, status: AdminUserStatus) => raw<AdminUser>(`/admin/users/${id}/status`, { method: "PATCH", body: JSON.stringify({ status }) }),
+  deleteAdminUser: (id: string) => raw<void>(`/admin/users/${id}`, { method: "DELETE" }),
   getWarehouseCatalog: () => raw<WarehouseCatalog>("/staff/warehouse-items/catalog"),
   listWarehouseItems: (filters: WarehouseFilters = {}) => raw<WarehouseDashboard>(`/staff/warehouse-items${queryString(filters)}`),
   createWarehouseItem: (payload: CreateWarehouseItemPayload) => raw<WarehouseItem>("/staff/warehouse-items", { method: "POST", body: JSON.stringify(payload) }),

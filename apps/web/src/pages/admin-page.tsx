@@ -6,6 +6,7 @@ import {
   Clock3,
   Eye,
   EyeOff,
+  Filter,
   FolderTree,
   Layers3,
   MapPinned,
@@ -13,17 +14,20 @@ import {
   Plus,
   RefreshCw,
   Trash2,
+  UserPlus,
   UsersRound,
   X
 } from "lucide-react";
-import { api, type AdminArea, type AdminBuilding, type AdminCatalog, type AdminCategory } from "../services/api";
+import { api, type AdminAccessRole, type AdminArea, type AdminBuilding, type AdminCatalog, type AdminCategory, type AdminUser, type AdminUserStatus } from "../services/api";
 
-type AdminTab = "categories" | "locations";
-type PendingAction = "" | "load" | "category" | "area" | "building" | "toggle" | "delete";
+type AdminTab = "users" | "categories" | "locations";
+type PendingAction = "" | "load" | "users" | "user" | "user-toggle" | "category" | "area" | "building" | "toggle" | "delete";
 
 const emptyCategoryForm = { name: "", parentId: "", isActive: true };
 const emptyAreaForm = { name: "", description: "", isActive: true };
 const emptyBuildingForm = { name: "", areaId: "", isActive: true };
+const emptyUserForm = { email: "", password: "", fullName: "", studentCode: "", phoneNumber: "", audienceRole: "", accessRole: "USER" as AdminAccessRole, status: "ACTIVE" as AdminUserStatus };
+const emptyUserFilters = { q: "", role: "" as AdminAccessRole | "", status: "" as AdminUserStatus | "", page: 1, pageSize: 10 };
 
 function messageOf(reason: unknown, fallback: string) {
   return reason instanceof Error ? reason.message : fallback;
@@ -43,6 +47,12 @@ function StatusBadge({ active }: { active: boolean }) {
   </span>;
 }
 
+function UserStatusBadge({ status }: { status: AdminUserStatus }) {
+  return <span className={`admin-status ${status === "ACTIVE" ? "admin-status--active" : ""}`}>
+    {status === "ACTIVE" ? "Active" : "Disabled"}
+  </span>;
+}
+
 function CardActions({ active, label, onEdit, onToggle, onDelete }: { active: boolean; label: string; onEdit: () => void; onToggle: () => void; onDelete: () => void }) {
   return <div className="admin-card-actions">
     <button type="button" className="admin-icon-button" title={`Chỉnh sửa ${label}`} aria-label={`Chỉnh sửa ${label}`} onClick={onEdit}><PencilLine size={16} /></button>
@@ -55,11 +65,16 @@ function CardActions({ active, label, onEdit, onToggle, onDelete }: { active: bo
 
 export function AdminPage() {
   const [catalog, setCatalog] = useState<AdminCatalog | null>(null);
-  const [activeTab, setActiveTab] = useState<AdminTab>("categories");
+  const [users, setUsers] = useState<AdminUser[]>([]);
+  const [userTotal, setUserTotal] = useState(0);
+  const [activeTab, setActiveTab] = useState<AdminTab>("users");
   const [pendingAction, setPendingAction] = useState<PendingAction>("load");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
+  const [userFilters, setUserFilters] = useState(emptyUserFilters);
+  const [userForm, setUserForm] = useState(emptyUserForm);
+  const [userEditingId, setUserEditingId] = useState<string | null>(null);
   const [categoryForm, setCategoryForm] = useState(emptyCategoryForm);
   const [categoryEditingId, setCategoryEditingId] = useState<string | null>(null);
   const [areaForm, setAreaForm] = useState(emptyAreaForm);
@@ -79,7 +94,24 @@ export function AdminPage() {
     }
   }
 
-  useEffect(() => { void loadCatalog(); }, []);
+  async function loadUsers(nextFilters = userFilters, silent = false) {
+    if (!silent) setPendingAction("users");
+    setError("");
+    try {
+      const result = await api.listAdminUsers(nextFilters);
+      setUsers(result.items);
+      setUserTotal(result.total);
+      setUserFilters({ ...nextFilters, page: result.page, pageSize: result.pageSize });
+    } catch (reason) {
+      setError(messageOf(reason, "Không thể tải danh sách người dùng"));
+    } finally {
+      if (!silent) setPendingAction("");
+    }
+  }
+
+  useEffect(() => {
+    void Promise.all([loadCatalog(), loadUsers(emptyUserFilters, true)]).finally(() => setPendingAction(""));
+  }, []);
 
   const mainCategories = useMemo(() => catalog?.categories.filter((category) => !category.parentId) ?? [], [catalog]);
   const childCategories = useMemo(() => catalog?.categories.filter((category) => category.parentId) ?? [], [catalog]);
@@ -100,6 +132,98 @@ export function AdminPage() {
     } finally {
       setPendingAction("");
     }
+  }
+
+  async function runUserAction(action: PendingAction, work: () => Promise<unknown>, success: string) {
+    setPendingAction(action);
+    setError("");
+    setNotice("");
+    try {
+      await work();
+      setNotice(success);
+      await Promise.all([loadUsers(userFilters, true), loadCatalog(true)]);
+      return true;
+    } catch (reason) {
+      setError(messageOf(reason, "Không thể thực hiện thao tác"));
+      return false;
+    } finally {
+      setPendingAction("");
+    }
+  }
+
+  function resetUserForm() {
+    setUserForm(emptyUserForm);
+    setUserEditingId(null);
+  }
+
+  function editUser(user: AdminUser) {
+    setActiveTab("users");
+    setUserEditingId(user.id);
+    setUserForm({
+      email: user.email,
+      password: "",
+      fullName: user.fullName,
+      studentCode: user.studentCode ?? "",
+      phoneNumber: user.phoneNumber ?? "",
+      audienceRole: user.roles.includes("LECTURER") ? "LECTURER" : user.roles.includes("STUDENT") ? "STUDENT" : "",
+      accessRole: user.accessRole,
+      status: user.status
+    });
+  }
+
+  async function submitUser(event: FormEvent) {
+    event.preventDefault();
+    const audienceRole = userForm.audienceRole ? userForm.audienceRole as "STUDENT" | "LECTURER" : null;
+    if (userEditingId) {
+      const current = users.find((user) => user.id === userEditingId);
+      if (await runUserAction("user", async () => {
+        await api.updateAdminUser(userEditingId, {
+          email: userForm.email,
+          fullName: userForm.fullName,
+          studentCode: userForm.studentCode.trim() || null,
+          phoneNumber: userForm.phoneNumber.trim() || null
+        });
+        if (current && current.accessRole !== userForm.accessRole) await api.changeAdminUserRole(userEditingId, userForm.accessRole);
+        if (current && current.status !== userForm.status) await api.changeAdminUserStatus(userEditingId, userForm.status);
+      }, "Đã cập nhật người dùng")) resetUserForm();
+      return;
+    }
+
+    if (await runUserAction("user", () => api.createAdminUser({
+      email: userForm.email,
+      password: userForm.password,
+      fullName: userForm.fullName,
+      studentCode: userForm.studentCode.trim() || null,
+      phoneNumber: userForm.phoneNumber.trim() || null,
+      audienceRole,
+      accessRole: userForm.accessRole,
+      status: userForm.status
+    }), "Đã tạo người dùng")) resetUserForm();
+  }
+
+  function applyUserFilters(event: FormEvent) {
+    event.preventDefault();
+    void loadUsers({ ...userFilters, page: 1 });
+  }
+
+  function changeUserPage(delta: number) {
+    const maxPage = Math.max(1, Math.ceil(userTotal / userFilters.pageSize));
+    const page = Math.min(maxPage, Math.max(1, userFilters.page + delta));
+    if (page !== userFilters.page) void loadUsers({ ...userFilters, page });
+  }
+
+  function changeUserRole(user: AdminUser, accessRole: AdminAccessRole) {
+    void runUserAction("user-toggle", () => api.changeAdminUserRole(user.id, accessRole), "Đã cập nhật vai trò");
+  }
+
+  function toggleUserStatus(user: AdminUser) {
+    const status: AdminUserStatus = user.status === "ACTIVE" ? "DISABLED" : "ACTIVE";
+    void runUserAction("user-toggle", () => api.changeAdminUserStatus(user.id, status), status === "ACTIVE" ? "Đã mở tài khoản" : "Đã khóa tài khoản");
+  }
+
+  function deleteUser(user: AdminUser) {
+    if (!window.confirm(`Xóa người dùng "${user.email}"?`)) return;
+    void runUserAction("delete", () => api.deleteAdminUser(user.id), "Đã xóa người dùng");
   }
 
   function resetCategoryForm() {
@@ -176,7 +300,7 @@ export function AdminPage() {
         <p className="eyebrow">ADMIN OPERATIONS</p>
         <h1>Bảng quản trị</h1>
       </div>
-      <button type="button" className="secondary-button" onClick={() => void loadCatalog()} disabled={pendingAction === "load"}><RefreshCw size={17} /> Làm mới</button>
+      <button type="button" className="secondary-button" onClick={() => void Promise.all([loadCatalog(), loadUsers(userFilters, true)]).finally(() => setPendingAction(""))} disabled={pendingAction === "load"}><RefreshCw size={17} /> Làm mới</button>
     </header>
 
     <div className="admin-stats" aria-label="Thống kê nhanh">
@@ -187,12 +311,104 @@ export function AdminPage() {
     </div>
 
     <div className="admin-tabs" role="tablist" aria-label="Chức năng quản trị">
+      <button type="button" className={activeTab === "users" ? "active" : ""} onClick={() => setActiveTab("users")}><UsersRound size={18} /> Người dùng</button>
       <button type="button" className={activeTab === "categories" ? "active" : ""} onClick={() => setActiveTab("categories")}><FolderTree size={18} /> Danh mục</button>
       <button type="button" className={activeTab === "locations" ? "active" : ""} onClick={() => setActiveTab("locations")}><MapPinned size={18} /> Khu vực</button>
     </div>
 
     {notice && <p className="form-note admin-message">{notice}</p>}
     {error && <p className="form-error admin-message" role="alert">{error}</p>}
+
+    {activeTab === "users" && <div className="admin-grid admin-grid--users">
+      <aside className="admin-panel admin-panel--form">
+        <div className="admin-panel-heading">
+          <span><UserPlus size={18} /></span>
+          <div><p className="eyebrow">USERS</p><h2>{userEditingId ? "Cập nhật người dùng" : "Tạo người dùng"}</h2></div>
+        </div>
+        <form className="admin-form" onSubmit={submitUser}>
+          <label className="input-field"><span>Email</span><input type="email" value={userForm.email} onChange={(event) => setUserForm({ ...userForm, email: event.target.value })} required /></label>
+          {!userEditingId && <label className="input-field"><span>Mật khẩu</span><input type="password" minLength={8} value={userForm.password} onChange={(event) => setUserForm({ ...userForm, password: event.target.value })} required /></label>}
+          <label className="input-field"><span>Họ và tên</span><input value={userForm.fullName} onChange={(event) => setUserForm({ ...userForm, fullName: event.target.value })} required /></label>
+          <label className="input-field"><span>Mã sinh viên/nhân sự</span><input value={userForm.studentCode} onChange={(event) => setUserForm({ ...userForm, studentCode: event.target.value })} /></label>
+          <label className="input-field"><span>Số điện thoại</span><input value={userForm.phoneNumber} onChange={(event) => setUserForm({ ...userForm, phoneNumber: event.target.value })} /></label>
+          <div className="warehouse-form-pair">
+            {!userEditingId && <label className="input-field"><span>Nhóm sử dụng</span><select value={userForm.audienceRole} onChange={(event) => setUserForm({ ...userForm, audienceRole: event.target.value })}>
+              <option value="">Không gắn</option>
+              <option value="STUDENT">Student</option>
+              <option value="LECTURER">Lecturer</option>
+            </select></label>}
+            <label className="input-field"><span>Vai trò truy cập</span><select value={userForm.accessRole} onChange={(event) => setUserForm({ ...userForm, accessRole: event.target.value as AdminAccessRole })}>
+              <option value="USER">User</option>
+              <option value="STAFF">Staff</option>
+              <option value="ADMIN">Admin</option>
+            </select></label>
+          </div>
+          <label className="input-field"><span>Trạng thái</span><select value={userForm.status} onChange={(event) => setUserForm({ ...userForm, status: event.target.value as AdminUserStatus })}>
+            <option value="ACTIVE">Active</option>
+            <option value="DISABLED">Disabled</option>
+          </select></label>
+          <div className="admin-form-actions">
+            {userEditingId && <button type="button" className="secondary-button" onClick={resetUserForm}><X size={17} /> Hủy</button>}
+            <button className="primary-button" disabled={pendingAction === "user"}><Plus size={17} /> {userEditingId ? "Lưu người dùng" : "Tạo người dùng"}</button>
+          </div>
+        </form>
+      </aside>
+
+      <section className="admin-panel admin-panel--list">
+        <div className="admin-list-heading"><div><p className="eyebrow">ACCESS</p><h2>Danh sách người dùng</h2></div><strong>{userTotal}</strong></div>
+        <form className="admin-user-filters" onSubmit={applyUserFilters}>
+          <label className="input-field"><span>Tìm kiếm</span><input value={userFilters.q} onChange={(event) => setUserFilters({ ...userFilters, q: event.target.value })} placeholder="Email, tên, mã số..." /></label>
+          <label className="input-field"><span>Vai trò</span><select value={userFilters.role} onChange={(event) => setUserFilters({ ...userFilters, role: event.target.value as AdminAccessRole | "" })}>
+            <option value="">Tất cả</option>
+            <option value="ADMIN">Admin</option>
+            <option value="STAFF">Staff</option>
+            <option value="USER">User</option>
+          </select></label>
+          <label className="input-field"><span>Trạng thái</span><select value={userFilters.status} onChange={(event) => setUserFilters({ ...userFilters, status: event.target.value as AdminUserStatus | "" })}>
+            <option value="">Tất cả</option>
+            <option value="ACTIVE">Active</option>
+            <option value="DISABLED">Disabled</option>
+          </select></label>
+          <button className="secondary-button" disabled={pendingAction === "users"}><Filter size={17} /> Lọc</button>
+        </form>
+        <div className="admin-user-table-wrap">
+          <table className="admin-user-table">
+            <thead><tr><th>Người dùng</th><th>Vai trò</th><th>Trạng thái</th><th>Cập nhật</th><th></th></tr></thead>
+            <tbody>
+              {users.map((user) => <tr key={user.id}>
+                <td>
+                  <strong>{user.fullName}</strong>
+                  <span>{user.email}</span>
+                  <small>{user.studentCode || "Chưa có mã"} / {user.phoneNumber || "Chưa có SĐT"}</small>
+                </td>
+                <td>
+                  <select className="admin-inline-select" value={user.accessRole} onChange={(event) => changeUserRole(user, event.target.value as AdminAccessRole)} disabled={pendingAction === "user-toggle"}>
+                    <option value="USER">User</option>
+                    <option value="STAFF">Staff</option>
+                    <option value="ADMIN">Admin</option>
+                  </select>
+                </td>
+                <td><UserStatusBadge status={user.status} /></td>
+                <td>{new Date(user.updatedAt).toLocaleDateString("vi-VN")}</td>
+                <td>
+                  <div className="admin-user-actions">
+                    <button type="button" className="admin-icon-button" title="Chỉnh sửa" aria-label="Chỉnh sửa" onClick={() => editUser(user)}><PencilLine size={16} /></button>
+                    <button type="button" className="admin-icon-button" title={user.status === "ACTIVE" ? "Khóa tài khoản" : "Mở tài khoản"} aria-label={user.status === "ACTIVE" ? "Khóa tài khoản" : "Mở tài khoản"} onClick={() => toggleUserStatus(user)}>{user.status === "ACTIVE" ? <EyeOff size={16} /> : <Eye size={16} />}</button>
+                    <button type="button" className="admin-icon-button admin-icon-button--danger" title="Xóa người dùng" aria-label="Xóa người dùng" onClick={() => deleteUser(user)}><Trash2 size={16} /></button>
+                  </div>
+                </td>
+              </tr>)}
+              {!users.length && <tr><td colSpan={5} className="admin-empty-cell">Không có người dùng phù hợp</td></tr>}
+            </tbody>
+          </table>
+        </div>
+        <div className="admin-pagination">
+          <button type="button" className="secondary-button" onClick={() => changeUserPage(-1)} disabled={userFilters.page <= 1}>Trước</button>
+          <span>Trang {userFilters.page} / {Math.max(1, Math.ceil(userTotal / userFilters.pageSize))}</span>
+          <button type="button" className="secondary-button" onClick={() => changeUserPage(1)} disabled={userFilters.page >= Math.max(1, Math.ceil(userTotal / userFilters.pageSize))}>Sau</button>
+        </div>
+      </section>
+    </div>}
 
     {activeTab === "categories" && <div className="admin-grid">
       <aside className="admin-panel admin-panel--form">

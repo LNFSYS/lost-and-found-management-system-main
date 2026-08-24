@@ -38,6 +38,14 @@ test("unknown API routes return the JSON error convention", async () => {
   });
 });
 
+test("admin user routes require authentication", async () => {
+  await withServer(async () => undefined, async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/api/admin/users`);
+    assert.equal(response.status, 401);
+    assert.match(response.headers.get("content-type") ?? "", /application\/json/);
+  });
+});
+
 test("liveness stays independent while readiness reflects database availability", async () => {
   await withServer(async () => { throw new Error("database unavailable"); }, async (baseUrl) => {
     const health = await fetch(`${baseUrl}/api/health`);

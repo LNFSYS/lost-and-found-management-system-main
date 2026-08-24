@@ -102,7 +102,7 @@ Tổng quan audit: **42 Done, 2 Partial, 48 Planned, 8 Deferred**.
 | [x] | UC-060 | Cập nhật trạng thái warehouse item | Done | PATCH `/api/staff/warehouse-items/:id` theo state machine |
 | [x] | UC-061 | Lưu retention deadline cho warehouse item | Done | Deadline tính từ `received_at` theo retention config/category |
 | [x] | UC-062 | Giới hạn Staff thấp hơn Admin | Done | Backend/frontend guards; Staff page còn placeholder |
-| [ ] | UC-063 | Quản lý user qua Admin API | Planned | Chưa có route |
+| [x] | UC-063 | Quản lý user qua Admin API | Done | Admin-only CRUD, role/status, soft-delete |
 | [x] | UC-064 | Quản lý nhóm và danh mục vật phẩm | Done | Admin catalog API/UI |
 | [x] | UC-065 | Quản lý area và building | Done | Admin catalog API/UI |
 | [ ] | UC-066 | Moderate post và xử lý report | Planned | Chưa có route |
