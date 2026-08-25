@@ -1,8 +1,8 @@
 # FPTU Lost & Found System
 
-Web/backend MVP cho quy trình báo mất và báo nhặt đồ tại FPT University Đà Nẵng.
+Web Application with Progressive Web App (PWA) support cho quy trình báo mất và báo nhặt đồ tại FPT University Đà Nẵng.
 
-Phiên bản hiện tại tập trung vào authentication, LOST/FOUND posts, Gemini-assisted image draft và rule-based/hybrid matching có giải thích. Claim, evidence review, appointment, warehouse và realtime là các sprint tiếp theo, chưa phải chức năng runtime hoàn chỉnh trong codebase mới.
+Current implementation baseline gồm authentication, LOST/FOUND posts, Gemini-assisted image/OCR draft, rule-based/hybrid matching có giải thích và Staff warehouse operations. Claim, evidence review, appointment, warehouse disposition, realtime và PWA infrastructure tiếp tục được hoàn thiện theo kế hoạch 9 sprint.
 
 ## Chức năng hiện có
 
@@ -19,21 +19,23 @@ Phiên bản hiện tại tập trung vào authentication, LOST/FOUND posts, Gem
 - Hybrid matching dùng text/category/location/time/image/safe OCR tags.
 - Lưu score tier, explanation và manual recalculation.
 - Admin CRUD category, area và building.
+- Staff warehouse operations: tiếp nhận, lưu/trả vật phẩm, retention deadline, thống kê điểm bàn giao và storage log.
+- Responsive web cho desktop/mobile browser với Playwright mobile viewport checks.
 
 ## Chưa hoàn thành
 
-- Claim/evidence, appointment, warehouse, notification và Socket.IO chat.
-- Staff operations dashboard; route hiện tại mới là placeholder.
+- Claim/evidence, appointment, warehouse overdue/disposition, notification và Socket.IO chat.
 - Admin user management, moderation, report, config và dashboard toàn hệ thống.
 - Shared object storage; media hiện lưu local filesystem.
 - Java business endpoints; Java hiện chỉ có health-check skeleton.
-- Mobile và custom-trained AI model.
+- PWA manifest, service worker, installability và safe offline/error fallback.
+- Native mobile app và custom-trained AI model là future enhancements.
 
 ## Công nghệ
 
 | Layer | Công nghệ |
 | --- | --- |
-| Web | React 18, TypeScript, Vite, React Router |
+| Web/PWA | React 18, TypeScript, Vite, React Router; PWA infrastructure đang Planned/Partial |
 | Core API | Node.js, Express, TypeScript |
 | Database | MySQL 8+ |
 | Email | SMTP/Gmail App Password |
@@ -208,4 +210,4 @@ Bắt đầu tại [docs/README.md](docs/README.md).
 
 ## Cách mô tả trung thực
 
-> Đây là web/backend MVP đang phát triển cho Lost & Found campus. Authentication, post management, Gemini-assisted draft và hybrid matching đã có; claim, verification, appointment, warehouse, realtime, Java business extension và mobile là các bước tiếp theo.
+> LNFS là Web Application with PWA support đang được phát triển cho Lost & Found campus. Current implementation đã có authentication, post management, Gemini-assisted image/OCR draft, hybrid matching và Staff warehouse operations; claim, appointment, realtime, PWA infrastructure và server deployment đang được hoàn thiện. Native mobile và custom model training là future enhancements.

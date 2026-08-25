@@ -1,15 +1,15 @@
 # Checklist Use Case
 
-Cập nhật: 23/08/2026
+Cập nhật: 26/08/2026
 
 ## Quy ước
 
 - `[x] Done`: có runtime implementation trong codebase mới và có bằng chứng build/test phù hợp.
 - `[ ] Partial`: có một phần implementation nhưng chưa hoàn chỉnh end-to-end.
 - `[ ] Planned`: chưa có runtime; migration/schema không đủ để tick.
-- `[ ] Deferred`: cố ý để sau phạm vi web/backend hiện tại.
+- `[ ] Deferred`: future enhancement được nêu rõ và không thuộc current development scope.
 
-Tổng quan audit: **42 Done, 2 Partial, 48 Planned, 8 Deferred**.
+Tổng quan audit: **42 Done, 7 Partial, 51 Planned, 0 Deferred**.
 
 ## Authentication và authorization
 
@@ -101,7 +101,7 @@ Tổng quan audit: **42 Done, 2 Partial, 48 Planned, 8 Deferred**.
 | [x] | UC-059 | Quản lý warehouse item qua API | Done | `/api/staff/warehouse-items` list/create |
 | [x] | UC-060 | Cập nhật trạng thái warehouse item | Done | PATCH `/api/staff/warehouse-items/:id` theo state machine |
 | [x] | UC-061 | Lưu retention deadline cho warehouse item | Done | Deadline tính từ `received_at` theo retention config/category |
-| [x] | UC-062 | Giới hạn Staff thấp hơn Admin | Done | Backend/frontend guards; Staff page còn placeholder |
+| [x] | UC-062 | Giới hạn Staff thấp hơn Admin | Done | Backend/frontend guards; Staff warehouse page có operational flow và Playwright tests |
 | [ ] | UC-063 | Quản lý user qua Admin API | Planned | Chưa có route |
 | [x] | UC-064 | Quản lý nhóm và danh mục vật phẩm | Done | Admin catalog API/UI |
 | [x] | UC-065 | Quản lý area và building | Done | Admin catalog API/UI |
@@ -148,18 +148,18 @@ Tổng quan audit: **42 Done, 2 Partial, 48 Planned, 8 Deferred**.
 | [x] | UC-091 | Dùng image/safe OCR tags làm tín hiệu matching | Done | AI tags + matching engine |
 | [ ] | UC-092 | Hiển thị review confidence cho finder/staff | Planned | Chưa có claim review UI |
 
-## Mobile
+## Progressive Web App
 
 | Done | UC | Use case | Status | Evidence |
 | --- | --- | --- | --- | --- |
-| [ ] | UC-093 | Đăng ký/đăng nhập và lưu phiên trên mobile | Deferred | Không có mobile workspace |
-| [ ] | UC-094 | Xem/cập nhật profile, avatar, activity, reputation trên mobile | Deferred | Không có mobile workspace |
-| [ ] | UC-095 | Xem/search/filter board và post detail trên mobile | Deferred | Không có mobile workspace |
-| [ ] | UC-096 | Tạo/quản lý LOST/FOUND post trên mobile | Deferred | Không có mobile workspace |
-| [ ] | UC-097 | Upload ảnh từ camera/gallery trên mobile | Deferred | Không có mobile workspace |
-| [ ] | UC-098 | Gửi claim/evidence và xem trạng thái trên mobile | Deferred | Không có mobile/claim runtime |
-| [ ] | UC-099 | Xem handover map và tạo appointment trên mobile | Deferred | Không có mobile/appointment runtime |
-| [ ] | UC-100 | Chat realtime, notification và offline/retry trên mobile | Deferred | Không có mobile/realtime runtime |
+| [ ] | UC-093 | Xác thực và duy trì phiên qua PWA | Partial | Auth/refresh chạy trên responsive web; chưa có manifest, service worker hoặc installability |
+| [ ] | UC-094 | Xem và cập nhật profile/activity qua responsive PWA | Partial | Profile cơ bản đã có; avatar/activity/reputation và PWA infrastructure chưa có |
+| [ ] | UC-095 | Duyệt, tìm kiếm, lọc và xem chi tiết bài trên mobile browser | Partial | Board/detail responsive và mobile viewport test đã có; chưa có installable PWA/offline shell |
+| [ ] | UC-096 | Tạo và quản lý bài LOST/FOUND qua PWA | Partial | Responsive create/manage post flow và browser tests đã có; chưa có PWA installability/offline behavior |
+| [ ] | UC-097 | Chụp/chọn và upload ảnh qua mobile browser được hỗ trợ | Partial | File input hỗ trợ multiple image upload; chưa có camera capture/device compatibility evidence |
+| [ ] | UC-098 | Gửi evidence, quản lý claim và xem trạng thái qua PWA | Planned | Claim/evidence runtime chưa có |
+| [ ] | UC-099 | Xem thông tin bàn giao và quản lý appointment qua PWA | Planned | Chưa có user handover/appointment runtime |
+| [ ] | UC-100 | Nhận notification, dùng communication và xử lý offline/retry an toàn qua PWA | Planned | Chưa có notification/communication/service worker/offline runtime |
 
 ## Điều kiện tick Done
 

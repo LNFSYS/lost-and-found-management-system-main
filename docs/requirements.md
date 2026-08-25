@@ -1,6 +1,6 @@
 # Yêu cầu chức năng và phi chức năng
 
-Cập nhật: 23/08/2026
+Cập nhật: 26/08/2026
 
 ## 1. Quy ước trạng thái
 
@@ -9,7 +9,7 @@ Cập nhật: 23/08/2026
 | `Implemented` | Có runtime code và có thể kiểm tra trong codebase hiện tại |
 | `Partial` | Có một phần route/UI/schema nhưng chưa hoàn chỉnh end-to-end |
 | `Planned` | Chưa có runtime implementation |
-| `Deferred` | Ngoài phạm vi web/backend ưu tiên hiện tại |
+| `Deferred` | Future enhancement được nêu rõ và không thuộc current development scope |
 
 Migrations chỉ là bằng chứng schema, không đủ để đánh dấu một requirement là `Implemented`.
 
@@ -58,7 +58,7 @@ Migrations chỉ là bằng chứng schema, không đủ để đánh dấu mộ
 | FR-STAFF-01 | Staff có dashboard vận hành với quyền thấp hơn Admin. | UC-002, UC-062 | P1 | Implemented cho warehouse operations; user/admin domains khác vẫn tách quyền |
 | FR-HANDOVER-01 | User xem điểm bàn giao; Admin quản lý marker, giờ hoạt động và số item lưu giữ. | UC-008, UC-009, UC-010, UC-055, UC-056, UC-057, UC-058 | P1 | Partial; đã có catalog read-only và item count theo handover point |
 
-### 2.5 Core workflow tiếp theo
+### 2.5 Planned complete product workflow
 
 | ID | Requirement | UC | Priority | Status |
 | --- | --- | --- | --- | --- |
@@ -70,13 +70,15 @@ Migrations chỉ là bằng chứng schema, không đủ để đánh dấu mộ
 | FR-RT-01 | Socket.IO hỗ trợ JWT, room isolation, chat text/image, seen/unread và notification. | UC-077 đến UC-083 | P1 | Planned |
 | FR-REP-01 | Hệ thống ghi reputation và feedback sau business event hợp lệ. | UC-025, UC-039 | P2 | Planned |
 
-### 2.6 Java và mobile
+### 2.6 Java service boundary và Progressive Web App
 
 | ID | Requirement | UC | Priority | Status |
 | --- | --- | --- | --- | --- |
 | FR-JAVA-01 | Java service có health endpoint; chưa sở hữu flow nghiệp vụ. | N/A | P2 | Implemented skeleton |
 | FR-JAVA-02 | Trước khi Java nhận một domain phải có API contract, JWT compatibility test và one-writer rule. | UC-004, UC-008, UC-015 | P2 | Planned |
-| FR-MOBILE-01 | Mobile dùng chung API cho auth, posts, claim, handover và realtime. | UC-093 đến UC-100 | P2 | Deferred |
+| FR-PWA-01 | Web client cung cấp responsive UI trên desktop/tablet/mobile browser, manifest, installability, service worker, basic offline application shell, safe offline/error fallback, mobile-browser image upload và browser/device verification. Mọi transaction chỉ được xác nhận sau khi server chấp nhận. | UC-093 đến UC-100 | P1 | Partial; responsive UI, file selection/upload và mobile viewport tests đã có; manifest, service worker, installability, offline shell và device verification chưa có |
+
+`FR-PWA-01` thay thế ID lịch sử `FR-MOBILE-01` từ ngày 26/08/2026. Native mobile app là future enhancement; không phải client đang được triển khai trong current development scope.
 
 ## 3. Non-functional requirements
 
@@ -89,13 +91,14 @@ Migrations chỉ là bằng chứng schema, không đủ để đánh dấu mộ
 | NFR-PRIV-01 | Private post/media/matching signals không được lộ cho actor không có quyền. | P0 | Partial; cần integration tests |
 | NFR-DATA-01 | Migration phải tuần tự, checksum-protected và không sửa file đã chạy. | P0 | Implemented |
 | NFR-DATA-02 | Shared DB phải tách dev/demo/test và tránh destructive test. | P0 | Process requirement |
-| NFR-PERF-01 | Board phải pagination; matching phải giới hạn candidate và rate-limit rerun. | P0 | Implemented cho MVP scale |
+| NFR-PERF-01 | Board phải pagination; matching phải giới hạn candidate và rate-limit rerun cho tải dự kiến hiện tại của dự án. | P0 | Implemented ở current tested baseline; chưa có load test/benchmark production |
 | NFR-PORT-01 | Media phải tồn tại sau restart/deploy và truy cập được từ mọi API instance. | P0 | Not met với local storage |
 | NFR-TEST-01 | API/web phải build; logic quan trọng có unit/browser tests. | P0 | Partial |
 | NFR-CI-01 | Pull request phải tự động chạy test/build với MySQL isolated. | P1 | Planned |
 | NFR-OBS-01 | API có structured request log, readiness và graceful shutdown. | P1 | Partial; DB readiness đã triển khai, logging/shutdown cần verify thêm |
 | NFR-AUDIT-01 | Thao tác quản trị và transition nghiệp vụ nhạy cảm phải lưu actor, action, before/after và timestamp. | P1 | Partial; warehouse transitions đã ghi actor/action/from-to/timestamp, admin catalog audit còn Planned |
 | NFR-AI-01 | AI/matching chỉ là decision support; human verification bắt buộc trước khi trả đồ. | P0 | Implemented trong module hiện tại |
+| NFR-PWA-01 | Cached/offline UI không được lộ private data hoặc báo transaction thành công trước khi server xác nhận; browser không hỗ trợ phải có fallback an toàn. | P0 | Planned cùng service worker/offline design |
 
 ## 4. Release gate cho trạng thái Done
 

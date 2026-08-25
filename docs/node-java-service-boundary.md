@@ -1,6 +1,6 @@
 # Ranh giới Node.js và Java
 
-Cập nhật: 21/08/2026
+Cập nhật: 26/08/2026
 
 ## Quyết định hiện tại
 
@@ -12,7 +12,7 @@ Không trình bày kiến trúc hiện tại là production microservices. Java 
 
 | Thành phần | Trạng thái thực tế |
 | --- | --- |
-| Node app | Mount `/api/auth`, `/api/posts`, `/api/admin` trong `apps/api-node/src/app.ts` |
+| Node app | Mount `/api/auth`, `/api/posts`, `/api/staff`, `/api/admin` trong `apps/api-node/src/app.ts` |
 | Node migrations | Là nguồn thay đổi schema duy nhất trong `apps/api-node/src/migrations` |
 | Java app | Chỉ có `JavaAdminServiceApplication` và Actuator health |
 | Java business API | Chưa có |
@@ -29,7 +29,8 @@ Không trình bày kiến trúc hiện tại là production microservices. Java 
 | Category/area/building admin | Node.js | Không tham gia | Có thể chuyển trọn flow sang Java sau khi có contract |
 | Claim/evidence | Chưa có runtime | Không có | Chọn đúng một owner trước khi triển khai |
 | Appointment/handover | Chưa có runtime | Không có | Chọn đúng một owner trước khi triển khai |
-| Warehouse | Chưa có runtime | Không có | Phù hợp để Java đảm nhiệm nếu team muốn |
+| Warehouse receive/store/return, retention và storage log | Node.js | Không tham gia | Giữ Node làm owner cho current release; chỉ chuyển trọn domain sau contract/integration tests |
+| Warehouse overdue disposition, donation/transfer policy | Chưa hoàn chỉnh runtime | Không có | Hoàn thiện dưới một write owner duy nhất |
 | Realtime/notification | Chưa có runtime | Không có | Dự kiến Node.js/Socket.IO |
 
 ## Điều kiện để Java nhận một flow
@@ -48,7 +49,7 @@ Java không được ghi trực tiếp cùng bảng/trạng thái với Node cho
 
 ## Cách trình bày an toàn
 
-> Node.js là core API của MVP hiện tại. Nhóm giữ một Spring Boot skeleton để phát triển business extension trong các sprint sau; ở thời điểm này Java chưa sở hữu flow nghiệp vụ và hệ thống chưa được gọi là production microservices.
+> Node.js là core API của current system và là write owner cho các flow đang chạy, gồm warehouse operations hiện tại. Nhóm giữ một Spring Boot skeleton cho khả năng mở rộng sau này; Java chưa sở hữu flow nghiệp vụ và kiến trúc hiện tại không được trình bày là production microservices.
 
 ## Không nên tuyên bố
 

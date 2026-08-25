@@ -1,6 +1,6 @@
 # Luật nghiệp vụ
 
-Cập nhật: 23/08/2026
+Cập nhật: 26/08/2026
 
 ## 1. Quy ước
 
@@ -63,7 +63,7 @@ Cập nhật: 23/08/2026
 | BR-38 | Warehouse disposition bị chặn nếu còn claim hoặc appointment active/pending. | UC-011 đến UC-020, UC-059 đến UC-061 | Planned |
 | BR-39 | Socket phải JWT-authenticated, isolate theo user/claim room và không broadcast dữ liệu riêng cho actor không liên quan. | UC-077 đến UC-083 | Planned |
 | BR-40 | Custom AI chỉ được công bố sau khi có dataset hợp pháp, anonymization, evaluation và model versioning. | UC-026 đến UC-030 | Planned |
-| BR-41 | Mobile dùng chung API/privacy rules với web nhưng đang deferred, không thuộc completion hiện tại. | UC-093 đến UC-100 | Deferred |
+| BR-41 | PWA dùng cùng backend API, authentication, authorization, privacy, validation và business rules với desktop web. Cached/offline UI không được lộ private data hoặc xác nhận transaction trước khi server chấp nhận. | UC-093 đến UC-100 | Partial; shared responsive web runtime đã có, manifest/service worker/offline controls chưa có |
 
 ## 5. Nguyên tắc quyết định cuối
 
