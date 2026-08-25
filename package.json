@@ -2,7 +2,7 @@
   "name": "fptu-lost-found-system",
   "private": true,
   "version": "0.1.0",
-  "description": "Sprint 1 authentication base for FPTU Lost & Found System.",
+  "description": "FPTU Lost & Found web application with planned Progressive Web App support.",
   "workspaces": ["apps/*"],
   "scripts": {
     "start": "npm run dev",
