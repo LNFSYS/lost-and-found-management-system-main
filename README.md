@@ -12,13 +12,13 @@ Current implementation baseline gồm authentication, LOST/FOUND posts, Gemini-a
 - Role guard cho User/Student/Lecturer/Staff/Admin.
 - Storytelling home tích hợp form tạo LOST/FOUND post.
 - Board, My Posts, tìm kiếm/lọc/sắp xếp, post detail.
-- Category hai cấp, area/building và handover-point catalog.
+- Category hai cấp, area/building và public active-only handover-point catalog.
 - Upload/xóa ảnh bài đăng qua protected media endpoint.
 - `PRIVATE_DETAILS` cho bài FOUND.
 - Gemini-assisted multi-image analysis tạo bản nháp chỉnh sửa được.
 - Hybrid matching dùng text/category/location/time/image/safe OCR tags.
 - Lưu score tier, explanation và manual recalculation.
-- Admin CRUD category, area và building.
+- Admin CRUD category, area, building và điểm bàn giao; hỗ trợ ảnh map, kéo marker, giờ hoạt động, trạng thái và hard-delete guard.
 - Staff warehouse operations: tiếp nhận, lưu/trả vật phẩm, retention deadline, thống kê điểm bàn giao và storage log.
 - Responsive web cho desktop/mobile browser với Playwright mobile viewport checks.
 

@@ -802,6 +802,12 @@ textarea {
   gap: 14px;
 }
 
+.admin-form-pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
 .admin-hint {
   margin: -2px 0 0;
   color: var(--muted);
@@ -933,6 +939,205 @@ textarea {
 .admin-icon-button--danger:hover {
   color: var(--danger);
   background: var(--danger-soft);
+}
+
+.admin-grid--handover {
+  grid-template-columns: minmax(390px, 0.86fr) minmax(0, 1.4fr);
+}
+
+.admin-list-intro {
+  margin: 8px 0 20px;
+  color: var(--muted);
+  font-size: 0.86rem;
+}
+
+.handover-map-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.handover-map-upload {
+  position: relative;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.handover-map-upload input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.handover-map-picker {
+  display: grid;
+  gap: 8px;
+}
+
+.handover-map-picker__heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--ink-soft);
+  font-size: 0.78rem;
+}
+
+.handover-map-picker__heading span {
+  color: var(--fpt-blue);
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-weight: 800;
+}
+
+.handover-map-picker__surface {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  min-height: 190px;
+  overflow: hidden;
+  border: 1px solid #b9cce0;
+  border-radius: var(--radius);
+  background-color: #edf5fb;
+  background-image: linear-gradient(#cbdceb 1px, transparent 1px), linear-gradient(90deg, #cbdceb 1px, transparent 1px);
+  background-size: 24px 24px;
+  cursor: crosshair;
+  touch-action: none;
+  user-select: none;
+}
+
+.handover-map-picker__surface img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: contain;
+  background: #eef3f7;
+  pointer-events: none;
+}
+
+.handover-map-picker__empty {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 9px;
+  padding: 24px;
+  color: #60758b;
+  text-align: center;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.handover-map-picker__pin,
+.admin-handover-card__map span {
+  position: absolute;
+  z-index: 2;
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border: 3px solid #fff;
+  border-radius: 50% 50% 50% 8px;
+  color: #fff;
+  background: var(--fpt-orange);
+  box-shadow: 0 5px 14px rgb(32 58 85 / 24%);
+  transform: translate(-50%, -86%) rotate(-45deg);
+  pointer-events: none;
+}
+
+.handover-map-picker__pin svg,
+.admin-handover-card__map span svg {
+  transform: rotate(45deg);
+}
+
+.admin-card-grid--handover {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.admin-handover-card {
+  min-height: 0;
+  padding: 18px;
+}
+
+.admin-handover-card > .admin-status {
+  margin-right: 92px;
+}
+
+.admin-handover-card__map {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 7;
+  margin: 14px 0 4px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: calc(var(--radius) - 2px);
+  background: #eef3f7;
+}
+
+.admin-handover-card__map img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+}
+
+.admin-handover-card__map span {
+  width: 24px;
+  height: 24px;
+  border-width: 2px;
+}
+
+.admin-handover-meta {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin: 16px 0 0;
+}
+
+.admin-handover-meta div {
+  min-width: 0;
+  padding-top: 9px;
+  border-top: 1px solid var(--line);
+}
+
+.admin-handover-meta dt {
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.admin-handover-meta dd {
+  margin: 3px 0 0;
+  color: var(--ink-soft);
+  font-size: 0.78rem;
+  font-weight: 750;
+  overflow-wrap: anywhere;
+}
+
+.admin-delete-lock {
+  margin-top: 12px !important;
+  padding: 8px 10px;
+  border-left: 3px solid var(--fpt-orange);
+  color: #874510 !important;
+  background: var(--fpt-orange-soft);
+  font-weight: 750;
+}
+
+.admin-empty {
+  min-height: 240px;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 8px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.admin-empty strong {
+  color: var(--ink);
 }
 
 /* Staff warehouse */
@@ -3505,10 +3710,11 @@ textarea {
 
   .admin-tabs {
     width: 100%;
+    overflow-x: auto;
   }
 
   .admin-tabs button {
-    flex: 1;
+    flex: 1 0 auto;
     padding: 0 10px;
   }
 
@@ -3523,6 +3729,8 @@ textarea {
   }
 
   .warehouse-form-pair,
+  .admin-form-pair,
+  .admin-handover-meta,
   .warehouse-filter-bar {
     grid-template-columns: 1fr;
   }

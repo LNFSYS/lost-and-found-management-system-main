@@ -23,7 +23,7 @@ Historical alias: `FR-MOBILE-01` được thay bằng `FR-PWA-01` từ ngày 26/
 | BR-19, BR-20 | FR-MATCH-01 | UC-068 | Implemented | `matching.service.ts`, candidate repository queries |
 | BR-21, BR-22, BR-23 | FR-MATCH-02 | UC-069, UC-070, UC-091 | Implemented | `matching.engine.ts`, matching engine tests |
 | BR-24, BR-25 | FR-MATCH-03 | UC-071, UC-072, UC-075, UC-076 | Implemented | `matching.repository.ts`, post match routes, `post-matches-page.tsx` |
-| BR-09, BR-42 | FR-HANDOVER-01 | UC-008 đến UC-010, UC-055 đến UC-058 | Partial | Post/staff catalog và handover counts có runtime; Admin marker/hours management chưa có |
+| BR-09, BR-42, BR-43 | FR-HANDOVER-01 | UC-008 đến UC-010, UC-055 đến UC-058 | Implemented | Public active-only endpoint/catalog, Admin CRUD/toggle, multipart map upload, marker validation/picker, appointment delete guard, unit và Playwright tests |
 | BR-32, BR-42 | FR-STAFF-01, FR-WAREHOUSE-01, NFR-AUDIT-01 | UC-011 đến UC-015, UC-058 đến UC-061 | Implemented/partial warehouse scope | `staff.routes.ts`, `warehouse.service.ts`, `warehouse.repository.ts`, `warehouse.service.test.ts`, `staff-page.tsx`, `staff-page.spec.ts` |
 | BR-06, BR-26, BR-31 | FR-ADMIN-02 | UC-063, UC-066, UC-067, UC-084, UC-085 | Partial | `admin-page.tsx` có catalog statistics/CRUD; user/moderation/export/config chưa có |
 | BR-27 | NFR-DATA-01 | N/A | Implemented | `run-migrations.ts`, `schema_migrations` checksum |

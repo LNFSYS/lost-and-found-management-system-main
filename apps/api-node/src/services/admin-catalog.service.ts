@@ -6,9 +6,11 @@ import type {
   CreateAreaInput,
   CreateBuildingInput,
   CreateCategoryInput,
+  CreateHandoverPointInput,
   UpdateAreaInput,
   UpdateBuildingInput,
-  UpdateCategoryInput
+  UpdateCategoryInput,
+  UpdateHandoverPointInput
 } from "../validators/admin-catalog.validator.js";
 
 function normalizeCatalogName(value: string) {
@@ -22,15 +24,30 @@ async function ensureTopLevelCategory(parentId: string) {
   return parent;
 }
 
+async function validateHandoverLocation(areaId: string | null, buildingId: string | null) {
+  if (areaId && !await adminCatalogRepository.findAreaById(areaId)) throw new HttpError(404, "Không tìm thấy khu vực");
+  if (!buildingId) return;
+  if (!areaId) throw new HttpError(422, "Cần chọn khu vực trước khi chọn địa điểm cụ thể");
+  const building = await adminCatalogRepository.findBuildingById(buildingId);
+  if (!building) throw new HttpError(404, "Không tìm thấy địa điểm cụ thể");
+  if (building.areaId !== areaId) throw new HttpError(422, "Địa điểm cụ thể không thuộc khu vực đã chọn");
+}
+
 export const adminCatalogService = {
   async getCatalog() {
-    const [stats, categories, areas, buildings] = await Promise.all([
+    const [stats, categories, areas, buildings, handoverPoints] = await Promise.all([
       adminCatalogRepository.getStats(),
       adminCatalogRepository.listCategories(),
       adminCatalogRepository.listAreas(),
-      adminCatalogRepository.listBuildings()
+      adminCatalogRepository.listBuildings(),
+      adminCatalogRepository.listHandoverPoints()
     ]);
-    return { stats, categories, areas, buildings };
+    return { stats, categories, areas, buildings, handoverPoints };
+  },
+
+  async getPublicHandoverPoints() {
+    const points = await adminCatalogRepository.listHandoverPoints(true);
+    return points.map(({ activeAppointments: _activeAppointments, createdAt: _createdAt, ...point }) => point);
   },
 
   async createCategory(input: CreateCategoryInput) {
@@ -125,5 +142,50 @@ export const adminCatalogService = {
     if (!current) throw new HttpError(404, "Không tìm thấy địa điểm");
     if (await adminCatalogRepository.countBuildingReferences(buildingId)) throw new HttpError(409, "Địa điểm đang được sử dụng trong dữ liệu hệ thống, hãy ẩn thay vì xóa");
     await adminCatalogRepository.deleteBuilding(buildingId);
+  },
+
+  async createHandoverPoint(actorId: string, input: CreateHandoverPointInput) {
+    const areaId = input.areaId ?? null;
+    const buildingId = input.buildingId ?? null;
+    await validateHandoverLocation(areaId, buildingId);
+    return adminCatalogRepository.createHandoverPoint({
+      id: id(),
+      name: input.name,
+      address: input.address,
+      areaId,
+      buildingId,
+      openingHours: input.openingHours ?? null,
+      contactInfo: input.contactInfo ?? null,
+      mapImageUrl: input.mapImageUrl ?? null,
+      mapPositionX: input.mapPositionX ?? null,
+      mapPositionY: input.mapPositionY ?? null,
+      isActive: input.isActive,
+      createdBy: actorId
+    });
+  },
+
+  async updateHandoverPoint(pointId: string, input: UpdateHandoverPointInput) {
+    const current = await adminCatalogRepository.findHandoverPointById(pointId);
+    if (!current) throw new HttpError(404, "Không tìm thấy điểm bàn giao");
+    const areaId = input.areaId !== undefined ? input.areaId : current.areaId;
+    const buildingId = input.buildingId !== undefined ? input.buildingId : current.buildingId;
+    await validateHandoverLocation(areaId, buildingId);
+    return adminCatalogRepository.updateHandoverPoint(pointId, input);
+  },
+
+  async updateHandoverMapImage(pointId: string, dataUrl: string) {
+    if (!await adminCatalogRepository.findHandoverPointById(pointId)) throw new HttpError(404, "Không tìm thấy điểm bàn giao");
+    return adminCatalogRepository.updateHandoverPoint(pointId, { mapImageUrl: dataUrl });
+  },
+
+  async deleteHandoverPoint(pointId: string) {
+    if (!await adminCatalogRepository.findHandoverPointById(pointId)) throw new HttpError(404, "Không tìm thấy điểm bàn giao");
+    if (await adminCatalogRepository.countActiveHandoverAppointments(pointId)) {
+      throw new HttpError(409, "Điểm bàn giao đang được dùng bởi lịch hẹn hoạt động; hãy tạm đóng thay vì xóa");
+    }
+    if (await adminCatalogRepository.countHandoverPointReferences(pointId)) {
+      throw new HttpError(409, "Điểm bàn giao đã có dữ liệu nghiệp vụ liên quan; hãy tạm đóng thay vì xóa");
+    }
+    await adminCatalogRepository.deleteHandoverPoint(pointId);
   }
 };

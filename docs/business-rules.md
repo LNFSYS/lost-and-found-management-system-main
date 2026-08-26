@@ -42,6 +42,7 @@ Cập nhật: 26/08/2026
 | BR-28 | Node.js là write owner duy nhất. Java không được ghi business state khi chưa có domain ownership và integration test. | UC-001, UC-002 | Enforced theo kiến trúc hiện tại |
 | BR-32 | Staff page chỉ được công bố hoàn thành khi có ít nhất một operational flow và backend role matrix test. | UC-062 | Enforced cho warehouse operations |
 | BR-42 | Warehouse receive/store/return chỉ cho Staff/Admin và mỗi transition phải ghi storage log có actor, action, from/to status, condition/note và timestamp. | UC-011 đến UC-015, UC-059 đến UC-061 | Enforced |
+| BR-43 | Public API/form chỉ trả điểm bàn giao đang hoạt động. Admin không được hard-delete điểm còn appointment `PENDING`, `ACCEPTED` hoặc `RESCHEDULED`; điểm có dữ liệu nghiệp vụ khác phải chuyển inactive thay vì xóa. | UC-008 đến UC-010, UC-055 đến UC-057 | Enforced |
 
 ## 3. Rules cần hoàn thiện gần nhất
 
