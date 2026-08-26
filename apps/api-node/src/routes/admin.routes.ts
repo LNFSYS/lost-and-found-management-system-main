@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { adminCatalogController } from "../controllers/admin-catalog.controller.js";
 import { adminUserController } from "../controllers/admin-user.controller.js";
+import { systemConfigController } from "../controllers/system-config.controller.js";
 import { requireAnyRole, requireAuth } from "../middlewares/auth.middleware.js";
 
 export const adminRoutes = Router();
@@ -8,6 +9,12 @@ export const adminRoutes = Router();
 adminRoutes.use(requireAuth, requireAnyRole("ADMIN"));
 
 adminRoutes.get("/catalog", (req, res, next) => adminCatalogController.getCatalog(req, res).catch(next));
+
+adminRoutes.get("/configs", (req, res, next) => systemConfigController.listConfigs(req, res).catch(next));
+adminRoutes.post("/configs", (req, res, next) => systemConfigController.createConfig(req, res).catch(next));
+adminRoutes.get("/configs/:id", (req, res, next) => systemConfigController.getConfig(req, res).catch(next));
+adminRoutes.patch("/configs/:id", (req, res, next) => systemConfigController.updateConfig(req, res).catch(next));
+adminRoutes.delete("/configs/:id", (req, res, next) => systemConfigController.deleteConfig(req, res).catch(next));
 
 adminRoutes.get("/users", (req, res, next) => adminUserController.listUsers(req, res).catch(next));
 adminRoutes.post("/users", (req, res, next) => adminUserController.createUser(req, res).catch(next));

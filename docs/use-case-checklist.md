@@ -85,7 +85,7 @@ Tổng quan audit: **42 Done, 2 Partial, 48 Planned, 8 Deferred**.
 | [x] | UC-048 | Upload ảnh bài đăng | Done | Multer + media validation/proxy |
 | [ ] | UC-049 | Upload ảnh bằng chứng claim | Planned | Post `EVIDENCE` kind không phải claim flow |
 | [x] | UC-050 | Xóa ảnh bài đăng khỏi media storage hiện tại | Done | Owner-guarded delete; local storage |
-| [ ] | UC-051 | Cung cấp public config cho client validation | Planned | Chưa có public config route |
+| [x] | UC-051 | Cung cấp public config cho client validation | Done | `/api/config/public` chỉ trả key public an toàn |
 | [ ] | UC-052 | Gửi claim cho bài FOUND | Planned | Schema only |
 | [ ] | UC-053 | Ngăn duplicate claim cho cùng bài | Planned | Constraint foundation, chưa có API |
 | [ ] | UC-054 | Kiểm soát quyền xem claim evidence/private data | Partial | Post privacy có; claim chưa có |
@@ -134,7 +134,7 @@ Tổng quan audit: **42 Done, 2 Partial, 48 Planned, 8 Deferred**.
 | [ ] | UC-082 | Hiển thị seen và unread realtime | Planned | Chưa có runtime |
 | [ ] | UC-083 | Gửi realtime notification cho chat/claim/appointment | Planned | Chưa có runtime |
 | [ ] | UC-084 | Export báo cáo thống kê | Planned | Chưa có route |
-| [ ] | UC-085 | Quản lý system configuration | Planned | Matching chỉ đọc config nội bộ |
+| [x] | UC-085 | Quản lý system configuration | Done | Admin CRUD config, validate value type, ghi history |
 
 ## Gemini-assisted analysis và evidence support
 

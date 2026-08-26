@@ -31,6 +31,30 @@ export interface CreateAdminUserPayload {
   status: AdminUserStatus;
 }
 export type UpdateAdminUserPayload = Partial<Pick<AdminUser, "email" | "fullName" | "studentCode" | "phoneNumber">>;
+export type ConfigValueType = "STRING" | "INTEGER" | "FLOAT" | "BOOLEAN" | "JSON";
+export interface SystemConfig {
+  id: string;
+  configKey: string;
+  configValue: string;
+  valueType: ConfigValueType;
+  description: string | null;
+  isPublic: boolean;
+  updatedBy: string | null;
+  updatedAt: string;
+}
+export interface SystemConfigListResponse { total: number; page: number; pageSize: number; items: SystemConfig[]; }
+export interface SystemConfigFilters { q?: string; valueType?: ConfigValueType | ""; isPublic?: boolean | ""; page?: number; pageSize?: number; }
+export interface SystemConfigPayload {
+  configKey?: string;
+  configValue?: string;
+  valueType?: ConfigValueType;
+  description?: string | null;
+  isPublic?: boolean;
+}
+export interface PublicConfigResponse {
+  items: Array<{ key: string; value: unknown; valueType: ConfigValueType; description: string | null }>;
+  values: Record<string, unknown>;
+}
 export type WarehouseStatus = "PENDING_APPROVAL" | "RECEIVED" | "STORED" | "CLAIMED" | "RETURNED" | "EXPIRED" | "DISPOSED" | "DONATED" | "TRANSFERRED";
 export interface WarehouseCatalog {
   categories: Array<{ id: string; name: string; parentId: string | null }>;
@@ -334,6 +358,12 @@ export const api = {
   changeAdminUserRole: (id: string, accessRole: AdminAccessRole) => raw<AdminUser>(`/admin/users/${id}/role`, { method: "PATCH", body: JSON.stringify({ accessRole }) }),
   changeAdminUserStatus: (id: string, status: AdminUserStatus) => raw<AdminUser>(`/admin/users/${id}/status`, { method: "PATCH", body: JSON.stringify({ status }) }),
   deleteAdminUser: (id: string) => raw<void>(`/admin/users/${id}`, { method: "DELETE" }),
+  listSystemConfigs: (filters: SystemConfigFilters = {}) => raw<SystemConfigListResponse>(`/admin/configs${queryString(filters)}`),
+  getSystemConfig: (id: string) => raw<SystemConfig>(`/admin/configs/${id}`),
+  createSystemConfig: (payload: Required<Pick<SystemConfigPayload, "configKey" | "configValue" | "valueType">> & SystemConfigPayload) => raw<SystemConfig>("/admin/configs", { method: "POST", body: JSON.stringify(payload) }),
+  updateSystemConfig: (id: string, payload: SystemConfigPayload) => raw<SystemConfig>(`/admin/configs/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
+  deleteSystemConfig: (id: string) => raw<void>(`/admin/configs/${id}`, { method: "DELETE" }),
+  getPublicConfig: () => raw<PublicConfigResponse>("/config/public"),
   getWarehouseCatalog: () => raw<WarehouseCatalog>("/staff/warehouse-items/catalog"),
   listWarehouseItems: (filters: WarehouseFilters = {}) => raw<WarehouseDashboard>(`/staff/warehouse-items${queryString(filters)}`),
   createWarehouseItem: (payload: CreateWarehouseItemPayload) => raw<WarehouseItem>("/staff/warehouse-items", { method: "POST", body: JSON.stringify(payload) }),

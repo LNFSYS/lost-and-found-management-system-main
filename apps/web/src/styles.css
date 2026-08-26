@@ -825,6 +825,20 @@ textarea {
   accent-color: var(--fpt-blue);
 }
 
+.admin-check--field {
+  min-height: 48px;
+  align-self: end;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #fff;
+}
+
+.admin-form textarea {
+  width: 100%;
+  resize: vertical;
+}
+
 .admin-form-actions {
   display: flex;
   justify-content: flex-end;

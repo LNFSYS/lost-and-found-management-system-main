@@ -8,6 +8,7 @@ import { pool } from "./config/db.js";
 import { isOriginAllowed, parseAllowedOrigins } from "./config/cors.js";
 import { adminRoutes } from "./routes/admin.routes.js";
 import { authRoutes } from "./routes/auth.routes.js";
+import { configRoutes } from "./routes/config.routes.js";
 import { postRoutes } from "./routes/post.routes.js";
 import { staffRoutes } from "./routes/staff.routes.js";
 
@@ -36,6 +37,7 @@ export function createApp({ checkReadiness = async () => { await pool.query("SEL
       response.status(503).json({ status: "unavailable", message: "Dịch vụ chưa sẵn sàng" });
     }
   });
+  app.use("/api/config", configRoutes);
   app.use("/api/auth", authRoutes);
   app.use("/api/posts", postRoutes);
   app.use("/api/staff", staffRoutes);
