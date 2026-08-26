@@ -9,7 +9,7 @@ Cập nhật: 26/08/2026
 - `[ ] Planned`: chưa có runtime; migration/schema không đủ để tick.
 - `[ ] Deferred`: future enhancement được nêu rõ và không thuộc current development scope.
 
-Tổng quan audit: **42 Done, 7 Partial, 51 Planned, 0 Deferred**.
+Tổng quan audit: **47 Done, 7 Partial, 46 Planned, 0 Deferred**.
 
 ## Authentication và authorization
 
@@ -27,9 +27,9 @@ Tổng quan audit: **42 Done, 7 Partial, 51 Planned, 0 Deferred**.
 
 | Done | UC | Use case | Status | Evidence |
 | --- | --- | --- | --- | --- |
-| [ ] | UC-008 | Tạo điểm bàn giao | Planned | Schema only |
-| [ ] | UC-009 | Cập nhật điểm bàn giao | Planned | Schema only |
-| [ ] | UC-010 | Đóng/mở điểm bàn giao | Planned | Schema only |
+| [x] | UC-008 | Tạo điểm bàn giao | Done | Admin API/UI, validation và `admin-handover.spec.ts` |
+| [x] | UC-009 | Cập nhật điểm bàn giao | Done | PATCH Admin API, form chỉnh sửa và marker picker |
+| [x] | UC-010 | Đóng/mở điểm bàn giao | Done | Admin toggle `isActive`; public query chỉ lấy điểm active |
 | [x] | UC-011 | Xác nhận tiếp nhận vật phẩm tại điểm bàn giao | Done | Staff warehouse API/UI tạo `warehouse_items` và log `RECEIVED` |
 | [x] | UC-012 | Chuyển vật phẩm sang trạng thái lưu kho | Done | PATCH warehouse status `STORED`, yêu cầu storage code |
 | [x] | UC-013 | Ghi nhận tình trạng vật phẩm khi tiếp nhận | Done | Condition notes bắt buộc khi receive và hiển thị trên Staff UI |
@@ -95,8 +95,8 @@ Tổng quan audit: **42 Done, 7 Partial, 51 Planned, 0 Deferred**.
 | Done | UC | Use case | Status | Evidence |
 | --- | --- | --- | --- | --- |
 | [x] | UC-055 | Lấy danh sách handover point đang hoạt động cho form | Done | `/posts/catalog` |
-| [ ] | UC-056 | Quản lý handover point qua Admin API | Planned | Chưa có route |
-| [ ] | UC-057 | Lưu campus map và marker point | Planned | Schema columns only |
+| [x] | UC-056 | Quản lý handover point qua Admin API | Done | `/api/admin/handover-points`, hard-delete guard và unit tests |
+| [x] | UC-057 | Lưu campus map và marker point | Done | Multipart map upload, URL/path validation, X/Y từ 0–100 và Admin map picker |
 | [x] | UC-058 | Đếm item lưu tại handover point | Done | Staff dashboard trả `handoverCounts` theo điểm bàn giao |
 | [x] | UC-059 | Quản lý warehouse item qua API | Done | `/api/staff/warehouse-items` list/create |
 | [x] | UC-060 | Cập nhật trạng thái warehouse item | Done | PATCH `/api/staff/warehouse-items/:id` theo state machine |

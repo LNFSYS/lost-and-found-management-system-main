@@ -83,7 +83,7 @@ Kết luận: `FR-PWA-01` là `Partial`; không UC PWA nào được đánh dấ
 
 ### Use-case status
 
-Checklist sau cập nhật có **42 Done, 7 Partial, 51 Planned, 0 Deferred**, tổng 100 UC duy nhất từ UC-001 đến UC-100.
+Checklist sau cập nhật có **47 Done, 7 Partial, 46 Planned, 0 Deferred**, tổng 100 UC duy nhất từ UC-001 đến UC-100. Ngày 26/08/2026, UC-008 đến UC-010 và UC-056 đến UC-057 được chuyển sang Done sau khi có Admin handover API/UI, map upload/marker validation, active-only public query và test delete guard cho active appointment.
 
 ## 6. Kế hoạch và effort
 

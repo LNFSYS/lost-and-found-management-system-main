@@ -56,7 +56,7 @@ Migrations chỉ là bằng chứng schema, không đủ để đánh dấu mộ
 | FR-ADMIN-01 | Admin có thể CRUD/toggle nhóm danh mục, danh mục con, area và building. | UC-064, UC-065 | P0 | Implemented |
 | FR-ADMIN-02 | Admin có dashboard toàn hệ thống, user management, moderation, report/export và config management. | UC-063, UC-066, UC-067, UC-084, UC-085 | P1 | Partial; mới có catalog statistics |
 | FR-STAFF-01 | Staff có dashboard vận hành với quyền thấp hơn Admin. | UC-002, UC-062 | P1 | Implemented cho warehouse operations; user/admin domains khác vẫn tách quyền |
-| FR-HANDOVER-01 | User xem điểm bàn giao; Admin quản lý marker, giờ hoạt động và số item lưu giữ. | UC-008, UC-009, UC-010, UC-055, UC-056, UC-057, UC-058 | P1 | Partial; đã có catalog read-only và item count theo handover point |
+| FR-HANDOVER-01 | User xem điểm bàn giao đang hoạt động; Admin CRUD/toggle điểm, quản lý ảnh map, marker, giờ hoạt động và xem số item lưu giữ. Điểm có lịch hẹn active không được hard-delete. | UC-008, UC-009, UC-010, UC-055, UC-056, UC-057, UC-058 | P0 | Implemented |
 
 ### 2.5 Planned complete product workflow
 

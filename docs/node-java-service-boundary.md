@@ -28,7 +28,8 @@ Không trình bày kiến trúc hiện tại là production microservices. Java 
 | Gemini draft và matching | Node.js | Không tham gia | Java có thể đọc kết quả, không ghi cạnh tranh |
 | Category/area/building admin | Node.js | Không tham gia | Có thể chuyển trọn flow sang Java sau khi có contract |
 | Claim/evidence | Chưa có runtime | Không có | Chọn đúng một owner trước khi triển khai |
-| Appointment/handover | Chưa có runtime | Không có | Chọn đúng một owner trước khi triển khai |
+| Handover point catalog/management | Public active-only read và Admin CRUD/toggle/map/marker; Node là write owner | Không có | Java không ghi `handover_points` |
+| Appointment workflow | Chưa có runtime | Không có | Chọn đúng một owner trước khi triển khai |
 | Warehouse receive/store/return, retention và storage log | Node.js | Không tham gia | Giữ Node làm owner cho current release; chỉ chuyển trọn domain sau contract/integration tests |
 | Warehouse overdue disposition, donation/transfer policy | Chưa hoàn chỉnh runtime | Không có | Hoàn thiện dưới một write owner duy nhất |
 | Realtime/notification | Chưa có runtime | Không có | Dự kiến Node.js/Socket.IO |

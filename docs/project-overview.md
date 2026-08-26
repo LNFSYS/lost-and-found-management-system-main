@@ -52,13 +52,13 @@ Backend luôn là nơi quyết định quyền. Frontend route guard chỉ hỗ 
 - Tạo, cập nhật trạng thái và xóa mềm bài `LOST`/`FOUND`.
 - Board, tìm kiếm, lọc, sắp xếp, phân trang, bài của tôi và trang chi tiết.
 - Category hai cấp: nhóm chính và danh mục cụ thể.
-- Area/building/handover-point catalog cho form tạo bài.
+- Area/building catalog và danh sách handover point đang hoạt động cho form tạo bài.
 - Upload, đọc qua media proxy và xóa ảnh bài đăng.
 - Chế độ `PRIVATE_DETAILS` cho bài `FOUND` với serializer hạn chế dữ liệu public.
 - Gemini-assisted image analysis cho tối đa 5 ảnh, trả bản nháp có thể chỉnh sửa.
 - Rule-based/hybrid matching có text, category, location, time, image tags và safe OCR tags.
 - Lưu kết quả matching, score tier, explanation và manual recalculation có rate limit.
-- Admin CRUD category, area và building.
+- Admin CRUD category, area, building và handover point; quản lý ảnh map, marker, giờ hoạt động, contact và active state.
 - Staff warehouse operations: list/filter, receive, store, return, retention deadline, item count theo handover point và storage log.
 - React Router cho các route auth, home, board, my posts, detail, matching, profile, staff và admin.
 - Responsive layouts và mobile viewport browser tests cho các màn hình chính.
@@ -66,7 +66,7 @@ Backend luôn là nơi quyết định quyền. Frontend route guard chỉ hỗ 
 ### 4.2 Current implementation status: Partial
 
 - Admin dashboard: mới có số liệu và CRUD catalog, chưa có users/moderation/report/config toàn hệ thống.
-- Handover point: form catalog đọc được danh sách điểm đang hoạt động; chưa có trang bản đồ và admin management trong codebase mới.
+- Handover point: public endpoint/form chỉ đọc điểm active; Admin có CRUD/toggle, upload/URL ảnh map, marker picker, stored-item count và guard hard-delete khi còn active appointment.
 - Media privacy: proxy/authorization có nền tảng, nhưng storage là local filesystem nên chưa phù hợp nhiều máy hoặc deploy nhiều instance.
 - Warehouse: receive/store/return và logs đã chạy; overdue scanning, disposition guard, donation/transfer documents và liên kết claim/appointment chưa hoàn chỉnh.
 - PWA: responsive web và mobile browser checks đã có; manifest, service worker, installability và offline shell chưa có.
@@ -254,7 +254,7 @@ Nhóm bảng đang được runtime sử dụng trực tiếp:
 - `users`, `roles`, `user_roles`.
 - `email_otps`, `refresh_tokens`, `password_reset_tokens`.
 - `posts`, `post_media`, `ai_tags`, `match_results`.
-- `item_categories`, `campus_areas`, `campus_buildings`, `handover_points` ở mức catalog.
+- `item_categories`, `campus_areas`, `campus_buildings`; `handover_points` có public active-only read và Admin management runtime.
 - `config_entries` cho một số matching weights/thresholds đọc nội bộ.
 
 Runtime hiện dùng thêm `warehouse_items`, `storage_logs` và retention config cho Staff warehouse operations. Các bảng claim, appointment, notification, chat, reputation, radar, proof vault và finder scan vẫn là schema foundation; sự tồn tại của bảng không được dùng làm bằng chứng UC đã Done.

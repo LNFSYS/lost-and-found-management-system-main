@@ -4,11 +4,15 @@ import {
   createAreaSchema,
   createBuildingSchema,
   createCategorySchema,
+  createHandoverPointSchema,
   idParamSchema,
   updateAreaSchema,
   updateBuildingSchema,
-  updateCategorySchema
+  updateCategorySchema,
+  updateHandoverPointSchema
 } from "../validators/admin-catalog.validator.js";
+import { HttpError } from "../utils/http-error.js";
+import { validateImageUpload } from "../utils/media.js";
 
 function routeId(request: Request) {
   return idParamSchema.parse(request.params).id;
@@ -55,6 +59,33 @@ export const adminCatalogController = {
 
   async deleteBuilding(request: Request, response: Response) {
     await adminCatalogService.deleteBuilding(routeId(request));
+    response.status(204).send();
+  },
+
+  async listPublicHandoverPoints(_request: Request, response: Response) {
+    response.json({ handoverPoints: await adminCatalogService.getPublicHandoverPoints() });
+  },
+
+  async createHandoverPoint(request: Request, response: Response) {
+    response.status(201).json(await adminCatalogService.createHandoverPoint(
+      request.auth!.sub,
+      createHandoverPointSchema.parse(request.body)
+    ));
+  },
+
+  async updateHandoverPoint(request: Request, response: Response) {
+    response.json(await adminCatalogService.updateHandoverPoint(routeId(request), updateHandoverPointSchema.parse(request.body)));
+  },
+
+  async uploadHandoverMapImage(request: Request, response: Response) {
+    if (!request.file) throw new HttpError(400, "Cần chọn một ảnh bản đồ");
+    const image = validateImageUpload(request.file);
+    const dataUrl = `data:${image.mimeType};base64,${request.file.buffer.toString("base64")}`;
+    response.json(await adminCatalogService.updateHandoverMapImage(routeId(request), dataUrl));
+  },
+
+  async deleteHandoverPoint(request: Request, response: Response) {
+    await adminCatalogService.deleteHandoverPoint(routeId(request));
     response.status(204).send();
   }
 };

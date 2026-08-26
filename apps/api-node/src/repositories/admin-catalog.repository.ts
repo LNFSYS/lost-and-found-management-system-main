@@ -33,6 +33,25 @@ export interface AdminBuilding {
   createdAt: string;
 }
 
+export interface AdminHandoverPoint {
+  id: string;
+  name: string;
+  address: string;
+  areaId: string | null;
+  areaName: string | null;
+  buildingId: string | null;
+  buildingName: string | null;
+  openingHours: string | null;
+  contactInfo: string | null;
+  mapImageUrl: string | null;
+  mapPositionX: number | null;
+  mapPositionY: number | null;
+  isActive: boolean;
+  storedItems: number;
+  activeAppointments: number;
+  createdAt: string;
+}
+
 export interface AdminCatalogStats {
   totalPosts: number;
   processingPosts: number;
@@ -72,6 +91,25 @@ interface BuildingRow extends RowDataPacket {
   created_at: Date;
 }
 
+interface HandoverPointRow extends RowDataPacket {
+  id: string;
+  name: string;
+  address: string;
+  area_id: string | null;
+  area_name: string | null;
+  building_id: string | null;
+  building_name: string | null;
+  opening_hours: string | null;
+  contact_info: string | null;
+  map_image_url: string | null;
+  map_position_x: number | string | null;
+  map_position_y: number | string | null;
+  is_active: number | boolean;
+  stored_items: number | string;
+  active_appointments: number | string;
+  created_at: Date;
+}
+
 interface StatsRow extends RowDataPacket {
   total_posts: number | string;
   processing_posts: number | string;
@@ -103,6 +141,18 @@ const areaGroup = "GROUP BY a.id, a.name, a.description, a.is_active, a.sort_ord
 const buildingSelect = `SELECT b.id, b.area_id, a.name AS area_name, b.name, b.is_active, b.sort_order, b.created_at
   FROM campus_buildings b
   INNER JOIN campus_areas a ON a.id = b.area_id`;
+
+const handoverPointSelect = `SELECT hp.id, hp.name, hp.address, hp.area_id, a.name AS area_name,
+  hp.building_id, b.name AS building_name, hp.opening_hours, hp.contact_info,
+  hp.map_image_url, hp.map_position_x, hp.map_position_y, hp.is_active, hp.created_at,
+  COALESCE((SELECT COUNT(*) FROM warehouse_items wi
+    WHERE wi.handover_point_id = hp.id AND wi.deleted_at IS NULL
+      AND wi.status IN ('PENDING_APPROVAL', 'RECEIVED', 'STORED', 'CLAIMED')), 0) AS stored_items,
+  COALESCE((SELECT COUNT(*) FROM return_appointments ra
+    WHERE ra.handover_point_id = hp.id AND ra.status IN ('PENDING', 'ACCEPTED', 'RESCHEDULED')), 0) AS active_appointments
+  FROM handover_points hp
+  LEFT JOIN campus_areas a ON a.id = hp.area_id
+  LEFT JOIN campus_buildings b ON b.id = hp.building_id`;
 
 function mapCategory(row: CategoryRow): AdminCategory {
   return {
@@ -138,6 +188,27 @@ function mapBuilding(row: BuildingRow): AdminBuilding {
     name: row.name,
     isActive: Boolean(row.is_active),
     sortOrder: row.sort_order,
+    createdAt: row.created_at.toISOString()
+  };
+}
+
+function mapHandoverPoint(row: HandoverPointRow): AdminHandoverPoint {
+  return {
+    id: row.id,
+    name: row.name,
+    address: row.address,
+    areaId: row.area_id,
+    areaName: row.area_name,
+    buildingId: row.building_id,
+    buildingName: row.building_name,
+    openingHours: row.opening_hours,
+    contactInfo: row.contact_info,
+    mapImageUrl: row.map_image_url,
+    mapPositionX: row.map_position_x === null ? null : Number(row.map_position_x),
+    mapPositionY: row.map_position_y === null ? null : Number(row.map_position_y),
+    isActive: Boolean(row.is_active),
+    storedItems: Number(row.stored_items),
+    activeAppointments: Number(row.active_appointments),
     createdAt: row.created_at.toISOString()
   };
 }
@@ -294,5 +365,95 @@ export const adminCatalogRepository = {
       (SELECT COUNT(*) FROM campus_radar_events WHERE building_id = ?)
     ) AS total`, [id, id, id, id]);
     return Number(rows[0]?.total ?? 0);
+  },
+
+  async listHandoverPoints(activeOnly = false) {
+    const [rows] = await pool.execute<HandoverPointRow[]>(
+      `${handoverPointSelect} ${activeOnly ? "WHERE hp.is_active = TRUE" : ""} ORDER BY hp.is_active DESC, hp.name`
+    );
+    return rows.map(mapHandoverPoint);
+  },
+
+  async findHandoverPointById(id: string) {
+    const [rows] = await pool.execute<HandoverPointRow[]>(`${handoverPointSelect} WHERE hp.id = ?`, [id]);
+    return rows[0] ? mapHandoverPoint(rows[0]) : null;
+  },
+
+  async createHandoverPoint(input: {
+    id: string;
+    name: string;
+    address: string;
+    areaId?: string | null;
+    buildingId?: string | null;
+    openingHours?: string | null;
+    contactInfo?: string | null;
+    mapImageUrl?: string | null;
+    mapPositionX?: number | null;
+    mapPositionY?: number | null;
+    isActive?: boolean;
+    createdBy: string;
+  }) {
+    await pool.execute(
+      `INSERT INTO handover_points (
+        id, name, address, area_id, building_id, opening_hours, contact_info,
+        map_image_url, map_position_x, map_position_y, is_active, created_by
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        input.id, input.name, input.address, input.areaId ?? null, input.buildingId ?? null,
+        input.openingHours ?? null, input.contactInfo ?? null, input.mapImageUrl ?? null,
+        input.mapPositionX ?? null, input.mapPositionY ?? null, input.isActive ?? true, input.createdBy
+      ]
+    );
+    return this.findHandoverPointById(input.id);
+  },
+
+  async updateHandoverPoint(id: string, input: {
+    name?: string;
+    address?: string;
+    areaId?: string | null;
+    buildingId?: string | null;
+    openingHours?: string | null;
+    contactInfo?: string | null;
+    mapImageUrl?: string | null;
+    mapPositionX?: number | null;
+    mapPositionY?: number | null;
+    isActive?: boolean;
+  }) {
+    const fields: string[] = [];
+    const values: Array<string | number | boolean | null> = [];
+    if (input.name !== undefined) { fields.push("name = ?"); values.push(input.name); }
+    if (input.address !== undefined) { fields.push("address = ?"); values.push(input.address); }
+    if (input.areaId !== undefined) { fields.push("area_id = ?"); values.push(input.areaId); }
+    if (input.buildingId !== undefined) { fields.push("building_id = ?"); values.push(input.buildingId); }
+    if (input.openingHours !== undefined) { fields.push("opening_hours = ?"); values.push(input.openingHours); }
+    if (input.contactInfo !== undefined) { fields.push("contact_info = ?"); values.push(input.contactInfo); }
+    if (input.mapImageUrl !== undefined) { fields.push("map_image_url = ?"); values.push(input.mapImageUrl); }
+    if (input.mapPositionX !== undefined) { fields.push("map_position_x = ?"); values.push(input.mapPositionX); }
+    if (input.mapPositionY !== undefined) { fields.push("map_position_y = ?"); values.push(input.mapPositionY); }
+    if (input.isActive !== undefined) { fields.push("is_active = ?"); values.push(input.isActive); }
+    if (fields.length) await pool.execute(`UPDATE handover_points SET ${fields.join(", ")} WHERE id = ?`, [...values, id]);
+    return this.findHandoverPointById(id);
+  },
+
+  async countActiveHandoverAppointments(id: string) {
+    const [rows] = await pool.execute<CountRow[]>(
+      "SELECT COUNT(*) AS total FROM return_appointments WHERE handover_point_id = ? AND status IN ('PENDING', 'ACCEPTED', 'RESCHEDULED')",
+      [id]
+    );
+    return Number(rows[0]?.total ?? 0);
+  },
+
+  async countHandoverPointReferences(id: string) {
+    const [rows] = await pool.execute<CountRow[]>(`SELECT (
+      (SELECT COUNT(*) FROM posts WHERE handover_point_id = ?) +
+      (SELECT COUNT(*) FROM warehouse_items WHERE handover_point_id = ?) +
+      (SELECT COUNT(*) FROM storage_logs WHERE handover_point_id = ?) +
+      (SELECT COUNT(*) FROM return_appointments WHERE handover_point_id = ?)
+    ) AS total`, [id, id, id, id]);
+    return Number(rows[0]?.total ?? 0);
+  },
+
+  async deleteHandoverPoint(id: string) {
+    await pool.execute("DELETE FROM handover_points WHERE id = ?", [id]);
   }
 };

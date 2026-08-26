@@ -3,7 +3,25 @@ export interface CurrentUser { id: string; email: string; fullName: string; stud
 export interface AdminCategory { id: string; name: string; icon: string | null; parentId: string | null; parentName: string | null; isActive: boolean; sortOrder: number; childCount: number; createdAt: string; }
 export interface AdminArea { id: string; name: string; description: string | null; isActive: boolean; sortOrder: number; buildingCount: number; createdAt: string; }
 export interface AdminBuilding { id: string; areaId: string; areaName: string; name: string; isActive: boolean; sortOrder: number; createdAt: string; }
-export interface AdminCatalog { stats: { totalPosts: number; processingPosts: number; totalUsers: number; returnedPosts: number }; categories: AdminCategory[]; areas: AdminArea[]; buildings: AdminBuilding[]; }
+export interface AdminHandoverPoint {
+  id: string;
+  name: string;
+  address: string;
+  areaId: string | null;
+  areaName: string | null;
+  buildingId: string | null;
+  buildingName: string | null;
+  openingHours: string | null;
+  contactInfo: string | null;
+  mapImageUrl: string | null;
+  mapPositionX: number | null;
+  mapPositionY: number | null;
+  isActive: boolean;
+  storedItems: number;
+  activeAppointments: number;
+  createdAt: string;
+}
+export interface AdminCatalog { stats: { totalPosts: number; processingPosts: number; totalUsers: number; returnedPosts: number }; categories: AdminCategory[]; areas: AdminArea[]; buildings: AdminBuilding[]; handoverPoints: AdminHandoverPoint[]; }
 export type WarehouseStatus = "PENDING_APPROVAL" | "RECEIVED" | "STORED" | "CLAIMED" | "RETURNED" | "EXPIRED" | "DISPOSED" | "DONATED" | "TRANSFERRED";
 export interface WarehouseCatalog {
   categories: Array<{ id: string; name: string; parentId: string | null }>;
@@ -202,6 +220,18 @@ export interface PostListFilters {
 export type AdminCategoryPayload = { name?: string; icon?: string | null; parentId?: string | null; isActive?: boolean; sortOrder?: number };
 export type AdminAreaPayload = { name?: string; description?: string | null; isActive?: boolean; sortOrder?: number };
 export type AdminBuildingPayload = { name?: string; areaId?: string; isActive?: boolean; sortOrder?: number };
+export type AdminHandoverPointPayload = {
+  name?: string;
+  address?: string;
+  areaId?: string | null;
+  buildingId?: string | null;
+  openingHours?: string | null;
+  contactInfo?: string | null;
+  mapImageUrl?: string | null;
+  mapPositionX?: number | null;
+  mapPositionY?: number | null;
+  isActive?: boolean;
+};
 interface SessionResponse { user: CurrentUser; accessToken: string; accessTokenExpiresIn: string; }
 
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3001/api";
@@ -300,6 +330,15 @@ export const api = {
   createAdminBuilding: (payload: Required<Pick<AdminBuildingPayload, "name" | "areaId">> & AdminBuildingPayload) => raw<AdminBuilding>("/admin/buildings", { method: "POST", body: JSON.stringify(payload) }),
   updateAdminBuilding: (id: string, payload: AdminBuildingPayload) => raw<AdminBuilding>(`/admin/buildings/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
   deleteAdminBuilding: (id: string) => raw<void>(`/admin/buildings/${id}`, { method: "DELETE" }),
+  listPublicHandoverPoints: () => raw<{ handoverPoints: Array<Omit<AdminHandoverPoint, "activeAppointments" | "createdAt">> }>("/handover-points"),
+  createAdminHandoverPoint: (payload: Required<Pick<AdminHandoverPointPayload, "name" | "address">> & AdminHandoverPointPayload) => raw<AdminHandoverPoint>("/admin/handover-points", { method: "POST", body: JSON.stringify(payload) }),
+  updateAdminHandoverPoint: (id: string, payload: AdminHandoverPointPayload) => raw<AdminHandoverPoint>(`/admin/handover-points/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
+  uploadAdminHandoverMap: (id: string, file: File) => {
+    const form = new FormData();
+    form.append("file", file);
+    return raw<AdminHandoverPoint>(`/admin/handover-points/${id}/map-image`, { method: "POST", body: form });
+  },
+  deleteAdminHandoverPoint: (id: string) => raw<void>(`/admin/handover-points/${id}`, { method: "DELETE" }),
   getWarehouseCatalog: () => raw<WarehouseCatalog>("/staff/warehouse-items/catalog"),
   listWarehouseItems: (filters: WarehouseFilters = {}) => raw<WarehouseDashboard>(`/staff/warehouse-items${queryString(filters)}`),
   createWarehouseItem: (payload: CreateWarehouseItemPayload) => raw<WarehouseItem>("/staff/warehouse-items", { method: "POST", body: JSON.stringify(payload) }),
