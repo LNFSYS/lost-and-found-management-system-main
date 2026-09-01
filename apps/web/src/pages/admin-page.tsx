@@ -6,6 +6,7 @@ import {
   Clock3,
   Eye,
   EyeOff,
+  Filter,
   FolderTree,
   Handshake,
   Layers3,
@@ -14,15 +15,17 @@ import {
   PencilLine,
   Plus,
   RefreshCw,
+  Settings2,
   Trash2,
   UploadCloud,
+  UserPlus,
   UsersRound,
   X
 } from "lucide-react";
-import { api, type AdminArea, type AdminBuilding, type AdminCatalog, type AdminCategory, type AdminHandoverPoint, type AdminHandoverPointPayload } from "../services/api";
+import { api, type AdminAccessRole, type AdminArea, type AdminBuilding, type AdminCatalog, type AdminCategory, type AdminHandoverPoint, type AdminHandoverPointPayload, type AdminUser, type AdminUserStatus, type ConfigHistoryEntry, type ConfigValueType, type SystemConfig } from "../services/api";
 
-type AdminTab = "categories" | "locations" | "handover";
-type PendingAction = "" | "load" | "category" | "area" | "building" | "handover" | "toggle" | "delete";
+type AdminTab = "users" | "configs" | "categories" | "locations" | "handover";
+type PendingAction = "" | "load" | "users" | "user" | "user-toggle" | "configs" | "config" | "config-history" | "category" | "area" | "building" | "handover" | "toggle" | "delete";
 
 const emptyCategoryForm = { name: "", parentId: "", isActive: true };
 const emptyAreaForm = { name: "", description: "", isActive: true };
@@ -39,6 +42,10 @@ const emptyHandoverForm = {
   mapPositionY: 50,
   isActive: true
 };
+const emptyUserForm = { email: "", password: "", fullName: "", studentCode: "", phoneNumber: "", audienceRole: "", accessRole: "USER" as AdminAccessRole, status: "ACTIVE" as AdminUserStatus, reason: "" };
+const emptyUserFilters = { q: "", role: "" as AdminAccessRole | "", status: "" as AdminUserStatus | "", page: 1, pageSize: 10 };
+const emptyConfigForm = { configKey: "", configValue: "", valueType: "STRING" as ConfigValueType, description: "", isPublic: false, reason: "" };
+const emptyConfigFilters = { q: "", valueType: "" as ConfigValueType | "", isPublic: "" as boolean | "", page: 1, pageSize: 10 };
 
 function messageOf(reason: unknown, fallback: string) {
   return reason instanceof Error ? reason.message : fallback;
@@ -55,6 +62,12 @@ function StatCard({ icon, value, label }: { icon: ReactNode; value: number; labe
 function StatusBadge({ active }: { active: boolean }) {
   return <span className={`admin-status ${active ? "admin-status--active" : ""}`}>
     {active ? "Đang hoạt động" : "Đã ẩn"}
+  </span>;
+}
+
+function UserStatusBadge({ status }: { status: AdminUserStatus }) {
+  return <span className={`admin-status ${status === "ACTIVE" ? "admin-status--active" : ""}`}>
+    {status === "ACTIVE" ? "Active" : "Disabled"}
   </span>;
 }
 
@@ -101,11 +114,23 @@ function HandoverMapPicker({ imageUrl, x, y, onChange }: { imageUrl: string; x: 
 
 export function AdminPage() {
   const [catalog, setCatalog] = useState<AdminCatalog | null>(null);
-  const [activeTab, setActiveTab] = useState<AdminTab>("categories");
+  const [users, setUsers] = useState<AdminUser[]>([]);
+  const [userTotal, setUserTotal] = useState(0);
+  const [configs, setConfigs] = useState<SystemConfig[]>([]);
+  const [configTotal, setConfigTotal] = useState(0);
+  const [activeTab, setActiveTab] = useState<AdminTab>("users");
   const [pendingAction, setPendingAction] = useState<PendingAction>("load");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
+  const [userFilters, setUserFilters] = useState(emptyUserFilters);
+  const [userForm, setUserForm] = useState(emptyUserForm);
+  const [userEditingId, setUserEditingId] = useState<string | null>(null);
+  const [configFilters, setConfigFilters] = useState(emptyConfigFilters);
+  const [configForm, setConfigForm] = useState(emptyConfigForm);
+  const [configEditingId, setConfigEditingId] = useState<string | null>(null);
+  const [configHistory, setConfigHistory] = useState<ConfigHistoryEntry[]>([]);
+  const [historyConfig, setHistoryConfig] = useState<SystemConfig | null>(null);
   const [categoryForm, setCategoryForm] = useState(emptyCategoryForm);
   const [categoryEditingId, setCategoryEditingId] = useState<string | null>(null);
   const [areaForm, setAreaForm] = useState(emptyAreaForm);
@@ -130,7 +155,39 @@ export function AdminPage() {
     }
   }
 
-  useEffect(() => { void loadCatalog(); }, []);
+  async function loadUsers(nextFilters = userFilters, silent = false) {
+    if (!silent) setPendingAction("users");
+    setError("");
+    try {
+      const result = await api.listAdminUsers(nextFilters);
+      setUsers(result.items);
+      setUserTotal(result.total);
+      setUserFilters({ ...nextFilters, page: result.page, pageSize: result.pageSize });
+    } catch (reason) {
+      setError(messageOf(reason, "Không thể tải danh sách người dùng"));
+    } finally {
+      if (!silent) setPendingAction("");
+    }
+  }
+
+  async function loadConfigs(nextFilters = configFilters, silent = false) {
+    if (!silent) setPendingAction("configs");
+    setError("");
+    try {
+      const result = await api.listSystemConfigs(nextFilters);
+      setConfigs(result.items);
+      setConfigTotal(result.total);
+      setConfigFilters({ ...nextFilters, page: result.page, pageSize: result.pageSize });
+    } catch (reason) {
+      setError(messageOf(reason, "Không thể tải cấu hình hệ thống"));
+    } finally {
+      if (!silent) setPendingAction("");
+    }
+  }
+
+  useEffect(() => {
+    void Promise.all([loadCatalog(), loadUsers(emptyUserFilters, true), loadConfigs(emptyConfigFilters, true)]).finally(() => setPendingAction(""));
+  }, []);
 
   const mainCategories = useMemo(() => catalog?.categories.filter((category) => !category.parentId) ?? [], [catalog]);
   const childCategories = useMemo(() => catalog?.categories.filter((category) => category.parentId) ?? [], [catalog]);
@@ -149,6 +206,184 @@ export function AdminPage() {
     } catch (reason) {
       setError(messageOf(reason, "Không thể thực hiện thao tác"));
       return false;
+    } finally {
+      setPendingAction("");
+    }
+  }
+
+  async function runUserAction(action: PendingAction, work: () => Promise<unknown>, success: string) {
+    setPendingAction(action);
+    setError("");
+    setNotice("");
+    try {
+      await work();
+      setNotice(success);
+      await Promise.all([loadUsers(userFilters, true), loadCatalog(true)]);
+      return true;
+    } catch (reason) {
+      setError(messageOf(reason, "Không thể thực hiện thao tác"));
+      return false;
+    } finally {
+      setPendingAction("");
+    }
+  }
+
+  async function runConfigAction(action: PendingAction, work: () => Promise<unknown>, success: string) {
+    setPendingAction(action);
+    setError("");
+    setNotice("");
+    try {
+      await work();
+      setNotice(success);
+      await loadConfigs(configFilters, true);
+      return true;
+    } catch (reason) {
+      setError(messageOf(reason, "Không thể thực hiện thao tác"));
+      return false;
+    } finally {
+      setPendingAction("");
+    }
+  }
+
+  function resetUserForm() {
+    setUserForm(emptyUserForm);
+    setUserEditingId(null);
+  }
+
+  function editUser(user: AdminUser) {
+    setActiveTab("users");
+    setUserEditingId(user.id);
+    setUserForm({
+      email: user.email,
+      password: "",
+      fullName: user.fullName,
+      studentCode: user.studentCode ?? "",
+      phoneNumber: user.phoneNumber ?? "",
+      audienceRole: user.roles.includes("LECTURER") ? "LECTURER" : user.roles.includes("STUDENT") ? "STUDENT" : "",
+      accessRole: user.accessRole,
+      status: user.status,
+      reason: ""
+    });
+  }
+
+  async function submitUser(event: FormEvent) {
+    event.preventDefault();
+    const audienceRole = userForm.audienceRole ? userForm.audienceRole as "STUDENT" | "LECTURER" : null;
+    if (userEditingId) {
+      if (await runUserAction("user", () => api.updateAdminUser(userEditingId, {
+        email: userForm.email,
+        fullName: userForm.fullName,
+        studentCode: userForm.studentCode.trim() || null,
+        phoneNumber: userForm.phoneNumber.trim() || null,
+        accessRole: userForm.accessRole,
+        status: userForm.status,
+        reason: userForm.reason.trim() || null
+      }), "Đã cập nhật người dùng")) resetUserForm();
+      return;
+    }
+
+    if (await runUserAction("user", () => api.createAdminUser({
+      email: userForm.email,
+      password: userForm.password,
+      fullName: userForm.fullName,
+      studentCode: userForm.studentCode.trim() || null,
+      phoneNumber: userForm.phoneNumber.trim() || null,
+      audienceRole,
+      accessRole: userForm.accessRole,
+      status: userForm.status,
+      reason: userForm.reason.trim() || null
+    }), "Đã tạo người dùng")) resetUserForm();
+  }
+
+  function applyUserFilters(event: FormEvent) {
+    event.preventDefault();
+    void loadUsers({ ...userFilters, page: 1 });
+  }
+
+  function changeUserPage(delta: number) {
+    const maxPage = Math.max(1, Math.ceil(userTotal / userFilters.pageSize));
+    const page = Math.min(maxPage, Math.max(1, userFilters.page + delta));
+    if (page !== userFilters.page) void loadUsers({ ...userFilters, page });
+  }
+
+  function changeUserRole(user: AdminUser, accessRole: AdminAccessRole) {
+    void runUserAction("user-toggle", () => api.changeAdminUserRole(user.id, accessRole), "Đã cập nhật vai trò");
+  }
+
+  function toggleUserStatus(user: AdminUser) {
+    const status: AdminUserStatus = user.status === "ACTIVE" ? "DISABLED" : "ACTIVE";
+    void runUserAction("user-toggle", () => api.changeAdminUserStatus(user.id, status), status === "ACTIVE" ? "Đã mở tài khoản" : "Đã khóa tài khoản");
+  }
+
+  function deleteUser(user: AdminUser) {
+    if (!window.confirm(`Xóa người dùng "${user.email}"?`)) return;
+    void runUserAction("delete", () => api.deleteAdminUser(user.id), "Đã xóa người dùng");
+  }
+
+  function resetConfigForm() {
+    setConfigForm(emptyConfigForm);
+    setConfigEditingId(null);
+  }
+
+  function editConfig(config: SystemConfig) {
+    setActiveTab("configs");
+    setConfigEditingId(config.id);
+    setConfigForm({
+      configKey: config.configKey,
+      configValue: config.configValue,
+      valueType: config.valueType,
+      description: config.description ?? "",
+      isPublic: config.isPublic,
+      reason: ""
+    });
+  }
+
+  async function submitConfig(event: FormEvent) {
+    event.preventDefault();
+    const payload = {
+      configKey: configForm.configKey,
+      configValue: configForm.configValue,
+      valueType: configForm.valueType,
+      description: configForm.description.trim() || null,
+      isPublic: configForm.isPublic,
+      reason: configForm.reason.trim() || null
+    };
+    if (configEditingId) {
+      if (await runConfigAction("config", () => api.updateSystemConfig(configEditingId, payload), "Đã cập nhật cấu hình")) resetConfigForm();
+      return;
+    }
+    if (await runConfigAction("config", () => api.createSystemConfig(payload), "Đã tạo cấu hình")) resetConfigForm();
+  }
+
+  function applyConfigFilters(event: FormEvent) {
+    event.preventDefault();
+    void loadConfigs({ ...configFilters, page: 1 });
+  }
+
+  function changeConfigPage(delta: number) {
+    const maxPage = Math.max(1, Math.ceil(configTotal / configFilters.pageSize));
+    const page = Math.min(maxPage, Math.max(1, configFilters.page + delta));
+    if (page !== configFilters.page) void loadConfigs({ ...configFilters, page });
+  }
+
+  function toggleConfigPublic(config: SystemConfig) {
+    void runConfigAction("config", () => api.updateSystemConfig(config.id, { isPublic: !config.isPublic }), config.isPublic ? "Đã ẩn khỏi public config" : "Đã bật public config");
+  }
+
+  function deleteConfig(config: SystemConfig) {
+    if (!window.confirm(`Xóa cấu hình "${config.configKey}"?`)) return;
+    void runConfigAction("delete", () => api.deleteSystemConfig(config.id), "Đã xóa cấu hình");
+  }
+
+  async function viewConfigHistory(config: SystemConfig) {
+    setPendingAction("config-history");
+    setError("");
+    try {
+      const result = await api.getSystemConfigHistory(config.id);
+      setHistoryConfig(config);
+      setConfigHistory(result.items);
+    } catch (reason) {
+      setError(messageOf(reason, "Không thể tải lịch sử cấu hình"));
     } finally {
       setPendingAction("");
     }
@@ -311,7 +546,7 @@ export function AdminPage() {
         <p className="eyebrow">ADMIN OPERATIONS</p>
         <h1>Bảng quản trị</h1>
       </div>
-      <button type="button" className="secondary-button" onClick={() => void loadCatalog()} disabled={pendingAction === "load"}><RefreshCw size={17} /> Làm mới</button>
+      <button type="button" className="secondary-button" onClick={() => void Promise.all([loadCatalog(), loadUsers(userFilters, true), loadConfigs(configFilters, true)]).finally(() => setPendingAction(""))} disabled={pendingAction === "load"}><RefreshCw size={17} /> Làm mới</button>
     </header>
 
     <div className="admin-stats" aria-label="Thống kê nhanh">
@@ -322,6 +557,8 @@ export function AdminPage() {
     </div>
 
     <div className="admin-tabs" role="tablist" aria-label="Chức năng quản trị">
+      <button type="button" className={activeTab === "users" ? "active" : ""} onClick={() => setActiveTab("users")}><UsersRound size={18} /> Người dùng</button>
+      <button type="button" className={activeTab === "configs" ? "active" : ""} onClick={() => setActiveTab("configs")}><Settings2 size={18} /> Cấu hình</button>
       <button type="button" className={activeTab === "categories" ? "active" : ""} onClick={() => setActiveTab("categories")}><FolderTree size={18} /> Danh mục</button>
       <button type="button" className={activeTab === "locations" ? "active" : ""} onClick={() => setActiveTab("locations")}><MapPinned size={18} /> Khu vực</button>
       <button type="button" className={activeTab === "handover" ? "active" : ""} onClick={() => setActiveTab("handover")}><Handshake size={18} /> Điểm bàn giao</button>
@@ -329,6 +566,188 @@ export function AdminPage() {
 
     {notice && <p className="form-note admin-message">{notice}</p>}
     {error && <p className="form-error admin-message" role="alert">{error}</p>}
+
+    {activeTab === "users" && <div className="admin-grid admin-grid--users">
+      <aside className="admin-panel admin-panel--form">
+        <div className="admin-panel-heading">
+          <span><UserPlus size={18} /></span>
+          <div><p className="eyebrow">USERS</p><h2>{userEditingId ? "Cập nhật người dùng" : "Tạo người dùng"}</h2></div>
+        </div>
+        <form className="admin-form" onSubmit={submitUser}>
+          <label className="input-field"><span>Email</span><input type="email" value={userForm.email} onChange={(event) => setUserForm({ ...userForm, email: event.target.value })} required /></label>
+          {!userEditingId && <label className="input-field"><span>Mật khẩu</span><input type="password" minLength={8} value={userForm.password} onChange={(event) => setUserForm({ ...userForm, password: event.target.value })} required /></label>}
+          <label className="input-field"><span>Họ và tên</span><input value={userForm.fullName} onChange={(event) => setUserForm({ ...userForm, fullName: event.target.value })} required /></label>
+          <label className="input-field"><span>Mã sinh viên/nhân sự</span><input value={userForm.studentCode} onChange={(event) => setUserForm({ ...userForm, studentCode: event.target.value })} /></label>
+          <label className="input-field"><span>Số điện thoại</span><input value={userForm.phoneNumber} onChange={(event) => setUserForm({ ...userForm, phoneNumber: event.target.value })} /></label>
+          <div className="warehouse-form-pair">
+            {!userEditingId && <label className="input-field"><span>Nhóm sử dụng</span><select value={userForm.audienceRole} onChange={(event) => setUserForm({ ...userForm, audienceRole: event.target.value })}>
+              <option value="">Không gắn</option>
+              <option value="STUDENT">Student</option>
+              <option value="LECTURER">Lecturer</option>
+            </select></label>}
+            <label className="input-field"><span>Vai trò truy cập</span><select value={userForm.accessRole} onChange={(event) => setUserForm({ ...userForm, accessRole: event.target.value as AdminAccessRole })}>
+              <option value="USER">User</option>
+              <option value="STAFF">Staff</option>
+              <option value="ADMIN">Admin</option>
+            </select></label>
+          </div>
+          <label className="input-field"><span>Trạng thái</span><select value={userForm.status} onChange={(event) => setUserForm({ ...userForm, status: event.target.value as AdminUserStatus })}>
+            <option value="ACTIVE">Active</option>
+            <option value="DISABLED">Disabled</option>
+          </select></label>
+          <label className="input-field"><span>Lý do thay đổi</span><input value={userForm.reason} onChange={(event) => setUserForm({ ...userForm, reason: event.target.value })} placeholder="Không bắt buộc" /></label>
+          <div className="admin-form-actions">
+            {userEditingId && <button type="button" className="secondary-button" onClick={resetUserForm}><X size={17} /> Hủy</button>}
+            <button className="primary-button" disabled={pendingAction === "user"}><Plus size={17} /> {userEditingId ? "Lưu người dùng" : "Tạo người dùng"}</button>
+          </div>
+        </form>
+      </aside>
+
+      <section className="admin-panel admin-panel--list">
+        <div className="admin-list-heading"><div><p className="eyebrow">ACCESS</p><h2>Danh sách người dùng</h2></div><strong>{userTotal}</strong></div>
+        <form className="admin-user-filters" onSubmit={applyUserFilters}>
+          <label className="input-field"><span>Tìm kiếm</span><input value={userFilters.q} onChange={(event) => setUserFilters({ ...userFilters, q: event.target.value })} placeholder="Email, tên, mã số..." /></label>
+          <label className="input-field"><span>Vai trò</span><select value={userFilters.role} onChange={(event) => setUserFilters({ ...userFilters, role: event.target.value as AdminAccessRole | "" })}>
+            <option value="">Tất cả</option>
+            <option value="ADMIN">Admin</option>
+            <option value="STAFF">Staff</option>
+            <option value="USER">User</option>
+          </select></label>
+          <label className="input-field"><span>Trạng thái</span><select value={userFilters.status} onChange={(event) => setUserFilters({ ...userFilters, status: event.target.value as AdminUserStatus | "" })}>
+            <option value="">Tất cả</option>
+            <option value="ACTIVE">Active</option>
+            <option value="DISABLED">Disabled</option>
+          </select></label>
+          <button className="secondary-button" disabled={pendingAction === "users"}><Filter size={17} /> Lọc</button>
+        </form>
+        <div className="admin-user-table-wrap">
+          <table className="admin-user-table">
+            <thead><tr><th>Người dùng</th><th>Vai trò</th><th>Trạng thái</th><th>Cập nhật</th><th></th></tr></thead>
+            <tbody>
+              {users.map((user) => <tr key={user.id}>
+                <td>
+                  <strong>{user.fullName}</strong>
+                  <span>{user.email}</span>
+                  <small>{user.studentCode || "Chưa có mã"} / {user.phoneNumber || "Chưa có SĐT"}</small>
+                </td>
+                <td>
+                  <select className="admin-inline-select" value={user.accessRole} onChange={(event) => changeUserRole(user, event.target.value as AdminAccessRole)} disabled={pendingAction === "user-toggle"}>
+                    <option value="USER">User</option>
+                    <option value="STAFF">Staff</option>
+                    <option value="ADMIN">Admin</option>
+                  </select>
+                </td>
+                <td><UserStatusBadge status={user.status} /></td>
+                <td>{new Date(user.updatedAt).toLocaleDateString("vi-VN")}</td>
+                <td>
+                  <div className="admin-user-actions">
+                    <button type="button" className="admin-icon-button" title="Chỉnh sửa" aria-label="Chỉnh sửa" onClick={() => editUser(user)}><PencilLine size={16} /></button>
+                    <button type="button" className="admin-icon-button" title={user.status === "ACTIVE" ? "Khóa tài khoản" : "Mở tài khoản"} aria-label={user.status === "ACTIVE" ? "Khóa tài khoản" : "Mở tài khoản"} onClick={() => toggleUserStatus(user)}>{user.status === "ACTIVE" ? <EyeOff size={16} /> : <Eye size={16} />}</button>
+                    <button type="button" className="admin-icon-button admin-icon-button--danger" title="Xóa người dùng" aria-label="Xóa người dùng" onClick={() => deleteUser(user)}><Trash2 size={16} /></button>
+                  </div>
+                </td>
+              </tr>)}
+              {!users.length && <tr><td colSpan={5} className="admin-empty-cell">Không có người dùng phù hợp</td></tr>}
+            </tbody>
+          </table>
+        </div>
+        <div className="admin-pagination">
+          <button type="button" className="secondary-button" onClick={() => changeUserPage(-1)} disabled={userFilters.page <= 1}>Trước</button>
+          <span>Trang {userFilters.page} / {Math.max(1, Math.ceil(userTotal / userFilters.pageSize))}</span>
+          <button type="button" className="secondary-button" onClick={() => changeUserPage(1)} disabled={userFilters.page >= Math.max(1, Math.ceil(userTotal / userFilters.pageSize))}>Sau</button>
+        </div>
+      </section>
+    </div>}
+
+    {activeTab === "configs" && <div className="admin-grid admin-grid--users">
+      <aside className="admin-panel admin-panel--form">
+        <div className="admin-panel-heading">
+          <span><Settings2 size={18} /></span>
+          <div><p className="eyebrow">CONFIG</p><h2>{configEditingId ? "Cập nhật cấu hình" : "Tạo cấu hình"}</h2></div>
+        </div>
+        <form className="admin-form" onSubmit={submitConfig}>
+          <label className="input-field"><span>Khóa cấu hình</span><input value={configForm.configKey} onChange={(event) => setConfigForm({ ...configForm, configKey: event.target.value })} placeholder="Ví dụ: client.max_title_length" required /></label>
+          <div className="warehouse-form-pair">
+            <label className="input-field"><span>Kiểu dữ liệu</span><select value={configForm.valueType} onChange={(event) => setConfigForm({ ...configForm, valueType: event.target.value as ConfigValueType })}>
+              <option value="STRING">Chuỗi</option>
+              <option value="INTEGER">Số nguyên</option>
+              <option value="FLOAT">Số thực</option>
+              <option value="BOOLEAN">Đúng/sai</option>
+              <option value="JSON">JSON</option>
+            </select></label>
+            <label className="admin-check admin-check--field"><input type="checkbox" checked={configForm.isPublic} onChange={(event) => setConfigForm({ ...configForm, isPublic: event.target.checked })} /><span>Cho phép public</span></label>
+          </div>
+          <label className="input-field"><span>Giá trị</span><textarea rows={4} value={configForm.configValue} onChange={(event) => setConfigForm({ ...configForm, configValue: event.target.value })} placeholder='Ví dụ: 5, 0.75, true, {"enabled":true}' required /></label>
+          <label className="input-field"><span>Mô tả</span><input value={configForm.description} onChange={(event) => setConfigForm({ ...configForm, description: event.target.value })} /></label>
+          <label className="input-field"><span>Lý do thay đổi</span><input value={configForm.reason} onChange={(event) => setConfigForm({ ...configForm, reason: event.target.value })} placeholder="Không bắt buộc" /></label>
+          <div className="admin-form-actions">
+            {configEditingId && <button type="button" className="secondary-button" onClick={resetConfigForm}><X size={17} /> Hủy</button>}
+            <button className="primary-button" disabled={pendingAction === "config"}><Plus size={17} /> {configEditingId ? "Lưu cấu hình" : "Tạo cấu hình"}</button>
+          </div>
+        </form>
+      </aside>
+
+      <section className="admin-panel admin-panel--list">
+        <div className="admin-list-heading"><div><p className="eyebrow">PUBLIC SAFE CONFIG</p><h2>Danh sách cấu hình</h2></div><strong>{configTotal}</strong></div>
+        <form className="admin-user-filters" onSubmit={applyConfigFilters}>
+          <label className="input-field"><span>Tìm kiếm</span><input value={configFilters.q} onChange={(event) => setConfigFilters({ ...configFilters, q: event.target.value })} placeholder="Khóa hoặc mô tả..." /></label>
+          <label className="input-field"><span>Kiểu</span><select value={configFilters.valueType} onChange={(event) => setConfigFilters({ ...configFilters, valueType: event.target.value as ConfigValueType | "" })}>
+            <option value="">Tất cả</option>
+            <option value="STRING">Chuỗi</option>
+            <option value="INTEGER">Số nguyên</option>
+            <option value="FLOAT">Số thực</option>
+            <option value="BOOLEAN">Đúng/sai</option>
+            <option value="JSON">JSON</option>
+          </select></label>
+          <label className="input-field"><span>Public</span><select value={String(configFilters.isPublic)} onChange={(event) => setConfigFilters({ ...configFilters, isPublic: event.target.value === "" ? "" : event.target.value === "true" })}>
+            <option value="">Tất cả</option>
+            <option value="true">Có</option>
+            <option value="false">Không</option>
+          </select></label>
+          <button className="secondary-button" disabled={pendingAction === "configs"}><Filter size={17} /> Lọc</button>
+        </form>
+        <div className="admin-user-table-wrap">
+          <table className="admin-user-table">
+            <thead><tr><th>Cấu hình</th><th>Kiểu</th><th>Public</th><th>Cập nhật</th><th></th></tr></thead>
+            <tbody>
+              {configs.map((config) => <tr key={config.id}>
+                <td>
+                  <strong>{config.configKey}</strong>
+                  <span>{config.configValue}</span>
+                  <small>{config.description || "Chưa có mô tả"}</small>
+                </td>
+                <td>{config.valueType}</td>
+                <td><UserStatusBadge status={config.isPublic ? "ACTIVE" : "DISABLED"} /></td>
+                <td>{new Date(config.updatedAt).toLocaleDateString("vi-VN")}</td>
+                <td>
+                  <div className="admin-user-actions">
+                     <button type="button" className="admin-icon-button" title="Chỉnh sửa" aria-label="Chỉnh sửa" onClick={() => editConfig(config)}><PencilLine size={16} /></button>
+                     <button type="button" className="admin-icon-button" title="Xem lịch sử" aria-label="Xem lịch sử" onClick={() => void viewConfigHistory(config)} disabled={pendingAction === "config-history"}><Clock3 size={16} /></button>
+                     <button type="button" className="admin-icon-button" title={config.isPublic ? "Ẩn khỏi public config" : "Bật public config"} aria-label={config.isPublic ? "Ẩn khỏi public config" : "Bật public config"} onClick={() => toggleConfigPublic(config)}>{config.isPublic ? <EyeOff size={16} /> : <Eye size={16} />}</button>
+                    <button type="button" className="admin-icon-button admin-icon-button--danger" title="Xóa cấu hình" aria-label="Xóa cấu hình" onClick={() => deleteConfig(config)}><Trash2 size={16} /></button>
+                  </div>
+                </td>
+              </tr>)}
+              {!configs.length && <tr><td colSpan={5} className="admin-empty-cell">Không có cấu hình phù hợp</td></tr>}
+            </tbody>
+          </table>
+        </div>
+        <div className="admin-pagination">
+          <button type="button" className="secondary-button" onClick={() => changeConfigPage(-1)} disabled={configFilters.page <= 1}>Trước</button>
+          <span>Trang {configFilters.page} / {Math.max(1, Math.ceil(configTotal / configFilters.pageSize))}</span>
+          <button type="button" className="secondary-button" onClick={() => changeConfigPage(1)} disabled={configFilters.page >= Math.max(1, Math.ceil(configTotal / configFilters.pageSize))}>Sau</button>
+         </div>
+       </section>
+       {historyConfig && <section className="admin-panel admin-panel--list admin-config-history">
+         <div className="admin-list-heading"><div><p className="eyebrow">AUDIT TRAIL</p><h2>Lịch sử {historyConfig.configKey}</h2></div><button type="button" className="admin-icon-button" title="Đóng lịch sử" aria-label="Đóng lịch sử" onClick={() => setHistoryConfig(null)}><X size={17} /></button></div>
+         {!configHistory.length && <p className="admin-list-intro">Chưa có bản ghi lịch sử.</p>}
+         {configHistory.length > 0 && <div className="admin-history-list">{configHistory.map((entry) => <article key={entry.id} className="admin-history-entry">
+           <div><strong>{entry.action}</strong><span>{new Date(entry.changedAt).toLocaleString("vi-VN")}</span></div>
+           <p>{entry.reason || "Không ghi lý do"}</p>
+           <small>Actor: {entry.changedBy}</small>
+         </article>)}</div>}
+       </section>}
+     </div>}
 
     {activeTab === "categories" && <div className="admin-grid">
       <aside className="admin-panel admin-panel--form">

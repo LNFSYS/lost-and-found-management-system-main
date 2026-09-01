@@ -60,6 +60,13 @@ export function errorHandler(error: unknown, _request: Request, response: Respon
   }
   if (error instanceof ZodError) return response.status(422).json({ message: "Dữ liệu nhập chưa hợp lệ", errors: error.flatten().fieldErrors });
   if (error instanceof HttpError) return response.status(error.status).json({ message: error.message });
-  console.error("Unhandled API error", error instanceof Error ? error.message : "unknown error");
+  const code = typeof error === "object" && error !== null && "code" in error
+    ? String((error as { code?: unknown }).code ?? "")
+    : "";
+  if (code === "ER_DUP_ENTRY") return response.status(409).json({ message: "Dữ liệu đã tồn tại" });
+  if (["ER_ROW_IS_REFERENCED_2", "ER_ROW_IS_REFERENCED", "ER_NO_REFERENCED_ROW_2", "ER_NO_REFERENCED_ROW"].includes(code)) {
+    return response.status(409).json({ message: "Dữ liệu đang được sử dụng hoặc liên kết không hợp lệ" });
+  }
+  console.error("Unhandled API error", { name: error instanceof Error ? error.name : "UnknownError", code: code || undefined });
   return response.status(500).json({ message: "Máy chủ gặp lỗi, vui lòng thử lại." });
 }

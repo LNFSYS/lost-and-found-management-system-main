@@ -6,9 +6,9 @@ Cập nhật: **01/09/2026**
 
 Mỗi dòng có actor, mục tiêu, status và evidence/gap. Preconditions chung là actor có quyền phù hợp; trigger là thao tác actor hoặc sự kiện hệ thống; postcondition chỉ được coi là đạt khi status có runtime evidence. Các ngoại lệ, privacy note và business rule chi tiết nằm trong LNFS_BUSINESS_PROCESS_A_TO_Z.md và business-rules.md.
 
-- [x] **Done/Implemented:** 47 UC có runtime và evidence phù hợp với baseline hiện tại.
+- [x] **Done/Implemented:** 50 UC có runtime và evidence phù hợp với baseline hiện tại.
 - [ ] **Partial:** 7 UC mới đáp ứng một phần acceptance criteria.
-- [ ] **Planned:** 46 UC chưa có runtime evidence.
+- [ ] **Planned:** 43 UC chưa có runtime evidence.
 - [ ] **Deferred:** 0 UC.
 - Tổng: **100 ID duy nhất từ UC-001 đến UC-100**.
 
@@ -68,7 +68,7 @@ Không tick Done chỉ vì migration, schema, Jira ticket, UI mockup hoặc test
 | [x] | UC-048 | Owner | Upload ảnh bài đăng | Done | Multer, media validation/proxy |
 | [ ] | UC-049 | Claimant | Upload ảnh bằng chứng claim | Planned | Claim evidence runtime chưa có |
 | [x] | UC-050 | Owner | Xóa ảnh bài đăng khỏi media storage hiện tại | Done | Owner-guarded delete |
-| [ ] | UC-051 | Client | Cung cấp public config cho client validation | Planned | Chưa có public config route |
+| [x] | UC-051 | Client | Cung cấp public config cho client validation | Done | Public route allowlist, typed parsing và service test |
 | [ ] | UC-052 | Owner | Gửi claim cho bài FOUND | Planned | Schema only |
 | [ ] | UC-053 | System | Ngăn duplicate claim cho cùng bài | Planned | Constraint foundation, chưa có API |
 | [ ] | UC-054 | Claimant/Owner/Reviewer | Kiểm soát quyền xem claim evidence/private data | Partial | Post privacy có; claim privacy chưa có |
@@ -80,7 +80,7 @@ Không tick Done chỉ vì migration, schema, Jira ticket, UI mockup hoặc test
 | [x] | UC-060 | Staff/Admin | Cập nhật trạng thái warehouse item | Done | Warehouse PATCH state machine |
 | [x] | UC-061 | Staff/Admin | Lưu retention deadline cho warehouse item | Done | Deadline từ received_at và config |
 | [x] | UC-062 | Staff/Admin | Giới hạn Staff thấp hơn Admin | Done | Backend/frontend guards và tests |
-| [ ] | UC-063 | Admin | Quản lý user qua Admin API | Planned | Chưa có route |
+| [x] | UC-063 | Admin | Quản lý user qua Admin API | Done | Admin CRUD, atomic profile/role/status update, last-admin lock, audit và tests |
 | [x] | UC-064 | Admin | Quản lý nhóm và danh mục vật phẩm | Done | Admin catalog API/UI |
 | [x] | UC-065 | Admin | Quản lý area và building | Done | Admin catalog API/UI |
 | [ ] | UC-066 | Admin | Moderate post và xử lý report | Planned | Chưa có route |
@@ -102,7 +102,7 @@ Không tick Done chỉ vì migration, schema, Jira ticket, UI mockup hoặc test
 | [ ] | UC-082 | Owner/Finder | Hiển thị seen và unread realtime | Planned | Chưa có runtime |
 | [ ] | UC-083 | System | Gửi realtime notification cho chat/claim/appointment | Planned | Chưa có runtime |
 | [ ] | UC-084 | Admin | Export báo cáo thống kê | Planned | Chưa có route |
-| [ ] | UC-085 | Admin | Quản lý system configuration | Planned | Chưa có admin config runtime |
+| [x] | UC-085 | Admin | Quản lý system configuration | Done | Admin CRUD, typed validation, public-safe route, history UI/API, audit và migration 039 |
 | [x] | UC-086 | User | Phân tích ảnh vật phẩm bằng Gemini provider | Done | Gemini service/tests/UI |
 | [ ] | UC-087 | System | Trích OCR từ claim evidence | Planned | Chưa có claim evidence runtime |
 | [x] | UC-088 | User | Gợi ý tag và danh mục từ ảnh post | Done | Gemini mapping và tests |
