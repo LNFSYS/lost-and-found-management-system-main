@@ -28,6 +28,17 @@ function safeErrorMessage(error: unknown) {
   return (error instanceof Error ? error.message : "unknown migration error").slice(0, 500);
 }
 
+function migrationChecksums(sql: string) {
+  return {
+    raw: createHash("sha256").update(sql).digest("hex"),
+    normalized: createHash("sha256").update(sql.replace(/\r\n/g, "\n")).digest("hex")
+  };
+}
+
+function checksumMatches(value: string, checksums: ReturnType<typeof migrationChecksums>) {
+  return value === checksums.raw || value === checksums.normalized;
+}
+
 export async function runMigrations(input: {
   directory: string;
   pool: MigrationPool;
@@ -53,18 +64,19 @@ export async function runMigrations(input: {
 
   for (const file of files) {
     const sql = await readFile(path.join(input.directory, file), "utf8");
-    const checksum = createHash("sha256").update(sql).digest("hex");
+    const checksums = migrationChecksums(sql);
+    const checksum = checksums.raw;
     const [appliedResult] = await input.pool.query("SELECT checksum FROM schema_migrations WHERE version = ?", [file]);
     const applied = appliedResult as AppliedRow[];
     if (applied.length) {
-      if (applied[0].checksum !== checksum) throw new Error(`Migration checksum mismatch: ${file}`);
+      if (!checksumMatches(applied[0].checksum, checksums)) throw new Error(`Migration checksum mismatch: ${file}`);
       continue;
     }
 
     const [attemptResult] = await input.pool.query("SELECT checksum, status FROM schema_migration_attempts WHERE version = ?", [file]);
     const attempts = attemptResult as AttemptRow[];
     if (attempts.length) {
-      const reason = attempts[0].checksum === checksum ? attempts[0].status : "CHECKSUM_CHANGED";
+      const reason = checksumMatches(attempts[0].checksum, checksums) ? attempts[0].status : "CHECKSUM_CHANGED";
       throw new Error(`Migration ${file} has an incomplete attempt (${reason}). ${recoveryInstruction}`);
     }
 

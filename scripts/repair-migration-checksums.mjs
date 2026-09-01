@@ -30,6 +30,13 @@ function number(name, fallback) {
   return parsed;
 }
 
+function migrationChecksums(sql) {
+  return {
+    raw: createHash("sha256").update(sql).digest("hex"),
+    normalized: createHash("sha256").update(sql.replace(/\r\n/g, "\n")).digest("hex")
+  };
+}
+
 function bool(name, fallback) {
   const value = process.env[name]?.trim().toLowerCase();
   if (!value) return fallback;
@@ -44,7 +51,7 @@ async function currentMigrationChecksums() {
   const checksums = new Map();
   for (const file of files) {
     const sql = await readFile(path.join(migrationsDir, file), "utf8");
-    checksums.set(file, createHash("sha256").update(sql).digest("hex"));
+    checksums.set(file, migrationChecksums(sql));
   }
   return checksums;
 }
@@ -76,8 +83,11 @@ try {
   const checksums = await currentMigrationChecksums();
   const [rows] = await pool.query("SELECT version, checksum FROM schema_migrations ORDER BY version");
   const mismatches = rows
-    .filter((row) => checksums.has(row.version) && checksums.get(row.version) !== row.checksum)
-    .map((row) => ({ version: row.version, oldChecksum: row.checksum, newChecksum: checksums.get(row.version) }));
+    .filter((row) => {
+      const current = checksums.get(row.version);
+      return current && row.checksum !== current.raw && row.checksum !== current.normalized;
+    })
+    .map((row) => ({ version: row.version, oldChecksum: row.checksum, newChecksum: checksums.get(row.version).raw }));
 
   if (!mismatches.length) {
     console.log("Migration checksums already match the current files.");

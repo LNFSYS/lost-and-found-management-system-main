@@ -44,8 +44,9 @@ Added `apps/api-node/src/migrations/039_admin_user_and_config_audit.sql`:
 
 - creates `admin_audit_logs`;
 - extends `config_history` with config identity, action, old/new key and type, state snapshots, reason, and an index.
+- migration checksum verification accepts CRLF/LF line-ending differences while still rejecting SQL content changes.
 
-The migration was not applied to the shared Aiven database from this session. Apply it once through the reviewed deployment migration process. Do not run the database integration suite against Aiven.
+Migration `039_admin_user_and_config_audit.sql` was applied successfully to the shared Aiven database on 2026-09-02 through `npm run migrate`. Read-only verification confirmed the migration row, the `admin_audit_logs` table, and all new `config_history` audit columns. Do not run the database integration suite against Aiven.
 
 ## API contract changes
 
@@ -61,8 +62,10 @@ The migration was not applied to the shared Aiven database from this session. Ap
 
 | Command | Result |
 | --- | --- |
-| `npm run test` | PASS: 84 API tests, 1 safe DB integration skip, Web TypeScript check pass |
+| `npm run test` | PASS: 85 API tests, 1 safe DB integration skip, Web TypeScript check pass |
 | `npm run build` | PASS: API TypeScript build and Web production build |
+| `npm run migrate:diagnose-checksums` | PASS: current migration files match applied database checksums, including CRLF/LF-equivalent files |
+| `npm run migrate` | PASS: applied `039_admin_user_and_config_audit.sql` to the shared Aiven database |
 | `npm --workspace @lnfs/api-node run test:db-integration` | PASS as a safe skip because no dedicated local `*_test` database was configured |
 | `git diff --check` | PASS; only Git line-ending normalization warnings |
 
@@ -80,7 +83,7 @@ Added or expanded coverage includes:
 ## Remaining verification
 
 - The MySQL concurrency test becomes an executed pass only when run with a dedicated local `LNFS_TEST_DB_NAME` ending in `_test` and `LNFS_DB_INTEGRATION=1`.
-- Migration application on Aiven requires the team deployment owner and a reviewed backup/rollback window.
+- Future migrations on Aiven still require the team deployment owner and a reviewed backup/rollback window.
 - Jira, PR, and branch status were not changed by this implementation.
 
 ## Rollback
