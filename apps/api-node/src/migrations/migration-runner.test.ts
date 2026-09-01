@@ -47,6 +47,34 @@ test("records a checksum only after the complete migration query succeeds", asyn
   });
 });
 
+test("accepts an equivalent LF checksum for a CRLF migration file", async () => {
+  const lfSql = "CREATE TABLE probe (id INT);\n";
+  const crlfSql = lfSql.replaceAll("\n", "\r\n");
+  await withMigration(crlfSql, async (directory, file) => {
+    const events: string[] = [];
+    let requestedConnection = false;
+    const lfChecksum = createHash("sha256").update(lfSql).digest("hex");
+    const pool: MigrationPool = {
+      async query(sql) {
+        events.push(sql);
+        if (sql.startsWith("SELECT checksum FROM schema_migrations")) return [[{ checksum: lfChecksum }], []];
+        if (sql.startsWith("SELECT checksum, status FROM schema_migration_attempts")) return [[], []];
+        return [[], []];
+      },
+      async getConnection() {
+        requestedConnection = true;
+        throw new Error("must not execute an already-applied migration");
+      }
+    };
+
+    await runMigrations({ directory, pool, log: () => undefined });
+
+    assert.equal(requestedConnection, false);
+    assert.equal(events.some((event) => event.includes("INSERT INTO schema_migration_attempts")), false);
+    assert.equal(file, "001_probe.sql");
+  });
+});
+
 test("marks a failed migration with its statement index and recovery guidance", async () => {
   await withMigration("CREATE TABLE probe (id INT); ALTER TABLE probe ADD value INT;", async (directory, file) => {
     const poolEvents: string[] = [];

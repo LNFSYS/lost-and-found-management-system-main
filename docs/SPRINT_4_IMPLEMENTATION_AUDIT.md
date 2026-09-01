@@ -6,6 +6,8 @@ Kho đối chiếu: **fptu-lost-found-system-main**
 
 > Đây là audit từ snapshot offline, không phải truy vấn Jira trực tiếp. Trạng thái Jira được giữ nguyên như snapshot; trạng thái code chỉ được kết luận từ runtime source, test và command đã chạy. Không chỉnh Jira, không chạy migration trên Aiven/shared DB.
 
+> Cập nhật phiên làm việc ngày 02/09/2026: sau snapshot trên, migration `039_admin_user_and_config_audit.sql` đã được chạy thành công trên shared Aiven bằng `npm run migrate`. Đã xác minh `schema_migrations`, bảng `admin_audit_logs` và các cột audit mới trong `config_history`. Các nhận định “chưa chạy migration” bên dưới phản ánh snapshot trước cập nhật.
+
 ## 1. Kết luận nhanh
 
 Sprint 4 có hướng nghiệp vụ đúng nhưng backlog **chưa đủ chuẩn để giữ nguyên và đánh dấu Done**. Có ba nhóm vấn đề chính:
