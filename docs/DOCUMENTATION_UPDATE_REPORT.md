@@ -1,129 +1,128 @@
-# Báo cáo cập nhật tài liệu LNFS
+# Báo cáo đồng bộ tài liệu LNFS
 
-Cập nhật: 26/08/2026
+Cập nhật: **01/09/2026**
 
-## 1. Phạm vi kiểm tra
+## 1. Phạm vi và phương pháp
 
-Đợt cập nhật này làm việc trên repository `fptu-lost-found-system-main` và dùng code/test hiện tại làm nguồn xác minh chính. Không sử dụng repository cũ để nâng trạng thái chức năng.
+Đợt này đọc và đối chiếu repository mới fptu-lost-found-system-main theo prompt master. Code, test và configuration được ưu tiên hơn tài liệu cũ. Không sửa source runtime, không chạy migration, không thao tác destructive trên Aiven/shared DB và không sửa Jira.
 
-Các file tài liệu đã kiểm tra:
+Repository có:
 
-- `README.md`.
-- `docs/README.md`.
-- `docs/project-overview.md`.
-- `docs/requirements.md`.
-- `docs/use-case-checklist.md`.
-- `docs/business-rules.md`.
-- `docs/traceability-matrix.md`.
-- `docs/node-java-service-boundary.md`.
-- `apps/java-admin-service/README.md`.
+- apps/api-node: Node.js/Express API, migrations, services, repositories, validators và tests.
+- apps/web: React/TypeScript/Vite/React Router, pages, components và Playwright tests.
+- apps/java-admin-service: Spring Boot health skeleton.
+- docs: bộ tài liệu Markdown hiện hành.
+- Không có thư mục/project Android, iOS, Expo, React Native hoặc Flutter trong workspace.
+- Không có docs report DOCX, XLSX, XLS, PDF, meeting record hoặc WBS spreadsheet.
 
-Các nguồn implementation đã đối chiếu:
+## 2. Evidence đã kiểm tra
 
-- React routes/pages/components và Playwright tests trong `apps/web`.
-- Node routes/controllers/services/repositories/validators và tests trong `apps/api-node`.
-- Node migration files từ `001_auth.sql` đến `038_seed_default_handover_point.sql`.
-- Spring Boot source và configuration trong `apps/java-admin-service`.
-- Root/package workspace scripts và environment examples.
+### Runtime/source
 
-## 2. File đã sửa
+- Node app mount auth, posts, staff, handover-points và admin routes trong apps/api-node/src/app.ts.
+- Web routes trong apps/web/src/main.tsx gồm login/register/reset, home, profile, posts, my-posts, detail, matches, staff và admin.
+- Auth có OTP/SMTP, password, JWT access/refresh, logout và reset password.
+- Post/catalog/media/matching/Gemini/warehouse được kiểm tra qua route, service, repository, validator và tests.
+- Java chỉ có JavaAdminServiceApplication và Actuator health.
+- Không tìm thấy Socket.IO server, native mobile project, manifest hoặc service worker.
+- Migration files hiện có từ 001_auth.sql đến 038_seed_default_handover_point.sql; migration runner có checksum/attempt handling.
 
-| File | Nội dung thay đổi chính |
+### Commands
+
+| Command | Result |
 | --- | --- |
-| `README.md` | Định vị Web + PWA, sửa current implementation, Warehouse và future enhancements |
-| `package.json` | Bỏ mô tả Sprint 1 authentication base; dùng mô tả current product scope |
-| `docs/README.md` | Snapshot, trạng thái PWA, Warehouse và kết quả test/build mới |
-| `docs/project-overview.md` | Current baseline, planned scope, kiến trúc Web/PWA, 9 sprint, 416 man-days, deployment/feedback strategy |
-| `docs/requirements.md` | `FR-PWA-01`, `NFR-PWA-01`, status theo code và wording performance có thể kiểm chứng |
-| `docs/use-case-checklist.md` | UC-093–UC-100 chuyển từ Mobile sang PWA và tính lại status |
-| `docs/business-rules.md` | BR-41 chuyển thành privacy/transaction rule cho PWA |
-| `docs/traceability-matrix.md` | Mapping BR-41 → FR-PWA-01 → UC-093–UC-100 và evidence thực tế |
-| `docs/node-java-service-boundary.md` | Warehouse hiện do Node sở hữu; Java vẫn chỉ là skeleton |
-| `apps/java-admin-service/README.md` | Bỏ wording Sprint 1 và ghi đúng one-writer boundary hiện tại |
+| npm test | PASS: 53 tests pass, 1 DB integration test skip an toàn; Web TypeScript check pass |
+| npm run build | PASS: API TypeScript build và Web Vite production build |
+| npm run build:java | BLOCKED: lệnh đã được gọi nhưng máy không có Maven trong PATH; chưa kết luận Java source lỗi |
+| npm --workspace @lnfs/web run e2e:home | PASS: 16/16 Playwright tests, gồm auth resilience, post creation, matching view, mobile layout, Staff warehouse và Admin handover/map |
+| npm run migrate | Không chạy; tránh tác động Aiven/shared DB |
+| git diff --check | PASS: không có whitespace error |
+| Markdown relative-link scan | PASS: tất cả link tương đối trong README/docs resolve được |
+| Legacy UC checklist count | PASS: 100 ID duy nhất; 47 Done, 7 Partial, 46 Planned |
+| Jira | Không có connector/quyền truy cập trong workspace |
 
-## 3. File Report và spreadsheet
+## 3. File đã cập nhật
 
-Không tìm thấy Report 1, Report 2, Report 3/SRS, Report 4/Design, Report 5/Implementation and Testing, meeting records, DOCX, XLSX, XLS, PDF hoặc thư mục report tương ứng trong workspace. Vì không có source file, đợt cập nhật này không tạo bản thay thế giả và không bịa nội dung/hình ảnh/nguồn tham khảo.
+| File | Thay đổi |
+| --- | --- |
+| README.md | Định vị Web + PWA support + Native Mobile target; baseline, gap, setup và shared DB/media warning |
+| docs/README.md | Tài liệu index, source-of-truth rule, status glossary, snapshot và evidence |
+| docs/project-overview.md | Actor, scope channel, architecture, current flow, peer-to-peer target flow, state model và roadmap |
+| docs/LNFS_BUSINESS_PROCESS_A_TO_Z.md | Nguồn nghiệp vụ A–Z: peer-to-peer, chat/question, claimant, meetup, dual confirmation, custody, warehouse, privacy, KPI và TBD |
+| docs/requirements.md | FR-WEB, FR-PWA, FR-MOBILE, FR-CHAT, FR-VERIFY, FR-APPT, FR-HANDOVER, FR-CUSTODY, FR-WAREHOUSE, FR-AUDIT và NFR status |
+| docs/business-rules.md | Luật auth/post/privacy/matching/warehouse/peer flow và status Enforced/Partial/Planned/TBD |
+| docs/traceability-matrix.md | Mapping BR → FR/NFR → UC → evidence theo channel |
+| docs/use-case-checklist.md | Giữ 100 UC duy nhất, 47 Done, 7 Partial, 46 Planned; thêm actor và gap evidence |
+| docs/node-java-service-boundary.md | One-writer rule, ownership matrix và điều kiện Java nhận domain |
+| apps/java-admin-service/README.md | Ghi đúng Java là health skeleton, không có business ownership/integration |
+| docs/SPRINT_4_IMPLEMENTATION_AUDIT.md | Audit 17 ticket Sprint 4: Jira snapshot so với code, test evidence, dependency và backlog gap |
 
-Khi team cung cấp các Report chính thức, cần đồng bộ lại Web + PWA, 9 sprint, 416 man-days, Node/Java ownership, requirement/design/test evidence và release strategy theo bộ Markdown hiện hành.
+Prompt docs/CODEX_MASTER_UPDATE_PROMPT.md được giữ nguyên làm instruction input, không dùng làm evidence implementation.
 
-## 4. Thuật ngữ đã chuẩn hóa
+## 4. Status hiện tại
 
-- Product type: **Web Application with Progressive Web App (PWA) support**.
-- `MVP` không còn là tên hoặc trạng thái chính thức của current product.
-- Native mobile/Expo/React Native chỉ được nhắc như future enhancement.
-- AI được mô tả là **Gemini-assisted image/OCR analysis** và **rule-based/hybrid matching**.
-- AI/matching là decision support; không tự xác minh quyền sở hữu, accept claim, hoàn tất handover hoặc công khai private evidence.
-- Java được mô tả là extension skeleton, không phải production microservice hoặc business owner hiện tại.
-- Deployment được mô tả là planned server deployment; repository chưa chứng minh production deployment.
+### Web
 
-`FR-MOBILE-01` chỉ còn xuất hiện như historical alias của `FR-PWA-01`; tài liệu hiện hành dùng `FR-PWA-01`.
+Implemented baseline: auth, role guard, posts, media, catalog, handover point management, Gemini draft, hybrid matching và Staff warehouse operations.
 
-Chuỗi `MVP` còn nằm trong nội dung seed của migration đã phát hành `002_lost_found_schema.sql`. File migration đã chạy không được sửa để tránh checksum mismatch; đây là immutable historical text, không phải product positioning hiện hành.
-
-## 5. Mâu thuẫn đã giải quyết
-
-### Warehouse, Staff và Node/Java
-
-Tài liệu cũ ghi Staff page là placeholder và Warehouse chưa có runtime. Code hiện có:
-
-- `/api/staff/warehouse-items` list/create/update routes với backend role guard `STAFF`/`ADMIN`.
-- Warehouse service/repository với transaction, row lock, state transition, retention deadline và storage log.
-- Staff warehouse page và Playwright tests cho receive/update/log flow.
-
-Kết luận: Node.js là write owner của Warehouse operations hiện tại. Receive/store/return, retention deadline, handover counts và storage log được xem là implemented trong phạm vi có test. Overdue scanning, disposition guard khi có claim/appointment, donation/transfer/disposal documents vẫn Planned.
-
-Java chỉ có Spring Boot application và Actuator health. Không có Java business controller, shared JWT test, schema writer hoặc Node-to-Java integration.
+Partial/planned: claim/evidence, peer chat, guided questions, meetup, dual handover, notification, moderation, full admin dashboard/config và disposition.
 
 ### PWA
 
-Code có responsive layouts, file selection/upload và mobile viewport browser tests. Repository không có web app manifest, service worker, install prompt, offline application shell hoặc offline transaction controls.
+Partial target: responsive Web, mobile browser viewport checks và file input. Chưa có manifest, installability, service worker, offline application shell, safe offline transaction controls hoặc device matrix.
 
-Kết luận: `FR-PWA-01` là `Partial`; không UC PWA nào được đánh dấu Done. UC-093–UC-097 là Partial, UC-098–UC-100 là Planned.
+### Native Mobile
 
-### Use-case status
+Planned — project not created yet. Không có implementation evidence; công nghệ chưa được quyết định. Không gọi PWA là native app.
 
-Checklist sau cập nhật có **47 Done, 7 Partial, 46 Planned, 0 Deferred**, tổng 100 UC duy nhất từ UC-001 đến UC-100. Ngày 26/08/2026, UC-008 đến UC-010 và UC-056 đến UC-057 được chuyển sang Done sau khi có Admin handover API/UI, map upload/marker validation, active-only public query và test delete guard cho active appointment.
+### Backend
 
-## 6. Kế hoạch và effort
+Node.js là core API, migration owner và write owner. Java chỉ là health skeleton. Shared object storage, deployment/rollback/monitoring và multi-instance media chưa có evidence đầy đủ.
 
-- 9 sprint từ 01/08/2026 đến 13/12/2026, không chồng ngày.
-- Planned effort: 416 man-days.
-- Planning envelope: 456 man-days.
-- Reserve: 40 man-days.
-- Milestone Timeliness Target: 95%.
-- Allocation: 48 + 52 + 190 + 56 + 36 + 34 = 416 man-days.
-- Top-level WBS: 20 + 40 + 64 + 80 + 80 + 28 + 20 + 84 = 416 man-days.
+## 5. Mâu thuẫn đã giải quyết
 
-Jira không có connector trong phiên làm việc này. Vì vậy lịch sử Done, assignee và ticket Sprint 1–3 chưa được đối chiếu với Jira; tài liệu không tự thay đổi lịch sử ticket.
+- PWA-only được đổi thành Web + PWA support + Native Mobile target.
+- Native Mobile không bị xóa khỏi product scope nhưng được ghi Planned vì repository chưa có project.
+- Staff-first được đổi thành peer-to-peer first: Finder giữ item; Staff custody là optional/escalation.
+- Matching/AI được mô tả là rule-based/hybrid và Gemini-assisted decision support, không phải custom-trained model.
+- Schema có claims/appointments/chat không còn được dùng làm bằng chứng runtime nếu route/UI/test chưa có.
+- Java không còn được mô tả là business microservice; Node giữ one-writer ownership.
+- Sprint/Jira/assignee không được khẳng định vì không có connector để xác minh.
 
-## 7. Verification đã chạy
+## 6. Use-case và traceability
 
-| Command/check | Kết quả |
-| --- | --- |
-| `npm test` | Pass: 47 API tests; 1 DB integration test safety-skip; web TypeScript check pass |
-| `npm run build` | Pass: API TypeScript build và web Vite production build |
-| `npm --workspace @lnfs/web run e2e:home` | Pass: 14/14 Playwright tests |
-| `npm run build:java` | Không chạy được vì `mvn` không có trong `PATH`; không kết luận source Java lỗi |
-| UC ID/count check | 100 ID duy nhất, UC-001–UC-100; status total = 100 |
-| Markdown link check | Pass; không có relative link hỏng |
-| Evidence basename check | Pass; các file code/test được dẫn bằng tên trong docs đều tồn tại |
-| Requirement traceability check | Pass; mọi FR/NFR hiện hành có mapping hoặc historical alias rõ ràng |
-| Legacy-term scan | Pass; chỉ còn immutable migration text, historical alias và explicit future enhancement đã được phân loại |
+Checklist giữ 100 ID legacy từ UC-001 đến UC-100:
 
-Không chạy migration hoặc destructive database test. Shared Aiven database không bị sử dụng trong đợt cập nhật tài liệu này.
+- 47 Done/Implemented có code và evidence hiện tại.
+- 7 Partial.
+- 46 Planned.
+- 0 Deferred.
 
-## 8. TBD và nội dung cần team xác nhận
+Nhóm Native Mobile target được ghi riêng là UC-M01–UC-M12 để tránh tự ý đổi/trùng ID legacy. Team cần phê duyệt mapping trước khi đưa vào SRS chính thức.
 
-- Cung cấp Report 1–5 và meeting spreadsheet để đồng bộ trực tiếp.
-- Xác nhận Jira sprint history, assignee và ticket chưa Done trong Sprint 3.
-- Chốt server/platform deployment, shared media storage và rollback procedure.
-- Triển khai và kiểm tra PWA manifest, service worker, installability, offline/error fallback và browser/device matrix.
-- Chạy DB integration suite trên MySQL local riêng có hậu tố `_test`; không dùng Aiven/shared DB.
-- Cài Maven để xác minh Java build.
-- Xác nhận camera/file capture trên thiết bị mobile thật.
-- Bổ sung CI/CD và deployment evidence trước khi mô tả hệ thống là deployable release đã triển khai.
+## 7. Gap còn lại
 
-## 9. Quy tắc cập nhật tiếp theo
+- Implement và test peer-to-peer claim/evidence/chat/guided question.
+- Implement appointment mutual agreement và dual-confirmed handover.
+- Implement notification/realtime room isolation và attachment privacy.
+- Hoàn thiện overdue/disposition với policy trường, order, approval và guard.
+- Chuyển media sang shared object storage trước multi-instance staging.
+- Tạo PWA manifest/service worker/offline/error fallback và device verification.
+- Tạo Native Mobile project theo technology decision.
+- Bổ sung CI workflow, load test, UAT, deployment smoke và rollback evidence.
+- Cài Maven để build Java.
+- Cung cấp Report 1–5 và meeting/WBS spreadsheet để đồng bộ trực tiếp.
 
-Một trạng thái chỉ được nâng thành Done/Implemented khi có runtime implementation, authorization/validation phù hợp, test hoặc bằng chứng tái lập được và traceability đồng bộ. Migration, roadmap, Jira ticket hoặc nội dung Report không tự tạo thành implementation evidence.
+## 8. Quyết định cần team/mentor
+
+- Native Mobile dùng Expo, React Native, Flutter hay công nghệ khác.
+- Sprint dates, assignee, ticket status và Jira history.
+- FPT University retention/disposition policy và sensitive-item routing.
+- Staff access scope với escalated chat/evidence.
+- Shared object storage, deployment platform, monitoring, backup và rollback.
+- Notification provider/realtime transport.
+- Dataset hợp pháp và tiêu chí evaluation nếu làm custom AI training.
+
+## 9. Quy tắc sau audit
+
+Chỉ nâng status khi có runtime implementation, validation/authorization/privacy, test/build evidence, channel verification và traceability. Không gọi product production-ready, Java production microservices, PWA/native mobile completed hoặc custom-trained AI nếu thiếu evidence tương ứng.

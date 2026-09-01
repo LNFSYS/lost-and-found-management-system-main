@@ -1,61 +1,73 @@
 # Ranh giới Node.js và Java
 
-Cập nhật: 26/08/2026
+Cập nhật: **01/09/2026**
 
-## Quyết định hiện tại
+## 1. Quyết định hiện tại
 
-Node.js là backend runtime, API owner và write owner duy nhất của codebase mới. Java/Spring Boot hiện là skeleton để giữ chỗ cho thành viên chuyên Java và chỉ cung cấp Spring Boot Actuator health endpoint.
+Node.js là core API, runtime owner, migration owner và write owner duy nhất của các flow đang có. Java/Spring Boot hiện là health-check skeleton cho khả năng mở rộng, không phải business microservice đã tích hợp.
 
-Không trình bày kiến trúc hiện tại là production microservices. Java chưa có controller nghiệp vụ, chưa xác thực JWT, chưa kết nối schema nghiệp vụ và chưa được frontend/Node.js gọi.
+Không trình bày hệ thống hiện tại là production microservices. Không để Node và Java cùng ghi một flow hoặc cùng điều khiển một trạng thái trên shared MySQL.
 
-## Bằng chứng trong code
+## 2. Bằng chứng repository
 
-| Thành phần | Trạng thái thực tế |
-| --- | --- |
-| Node app | Mount `/api/auth`, `/api/posts`, `/api/staff`, `/api/admin` trong `apps/api-node/src/app.ts` |
-| Node migrations | Là nguồn thay đổi schema duy nhất trong `apps/api-node/src/migrations` |
-| Java app | Chỉ có `JavaAdminServiceApplication` và Actuator health |
-| Java business API | Chưa có |
-| Node-to-Java integration | Chưa có |
-| Shared JWT contract | Chưa được triển khai/kiểm thử ở Java |
+| Thành phần | Evidence | Status |
+| --- | --- | --- |
+| Node application | apps/api-node/src/app.ts mount auth, posts, staff, handover-points và admin routes | Runtime/API owner |
+| Node migrations | apps/api-node/src/migrations/001_auth.sql đến 038_seed_default_handover_point.sql | Schema owner |
+| Node business modules | controllers, services, repositories, validators và tests | Current implementation |
+| Java application | apps/java-admin-service/src/main/java/.../JavaAdminServiceApplication.java | Health skeleton |
+| Java business API | Không tìm thấy controller/service/repository nghiệp vụ | Not implemented |
+| Node-to-Java integration | Không tìm thấy adapter/call/contract test | Not implemented |
+| Native mobile | Không tìm thấy Android/iOS/Expo/React Native/Flutter project | Planned |
 
-## Ownership matrix
+## 3. Ownership matrix
 
-| Domain | Owner hiện tại | Java hiện tại | Hướng tương lai |
+| Domain | Current owner | Current status | Rule |
 | --- | --- | --- | --- |
-| Auth, OTP, session, profile | Node.js | Không tham gia | Java chỉ verify JWT nếu có endpoint riêng |
-| LOST/FOUND posts và media | Node.js | Không tham gia | Giữ Node làm owner |
-| Gemini draft và matching | Node.js | Không tham gia | Java có thể đọc kết quả, không ghi cạnh tranh |
-| Category/area/building admin | Node.js | Không tham gia | Có thể chuyển trọn flow sang Java sau khi có contract |
-| Claim/evidence | Chưa có runtime | Không có | Chọn đúng một owner trước khi triển khai |
-| Handover point catalog/management | Public active-only read và Admin CRUD/toggle/map/marker; Node là write owner | Không có | Java không ghi `handover_points` |
-| Appointment workflow | Chưa có runtime | Không có | Chọn đúng một owner trước khi triển khai |
-| Warehouse receive/store/return, retention và storage log | Node.js | Không tham gia | Giữ Node làm owner cho current release; chỉ chuyển trọn domain sau contract/integration tests |
-| Warehouse overdue disposition, donation/transfer policy | Chưa hoàn chỉnh runtime | Không có | Hoàn thiện dưới một write owner duy nhất |
-| Realtime/notification | Chưa có runtime | Không có | Dự kiến Node.js/Socket.IO |
+| Auth, OTP, session, profile | Node.js | Implemented | Java không tạo login flow riêng |
+| LOST/FOUND posts và media | Node.js | Implemented; local media limitation | Java không ghi post/media state |
+| Category, area, building, handover point | Node.js | Implemented theo module | Java không ghi catalog nếu chưa có contract |
+| Gemini draft và hybrid matching | Node.js | Implemented theo decision-support scope | Không gọi custom-trained AI |
+| Claim/evidence/chat/appointment | Chưa có owner runtime | Planned | Chọn một owner trước khi triển khai |
+| Warehouse receive/store/return | Node.js | Partial/implemented operational scope | Giữ Node owner trong current release |
+| Warehouse disposition | Chưa có runtime đầy đủ | Planned/TBD | Policy và owner cần chốt |
+| Notification/realtime | Chưa có runtime | Planned | Dự kiến Node nếu được triển khai |
+| PWA | Cùng Web client | Partial/planned | Dùng shared API và rule |
+| Native Mobile | Client planned | Planned | Chỉ là client gọi shared Node API |
 
-## Điều kiện để Java nhận một flow
+## 4. One-writer rule
 
-Một domain chỉ được chuyển sang Java khi có đủ:
+Một business flow chỉ có một write owner trong mỗi deployment:
 
-1. API contract/OpenAPI cho domain đó.
-2. JWT/role compatibility test với token do Node phát hành.
-3. Một writer duy nhất trong mỗi deployment.
-4. Transaction/state-machine tests cho business invariant.
-5. Node adapter hoặc frontend routing rõ ràng.
-6. Health/readiness và cấu hình môi trường.
-7. Rollback plan về Node hoặc tắt route Java.
+1. Owner sở hữu route, validation, state transition và transaction.
+2. Service khác chỉ đọc qua API hoặc event contract được version hóa.
+3. Không dùng việc cùng truy cập MySQL để coi là integration.
+4. Mọi thay đổi ownership cần API contract, JWT compatibility test, transaction/concurrency test, integration test, health/readiness và rollback plan.
+5. Nếu chưa đủ evidence, ghi Planned hoặc TBD.
 
-Java không được ghi trực tiếp cùng bảng/trạng thái với Node cho cùng một flow nếu chưa có cơ chế ownership và integration test.
+## 5. Điều kiện để Java nhận một domain
 
-## Cách trình bày an toàn
+Java chỉ được nhận trọn một domain khi có:
 
-> Node.js là core API của current system và là write owner cho các flow đang chạy, gồm warehouse operations hiện tại. Nhóm giữ một Spring Boot skeleton cho khả năng mở rộng sau này; Java chưa sở hữu flow nghiệp vụ và kiến trúc hiện tại không được trình bày là production microservices.
+- API contract/OpenAPI được duyệt;
+- JWT/role compatibility với token Node;
+- một writer duy nhất và migration ownership rõ;
+- state machine, transaction và race-condition tests;
+- Node adapter hoặc frontend routing rõ;
+- readiness, metrics/logging, cấu hình secret;
+- rollout và rollback plan;
+- tài liệu traceability cập nhật.
 
-## Không nên tuyên bố
+Không chuyển một nửa claim, appointment hoặc warehouse sang Java. Tránh để hai service cùng sửa claims, return_appointments, warehouse_items hoặc posts.
 
-- Java đã xử lý claim/warehouse/appointment.
-- Node và Java đã chia tải production.
-- Hai service có thể cùng ghi shared MySQL an toàn.
-- Java đã tương thích JWT nếu chưa có test.
-- Hệ thống đã deploy theo microservice architecture.
+## 6. Cách trình bày với mentor/judge
+
+> Node.js là core API và write owner của current Web/PWA baseline. Java hiện là Spring Boot health skeleton để mở rộng, chưa có business endpoint hoặc integration. Native Mobile là client mục tiêu dùng chung backend nhưng chưa có project trong repository. Kiến trúc hiện tại chưa được gọi là production microservices.
+
+## 7. Việc cần quyết định sau
+
+- Java có nhận domain nào không, hay chỉ giữ vai trò extension.
+- Contract và owner cho claim/evidence/appointment/realtime.
+- Event/queue nếu matching/notification cần scale.
+- Shared object storage và deployment platform.
+- Jira sprint/assignee chính thức; workspace hiện không có Jira connector.

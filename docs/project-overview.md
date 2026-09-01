@@ -1,411 +1,237 @@
 # Tổng quan dự án FPTU Lost & Found System
 
-Cập nhật: 26/08/2026
+Cập nhật: **01/09/2026**
 
-## 1. Định vị dự án
+## 1. Định vị
 
-FPTU Lost & Found System là **Web Application with Progressive Web App (PWA) support** dành cho quy trình Lost & Found tại FPT University Đà Nẵng. Hệ thống hỗ trợ sinh viên, giảng viên và bộ phận vận hành ghi nhận đồ mất/nhặt được, tìm báo cáo liên quan, quản lý kho và từng bước hoàn thiện quy trình xác minh, hẹn lịch và bàn giao.
+LNFS là hệ thống quản lý đồ thất lạc và đồ nhặt được cho FPT University Đà Nẵng. Sản phẩm mục tiêu có ba delivery channel dùng chung API và luật nghiệp vụ:
 
-**Current implementation baseline** đã có authentication, quản lý bài LOST/FOUND, Gemini-assisted image/OCR analysis, rule-based/hybrid matching và một operational warehouse flow trên Node.js. Claim/evidence, appointment, warehouse disposition, realtime và PWA infrastructure vẫn nằm trong planned complete product scope.
+1. **Web Application:** channel hiện có, dùng trên desktop/laptop và cho các màn hình vận hành.
+2. **Progressive Web App (PWA):** phần mở rộng của web responsive, dự kiến có installability, application shell, safe retry và hỗ trợ camera/gallery trên mobile browser.
+3. **Native Mobile Application:** scope mục tiêu bắt buộc theo kế hoạch, dùng chung backend với Web/PWA. Repository hiện tại chưa có mobile project nên trạng thái là Planned — project not created yet.
 
-Current delivery channel là responsive web. Native mobile app là future enhancement; PWA chưa được xem là hoàn thành cho đến khi có manifest, service worker, installability, offline/error fallback và browser/device verification. Không mô tả dự án hiện tại là production-ready, production microservices hoặc custom-trained AI system.
+Không gọi hệ thống hiện tại là production-ready, production microservices hoặc custom-trained AI. Gemini/OCR và matching chỉ là decision support; quyết định xác minh và trả đồ phải có con người.
 
-LNFS chọn hướng PWA vì người dùng thường truy cập dịch vụ Lost & Found khi phát sinh nhu cầu cụ thể, không nhất thiết cài một native app dùng hằng ngày. Một shared web codebase có thể cung cấp trải nghiệm responsive, dễ tiếp cận và có khả năng cài đặt sau khi PWA infrastructure hoàn thiện.
+## 2. Bài toán và mục tiêu
 
-## 2. Bài toán
+Quy trình thủ công thường phân tán ở group chat, quầy bảo vệ, phòng công tác sinh viên hoặc tin nhắn cá nhân. Người mất khó tìm đúng bài nhặt được; người nhặt khó xác định chủ sở hữu mà không làm lộ đặc điểm riêng; nhân viên thiếu lịch sử và trạng thái nhất quán.
 
-Quy trình Lost & Found thủ công trong campus thường gặp các vấn đề:
+LNFS hướng tới:
 
-- Thông tin mất/nhặt đồ nằm rải rác ở nhiều nhóm và phòng ban.
-- Người dùng khó tìm bài đối ứng nếu cách mô tả khác nhau.
-- Người nhặt được đồ không biết nên cung cấp thông tin nào mà vẫn bảo vệ chi tiết nhận dạng.
-- Dữ liệu danh mục và địa điểm không đồng nhất.
-- Việc trả đồ cần một quy trình xác minh của con người, không thể dựa hoàn toàn vào điểm matching.
+- ghi nhận LOST/FOUND có cấu trúc, vị trí và thời gian;
+- hỗ trợ tìm kiếm và hybrid/rule-based matching có giải thích;
+- giữ private attributes cho bước xác minh;
+- hỗ trợ trao đổi giữa Finder và Owner;
+- cung cấp nhánh Staff custody/warehouse khi cần;
+- ghi lại appointment, handover, thông báo và audit khi các module tương ứng hoàn thiện;
+- cung cấp một nền tảng chung cho Web, PWA và Native Mobile.
 
-Current release giải quyết phần đầu và một phần vận hành của hành trình: tạo dữ liệu có cấu trúc, hỗ trợ điền bài từ ảnh, hiển thị board, tính gợi ý tương đồng có giải thích và tiếp nhận/lưu/trả vật phẩm trong kho nội bộ.
+## 3. Actor
 
-## 3. Actor và quyền hiện tại
-
-| Actor/role | Khả năng hiện có |
+| Actor | Vai trò |
 | --- | --- |
-| Guest | Truy cập trang auth; board hiện nằm sau route guard trong web hiện tại |
-| `USER` | Quyền nền được gán cho tài khoản đã đăng ký |
-| `STUDENT` | Đăng nhập, hồ sơ, tạo/quản lý bài, xem board và matching của bài được phép |
-| `LECTURER` | Cùng nhóm chức năng người dùng như Student |
-| `STAFF` | Quản lý warehouse item, trạng thái, retention deadline, điểm bàn giao và storage log; không truy cập Admin catalog API |
-| `ADMIN` | Quản lý category, area và building; truy cập admin route |
+| Guest | Xem nội dung public và đi tới đăng ký/đăng nhập. |
+| Student/Lecturer | Tạo LOST/FOUND, xem board, tìm kiếm, quản lý bài của mình. |
+| Finder | Người đang giữ vật phẩm FOUND trong luồng peer-to-peer mục tiêu. |
+| Owner | Người tạo LOST report và gửi yêu cầu xác minh cho FOUND phù hợp. |
+| Staff | Xử lý vận hành kho/tiếp nhận khi có escalation hoặc custody; quyền thấp hơn Admin. |
+| Admin | Quản trị catalog, điểm bàn giao và các chức năng quản trị được cấp. |
+| System | Tính matching, tạo draft AI, lưu trạng thái và phát sinh sự kiện. |
+| External services | SMTP và Gemini API tùy cấu hình; không được coi là nguồn quyết định sở hữu. |
 
-Backend luôn là nơi quyết định quyền. Frontend route guard chỉ hỗ trợ trải nghiệm và không thay thế authorization ở API.
-
-## 4. Phạm vi sản phẩm
+## 4. Phạm vi
 
 ### 4.1 Current implementation baseline
 
-Đã triển khai và có runtime evidence:
+Đã có runtime evidence trong repository:
 
-- Đăng ký bằng email OTP qua SMTP.
-- Đăng nhập email/password.
-- JWT access token và refresh token cookie `HttpOnly`.
-- Refresh, logout, forgot/reset password.
-- Xem và cập nhật profile cơ bản.
-- JWT middleware và role guard.
-- Tạo, cập nhật trạng thái và xóa mềm bài `LOST`/`FOUND`.
-- Board, tìm kiếm, lọc, sắp xếp, phân trang, bài của tôi và trang chi tiết.
-- Category hai cấp: nhóm chính và danh mục cụ thể.
-- Area/building catalog và danh sách handover point đang hoạt động cho form tạo bài.
-- Upload, đọc qua media proxy và xóa ảnh bài đăng.
-- Chế độ `PRIVATE_DETAILS` cho bài `FOUND` với serializer hạn chế dữ liệu public.
-- Gemini-assisted image analysis cho tối đa 5 ảnh, trả bản nháp có thể chỉnh sửa.
-- Rule-based/hybrid matching có text, category, location, time, image tags và safe OCR tags.
-- Lưu kết quả matching, score tier, explanation và manual recalculation có rate limit.
-- Admin CRUD category, area, building và handover point; quản lý ảnh map, marker, giờ hoạt động, contact và active state.
-- Staff warehouse operations: list/filter, receive, store, return, retention deadline, item count theo handover point và storage log.
-- React Router cho các route auth, home, board, my posts, detail, matching, profile, staff và admin.
-- Responsive layouts và mobile viewport browser tests cho các màn hình chính.
+- Auth email OTP/SMTP, password login, JWT access/refresh, logout, forgot/reset password và profile cơ bản.
+- Backend role guard cho USER, STUDENT, LECTURER, STAFF, ADMIN; frontend route guard cho Web.
+- Tạo/cập nhật/đóng/xóa mềm bài LOST/FOUND; board, my posts, detail, search/filter/sort/pagination.
+- Category hai cấp, campus area, building và public active-only handover point catalog.
+- Admin CRUD/toggle điểm bàn giao, map image upload, marker coordinates và guard không xóa điểm còn appointment/reference vận hành.
+- Post media local storage qua protected proxy, validation MIME/signature/size/count.
+- Gemini-assisted multi-image analysis tạo title/description/category/tags draft có thể chỉnh sửa.
+- Hybrid/rule-based matching dùng text normalization tiếng Việt, category, location, time, image/OCR tags, tier, score breakdown và explanation.
+- Staff warehouse receive/store/return, retention deadline, handover counts và storage log.
 
-### 4.2 Current implementation status: Partial
+### 4.2 Partial
 
-- Admin dashboard: mới có số liệu và CRUD catalog, chưa có users/moderation/report/config toàn hệ thống.
-- Handover point: public endpoint/form chỉ đọc điểm active; Admin có CRUD/toggle, upload/URL ảnh map, marker picker, stored-item count và guard hard-delete khi còn active appointment.
-- Media privacy: proxy/authorization có nền tảng, nhưng storage là local filesystem nên chưa phù hợp nhiều máy hoặc deploy nhiều instance.
-- Warehouse: receive/store/return và logs đã chạy; overdue scanning, disposition guard, donation/transfer documents và liên kết claim/appointment chưa hoàn chỉnh.
-- PWA: responsive web và mobile browser checks đã có; manifest, service worker, installability và offline shell chưa có.
-- Database: có nhiều bảng dành cho planned scope, nhưng schema không được xem là runtime implementation.
-- Test: có unit test, Playwright UI tests và DB integration suite opt-in có guard local-only; chưa có integration coverage cho toàn bộ endpoint hiện hành.
+- Responsive web có mobile viewport checks nhưng chưa có PWA manifest/service worker/installability/offline shell.
+- Warehouse có receive/store/return và retention deadline; overdue disposition/donation/transfer/disposal documents chưa đủ.
+- Admin có catalog và handover management; full user management, moderation, report, config và dashboard toàn hệ thống chưa đủ.
+- Local media chạy được cho một API host nhưng không phù hợp nhiều máy/instance dùng chung database.
 
-### 4.3 Planned complete product scope
+### 4.3 Planned product scope
 
-- Claim, claim evidence và ownership review confidence.
-- Appointment, handover completion và return feedback.
-- Warehouse overdue/disposition workflow và chứng từ donation/transfer/disposal.
-- Notification, Socket.IO chat và unread badge.
-- Admin user/role management, moderation, reports, config history.
-- Reputation/activity history.
-- Java business endpoints.
-- PWA manifest, service worker, install prompt, basic offline application shell và safe offline/error fallback.
-- System integration, regression testing, server deployment, real-user feedback và release hardening.
+Luồng nghiệp vụ mục tiêu là:
 
-### 4.4 Out of current development scope
+LOST/FOUND post → matching suggestion → private verification chat → Finder decision → meetup → dual-confirmed direct handover
 
-- Native Android/iOS hoặc Expo/React Native application; đây là future enhancement sau Web + PWA.
-- Custom model training/MLOps.
+Phạm vi target còn gồm claim/evidence, guided questions, multiple claimant isolation, realtime chat/notification, appointment, escalation/report, PWA và Native Mobile. Đây là product scope, không phải cam kết current implementation.
 
-## 5. Kiến trúc hiện tại
+### 4.4 Future/TBD
 
-```text
-React + TypeScript + Vite
-Responsive Web UI + planned PWA layer
-(manifest, service worker, installability, offline shell)
-        |
-        | HTTP/JSON + HttpOnly refresh cookie
-        v
-Node.js + Express + TypeScript
-        |
-        +--> MySQL (schema, auth, posts, catalog, matching, warehouse)
-        +--> Gmail/SMTP (OTP và reset password)
-        +--> Gemini API (phân tích ảnh tùy chọn)
-        +--> Local protected media directory (hiện tại)
+- Native Mobile implementation và công nghệ cụ thể.
+- Custom AI training/MLOps sau khi có dataset hợp pháp, anonymization, label và evaluation.
+- Shared object storage, production deployment, monitoring, backup và load testing.
+- Retention/disposition policy cần FPT University xác nhận.
+- Sprint dates, assignee và ticket status cần đối chiếu Jira trực tiếp.
 
-Java/Spring Boot
-        +--> Actuator health skeleton, chưa tham gia business flow
-```
+## 5. Kiến trúc và ownership
 
-### 5.1 Frontend
+~~~mermaid
+flowchart LR
+  Web[Web Application] --> API[Node.js / Express API]
+  PWA[PWA target - same web client] --> API
+  Mobile[Native Mobile - planned] --> API
+  API --> DB[(MySQL / Aiven target)]
+  API --> Media[Local media storage - current]
+  API --> SMTP[SMTP email - optional]
+  API --> Gemini[Gemini image analysis - optional]
+  Java[Java Spring Boot health skeleton] -. no business ownership .-> API
+~~~
 
-Frontend nằm tại `apps/web` và dùng:
+Node.js là runtime và write owner duy nhất của các flow đang chạy, đồng thời là owner của migrations. Java hiện chỉ có Spring Boot Actuator health endpoint; chưa có controller/service/repository nghiệp vụ, chưa tích hợp JWT hay frontend.
 
-- React 18 và TypeScript.
-- React Router cho navigation/route guard.
-- Vite cho dev/build.
-- Playwright cho browser tests.
-- Storytelling home kết hợp form tạo bài thực tế.
-- Responsive CSS; mobile viewport browser tests cho home và board.
+Bounded contexts mục tiêu:
 
-PWA status hiện tại là `Partial`: repository chưa có manifest, service worker, install prompt hoặc offline application shell. File input hỗ trợ chọn/upload ảnh trong mobile browser, nhưng chưa có device compatibility evidence cho camera capture.
-
-Các route chính:
-
-| Route | Mục đích |
+| Context | Current owner/status |
 | --- | --- |
-| `/login`, `/register` | Authentication |
-| `/forgot-password`, `/reset-password` | Khôi phục mật khẩu |
-| `/home` | Storytelling và tạo LOST/FOUND post |
-| `/posts` | Board |
-| `/my-posts` | Bài của người dùng hiện tại |
-| `/posts/:postId` | Chi tiết bài |
-| `/posts/:postId/matches` | Phân tích matching đã lưu |
-| `/profile` | Hồ sơ |
-| `/staff` | Staff warehouse operations |
-| `/admin` | Quản lý catalog dành cho Admin |
-
-### 5.2 Node.js API
-
-API nằm tại `apps/api-node` và chia theo route/controller/service/repository/validator.
-
-Route family hiện hành:
-
-- `/api/auth`: OTP, register, login, refresh, logout, password reset, profile.
-- `/api/posts`: board, catalog, mine, image analysis, CRUD post, matching, media.
-- `/api/staff`: warehouse catalog, list/create/update item và storage logs; yêu cầu `STAFF` hoặc `ADMIN`.
-- `/api/admin`: CRUD category, area và building; toàn bộ route yêu cầu `ADMIN`.
-- `/api/health`: liveness cơ bản.
-- `/api/ready`: readiness kiểm tra kết nối MySQL và trả `503` không lộ chi tiết kết nối khi DB chưa sẵn sàng.
-
-Node.js là schema owner và write owner duy nhất.
-
-### 5.3 Java
-
-`apps/java-admin-service` chỉ có Spring Boot application và Actuator. Không có controller/service/repository nghiệp vụ. Chi tiết tại [node-java-service-boundary.md](node-java-service-boundary.md).
-
-## 6. Luồng hiện hành
-
-### 6.1 Đăng ký và đăng nhập
-
-```text
-Nhập email + thông tin tài khoản
--> Yêu cầu OTP
--> API tạo OTP đã hash, có hạn dùng và gửi qua SMTP
--> Người dùng nhập OTP
--> API tạo user + roles trong transaction
--> Tạo access token + refresh session
--> Web chuyển tới /home
-```
-
-Refresh token được lưu dạng hash trong database và gửi cho trình duyệt qua cookie `HttpOnly`. Logout revoke refresh token hiện tại.
-
-### 6.2 Tạo bài LOST/FOUND thủ công
-
-```text
-Chọn LOST hoặc FOUND
--> Chọn nhóm chính
--> Chọn danh mục cụ thể thuộc nhóm
--> Nhập thời gian, vị trí, mô tả, liên hệ
--> FOUND chọn nơi lưu/điểm bàn giao và có thể bật PRIVATE_DETAILS
--> API validate quan hệ category/location/handover
--> Tạo post OPEN
--> Upload ảnh nếu có
--> Chạy matching best-effort
--> Mở trang kết quả matching hoặc My Posts
-```
-
-Lỗi matching không rollback bài đăng hợp lệ.
-
-### 6.3 Tạo bản nháp từ ảnh
-
-```text
-Chọn 1-5 ảnh
--> Người dùng chủ động bấm Phân tích ảnh
--> API kiểm tra MIME, chữ ký file, số lượng và tổng dung lượng
--> Gemini trả title/description/category/tags/safe visible text
--> Backend map category về danh mục con thật trong DB
--> Web điền form nháp
--> Người dùng kiểm tra/chỉnh sửa
--> Chỉ khi bấm Đăng bài thì post mới được lưu
-```
-
-Gemini không tự suy luận quyền sở hữu, không tự đăng bài và không auto-return vật phẩm.
-
-### 6.4 Matching
-
-```text
-Post được tạo/cập nhật
--> Lấy tập bài đối nghịch LOST/FOUND đang hoạt động
--> Giới hạn candidate theo config
--> Chuẩn hóa text tiếng Việt
--> Tính component scores
--> Áp dụng penalty/cap
--> Lưu match_results từ weak threshold trở lên
--> Trả score, tier và explanation cho actor có quyền
-```
-
-Tier mặc định:
-
-| Score | Tier | Hành vi hiện tại |
-| --- | --- | --- |
-| `< 45%` | Bỏ qua | Không lưu |
-| `45-59%` | `WEAK` | Lưu để phân tích, không tự notify |
-| `60-74%` | `SUGGESTION` | Hiển thị gợi ý |
-| `75-84%` | `NOTIFY` | Tier tư vấn; notification chưa triển khai |
-| `>= 85%` | `HIGH_CONFIDENCE` | Tương đồng cao nhưng vẫn cần con người xác minh |
-
-Các tín hiệu hiện tại gồm text, category, location, time, image tags và safe OCR tags. Explanation hiển thị điểm thành phần và lý do/cap có liên quan. Bài `PRIVATE_DETAILS` được redaction tín hiệu thô cho actor không đủ quyền.
+| Auth/account | Node.js, implemented |
+| Posts/catalog/media | Node.js, implemented; media shared storage planned |
+| Matching/AI assistance | Node.js, implemented theo rule-based/Gemini-assisted scope |
+| Claim/evidence/chat/appointment | Chưa có runtime; phải chọn một write owner trước khi làm |
+| Handover point catalog | Node.js, implemented cho public active-only và Admin CRUD |
+| Warehouse | Node.js, implemented một phần cho Staff operations |
+| Notification/realtime | Chưa có runtime |
+| Native Mobile | Client planned, dùng shared API |
 
-### 6.5 Staff warehouse operations
+Không cho Node và Java cùng ghi một business flow/table nếu chưa có API contract, transaction/integration test và one-writer rule.
+
+## 6. Luồng hiện tại có thể kiểm tra
 
-```text
-Staff/Admin mở /staff
--> API kiểm tra JWT và role STAFF/ADMIN
--> Xem thống kê kho, số vật phẩm theo điểm bàn giao và danh sách có phân trang/lọc
--> Tiếp nhận vật phẩm với điểm bàn giao, tình trạng và thông tin vị trí
--> API tính retention deadline theo nhóm vật phẩm
--> Tạo warehouse item và storage log RECEIVED trong cùng transaction
--> Khi đổi trạng thái, API khóa row, kiểm tra state transition và yêu cầu storage code nếu STORED
--> Ghi actor, action, from/to status, condition/note và timestamp vào storage log
-```
+### 6.1 Auth và session
 
-Flow hiện tại hỗ trợ receive/store/claim-state/return/expire/dispose/donate/transfer theo transition map, nhưng chưa có scheduler đánh dấu quá hạn, guard claim/appointment, chứng từ disposition hoặc complete claim-to-handover workflow. Vì vậy các UC overdue/disposition vẫn Planned.
-
-## 7. Dữ liệu và migration
+1. Guest nhập email và thông tin đăng ký.
+2. API gửi OTP qua SMTP; OTP/token được bảo vệ theo auth service và có expiry/rate limit.
+3. API xác thực OTP rồi tạo tài khoản với audience role hợp lệ; client không tự cấp Staff/Admin.
+4. User đăng nhập bằng email/password.
+5. Access token dùng cho protected API; refresh token cookie được rotate; logout revoke session.
+6. Forgot/reset password dùng OTP có hạn dùng và một lần.
+7. Web route guard đưa user chưa đăng nhập về login; role không đủ được đưa về home.
 
-Migration Node.js là nguồn schema duy nhất. `schema_migrations` chỉ lưu checksum sau khi toàn bộ file chạy thành công. `schema_migration_attempts` ghi `RUNNING`/`FAILED`/`APPLIED` để phát hiện lần chạy có thể đã áp dụng DDL một phần; runner dừng và yêu cầu reconcile thủ công thay vì tuyên bố rollback an toàn hoặc tự retry phá dữ liệu.
+### 6.2 Tạo và quản lý bài
 
-Nhóm bảng đang được runtime sử dụng trực tiếp:
+1. User chọn hướng LOST hoặc FOUND trên home storytelling.
+2. User có thể nhập form thủ công hoặc gửi tối đa 5 ảnh cho Gemini-assisted draft.
+3. Draft chỉ điền title, description, category suggestion, tags và visible text; user phải review/chỉnh sửa.
+4. User chọn category cụ thể sau nhóm chính, thời gian, area/building và địa điểm hợp lệ.
+5. FOUND phải có nơi lưu/địa điểm hợp lệ; LOST không dùng handover point như nơi bàn giao.
+6. API validate merged state, lưu post và media; owner có thể update/close/soft-delete theo quyền.
+7. Board public không trả post hidden/deleted và public serializer che private fields.
 
-- `users`, `roles`, `user_roles`.
-- `email_otps`, `refresh_tokens`, `password_reset_tokens`.
-- `posts`, `post_media`, `ai_tags`, `match_results`.
-- `item_categories`, `campus_areas`, `campus_buildings`; `handover_points` có public active-only read và Admin management runtime.
-- `config_entries` cho một số matching weights/thresholds đọc nội bộ.
+### 6.3 Matching
 
-Runtime hiện dùng thêm `warehouse_items`, `storage_logs` và retention config cho Staff warehouse operations. Các bảng claim, appointment, notification, chat, reputation, radar, proof vault và finder scan vẫn là schema foundation; sự tồn tại của bảng không được dùng làm bằng chứng UC đã Done.
+1. Create/update post gọi matching best-effort với candidate đối nghịch còn hoạt động.
+2. Engine normalize tiếng Việt và tính điểm text, category, location, time, image tags và safe OCR tags.
+3. Candidate bị giới hạn theo số lượng và cửa sổ thời gian; có penalty/cap cho category/time không phù hợp.
+4. Kết quả được lưu cùng score thành phần, tier, matcher version và explanation.
+5. Owner có thể xem/recalculate bằng endpoint được bảo vệ và rate-limited.
+6. Score chỉ là gợi ý; không tự accept claim, xác minh sở hữu hay đổi trạng thái returned.
 
-Khi dùng shared cloud MySQL:
-
-1. Không sửa migration đã chạy.
-2. Chỉ thêm migration mới.
-3. Chỉ một người chạy migration sau review.
-4. Không chạy test destructive trên DB chung.
-5. Tách database dev/demo/test nếu có thể.
-
-## 8. Media storage
-
-Code hiện tại lưu file tại `UPLOAD_DIR` (mặc định `apps/api-node/uploads`) và lưu URI nội bộ dạng `private://post-media/...` trong DB. Client chỉ nhận URL proxy `/api/posts/:postId/media/:mediaId`.
-
-Giới hạn hiện tại:
-
-- File không tự đồng bộ giữa máy của các thành viên.
-- Shared Aiven DB có thể tham chiếu file chỉ tồn tại trên máy người upload.
-- Restart/deploy sang máy mới có thể mất media nếu volume không persistent.
-- Scale nhiều API instance không an toàn nếu không có shared object storage.
-
-Cloudinary/S3-compatible storage là việc cần làm trước shared staging/deployment. Sau khi chuyển, private media vẫn phải đi qua signed/authenticated access; không trả raw private URL.
-
-## 9. Security hiện tại
-
-- Password hash bằng bcrypt.
-- OTP và refresh token không lưu plaintext.
-- OTP có expiry và giới hạn số lần thử.
-- Auth endpoints có rate limit cơ bản.
-- Refresh token dùng cookie `HttpOnly`.
-- JWT session version được kiểm tra lại với DB.
-- `helmet` và CORS allowlist được cấu hình.
-- Zod validate request payload/query/params.
-- Admin API bắt buộc role `ADMIN`.
-- Owner guard áp dụng cho update/delete post và media.
-- Upload kiểm tra MIME, kích thước và file signature.
-- Gemini key chỉ dùng server-side.
+### 6.4 Catalog và warehouse hiện tại
 
-Khoảng trống cần hardening:
+1. Admin quản lý category, area, building và handover point.
+2. Điểm bàn giao có map image, marker X/Y từ 0–100, opening hours, active flag và liên kết area/building.
+3. Public API chỉ trả điểm active; Admin có thể tạm đóng/mở.
+4. Staff/Admin tạo warehouse item, tiếp nhận, lưu kho hoặc trả đồ theo state transition.
+5. Mỗi transition warehouse ghi actor/action/from-to/status note vào storage log.
+6. Retention deadline được tính theo thời điểm nhận và policy hiện có. Overdue disposition là planned/partial, chưa được hiểu là tự động thanh lý.
 
-- Chạy và mở rộng DB integration suite trên MySQL local `_test` cho auth/post/media/matching permissions; suite từ chối Aiven/shared DB.
-- Chuyển media sang object storage dùng chung.
-- Bổ sung audit log cho admin catalog writes.
-- Readiness hiện kiểm tra DB; SMTP/Gemini vẫn là dependency tùy chọn và chưa nằm trong readiness gate.
-
-## 10. Kiểm thử
+## 7. Luồng nghiệp vụ mục tiêu: peer-to-peer first
 
-Hiện có:
+Luồng sau là thiết kế mục tiêu và chỉ được ghi Implemented khi code/test tương ứng xuất hiện:
 
-- Unit tests cho auth validation/security, CORS và media signature.
-- Unit tests cho Gemini category mapping/multi-image behavior.
-- Unit tests cho matching score, tier, cap và redaction.
-- HTTP integration tests cho malformed JSON, API 404 và liveness/readiness.
-- Test transaction cho post/analysis tags, media slot locking và lỗi filesystem.
-- DB integration suite opt-in, có guard chỉ cho MySQL local và database hậu tố `_test`.
-- Playwright tests cho home responsive, board/filter/detail và storytelling create-post flow.
-- Playwright tests cho thông báo reset password và logout khi API lỗi.
-- Playwright tests cho Staff warehouse receive/update/log flow.
-- TypeScript build cho API và web.
-
-Kết quả xác minh ngày 26/08/2026:
-
-- `npm test`: 47 API tests pass, 1 DB integration test safety-skip; web TypeScript check pass.
-- `npm run build`: Node.js API và React web build pass.
-- `npm --workspace @lnfs/web run e2e:home`: 14/14 Playwright tests pass.
-- `npm run build:java`: không chạy được vì môi trường chưa có `mvn`; chưa kết luận Java source lỗi.
-
-Chưa có:
-
-- Bằng chứng chạy DB integration suite trên một MySQL isolated thực tế của team.
-- E2E auth OTP thật với SMTP sandbox.
-- Concurrency tests cho claim/appointment vì runtime chưa triển khai.
-- Load test và query-plan benchmark.
-- CI workflow trong codebase mới.
-
-## 11. Kế hoạch 9 sprint trong 19 tuần
-
-| Sprint | Thời gian | Trọng tâm và release evidence |
-| --- | --- | --- |
-| Sprint 1 | 01/08/2026–10/08/2026 | Khởi tạo dự án, Report 1, nền tảng requirement và authentication theo lịch sử thực tế |
-| Sprint 2 | 11/08/2026–18/08/2026 | Post/catalog foundation, Report 1 và requirement/design/test evidence tương ứng |
-| Sprint 3 | 19/08/2026–16/09/2026 | Cập nhật Report 1–2, hoàn thiện task đang thực hiện, đồng bộ backlog và tài liệu |
-| Sprint 4 | 17/09/2026–30/09/2026 | Claim/evidence/privacy flow; cập nhật Report 3–5 trong cùng sprint |
-| Sprint 5 | 01/10/2026–14/10/2026 | Review, appointment và handover workflow; state/sequence/test evidence |
-| Sprint 6 | 15/10/2026–28/10/2026 | Warehouse overdue/disposition, audit và operational hardening |
-| Sprint 7 | 29/10/2026–11/11/2026 | Matching/AI/OCR decision support, notification và hoàn thiện PWA |
-| Sprint 8 | 12/11/2026–25/11/2026 | Full integration, system/regression testing, server deployment và release validation |
-| Sprint 9 | 26/11/2026–13/12/2026 | Real-user feedback/UAT, P0/P1 fixes, regression, final documentation và demo |
-
-Mỗi sprint phải cập nhật theo chiều ngang: requirement/SRS (Report 3), analysis/design (Report 4), implementation, test evidence (Report 5), Sprint Review và release/document synchronization. Không di chuyển ticket lịch sử đã Done chỉ để roadmap trông thuận lợi hơn.
-
-## 12. Planned effort và capacity
-
-Tổng planned effort là **416 man-days**. Planning envelope là **456 man-days**, gồm **40 man-days reserve** cho rủi ro, integration và defect variance.
-
-| # | WBS item | Complexity | Man-days |
-| --- | --- | ---: | ---: |
-| 1 | Authentication and account management | Medium | 20 |
-| 2 | LOST/FOUND posts, media, category, area, building, search and filtering management | Complex | 40 |
-| 3 | Administration foundation, warehouse and operational management | Complex | 64 |
-| 4 | Claim, evidence, review, appointment, handover and audit flow | Complex | 80 |
-| 5 | Matching suggestions, match explanation and AI/OCR decision support | Complex | 80 |
-| 6 | Realtime notification and communication support | Medium | 28 |
-| 7 | Progressive Web App | Medium | 20 |
-| 8 | Integration, testing, fixing, documentation, deployment and final preparation | Complex | 84 |
-|  | **Total** |  | **416** |
-
-| Work category | Man-days | Percentage |
-| --- | ---: | ---: |
-| Requirements Analysis and SRS | 48 | 11.5% |
-| System and Database Design | 52 | 12.5% |
-| Coding and Implementation | 190 | 45.7% |
-| Testing and Bug Fixing | 56 | 13.5% |
-| Project Management and Scrum Activities | 36 | 8.7% |
-| Documentation, Final Review and Demonstration Preparation | 34 | 8.2% |
-| **Total** | **416** | **100%** |
-
-Milestone Timeliness Target: **95%**. Allocation phần trăm có sai số làm tròn nhỏ; tổng effort bắt buộc giữ ở 416 man-days.
-
-## 13. Deployment và feedback strategy
-
-1. Hoàn thành core workflows và PWA, đồng bộ requirement/design/test evidence trong sprint tương ứng.
-2. Chạy integration, system và regression tests trên môi trường tách khỏi shared Aiven development database.
-3. Chuẩn bị server configuration, shared media storage, secrets management, health/readiness và rollback procedure.
-4. Deploy release candidate lên server và hoàn tất release validation.
-5. Cho real users sử dụng trong phạm vi campus pilot, thu feedback có kiểm soát.
-6. Phân loại P0/P1/P2, fix lỗi, regression test và cập nhật tài liệu/demo.
-
-Repository hiện chưa có CI/CD workflow, container/deployment manifest hoặc PWA runtime evidence; vì vậy deployment là planned deployment, không phải trạng thái đã hoàn thành.
-
-## 14. Cách trình bày đồ án
-
-Nên nói:
-
-> LNFS là Web Application with Progressive Web App support cho quy trình Lost & Found campus. Current implementation đã có authentication, quản lý bài LOST/FOUND, Gemini-assisted image/OCR draft, hybrid matching có giải thích và Staff warehouse operations. Claim, appointment, realtime, PWA infrastructure và server deployment đang được hoàn thiện theo kế hoạch 9 sprint; AI chỉ hỗ trợ quyết định và mọi xác minh sở hữu vẫn cần con người.
-
-Không nên nói:
-
-- “Toàn bộ flow Lost & Found đã production-ready.”
-- “Hệ thống dùng custom AI model đã train.”
-- “Node và Java là production microservices hoàn chỉnh.”
-- “Media đã dùng Cloudinary” khi runtime còn lưu filesystem local.
-- “PWA đã hoàn thành” khi chưa có manifest/service worker/installability/offline fallback.
-- “Native mobile app đã hoàn thành.”
-
-## 15. Tài liệu liên quan
-
-- [Requirements](requirements.md)
-- [Business rules](business-rules.md)
-- [Traceability matrix](traceability-matrix.md)
-- [Use case checklist](use-case-checklist.md)
-- [Node.js/Java boundary](node-java-service-boundary.md)
+1. Owner tạo LOST report với public description và private details nếu cần.
+2. Finder tạo FOUND report và tiếp tục giữ vật phẩm; mặc định không chuyển thẳng vào Staff custody.
+3. Matching gợi ý các LOST/FOUND đối ứng và giải thích tín hiệu tương đồng.
+4. Owner gửi verification request cho FOUND phù hợp.
+5. Hệ thống mở conversation riêng đúng cặp Owner–Finder–LOST–FOUND.
+6. Finder dùng guided questions theo category; Owner trả lời mà không được xem trước private answer/attribute.
+7. Finder chọn MORE_INFO_REQUIRED, MEETUP_ACCEPTED, DECLINED hoặc ESCALATED.
+8. Hai bên đề xuất và cùng xác nhận thời gian/địa điểm; appointment chỉ confirmed khi có mutual agreement.
+9. Hai bên gặp trực tiếp; Finder xác nhận HANDED_OVER, Owner xác nhận RECEIVED.
+10. Chỉ khi dual confirmation hợp lệ, hệ thống mới chuyển item sang RETURNED/đóng hồ sơ.
+11. Dispute, no-show, harassment, sensitive item hoặc Finder không thể giữ đồ thì chuyển escalation/Staff custody với quyền tối thiểu và audit.
+
+## 8. State model mục tiêu và mapping
+
+FOUND item mục tiêu:
+
+~~~text
+REPORTED → HELD_BY_FINDER → CHATTING → RESERVED → MEETUP_SCHEDULED
+→ HANDOVER_PENDING_CONFIRMATION → RETURNED → CLOSED
+~~~
+
+Nhánh custody:
+
+~~~text
+HELD_BY_FINDER/CHATTING → TRANSFER_REQUESTED → IN_CUSTODY
+→ STAFF_HANDOVER_SCHEDULED → STAFF_RETURNED → CLOSED
+~~~
+
+Warehouse exception:
+
+~~~text
+IN_CUSTODY → OVERDUE → TRANSFERRED/DISPOSED → CLOSED
+~~~
+
+Schema hiện tại có post status OPEN/MATCHED/RESOLVED/CLOSED/EXPIRED/HIDDEN, claim/appointment/warehouse enum trong migrations nhưng không đồng nghĩa các API flow đó đã có. Cần tạo mapping current → target và migration riêng trước khi đổi enum; không sửa migration đã chạy.
+
+## 9. Privacy, AI và sensitive item
+
+- Public description tách khỏi private verification attributes.
+- Ảnh public phải tránh lộ toàn bộ serial, IMEI, QR/barcode, giấy tờ và thông tin liên hệ.
+- Gemini/OCR chỉ đọc tín hiệu trong ảnh để hỗ trợ draft/matching; không suy đoán quyền sở hữu.
+- Human verification bắt buộc trước khi trả đồ.
+- Claim evidence trong tương lai phải có protected access; không trả raw storage URL cho actor không có quyền.
+- Thẻ sinh viên, CCCD, ngân hàng, điện thoại/laptop, chìa khóa, tiền, thuốc và vật nguy hiểm cần policy vận hành riêng; phần chưa được trường xác nhận ghi TBD.
+
+## 10. Database, migration và media
+
+Migrations SQL nằm tại apps/api-node/src/migrations, được chạy theo thứ tự và kiểm tra checksum. Repository hiện có schema cho auth, posts, catalog, matching, claims, appointments, chat, notifications, warehouse, AI feedback và map/catalog, nhưng schema không thay thế runtime evidence.
+
+Khi dùng Aiven/shared MySQL:
+
+- mỗi môi trường nên có database riêng;
+- chỉ một người chạy migration sau review;
+- không chạy test destructive trên shared DB;
+- không commit .env, password, API key hay CA certificate;
+- media local trên từng máy không đồng bộ theo database; trước staging cần shared object storage.
+
+## 11. Kiểm thử và evidence
+
+Evidence đã kiểm tra ngày 01/09/2026:
+
+- npm test: 53 test pass, 1 DB integration test skip an toàn vì thiếu MySQL local _test; web TypeScript check pass.
+- npm run build: API TypeScript build và Web production build pass.
+- npm run build:java: chưa chạy được vì Maven không có trong PATH.
+- `npm --workspace @lnfs/web run e2e:home`: 16/16 Playwright tests pass, gồm auth resilience, post creation, matching view, mobile layout, Staff warehouse và Admin handover/map.
+
+Các gap còn lại: claim race/concurrency, evidence privacy, peer chat room isolation, appointment dual confirmation, full warehouse disposition, PWA browser/device matrix, Native Mobile, load test, UAT và deployment rollback.
+
+## 12. Deployment và roadmap
+
+Current deployment evidence chưa chứng minh một production/staging environment hoàn chỉnh. Aiven là lựa chọn shared database đã được nhóm sử dụng, nhưng cần cấu hình TLS và tách môi trường. Web/API deployment, persistent media, secret management, health/readiness, monitoring, backup và rollback cần checklist riêng.
+
+Không ghi sprint date, assignee hoặc Jira status nếu chưa được kiểm tra Jira. Ngày Sprint 4 nêu trong prompt là planning input cần verify lại, không phải evidence repository.
+
+## 13. Tài liệu liên quan
+
+- Quy trình nghiệp vụ A–Z: LNFS_BUSINESS_PROCESS_A_TO_Z.md
+- Requirements: requirements.md
+- Business rules: business-rules.md
+- Traceability matrix: traceability-matrix.md
+- Use-case checklist: use-case-checklist.md
+- Node/Java boundary: node-java-service-boundary.md

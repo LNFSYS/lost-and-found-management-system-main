@@ -1,103 +1,85 @@
 # FPTU Lost & Found System
 
-Web Application with Progressive Web App (PWA) support cho quy trình báo mất và báo nhặt đồ tại FPT University Đà Nẵng.
+## Định vị sản phẩm
 
-Current implementation baseline gồm authentication, LOST/FOUND posts, Gemini-assisted image/OCR draft, rule-based/hybrid matching có giải thích và Staff warehouse operations. Claim, evidence review, appointment, warehouse disposition, realtime và PWA infrastructure tiếp tục được hoàn thiện theo kế hoạch 9 sprint.
+**Software type:** Web Application with Progressive Web App (PWA) support and a Native Mobile Application.
 
-## Chức năng hiện có
+LNFS là hệ thống Lost & Found cho FPT University Đà Nẵng. Sản phẩm mục tiêu có ba kênh dùng chung backend, authentication, authorization, validation, privacy rules và business state transitions:
 
-- Đăng ký bằng email OTP qua Gmail/SMTP.
-- Đăng nhập, JWT access token, refresh token cookie, logout.
-- Quên/đặt lại mật khẩu và profile cơ bản.
-- Role guard cho User/Student/Lecturer/Staff/Admin.
-- Storytelling home tích hợp form tạo LOST/FOUND post.
-- Board, My Posts, tìm kiếm/lọc/sắp xếp, post detail.
-- Category hai cấp, area/building và public active-only handover-point catalog.
-- Upload/xóa ảnh bài đăng qua protected media endpoint.
-- `PRIVATE_DETAILS` cho bài FOUND.
-- Gemini-assisted multi-image analysis tạo bản nháp chỉnh sửa được.
-- Hybrid matching dùng text/category/location/time/image/safe OCR tags.
-- Lưu score tier, explanation và manual recalculation.
-- Admin CRUD category, area, building và điểm bàn giao; hỗ trợ ảnh map, kéo marker, giờ hoạt động, trạng thái và hard-delete guard.
-- Staff warehouse operations: tiếp nhận, lưu/trả vật phẩm, retention deadline, thống kê điểm bàn giao và storage log.
-- Responsive web cho desktop/mobile browser với Playwright mobile viewport checks.
+- **Web Application:** kênh hiện có, dùng trên desktop/laptop và cung cấp các màn hình vận hành Staff/Admin.
+- **PWA:** phần mở rộng của web responsive, hướng tới installability, offline application shell và camera/gallery trên mobile browser. Không gọi PWA là native app và không giả định toàn bộ workflow chạy offline.
+- **Native Mobile Application:** phạm vi sản phẩm bắt buộc theo kế hoạch, nhưng **chưa có project hoặc implementation evidence trong repository hiện tại**; trạng thái là `Planned — project not created yet`.
 
-## Chưa hoàn thành
+Current repository là baseline Web + Node.js API. Native Mobile, PWA infrastructure và các workflow peer-return nâng cao được theo dõi riêng trong tài liệu để không nhầm planned scope với tính năng đã triển khai.
 
-- Claim/evidence, appointment, warehouse overdue/disposition, notification và Socket.IO chat.
-- Admin user management, moderation, report, config và dashboard toàn hệ thống.
+## Baseline hiện tại
+
+Đã có code runtime và bằng chứng test phù hợp cho:
+
+- Đăng ký email OTP qua SMTP, đăng nhập password, JWT access/refresh, logout, forgot/reset password và profile cơ bản.
+- Role guard `USER`, `STUDENT`, `LECTURER`, `STAFF`, `ADMIN`; Admin và Staff có vùng vận hành khác nhau.
+- Tạo/cập nhật/đóng/xóa mềm bài `LOST` và `FOUND`, board, bài của tôi, chi tiết bài, tìm kiếm, lọc, sắp xếp và phân trang.
+- Category hai cấp, khu vực, tòa nhà và điểm bàn giao active-only; Admin quản lý điểm bàn giao, ảnh map, marker, giờ hoạt động và hard-delete guard.
+- Upload media bài đăng qua local protected media proxy, có kiểm tra loại, kích thước và file signature.
+- Gemini-assisted multi-image analysis tạo bản nháp có thể chỉnh sửa; không tự đăng bài và không tự xác minh quyền sở hữu.
+- Hybrid/rule-based matching với text normalization tiếng Việt, category, location, time, image/OCR tags, tier, score breakdown và explanation.
+- Staff warehouse operations: tiếp nhận, lưu, trả, retention deadline, handover counts và storage log.
+
+Các mục trên là **current implementation baseline**, không đồng nghĩa mọi workflow trong product scope đã hoàn tất end-to-end.
+
+## Phạm vi mục tiêu
+
+Luồng nghiệp vụ mục tiêu là:
+
+`LOST/FOUND post → matching suggestion → private verification chat → finder decision → meetup → dual-confirmed direct handover`
+
+Staff custody/warehouse là nhánh hỗ trợ hoặc escalation khi Finder không thể tiếp tục giữ đồ, có dispute, item nhạy cảm/nguy hiểm hoặc policy yêu cầu chuyển vào kho. Claim/evidence, appointment, realtime chat/notification và phần PWA/native mobile chưa được mô tả là đã chạy nếu chưa có route, UI và test evidence.
+
+## Trạng thái chưa có runtime evidence
+
+- Peer-to-peer verification conversation, guided questions, claim/evidence upload/review, multiple claimant isolation.
+- Meetup proposal/acceptance/reschedule và dual-confirmation direct handover.
+- Socket.IO realtime chat, image message, unread/seen và realtime notification.
+- Overdue disposition, donation/transfer/disposal document flow và dispute escalation.
+- PWA manifest, service worker, installability, offline shell và browser/device verification.
+- Native Mobile Application.
+- Custom-trained AI model, MLOps hoặc production model registry.
 - Shared object storage; media hiện lưu local filesystem.
-- Java business endpoints; Java hiện chỉ có health-check skeleton.
-- PWA manifest, service worker, installability và safe offline/error fallback.
-- Native mobile app và custom-trained AI model là future enhancements.
+- Java business endpoints; Java hiện chỉ là Spring Boot health skeleton.
 
-## Công nghệ
+## Kiến trúc hiện tại
 
-| Layer | Công nghệ |
-| --- | --- |
-| Web/PWA | React 18, TypeScript, Vite, React Router; PWA infrastructure đang Planned/Partial |
-| Core API | Node.js, Express, TypeScript |
-| Database | MySQL 8+ |
-| Email | SMTP/Gmail App Password |
-| Image assistance | Gemini API, tùy chọn |
-| Current media storage | Protected local filesystem |
-| Java | Spring Boot Actuator skeleton |
-| Tests | Node test runner, TypeScript, Playwright |
+```text
+Web responsive client ─────┐
+                            ├── Node.js/Express API ── MySQL
+PWA target (same web) ──────┘          ├── local media storage (current)
+                                       └── Gemini-assisted analysis (optional)
 
-Node.js là runtime/write owner duy nhất. Xem [ranh giới Node.js và Java](docs/node-java-service-boundary.md).
+Native Mobile (planned) ─── shared API/auth/business rules
+
+Java/Spring Boot: health skeleton only; no current business ownership
+```
+
+Node.js là runtime và write owner duy nhất của các flow đang có. Xem [ranh giới Node.js và Java](docs/node-java-service-boundary.md).
 
 ## Yêu cầu môi trường
 
 - Node.js 20+
 - npm 10+
-- MySQL 8+ hoặc Aiven MySQL
-- Gmail account đã bật 2-Step Verification và App Password nếu test email thật
-- Java 21 + Maven chỉ khi chạy Java health skeleton
+- MySQL 8+ hoặc Aiven MySQL có TLS
+- Java 21 + Maven chỉ khi kiểm tra Java health skeleton
+- SMTP provider và Gmail App Password nếu cần gửi email thật
+- Gemini API key tùy chọn, chỉ đặt server-side
 
-## Cấu hình
-
-1. Cài dependencies:
+## Cấu hình local
 
 ```bash
 npm install
 ```
 
-2. Tạo `.env` ở root từ `.env.example`.
+Tạo `.env` ở root từ `.env.example`, sau đó điền `DB_*`, `JWT_*`, `SMTP_*` và tùy chọn `GEMINI_*`. Không commit `.env`, API key, password, token hoặc CA certificate. Nếu credential từng bị lộ, cần rotate ngay; không đưa secret vào issue, log hoặc tài liệu.
 
-3. Điền các nhóm biến:
-
-- `DB_*`: MySQL connection.
-- `JWT_ACCESS_SECRET`: chuỗi bí mật dài và riêng cho môi trường.
-- `SMTP_*`: SMTP host/user/App Password/from.
-- `GEMINI_*`: tùy chọn, chỉ đặt server-side.
-- `UPLOAD_DIR`: thư mục media local hiện tại.
-
-Không commit `.env`, CA certificate, password, API key hoặc token. Nếu secret từng xuất hiện trong ảnh/chat/log công khai, hãy rotate secret đó.
-
-### Gmail SMTP
-
-```env
-SMTP_HOST=smtp.gmail.com
-SMTP_PORT=465
-SMTP_SECURE=true
-SMTP_USER=your-address@gmail.com
-SMTP_PASS=your-gmail-app-password
-SMTP_FROM="FPTU Lost & Found <your-address@gmail.com>"
-```
-
-Không dùng mật khẩu Gmail chính.
-
-### Gemini
-
-```env
-GEMINI_API_KEY=your-server-side-key
-GEMINI_MODEL=your-supported-gemini-model
-GEMINI_TIMEOUT_MS=30000
-```
-
-API key không được đặt trong biến `VITE_*`. Nếu provider chưa cấu hình hoặc lỗi, user vẫn có thể nhập form thủ công.
-
-### Aiven MySQL
+Ví dụ Aiven MySQL:
 
 ```env
 DB_HOST=your-service.aivencloud.com
@@ -109,105 +91,48 @@ DB_SSL=true
 DB_SSL_CA_PATH=certs/aiven-ca.pem
 ```
 
-CA certificate và `.env` phải nằm ngoài Git. Không tắt TLS verification để né lỗi certificate.
+Không tắt TLS verification để né lỗi certificate. Khi dùng database chung, chỉ một người được chạy migration sau khi review; không chạy test destructive trên database chung. Nên tách database dev/demo/test.
 
-## Migration
+## Chạy và kiểm tra
 
 ```bash
 npm run check:env
 npm run migrate
-```
-
-Migration runner lưu checksum sau khi toàn bộ file migration chạy thành công. Vì MySQL DDL có thể auto-commit, runner còn lưu trạng thái vào `schema_migration_attempts`. Nếu một lần chạy bị dở dang, runner sẽ dừng và yêu cầu kiểm tra/reconcile schema thủ công; hệ thống không tự rollback hoặc tự chạy lại một migration có khả năng đã áp dụng một phần.
-
-Nếu gặp `Migration checksum mismatch`, không sửa/bypass migration đã chạy; hãy khôi phục nội dung gốc hoặc tạo migration mới. Nếu gặp `incomplete attempt`, đọc migration được nêu trong lỗi, đối chiếu schema thực tế rồi chỉ xóa attempt marker sau khi đã xử lý an toàn.
-
-Quy tắc khi dùng DB chung:
-
-1. Chỉ một thành viên chạy migration sau khi PR được review.
-2. Không `DROP`, `TRUNCATE` hoặc sửa schema thủ công.
-3. Không chạy test destructive trên shared DB.
-4. Tách database dev/demo/test khi có thể.
-
-## Chạy local
-
-```bash
 npm run dev
 ```
 
 - Web: `http://localhost:5173`
 - API: `http://localhost:3001`
 - Liveness: `http://localhost:3001/api/health`
-- Readiness (kiểm tra DB): `http://localhost:3001/api/ready`
+- Readiness: `http://localhost:3001/api/ready`
 
-Chạy riêng:
-
-```bash
-npm run dev:web
-npm run dev:api
-```
-
-Java health skeleton:
-
-```bash
-npm run dev:java
-```
-
-## Test và build
+Các lệnh kiểm tra có sẵn:
 
 ```bash
 npm test
 npm run build
+npm run build:java
 npm --workspace @lnfs/web run e2e:home
 ```
 
-DB integration tests chỉ được chạy với một MySQL local riêng; script từ chối host remote/Aiven và yêu cầu tên database kết thúc bằng `_test`:
+`build:java` cần Maven trong `PATH`. Database integration test chỉ được trỏ vào MySQL local riêng có tên kết thúc bằng `_test`; không dùng Aiven/shared DB.
 
-```powershell
-$env:LNFS_DB_INTEGRATION="1"
-$env:LNFS_TEST_DB_HOST="127.0.0.1"
-$env:LNFS_TEST_DB_PORT="3306"
-$env:LNFS_TEST_DB_NAME="lnfs_integration_test"
-$env:LNFS_TEST_DB_USER="your_test_user"
-$env:LNFS_TEST_DB_PASSWORD="your_test_password"
-npm --workspace @lnfs/api-node run test:db-integration
-```
+## Media và làm việc nhóm
 
-Không trỏ các biến `LNFS_TEST_DB_*` vào Aiven/shared DB.
+Metadata media nằm trong MySQL nhưng file hiện được lưu trên `UPLOAD_DIR` của từng máy. Dùng chung database mà chạy API trên nhiều máy có thể tạo reference tới file không tồn tại trên máy khác. Trước staging cần chuyển sang shared object storage và giữ protected/signed access cho private media.
 
-Playwright có thể cần cài browser lần đầu:
+## Tài liệu chính
 
-```bash
-npx playwright install chromium
-```
-
-## Lưu ý media khi làm việc nhóm
-
-Post media đang được ghi vào `UPLOAD_DIR` trên từng máy, trong khi metadata nằm trong MySQL. Nếu cả nhóm dùng chung Aiven DB, ảnh do máy A upload sẽ không tự xuất hiện trên máy B. Khi đó API có thể gặp file reference không tồn tại.
-
-Giải pháp ngắn hạn là cùng test trên một API host có persistent volume. Giải pháp đúng trước staging là chuyển sang Cloudinary/S3-compatible shared object storage và vẫn bảo vệ private media bằng signed/authenticated access.
-
-## Cấu trúc
-
-```text
-apps/
-  api-node/            Node.js core API và migrations
-  web/                 React web app
-  java-admin-service/  Spring Boot health skeleton
-docs/                  Tài liệu phạm vi, requirement, rules và checklist
-scripts/               Kiểm tra môi trường
-```
-
-## Tài liệu
-
-Bắt đầu tại [docs/README.md](docs/README.md).
-
-- [Project overview](docs/project-overview.md)
+- [Tài liệu index](docs/README.md)
+- [Tổng quan dự án](docs/project-overview.md)
+- [Quy trình nghiệp vụ A–Z](docs/LNFS_BUSINESS_PROCESS_A_TO_Z.md)
 - [Requirements](docs/requirements.md)
 - [Business rules](docs/business-rules.md)
-- [Traceability](docs/traceability-matrix.md)
+- [Traceability matrix](docs/traceability-matrix.md)
 - [Use-case checklist](docs/use-case-checklist.md)
+- [Node.js/Java boundary](docs/node-java-service-boundary.md)
+- [Documentation update report](docs/DOCUMENTATION_UPDATE_REPORT.md)
 
-## Cách mô tả trung thực
+## Cách trình bày trung thực
 
-> LNFS là Web Application with PWA support đang được phát triển cho Lost & Found campus. Current implementation đã có authentication, post management, Gemini-assisted image/OCR draft, hybrid matching và Staff warehouse operations; claim, appointment, realtime, PWA infrastructure và server deployment đang được hoàn thiện. Native mobile và custom model training là future enhancements.
+> LNFS là Web Application với định hướng PWA và Native Mobile dùng chung backend. Baseline hiện tại tập trung vào authentication, LOST/FOUND post, catalog, Gemini-assisted draft, hybrid matching và Staff warehouse operations. Peer-to-peer verification, realtime, PWA infrastructure và Native Mobile được quản lý theo trạng thái implementation thực tế; custom AI training là hướng nghiên cứu mở rộng.
