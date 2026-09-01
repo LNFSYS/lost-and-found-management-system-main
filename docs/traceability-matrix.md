@@ -35,7 +35,7 @@ Nguồn status là code/test hiện tại. Mỗi dòng liên kết business rule
 | BR-19, BR-27, BR-39 | NFR-TEST-01 | N/A | Partial | API tests/build và web typecheck có; complete product flow chưa có |
 | BR-27, BR-28 | NFR-DATA-02 | N/A | Process rule | README yêu cầu không destructive test trên Aiven/shared DB |
 | BR-27 | NFR-OBS-01 | N/A | Partial | /api/health và /api/ready có; graceful shutdown/observability cần verify thêm |
-| BR-31 | NFR-AUDIT-01 | UC-015, UC-064–UC-067 | Partial | Warehouse storage log có; admin audit chưa có |
+| BR-31 | NFR-AUDIT-01 | UC-015, UC-064–UC-067 | Partial | Warehouse storage log và admin user/config audit đã có; audit catalog/moderation và toàn bộ transition còn thiếu |
 
 ## 3. Channel evidence
 

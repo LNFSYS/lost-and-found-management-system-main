@@ -22,6 +22,77 @@ export interface AdminHandoverPoint {
   createdAt: string;
 }
 export interface AdminCatalog { stats: { totalPosts: number; processingPosts: number; totalUsers: number; returnedPosts: number }; categories: AdminCategory[]; areas: AdminArea[]; buildings: AdminBuilding[]; handoverPoints: AdminHandoverPoint[]; }
+export type AdminAccessRole = "ADMIN" | "STAFF" | "USER";
+export type AdminUserStatus = "ACTIVE" | "DISABLED";
+export interface AdminUser {
+  id: string;
+  email: string;
+  fullName: string;
+  studentCode: string | null;
+  phoneNumber: string | null;
+  status: AdminUserStatus;
+  roles: Role[];
+  accessRole: AdminAccessRole;
+  createdAt: string;
+  updatedAt: string;
+}
+export interface AdminUserListResponse { total: number; page: number; pageSize: number; items: AdminUser[]; }
+export interface AdminUserFilters { q?: string; role?: AdminAccessRole | ""; status?: AdminUserStatus | ""; page?: number; pageSize?: number; }
+export interface CreateAdminUserPayload {
+  email: string;
+  password: string;
+  fullName: string;
+  studentCode?: string | null;
+  phoneNumber?: string | null;
+  audienceRole?: "STUDENT" | "LECTURER" | null;
+  accessRole: AdminAccessRole;
+  status: AdminUserStatus;
+  reason?: string | null;
+}
+export type UpdateAdminUserPayload = Partial<Pick<AdminUser, "email" | "fullName" | "studentCode" | "phoneNumber" | "accessRole" | "status">> & { reason?: string | null };
+export type ConfigValueType = "STRING" | "INTEGER" | "FLOAT" | "BOOLEAN" | "JSON";
+export interface SystemConfig {
+  id: string;
+  configKey: string;
+  configValue: string;
+  valueType: ConfigValueType;
+  description: string | null;
+  isPublic: boolean;
+  updatedBy: string | null;
+  updatedAt: string;
+}
+export interface SystemConfigListResponse { total: number; page: number; pageSize: number; items: SystemConfig[]; }
+export interface SystemConfigFilters { q?: string; valueType?: ConfigValueType | ""; isPublic?: boolean | ""; page?: number; pageSize?: number; }
+export interface SystemConfigPayload {
+  configKey?: string;
+  configValue?: string;
+  valueType?: ConfigValueType;
+  description?: string | null;
+  isPublic?: boolean;
+  reason?: string | null;
+}
+export interface ConfigHistoryEntry {
+  id: string;
+  configId: string | null;
+  action: string;
+  configKey: string;
+  oldConfigKey: string | null;
+  newConfigKey: string | null;
+  oldValue: string | null;
+  newValue: string;
+  oldValueType: string | null;
+  newValueType: string | null;
+  oldState: Record<string, unknown> | null;
+  newState: Record<string, unknown> | null;
+  changedBy: string;
+  changedAt: string;
+  reason: string | null;
+}
+export interface ConfigHistoryResponse { items: ConfigHistoryEntry[]; }
+export interface PublicConfigResponse {
+  items: Array<{ key: string; value: unknown; valueType: ConfigValueType; description: string | null }>;
+  values: Record<string, unknown>;
+}
 export type WarehouseStatus = "PENDING_APPROVAL" | "RECEIVED" | "STORED" | "CLAIMED" | "RETURNED" | "EXPIRED" | "DISPOSED" | "DONATED" | "TRANSFERRED";
 export interface WarehouseCatalog {
   categories: Array<{ id: string; name: string; parentId: string | null }>;
@@ -339,6 +410,20 @@ export const api = {
     return raw<AdminHandoverPoint>(`/admin/handover-points/${id}/map-image`, { method: "POST", body: form });
   },
   deleteAdminHandoverPoint: (id: string) => raw<void>(`/admin/handover-points/${id}`, { method: "DELETE" }),
+  listAdminUsers: (filters: AdminUserFilters = {}) => raw<AdminUserListResponse>(`/admin/users${queryString(filters)}`),
+  getAdminUser: (id: string) => raw<AdminUser>(`/admin/users/${id}`),
+  createAdminUser: (payload: CreateAdminUserPayload) => raw<AdminUser>("/admin/users", { method: "POST", body: JSON.stringify(payload) }),
+  updateAdminUser: (id: string, payload: UpdateAdminUserPayload) => raw<AdminUser>(`/admin/users/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
+  changeAdminUserRole: (id: string, accessRole: AdminAccessRole, reason?: string) => raw<AdminUser>(`/admin/users/${id}/role`, { method: "PATCH", body: JSON.stringify({ accessRole, reason }) }),
+  changeAdminUserStatus: (id: string, status: AdminUserStatus, reason?: string) => raw<AdminUser>(`/admin/users/${id}/status`, { method: "PATCH", body: JSON.stringify({ status, reason }) }),
+  deleteAdminUser: (id: string) => raw<void>(`/admin/users/${id}`, { method: "DELETE" }),
+  listSystemConfigs: (filters: SystemConfigFilters = {}) => raw<SystemConfigListResponse>(`/admin/configs${queryString(filters)}`),
+  getSystemConfig: (id: string) => raw<SystemConfig>(`/admin/configs/${id}`),
+  createSystemConfig: (payload: Required<Pick<SystemConfigPayload, "configKey" | "configValue" | "valueType">> & SystemConfigPayload) => raw<SystemConfig>("/admin/configs", { method: "POST", body: JSON.stringify(payload) }),
+  updateSystemConfig: (id: string, payload: SystemConfigPayload) => raw<SystemConfig>(`/admin/configs/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
+  getSystemConfigHistory: (id: string, limit = 20) => raw<ConfigHistoryResponse>(`/admin/configs/${id}/history?limit=${limit}`),
+  deleteSystemConfig: (id: string) => raw<void>(`/admin/configs/${id}`, { method: "DELETE" }),
+  getPublicConfig: () => raw<PublicConfigResponse>("/config/public"),
   getWarehouseCatalog: () => raw<WarehouseCatalog>("/staff/warehouse-items/catalog"),
   listWarehouseItems: (filters: WarehouseFilters = {}) => raw<WarehouseDashboard>(`/staff/warehouse-items${queryString(filters)}`),
   createWarehouseItem: (payload: CreateWarehouseItemPayload) => raw<WarehouseItem>("/staff/warehouse-items", { method: "POST", body: JSON.stringify(payload) }),

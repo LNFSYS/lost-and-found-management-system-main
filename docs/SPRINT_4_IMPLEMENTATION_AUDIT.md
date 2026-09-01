@@ -1,6 +1,6 @@
 # LNFS Sprint 4 Implementation Audit
 
-Cập nhật: **01/09/2026**
+Cập nhật: **02/09/2026**
 Nguồn Jira: **LNFS Sprint 4, sprint ID 70, snapshot 01/09/2026**
 Kho đối chiếu: **fptu-lost-found-system-main**
 
@@ -11,7 +11,7 @@ Kho đối chiếu: **fptu-lost-found-system-main**
 Sprint 4 có hướng nghiệp vụ đúng nhưng backlog **chưa đủ chuẩn để giữ nguyên và đánh dấu Done**. Có ba nhóm vấn đề chính:
 
 - LNFS-56 đã có implementation và test thực tế nhưng Jira vẫn To Do.
-- LNFS-50 đang Done nhưng chưa tìm thấy API/UI runtime cho system configuration/public config.
+- LNFS-50 đã có API/UI runtime cho system configuration/public config; đợt hardening này bổ sung history, audit và bảo vệ key nhạy cảm.
 - LNFS-52, LNFS-53, LNFS-54, LNFS-58, LNFS-62, LNFS-63 phụ thuộc lẫn nhau và đang gom quá nhiều claim, chat, appointment, handover, notification và PWA vào một sprint 9 ngày.
 - LNFS-57 ghi Java AI/OCR nhưng kiến trúc repository xác định Node.js là core API; Java chỉ là health skeleton.
 - LNFS-62 và LNFS-63 là ticket umbrella lớn, có nhiều phần trùng với các ticket khác và không nên dùng như story triển khai độc lập.
@@ -21,7 +21,7 @@ Sprint 4 có hướng nghiệp vụ đúng nhưng backlog **chưa đủ chuẩn 
 | Tổng ticket trong snapshot | 17 |
 | Jira Done | 2 |
 | Jira To Do | 15 |
-| Code verified baseline | 1 |
+| Code verified baseline | 3 |
 | Code partial | 7 |
 | Chưa có runtime hoặc sai ownership | 8 |
 | Blocked bởi dependency/artifact | 1 |
@@ -32,7 +32,7 @@ Sprint 4 có hướng nghiệp vụ đúng nhưng backlog **chưa đủ chuẩn 
 | Key | Jira snapshot | Code-verified status | Evidence hiện có | Acceptance/gap/conflict | Khuyến nghị |
 | --- | --- | --- | --- | --- | --- |
 | LNFS-47 | Done, P0, assignee field Võ Chiêu Quân; description ghi Tran The Luong | **Partial: core verified** | apps/api-node/src/routes/admin.routes.ts; admin-catalog.service.ts; admin-catalog.repository.ts; admin-catalog.validator.ts; apps/web/src/pages/admin-page.tsx; admin-catalog.service.test.ts; apps/web/tests/admin-handover.spec.ts | CRUD, active-only public query, map/marker validation và hard-delete guard có code/test. Guard active appointment được test ở service/UI nhưng không có appointment runtime để kiểm tra end-to-end. Branch/PR/Jira evidence không có trong repository. Assignee bị lệch. | Giữ ticket, bổ sung PR/Jira evidence và test integration với dữ liệu appointment thật trước khi coi hoàn toàn Done. Đồng bộ assignee. |
-| LNFS-50 | Done, P0, assignee field/description Truong Quang Dat | **Not implemented** | Config entries xuất hiện trong migration 015, 025, 031, 033, 035, 036; không có config route/controller/UI tương ứng. | Migration/schema không chứng minh CRUD runtime. Không tìm thấy admin config API, public config API, validator, UI hoặc test cho UC-051, UC-085. | Hạ về To Do/Partial; tách admin config CRUD và public safe config; thêm whitelist public fields, validation, role guard, audit và test. |
+| LNFS-50 | Done, P0, assignee field/description Truong Quang Dat | **Implemented with hardening** | `apps/api-node/src/routes/config.routes.ts`, `admin.routes.ts`, typed validator/service/repository, Admin Config UI, `039_admin_user_and_config_audit.sql`, service/validator tests. | Public response chỉ allowlist key và parse typed value; admin CRUD có role guard, history, audit, pessimistic transaction lock và reject credential-like keys. Cần chạy migration trên môi trường triển khai sau khi review. | Giữ Done nếu gắn commit/PR/Jira evidence; không đưa secret vào system config, tiếp tục dùng environment secret. |
 | LNFS-51 | To Do, P1, assignee field Truong Quang Dat; description ghi PHAM NGUYEN ANH KHOA | **Planned / not implemented** | apps/web/src/pages/profile-page.tsx chỉ có profile cơ bản; migration 018_return_feedback.sql là foundation. Không có feedback/reputation/activity route/service/UI. | Chưa có completed return runtime để kiểm tra eligibility, reputation event hoặc feedback duplication/authorization. Assignee bị lệch. | Giữ To Do nhưng tách feedback eligibility, reputation event và profile activity. Phụ thuộc dual-confirmed return của LNFS-54. |
 | LNFS-52 | To Do, P0, assignee PHAM NGUYEN ANH KHOA | **Planned / not implemented** | Có schema foundation trong migration claim/private proof; không có claim/chat controller, route, service, repository hoặc Web page runtime. | Chưa có private conversation, duplicate-request guard, participant authorization, private attachment proxy, state transition hoặc notification. | Tách claim creation/conversation authorization và private evidence upload/access. Chỉ bắt đầu sau khi contract claim được chốt. |
 | LNFS-53 | To Do, P0, assignee Tran The Luong | **Planned / not implemented** | Có migration 029_ai_verification_questions.sql và 032_ai_feedback_and_question_options.sql; không có runtime route/UI/service. | Chưa có Finder decision, reason audit, question isolation, secret-answer privacy hoặc competing claimant handling. Migration không phải evidence runtime. | Tách question template/read, Finder decision/state machine và privacy/security tests. |
@@ -41,7 +41,7 @@ Sprint 4 có hướng nghiệp vụ đúng nhưng backlog **chưa đủ chuẩn 
 | LNFS-56 | To Do, P1, assignee Võ Chiêu Quân | **Implemented baseline; Jira status stale** | matching.engine.ts; matching.service.ts; post.service.ts; post.routes.ts; apps/web/src/pages/post-matches-page.tsx; matching.engine.test.ts; story-post-form.spec.ts | Normalize tiếng Việt, weighted tiered score, candidate limit/window, persisted results, explanation, rerun rate limit và Staff/Admin review access đã có. Chưa có branch/PR/Jira evidence trong snapshot. | Đề nghị chuyển Done sau khi gắn commit/PR/test evidence. Nếu cần cải thiện, tạo ticket hardening riêng. |
 | LNFS-57 | To Do, P1, assignee Tran The Luong | **Not implemented; wrong ownership** | AI hiện nằm ở apps/api-node/src/services/gemini-image.service.ts; Java chỉ có JavaAdminServiceApplication.java và Actuator health. | Không có Java AI/OCR endpoint, integration, persistence confidence hoặc claim-review runtime. Node là core/write owner. Google Vision/OCR trong description chưa có runtime evidence. | Đổi thành Node.js Gemini decision-support nếu cần. Java chỉ giữ health skeleton; tách OCR provider integration thành task riêng nếu có provider, privacy và test. |
 | LNFS-58 | To Do, P1, assignee Truong Quang Dat | **Planned / not implemented** | apps/api-node/src/routes không có Socket.IO/chat/notification routes; Web không có conversation/message page; không có realtime runtime trong package/source. | Ticket quá rộng: chat, image message, retry/idempotency, seen/read, guided events, meetup events, notification, report/block, escalation. | Tách chat contract/room auth, text messages, private image messages, notification và retry/read state thành story nhỏ. |
-| LNFS-59 | To Do, P1, assignee PHAM NGUYEN ANH KHOA | **Partial** | admin-catalog.service.ts; admin.routes.ts; apps/web/src/pages/admin-page.tsx có catalog/handover tabs và limited catalog stats. | Không có moderation/report route, dashboard toàn hệ thống hoặc export. Role guard cho current admin catalog có, nhưng acceptance dashboard/statistic chưa đủ. | Tách moderation/report, dashboard KPI và export. Xác định nguồn dữ liệu và expected counts trước test. |
+| LNFS-59 | To Do, P1, assignee PHAM NGUYEN ANH KHOA | **Partial** | admin-catalog.service.ts; admin.routes.ts; apps/web/src/pages/admin-page.tsx có catalog/handover, user/config tabs và limited catalog stats. | Không có moderation/report route, dashboard toàn hệ thống hoặc export. Role guard cho current admin catalog/user/config có, nhưng acceptance dashboard/statistic chưa đủ. | Tách moderation/report, dashboard KPI và export. Xác định nguồn dữ liệu và expected counts trước test. |
 | LNFS-60 | To Do, P1, assignee PHAM NGUYEN ANH KHOA | **Partial** | apps/web/src/main.tsx; route-guard.tsx; context/auth-context.tsx; auth pages; profile-page.tsx; responsive E2E. | Auth/refresh/profile cơ bản có. Chưa có manifest, service worker, installability, offline shell, avatar, activity hoặc reputation. Mobile phải hiểu là mobile-browser/PWA, không phải native mobile. | Tách PWA foundation khỏi profile/activity. Thêm installability/device matrix và privacy-safe offline acceptance criteria. |
 | LNFS-61 | To Do, P1, assignee field Truong Quang Dat; description ghi PHAM NGUYEN ANH KHOA | **Partial** | apps/web/src/pages/posts-page.tsx; post-detail-page.tsx; story-post-form.tsx; post.routes.ts; posts-page.spec.ts; story-post-form.spec.ts | Responsive board, detail, LOST/FOUND management và multi-image input có. Chưa có PWA installability/service worker/offline behavior/device matrix. Assignee bị lệch. | Ghi rõ Web baseline đã có; tách PWA shell/caching khỏi board/post UX. Đồng bộ assignee. |
 | LNFS-62 | To Do, P1, assignee Võ Chiêu Quân | **Planned / not implemented** | Không có claim/chat/appointment/notification runtime trong route/page inventory. | Trùng với LNFS-52 đến LNFS-58, gom toàn bộ peer-return journey và PWA vào một ticket. | Không giữ dạng story lớn. Đổi thành PWA integration test/release checklist sau khi feature nền hoàn thành. |
@@ -102,11 +102,11 @@ Các command dưới đây được chạy trên repository fptu-lost-found-syst
 
 | Command | Kết quả |
 | --- | --- |
-| npm test | **PASS**: 53 test pass, 1 DB integration test skip an toàn; Web TypeScript check pass |
+| npm run test | **PASS**: 84 API test pass, 1 DB integration test skip an toàn; Web TypeScript check pass |
 | npm run build | **PASS**: API TypeScript build và Web Vite production build |
 | npm --workspace @lnfs/web run e2e:home | **PASS 16/16**: auth resilience, post creation, matching view, mobile layout, Staff warehouse và Admin handover/map |
 | npm run build:java | **BLOCKED**: máy không có Maven trong PATH; chưa kết luận Java source lỗi |
-| npm run migrate | **Không chạy** để tránh tác động Aiven/shared DB |
+| npm run migrate | **Không chạy** để tránh tác động Aiven/shared DB; migration 039 đã được thêm và cần apply ở môi trường triển khai |
 | git diff --check | **PASS** |
 | Markdown relative-link scan | **PASS**: link tương đối trong README/docs resolve được |
 
@@ -119,7 +119,7 @@ Các test hiện tại chưa bao phủ claim, private evidence, realtime chat, a
 | Web | **Implemented baseline** | Auth, board, my posts, detail, LOST/FOUND, catalog, handover admin, Gemini draft, matching, Staff warehouse |
 | PWA | **Partial** | Responsive/mobile-browser flow và file input có; manifest, service worker, installability, offline shell, device matrix chưa có |
 | Native Mobile | **Planned — project not created** | Không có Android/iOS/Expo/React Native/Flutter project trong repository |
-| Node.js API | **Core/write owner** | Auth, posts, catalog, matching, warehouse và Gemini route/service hiện có |
+| Node.js API | **Core/write owner** | Auth, posts, catalog, matching, warehouse, Gemini, admin user và system config route/service hiện có |
 | Java | **Health skeleton only** | Chỉ Actuator health; không sở hữu AI, auth hoặc domain write |
 | Database | **Migration foundation** | Có schema cho nhiều planned domain nhưng không dùng schema thay runtime evidence; không chạy migration audit trên Aiven |
 
@@ -134,6 +134,6 @@ Các test hiện tại chưa bao phủ claim, private evidence, realtime chat, a
 
 ## 8. Verdict
 
-**Sprint 4 backlog chưa chuẩn để đánh dấu Done hàng loạt.** Nên giữ LNFS-47 sau khi bổ sung evidence, chuyển LNFS-56 sang Done sau khi đính kèm commit/PR/test evidence, mở lại LNFS-50, sửa ownership LNFS-57, và tách các ticket lớn trước khi giao sprint. LNFS-63 chỉ được dùng làm release gate sau khi các dependency thực sự có runtime và test.
+**Sprint 4 backlog vẫn chưa nên đánh dấu Done hàng loạt.** LNFS-50 đã có runtime và hardening trên nhánh triển khai này; LNFS-47/LNFS-56 vẫn cần commit/PR/Jira evidence. Cần sửa ownership LNFS-57 và tách các ticket lớn trước khi giao sprint. LNFS-63 chỉ được dùng làm release gate sau khi các dependency thực sự có runtime và test.
 
 Không có Jira issue nào được thay đổi từ audit này.

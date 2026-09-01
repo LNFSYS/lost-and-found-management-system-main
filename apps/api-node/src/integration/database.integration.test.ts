@@ -11,8 +11,10 @@ import mysql, { type Pool, type PoolOptions, type RowDataPacket } from "mysql2/p
 import { createApp } from "../app.js";
 import { runInTransaction } from "../config/db.js";
 import { runMigrations, type MigrationPool } from "../migrations/migration-runner.js";
+import { createAdminUserRepository } from "../repositories/admin-user.repository.js";
 import { matchingRepository } from "../repositories/matching.repository.js";
 import { postRepository } from "../repositories/post.repository.js";
+import { createAdminUserService } from "../services/admin-user.service.js";
 
 const integrationEnabled = process.env.LNFS_DB_INTEGRATION === "1";
 const skipReason = integrationEnabled
@@ -118,6 +120,65 @@ test("isolated MySQL integration: migrations, auth errors, and post/media integr
         const readiness = await fetch(`${baseUrl}/api/ready`);
         assert.equal(readiness.status, 200);
       });
+    });
+
+    await context.test("serializes concurrent removal of the last active admin", async () => {
+      const actorId = randomUUID();
+      const firstAdminId = randomUUID();
+      const secondAdminId = randomUUID();
+      const fixtureUsers = [
+        [actorId, `${actorId}@example.invalid`, "Admin concurrency actor"],
+        [firstAdminId, `${firstAdminId}@example.invalid`, "First concurrency admin"],
+        [secondAdminId, `${secondAdminId}@example.invalid`, "Second concurrency admin"]
+      ] as const;
+      const repository = createAdminUserRepository(applicationPool);
+      const service = createAdminUserService({
+        repository,
+        auditRepository: { async record() {} },
+        transaction: async (work) => {
+          const connection = await applicationPool.getConnection();
+          try {
+            return await runInTransaction(connection, work);
+          } finally {
+            connection.release();
+          }
+        }
+      });
+
+      for (const [userId, email, fullName] of fixtureUsers) {
+        await applicationPool.execute(
+          `INSERT INTO users (id, email, normalized_email, password_hash, full_name, email_verified_at)
+           VALUES (?, ?, ?, ?, ?, UTC_TIMESTAMP())`,
+          [userId, email, email, "integration-test-hash", fullName]
+        );
+      }
+      await applicationPool.execute(
+        `INSERT INTO user_roles (user_id, role_code) VALUES
+         (?, 'USER'), (?, 'ADMIN'), (?, 'USER'), (?, 'ADMIN'), (?, 'USER')`,
+        [actorId, firstAdminId, firstAdminId, secondAdminId, secondAdminId]
+      );
+
+      try {
+        const outcomes = await Promise.allSettled([
+          service.changeStatus(actorId, firstAdminId, { status: "DISABLED" }),
+          service.changeStatus(actorId, secondAdminId, { status: "DISABLED" })
+        ]);
+        const successful = outcomes.filter((outcome) => outcome.status === "fulfilled");
+        const rejected = outcomes.filter((outcome): outcome is PromiseRejectedResult => outcome.status === "rejected");
+        assert.equal(successful.length, 1);
+        assert.equal(rejected.length, 1);
+        assert.equal((rejected[0]?.reason as { status?: number }).status, 409);
+
+        const [rows] = await applicationPool.execute<RowDataPacket[]>(
+          `SELECT COUNT(DISTINCT u.id) AS total
+           FROM users u
+           INNER JOIN user_roles ur ON ur.user_id = u.id AND ur.role_code = 'ADMIN'
+           WHERE u.status = 'ACTIVE'`
+        );
+        assert.equal(Number(rows[0]?.total), 1);
+      } finally {
+        await applicationPool.execute("DELETE FROM users WHERE id IN (?, ?, ?)", [actorId, firstAdminId, secondAdminId]);
+      }
     });
 
     await context.test("rolls post tags back atomically and serializes competing media slots", async () => {

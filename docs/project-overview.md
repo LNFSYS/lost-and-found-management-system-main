@@ -59,7 +59,7 @@ LNFS hướng tới:
 
 - Responsive web có mobile viewport checks nhưng chưa có PWA manifest/service worker/installability/offline shell.
 - Warehouse có receive/store/return và retention deadline; overdue disposition/donation/transfer/disposal documents chưa đủ.
-- Admin có catalog và handover management; full user management, moderation, report, config và dashboard toàn hệ thống chưa đủ.
+- Admin có catalog, handover management, user access management và system config; moderation, report và dashboard toàn hệ thống chưa đủ.
 - Local media chạy được cho một API host nhưng không phù hợp nhiều máy/instance dùng chung database.
 
 ### 4.3 Planned product scope
@@ -212,12 +212,13 @@ Khi dùng Aiven/shared MySQL:
 
 ## 11. Kiểm thử và evidence
 
-Evidence đã kiểm tra ngày 01/09/2026:
+Evidence đã kiểm tra ngày 02/09/2026:
 
-- npm test: 53 test pass, 1 DB integration test skip an toàn vì thiếu MySQL local _test; web TypeScript check pass.
+- npm test: 84 API test pass, 1 DB integration test skip an toàn vì thiếu MySQL local _test; web TypeScript check pass.
 - npm run build: API TypeScript build và Web production build pass.
 - npm run build:java: chưa chạy được vì Maven không có trong PATH.
 - `npm --workspace @lnfs/web run e2e:home`: 16/16 Playwright tests pass, gồm auth resilience, post creation, matching view, mobile layout, Staff warehouse và Admin handover/map.
+- `npm --workspace @lnfs/api-node run test:db-integration`: test được skip an toàn vì chưa cấu hình MySQL local `*_test`; không chạy trên Aiven/shared DB.
 
 Các gap còn lại: claim race/concurrency, evidence privacy, peer chat room isolation, appointment dual confirmation, full warehouse disposition, PWA browser/device matrix, Native Mobile, load test, UAT và deployment rollback.
 

@@ -16,6 +16,10 @@ type AuthResult = { user: User; accessToken: string; refreshToken: string; refre
 
 function publicUser(user: User): User { return user; }
 
+export function isAccessSessionValid(user: (User & { sessionVersion: number }) | null, payload: AccessTokenPayload) {
+  return Boolean(user && user.status === "ACTIVE" && user.sessionVersion === payload.sessionVersion);
+}
+
 function signAccessToken(user: User & { sessionVersion: number }) {
   const payload: AccessTokenPayload = { sub: user.id, email: user.email, roles: user.roles, sessionVersion: user.sessionVersion };
   return jwt.sign(payload, env.jwtAccessSecret, { expiresIn: env.jwtAccessExpiresIn } as SignOptions);
@@ -142,6 +146,6 @@ export const authService = {
 
   async validateAccessSession(payload: AccessTokenPayload) {
     const user = await userRepository.findById(payload.sub);
-    return Boolean(user && user.status === "ACTIVE" && user.sessionVersion === payload.sessionVersion);
+    return isAccessSessionValid(user, payload);
   }
 };

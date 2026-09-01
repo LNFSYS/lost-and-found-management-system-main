@@ -831,6 +831,20 @@ textarea {
   accent-color: var(--fpt-blue);
 }
 
+.admin-check--field {
+  min-height: 48px;
+  align-self: end;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #fff;
+}
+
+.admin-form textarea {
+  width: 100%;
+  resize: vertical;
+}
+
 .admin-form-actions {
   display: flex;
   justify-content: flex-end;
@@ -1109,6 +1123,44 @@ textarea {
   text-transform: uppercase;
 }
 
+.admin-grid--users {
+  grid-template-columns: minmax(340px, 0.72fr) minmax(0, 1.55fr);
+}
+
+.admin-user-filters {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) 150px 150px auto;
+  gap: 10px;
+  align-items: end;
+  margin: 18px 0;
+}
+
+.admin-user-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.admin-user-table {
+  width: 100%;
+  min-width: 760px;
+  border-collapse: collapse;
+}
+
+.admin-user-table th,
+.admin-user-table td {
+  padding: 13px 12px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  vertical-align: middle;
+}
+
+.admin-user-table th {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
 .admin-handover-meta dd {
   margin: 3px 0 0;
   color: var(--ink-soft);
@@ -1138,6 +1190,106 @@ textarea {
 
 .admin-empty strong {
   color: var(--ink);
+}
+
+.admin-user-table td:first-child {
+  min-width: 260px;
+}
+
+.admin-user-table strong,
+.admin-user-table span,
+.admin-user-table small {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.admin-user-table strong {
+  color: var(--ink);
+  font-size: 0.95rem;
+}
+
+.admin-user-table span,
+.admin-user-table small {
+  color: var(--muted);
+  font-size: 0.8rem;
+  line-height: 1.45;
+}
+
+.admin-inline-select {
+  width: 116px;
+  min-height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  color: var(--ink);
+  background: #fff;
+  font-weight: 800;
+}
+
+.admin-user-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.admin-empty-cell {
+  height: 96px;
+  color: var(--muted);
+  text-align: center !important;
+  font-weight: 800;
+}
+
+.admin-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.admin-pagination span {
+  color: var(--muted);
+  font-size: 0.84rem;
+  font-weight: 800;
+}
+
+.admin-config-history {
+  grid-column: 1 / -1;
+}
+
+.admin-history-list {
+  display: grid;
+  gap: 10px;
+}
+
+.admin-history-entry {
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #fbfdff;
+}
+
+.admin-history-entry > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.admin-history-entry strong {
+  color: var(--fpt-blue);
+  font-size: 0.8rem;
+}
+
+.admin-history-entry span,
+.admin-history-entry small {
+  color: var(--muted);
+  font-size: 0.76rem;
+}
+
+.admin-history-entry p {
+  margin: 7px 0 3px;
+  color: var(--ink-soft);
+  font-size: 0.82rem;
 }
 
 /* Staff warehouse */
@@ -3517,6 +3669,10 @@ textarea {
     grid-template-columns: 1fr;
   }
 
+  .admin-grid--users {
+    grid-template-columns: 1fr;
+  }
+
   .warehouse-layout {
     grid-template-columns: 1fr;
   }
@@ -3731,8 +3887,17 @@ textarea {
   .warehouse-form-pair,
   .admin-form-pair,
   .admin-handover-meta,
-  .warehouse-filter-bar {
+  .warehouse-filter-bar,
+  .admin-user-filters {
     grid-template-columns: 1fr;
+  }
+
+  .admin-pagination {
+    justify-content: stretch;
+  }
+
+  .admin-pagination button {
+    flex: 1;
   }
 
   .warehouse-filter-bar .secondary-button {

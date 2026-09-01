@@ -1,6 +1,8 @@
 import { Router, type NextFunction, type Request, type Response } from "express";
 import multer from "multer";
 import { adminCatalogController } from "../controllers/admin-catalog.controller.js";
+import { adminUserController } from "../controllers/admin-user.controller.js";
+import { systemConfigController } from "../controllers/system-config.controller.js";
 import { requireAnyRole, requireAuth } from "../middlewares/auth.middleware.js";
 import { HttpError } from "../utils/http-error.js";
 
@@ -26,6 +28,21 @@ function uploadHandoverMap(request: Request, response: Response, next: NextFunct
 adminRoutes.use(requireAuth, requireAnyRole("ADMIN"));
 
 adminRoutes.get("/catalog", (req, res, next) => adminCatalogController.getCatalog(req, res).catch(next));
+
+adminRoutes.get("/configs", (req, res, next) => systemConfigController.listConfigs(req, res).catch(next));
+adminRoutes.post("/configs", (req, res, next) => systemConfigController.createConfig(req, res).catch(next));
+adminRoutes.get("/configs/:id/history", (req, res, next) => systemConfigController.listHistory(req, res).catch(next));
+adminRoutes.get("/configs/:id", (req, res, next) => systemConfigController.getConfig(req, res).catch(next));
+adminRoutes.patch("/configs/:id", (req, res, next) => systemConfigController.updateConfig(req, res).catch(next));
+adminRoutes.delete("/configs/:id", (req, res, next) => systemConfigController.deleteConfig(req, res).catch(next));
+
+adminRoutes.get("/users", (req, res, next) => adminUserController.listUsers(req, res).catch(next));
+adminRoutes.post("/users", (req, res, next) => adminUserController.createUser(req, res).catch(next));
+adminRoutes.get("/users/:id", (req, res, next) => adminUserController.getUser(req, res).catch(next));
+adminRoutes.patch("/users/:id", (req, res, next) => adminUserController.updateUser(req, res).catch(next));
+adminRoutes.patch("/users/:id/role", (req, res, next) => adminUserController.changeRole(req, res).catch(next));
+adminRoutes.patch("/users/:id/status", (req, res, next) => adminUserController.changeStatus(req, res).catch(next));
+adminRoutes.delete("/users/:id", (req, res, next) => adminUserController.deleteUser(req, res).catch(next));
 
 adminRoutes.post("/categories", (req, res, next) => adminCatalogController.createCategory(req, res).catch(next));
 adminRoutes.patch("/categories/:id", (req, res, next) => adminCatalogController.updateCategory(req, res).catch(next));
