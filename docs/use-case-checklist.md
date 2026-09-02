@@ -88,12 +88,12 @@ Không tick Done chỉ vì migration, schema, Jira ticket, UI mockup hoặc test
 | [x] | UC-068 | System | Chạy matching sau khi tạo hoặc cập nhật post | Done | Best-effort hook trong post service |
 | [x] | UC-069 | System | Chuẩn hóa text tiếng Việt cho matching | Done | Matching engine và tests |
 | [x] | UC-070 | System | Tính tiered score từ text/category/location/time/image/OCR | Done | Matching engine và tests |
-| [x] | UC-071 | System | Lưu kết quả matching | Done | Matching repository và match_results |
-| [x] | UC-072 | Owner | Trả danh sách bài tương tự | Done | Match API/page |
+| [x] | UC-071 | System | Lưu kết quả matching | Done | Matching repository và `match_results`; chỉ trả cặp LOST/FOUND còn active |
+| [x] | UC-072 | Owner | Trả danh sách bài tương tự | Done | Match API/page; source owner hoặc Staff/Admin |
 | [ ] | UC-073 | System | Gửi notification khi có match mới | Planned | Chưa có notification runtime |
 | [ ] | UC-074 | System | Kiểm tra gợi ý theo chu kỳ 10 phút | Planned | Chưa có scheduler/client polling |
-| [x] | UC-075 | Owner | Tính lại matching theo quyền và rate limit | Done | Recalculate endpoint |
-| [x] | UC-076 | Owner | Giải thích lý do và điểm thành phần của match | Done | Explanation JSON và UI |
+| [x] | UC-075 | Owner | Tính lại matching theo quyền và rate limit | Done | Recalculate endpoint, backend ownership/role guard và service test |
+| [x] | UC-076 | Owner | Giải thích lý do và điểm thành phần của match | Done | Explanation JSON/UI; raw private signals được redact với người không có quyền |
 | [ ] | UC-077 | System | Khởi tạo Socket.IO server | Planned | Không có dependency/runtime |
 | [ ] | UC-078 | System | Xác thực socket bằng JWT | Planned | Chưa có socket server |
 | [ ] | UC-079 | Owner/Finder | Tạo hoặc join claim chat room | Planned | Chưa có claim/socket runtime |
