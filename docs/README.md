@@ -1,6 +1,6 @@
 # Tài liệu FPTU Lost & Found System
 
-Cập nhật: **01/09/2026**
+Cập nhật: **02/09/2026**
 
 ## 1. Mục đích
 
@@ -47,8 +47,9 @@ Không đánh dấu Done chỉ vì có migration, schema, ticket, mockup, skelet
 | [node-java-service-boundary.md](node-java-service-boundary.md) | Ownership Node.js/Java và one-writer rule |
 | [DOCUMENTATION_UPDATE_REPORT.md](DOCUMENTATION_UPDATE_REPORT.md) | Biên bản đối chiếu code và cập nhật tài liệu gần nhất |
 | [SPRINT_4_IMPLEMENTATION_AUDIT.md](SPRINT_4_IMPLEMENTATION_AUDIT.md) | Audit 17 Jira ticket Sprint 4 từ snapshot offline |
+| [LNFS_56_IMPLEMENTATION_REPORT_2026-09-02.md](LNFS_56_IMPLEMENTATION_REPORT_2026-09-02.md) | Báo cáo triển khai, hardening và test evidence cho LNFS-56 |
 
-## 5. Snapshot implementation ngày 01/09/2026
+## 5. Snapshot implementation ngày 02/09/2026
 
 **Đã có bằng chứng runtime/test:**
 
@@ -70,7 +71,7 @@ Không đánh dấu Done chỉ vì có migration, schema, ticket, mockup, skelet
 
 ## 6. Evidence đã kiểm tra
 
-- API unit/service/repository/validator tests: **53 pass, 1 skip an toàn** cho DB integration chưa có MySQL local `_test`.
+- API unit/service/repository/validator tests: **60 pass, 1 skip an toàn** cho DB integration chưa có MySQL local `_test`.
 - `npm test`: pass, gồm API tests và web TypeScript check.
 - `npm run build`: pass cho API và Web production build.
 - `npm run build:java`: chưa chạy được vì Maven không có trong `PATH`.

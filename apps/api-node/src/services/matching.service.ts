@@ -7,6 +7,32 @@ import {
   type MatchingConfig
 } from "./matching.engine.js";
 
+function isUnitInterval(value: number) {
+  return Number.isFinite(value) && value >= 0 && value <= 1;
+}
+
+export function sanitizeMatchingConfig(config: MatchingConfig): MatchingConfig {
+  const thresholds = [
+    config.weakThreshold,
+    config.suggestionThreshold,
+    config.notificationThreshold,
+    config.highConfidenceThreshold
+  ];
+  const thresholdsAreValid = thresholds.every(isUnitInterval)
+    && thresholds.every((value, index) => index === 0 || thresholds[index - 1] <= value);
+  const weightValues = Object.values(config.weights);
+  const weightsAreValid = weightValues.every(isUnitInterval)
+    && weightValues.some((value) => value > 0);
+
+  return {
+    weakThreshold: thresholdsAreValid ? config.weakThreshold : defaultMatchingConfig.weakThreshold,
+    suggestionThreshold: thresholdsAreValid ? config.suggestionThreshold : defaultMatchingConfig.suggestionThreshold,
+    notificationThreshold: thresholdsAreValid ? config.notificationThreshold : defaultMatchingConfig.notificationThreshold,
+    highConfidenceThreshold: thresholdsAreValid ? config.highConfidenceThreshold : defaultMatchingConfig.highConfidenceThreshold,
+    weights: weightsAreValid ? config.weights : { ...defaultMatchingConfig.weights }
+  };
+}
+
 async function loadConfig(): Promise<MatchingConfig> {
   const [
     weakThreshold,
@@ -31,13 +57,13 @@ async function loadConfig(): Promise<MatchingConfig> {
     matchingRepository.getConfigNumber("matching.weight_image", defaultMatchingConfig.weights.image),
     matchingRepository.getConfigNumber("matching.weight_ocr", defaultMatchingConfig.weights.ocr)
   ]);
-  return {
+  return sanitizeMatchingConfig({
     weakThreshold,
     suggestionThreshold,
     notificationThreshold,
     highConfidenceThreshold,
     weights: { text, category, location, time, image, ocr }
-  };
+  });
 }
 
 async function buildStoredResults(postId: string, config: MatchingConfig) {

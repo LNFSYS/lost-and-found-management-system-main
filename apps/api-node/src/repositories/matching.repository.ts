@@ -133,10 +133,18 @@ LEFT JOIN (
   GROUP BY post_id
 ) tags ON tags.post_id = p.id`;
 
-const resultSelect = `SELECT id, lost_post_id, found_post_id, total_score, text_score,
-  category_score, location_score, time_score, image_score, ocr_score,
-  score_tier, matcher_version, explanation_json, is_notified, created_at, updated_at
-FROM match_results`;
+const resultSelect = `SELECT mr.id, mr.lost_post_id, mr.found_post_id, mr.total_score, mr.text_score,
+  mr.category_score, mr.location_score, mr.time_score, mr.image_score, mr.ocr_score,
+  mr.score_tier, mr.matcher_version, mr.explanation_json, mr.is_notified, mr.created_at, mr.updated_at
+FROM match_results mr`;
+
+const activeMatchJoin = `INNER JOIN posts lost_post ON lost_post.id = mr.lost_post_id
+INNER JOIN posts found_post ON found_post.id = mr.found_post_id`;
+
+const activeMatchWhere = `lost_post.deleted_at IS NULL
+  AND found_post.deleted_at IS NULL
+  AND lost_post.status IN ('OPEN', 'MATCHED')
+  AND found_post.status IN ('OPEN', 'MATCHED')`;
 
 async function upsertResult(connection: PoolConnection, source: MatchCandidate, match: ScoredMatch) {
   const lostPostId = source.type === "LOST" ? source.id : match.candidateId;
@@ -244,8 +252,11 @@ export const matchingRepository = {
   async listForPost(postId: string, minimumScore: number) {
     const [rows] = await pool.execute<MatchResultRow[]>(
       `${resultSelect}
-       WHERE (lost_post_id = ? OR found_post_id = ?) AND total_score >= ?
-       ORDER BY total_score DESC, updated_at DESC`,
+       ${activeMatchJoin}
+       WHERE (mr.lost_post_id = ? OR mr.found_post_id = ?)
+         AND mr.total_score >= ?
+         AND ${activeMatchWhere}
+       ORDER BY mr.total_score DESC, mr.updated_at DESC`,
       [postId, postId, minimumScore]
     );
     return rows.map(mapResult);
@@ -273,11 +284,19 @@ export const matchingRepository = {
           SUBSTRING_INDEX(GROUP_CONCAT(matched.score_tier ORDER BY matched.total_score DESC), ',', 1) AS top_tier,
           MAX(matched.updated_at) AS last_calculated_at
        FROM (
-         SELECT lost_post_id AS post_id, total_score, score_tier, updated_at
-         FROM match_results WHERE lost_post_id IN (${placeholders}) AND total_score >= ?
+         SELECT mr.lost_post_id AS post_id, mr.total_score, mr.score_tier, mr.updated_at
+         FROM match_results mr
+         ${activeMatchJoin}
+         WHERE mr.lost_post_id IN (${placeholders})
+           AND mr.total_score >= ?
+           AND ${activeMatchWhere}
          UNION ALL
-         SELECT found_post_id AS post_id, total_score, score_tier, updated_at
-         FROM match_results WHERE found_post_id IN (${placeholders}) AND total_score >= ?
+         SELECT mr.found_post_id AS post_id, mr.total_score, mr.score_tier, mr.updated_at
+         FROM match_results mr
+         ${activeMatchJoin}
+         WHERE mr.found_post_id IN (${placeholders})
+           AND mr.total_score >= ?
+           AND ${activeMatchWhere}
        ) matched
        GROUP BY matched.post_id`,
       [minimumScore, ...uniqueIds, minimumScore, ...uniqueIds, minimumScore]
