@@ -145,14 +145,13 @@ export interface AdminReportFilters { q?: string; status?: AdminReportStatus | "
 export interface AdminReportListResponse { total: number; page: number; pageSize: number; items: AdminModerationReport[]; }
 export interface ReviewAdminReportPayload {
   actionType: ModerationActionType;
-  targetUserId?: string | null;
-  targetPostId?: string | null;
   reason: string;
 }
 export interface AdminDashboardKpis {
   filters: { from: string; to: string; days: number; granularity: "day" };
   scope: { role: "ADMIN"; privateEvidenceIncluded: false };
-  totals: { posts: number; openPosts: number; claims: number; appointments: number; returns: number; custodyItems: number; unresolvedReports: number };
+  totals: { posts: number; claims: number; appointments: number; returns: number };
+  snapshot: { openPosts: number; custodyItems: number; unresolvedReports: number };
   trends: Array<{ date: string; posts: number; claims: number; appointments: number; returns: number; custody: number; reports: number }>;
   statusBreakdown: Record<"posts" | "claims" | "appointments" | "custody" | "reports", Array<{ status: string; total: number }>>;
 }
@@ -386,6 +385,18 @@ const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3001/api";
 let accessToken: string | null = null;
 let refreshInFlight: Promise<SessionResponse | null> | null = null;
 
+function normalizeUser(user: CurrentUser): CurrentUser {
+  const legacyUser = user as CurrentUser & { avatar?: CurrentUser["avatar"] | null };
+  return {
+    ...legacyUser,
+    avatar: legacyUser.avatar ?? { hasAvatar: false, updatedAt: null }
+  };
+}
+
+function normalizeSession(session: SessionResponse): SessionResponse {
+  return { ...session, user: normalizeUser(session.user) };
+}
+
 async function raw<T>(path: string, init: RequestInit = {}, retry = true): Promise<T> {
   const headers = new Headers(init.headers);
   if (init.body && !(init.body instanceof FormData) && !headers.has("content-type")) headers.set("content-type", "application/json");
@@ -411,14 +422,14 @@ async function raw<T>(path: string, init: RequestInit = {}, retry = true): Promi
 export async function refreshSession() {
   if (!refreshInFlight) {
     refreshInFlight = raw<SessionResponse>("/auth/refresh", { method: "POST" }, false)
-      .then((session) => { accessToken = session.accessToken; return session; })
+      .then((session) => { const normalized = normalizeSession(session); accessToken = normalized.accessToken; return normalized; })
       .catch(() => { accessToken = null; return null; })
       .finally(() => { refreshInFlight = null; });
   }
   return refreshInFlight;
 }
 
-function storeSession(session: SessionResponse) { accessToken = session.accessToken; return session.user; }
+function storeSession(session: SessionResponse) { const normalized = normalizeSession(session); accessToken = normalized.accessToken; return normalized.user; }
 
 function queryString(filters: object) {
   const query = new URLSearchParams();
@@ -456,12 +467,12 @@ export const api = {
   },
   forgotPassword: (email: string) => raw<{ delivered: boolean; message: string }>("/auth/forgot-password", { method: "POST", body: JSON.stringify({ email }) }),
   resetPassword: (email: string, token: string, newPassword: string) => raw<{ reset: boolean }>("/auth/reset-password", { method: "POST", body: JSON.stringify({ email, token, newPassword }) }),
-  me: () => raw<{ user: CurrentUser }>("/auth/me").then((payload) => payload.user),
-  updateProfile: (payload: Partial<Pick<CurrentUser, "fullName" | "studentCode" | "phoneNumber">>) => raw<{ user: CurrentUser }>("/auth/profile", { method: "PATCH", body: JSON.stringify(payload) }).then((result) => result.user),
+  me: () => raw<{ user: CurrentUser }>("/auth/me").then((payload) => normalizeUser(payload.user)),
+  updateProfile: (payload: Partial<Pick<CurrentUser, "fullName" | "studentCode" | "phoneNumber">>) => raw<{ user: CurrentUser }>("/auth/profile", { method: "PATCH", body: JSON.stringify(payload) }).then((result) => normalizeUser(result.user)),
   uploadProfileAvatar: (file: File) => {
     const form = new FormData();
     form.append("file", file);
-    return raw<{ user: CurrentUser }>("/auth/profile/avatar", { method: "PATCH", body: form }).then((result) => result.user);
+    return raw<{ user: CurrentUser }>("/auth/profile/avatar", { method: "PATCH", body: form }).then((result) => normalizeUser(result.user));
   },
   getProfileAvatar: () => mediaBlob("/auth/profile/avatar", true, "Khong the tai anh dai dien"),
   getActivitySummary: () => raw<ProfileActivitySummary>("/auth/activity"),

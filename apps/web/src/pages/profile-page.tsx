@@ -68,7 +68,7 @@ export function ProfilePage() {
   }, [user]);
 
   useEffect(() => {
-    if (!user?.avatar.hasAvatar) {
+    if (!user?.avatar?.hasAvatar) {
       setAvatarUrl(null);
       return;
     }
@@ -89,7 +89,7 @@ export function ProfilePage() {
       alive = false;
       if (nextUrl) URL.revokeObjectURL(nextUrl);
     };
-  }, [user?.avatar.hasAvatar, user?.avatar.updatedAt]);
+  }, [user?.avatar?.hasAvatar, user?.avatar?.updatedAt]);
 
   async function loadActivity() {
     setActivityLoading(true);

@@ -7,13 +7,18 @@ type Queryable = Pick<PoolConnection, "execute">;
 interface UserRow extends RowDataPacket {
   id: string; email: string; full_name: string; student_code: string | null; phone_number: string | null;
   password_hash: string; avatar_file_path: string | null; avatar_mime_type: string | null; avatar_size: number | null; avatar_updated_at: Date | null;
+  avatar_cloudinary_public_id: string | null; avatar_cloudinary_asset_id: string | null; avatar_cloudinary_version: number | null;
+  avatar_cloudinary_format: string | null; avatar_cloudinary_resource_type: string | null; avatar_cloudinary_bytes: number | null;
   status: "ACTIVE" | "DISABLED"; session_version: number; created_at: Date; updated_at: Date; roles: string | null;
 }
 
 interface AvatarRow extends RowDataPacket {
-  avatar_file_path: string | null;
-  avatar_mime_type: string | null;
-  avatar_size: number | null;
+  avatar_cloudinary_public_id: string | null;
+  avatar_cloudinary_asset_id: string | null;
+  avatar_cloudinary_version: number | null;
+  avatar_cloudinary_format: string | null;
+  avatar_cloudinary_resource_type: string | null;
+  avatar_cloudinary_bytes: number | null;
   avatar_updated_at: Date | null;
 }
 
@@ -43,7 +48,7 @@ function mapUser(row: UserRow): User & { sessionVersion: number } {
   return {
     id: row.id, email: row.email, fullName: row.full_name, studentCode: row.student_code, phoneNumber: row.phone_number,
     avatar: {
-      hasAvatar: Boolean(row.avatar_file_path),
+      hasAvatar: Boolean(row.avatar_cloudinary_public_id),
       updatedAt: row.avatar_updated_at?.toISOString() ?? null
     },
     status: row.status, sessionVersion: row.session_version, roles: (row.roles?.split(",").filter(Boolean) ?? []) as Role[],
@@ -53,6 +58,8 @@ function mapUser(row: UserRow): User & { sessionVersion: number } {
 
 const selectUser = `SELECT u.id, u.email, u.password_hash, u.full_name, u.student_code, u.phone_number,
   u.avatar_file_path, u.avatar_mime_type, u.avatar_size, u.avatar_updated_at,
+  u.avatar_cloudinary_public_id, u.avatar_cloudinary_asset_id, u.avatar_cloudinary_version,
+  u.avatar_cloudinary_format, u.avatar_cloudinary_resource_type, u.avatar_cloudinary_bytes,
   u.status, u.session_version, u.created_at, u.updated_at,
   GROUP_CONCAT(ur.role_code ORDER BY ur.role_code SEPARATOR ',') AS roles
   FROM users u LEFT JOIN user_roles ur ON ur.user_id = u.id`;
@@ -87,27 +94,43 @@ export const userRepository = {
   },
   async findAvatarById(userId: string, connection: Queryable = pool) {
     const [rows] = await connection.execute<AvatarRow[]>(
-      `SELECT avatar_file_path, avatar_mime_type, avatar_size, avatar_updated_at
+      `SELECT avatar_cloudinary_public_id, avatar_cloudinary_asset_id, avatar_cloudinary_version,
+              avatar_cloudinary_format, avatar_cloudinary_resource_type, avatar_cloudinary_bytes, avatar_updated_at
        FROM users
        WHERE id = ? AND status = 'ACTIVE'
        LIMIT 1`,
       [userId]
     );
     const row = rows[0];
-    if (!row?.avatar_file_path || !row.avatar_mime_type) return null;
+    if (!row?.avatar_cloudinary_public_id
+      || !row.avatar_cloudinary_version
+      || !row.avatar_cloudinary_format
+      || row.avatar_cloudinary_resource_type !== "image") return null;
     return {
-      filePath: row.avatar_file_path,
-      mimeType: row.avatar_mime_type,
-      size: row.avatar_size ?? 0,
+      publicId: row.avatar_cloudinary_public_id,
+      assetId: row.avatar_cloudinary_asset_id,
+      version: row.avatar_cloudinary_version,
+      format: row.avatar_cloudinary_format,
+      resourceType: "image" as const,
+      size: row.avatar_cloudinary_bytes ?? 0,
       updatedAt: row.avatar_updated_at?.toISOString() ?? null
     };
   },
-  async updateAvatar(userId: string, input: { filePath: string; mimeType: string; size: number }) {
+  async updateAvatar(userId: string, input: {
+    publicId: string;
+    assetId: string | null;
+    version: number;
+    format: string;
+    resourceType: "image";
+    size: number;
+  }) {
     await pool.execute(
       `UPDATE users
-       SET avatar_file_path = ?, avatar_mime_type = ?, avatar_size = ?, avatar_updated_at = UTC_TIMESTAMP()
+       SET avatar_cloudinary_public_id = ?, avatar_cloudinary_asset_id = ?, avatar_cloudinary_version = ?,
+           avatar_cloudinary_format = ?, avatar_cloudinary_resource_type = ?, avatar_cloudinary_bytes = ?,
+           avatar_file_path = NULL, avatar_mime_type = NULL, avatar_size = NULL, avatar_updated_at = UTC_TIMESTAMP()
        WHERE id = ? AND status = 'ACTIVE'`,
-      [input.filePath, input.mimeType, input.size, userId]
+      [input.publicId, input.assetId, input.version, input.format, input.resourceType, input.size, userId]
     );
     return this.findById(userId);
   },

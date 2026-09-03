@@ -61,7 +61,7 @@ export const authController = {
     response.setHeader("Cache-Control", "private, no-store");
     response.setHeader("X-Content-Type-Options", "nosniff");
     if (avatar.updatedAt) response.setHeader("Last-Modified", new Date(avatar.updatedAt).toUTCString());
-    response.type(avatar.contentType).sendFile(avatar.filePath);
+    response.type(avatar.contentType).send(avatar.body);
   },
   async activity(request: Request, response: Response) {
     response.json(await authService.getActivitySummary(request.auth!.sub));
