@@ -1,14 +1,14 @@
 # Checklist Use Case LNFS
 
-Cập nhật: **01/09/2026**
+Cập nhật: **03/09/2026**
 
 ## 1. Quy ước và tổng hợp
 
 Mỗi dòng có actor, mục tiêu, status và evidence/gap. Preconditions chung là actor có quyền phù hợp; trigger là thao tác actor hoặc sự kiện hệ thống; postcondition chỉ được coi là đạt khi status có runtime evidence. Các ngoại lệ, privacy note và business rule chi tiết nằm trong LNFS_BUSINESS_PROCESS_A_TO_Z.md và business-rules.md.
 
-- [x] **Done/Implemented:** 50 UC có runtime và evidence phù hợp với baseline hiện tại.
+- [x] **Done/Implemented:** 55 UC có runtime và evidence phù hợp với baseline hiện tại.
 - [ ] **Partial:** 7 UC mới đáp ứng một phần acceptance criteria.
-- [ ] **Planned:** 43 UC chưa có runtime evidence.
+- [ ] **Planned:** 38 UC chưa có runtime evidence.
 - [ ] **Deferred:** 0 UC.
 - Tổng: **100 ID duy nhất từ UC-001 đến UC-100**.
 
@@ -55,8 +55,8 @@ Không tick Done chỉ vì migration, schema, Jira ticket, UI mockup hoặc test
 | [x] | UC-035 | User | Đăng xuất và revoke refresh token | Done | Logout route/service |
 | [x] | UC-036 | User | Đặt lại mật khẩu bằng mã email | Done | Forgot/reset routes |
 | [x] | UC-037 | User | Xem và cập nhật profile cơ bản | Done | auth me/profile và profile page |
-| [ ] | UC-038 | User | Quản lý avatar người dùng | Planned | Chưa có route/storage |
-| [ ] | UC-039 | User | Xem activity, reputation và feedback sau trả đồ | Planned | Chưa có runtime |
+| [x] | UC-038 | User | Quản lý avatar người dùng | Done | Cloudinary avatar API, MIME/signature/size validation, cleanup tests; cần manual Cloudinary QA |
+| [x] | UC-039 | User | Xem activity, reputation và feedback sau trả đồ | Done | Activity/reputation API owner-scoped, profile UI và auth tests |
 | [x] | UC-040 | Student/Lecturer | Tạo bài LOST qua API | Done | Post create route/service/UI |
 | [x] | UC-041 | Student/Lecturer | Tạo bài FOUND qua API | Done | FOUND validation và UI |
 | [x] | UC-042 | Owner | Cập nhật bài của owner | Done | PATCH post + owner guard |
@@ -83,8 +83,8 @@ Không tick Done chỉ vì migration, schema, Jira ticket, UI mockup hoặc test
 | [x] | UC-063 | Admin | Quản lý user qua Admin API | Done | Admin CRUD, atomic profile/role/status update, last-admin lock, audit và tests |
 | [x] | UC-064 | Admin | Quản lý nhóm và danh mục vật phẩm | Done | Admin catalog API/UI |
 | [x] | UC-065 | Admin | Quản lý area và building | Done | Admin catalog API/UI |
-| [ ] | UC-066 | Admin | Moderate post và xử lý report | Planned | Chưa có route |
-| [ ] | UC-067 | Admin | Hiển thị admin dashboard overview toàn hệ thống | Partial | Mới có catalog/warehouse statistics |
+| [x] | UC-066 | Admin | Moderate post và xử lý report | Done | Admin report API/UI, target derived from report, last-admin guard và service tests |
+| [x] | UC-067 | Admin | Hiển thị admin dashboard overview toàn hệ thống | Done | KPI/trend/status API/UI, date-window tests và current snapshot contract |
 | [x] | UC-068 | System | Chạy matching sau khi tạo hoặc cập nhật post | Done | Best-effort hook trong post service |
 | [x] | UC-069 | System | Chuẩn hóa text tiếng Việt cho matching | Done | Matching engine và tests |
 | [x] | UC-070 | System | Tính tiered score từ text/category/location/time/image/OCR | Done | Matching engine và tests |
@@ -101,7 +101,7 @@ Không tick Done chỉ vì migration, schema, Jira ticket, UI mockup hoặc test
 | [ ] | UC-081 | Owner/Finder | Gửi ảnh trong realtime chat | Planned | Chưa có runtime |
 | [ ] | UC-082 | Owner/Finder | Hiển thị seen và unread realtime | Planned | Chưa có runtime |
 | [ ] | UC-083 | System | Gửi realtime notification cho chat/claim/appointment | Planned | Chưa có runtime |
-| [ ] | UC-084 | Admin | Export báo cáo thống kê | Planned | Chưa có route |
+| [x] | UC-084 | Admin | Export báo cáo thống kê | Done | Aggregate CSV/JSON export, allowlist và audit tests |
 | [x] | UC-085 | Admin | Quản lý system configuration | Done | Admin CRUD, typed validation, public-safe route, history UI/API, audit và migration 039 |
 | [x] | UC-086 | User | Phân tích ảnh vật phẩm bằng Gemini provider | Done | Gemini service/tests/UI |
 | [ ] | UC-087 | System | Trích OCR từ claim evidence | Planned | Chưa có claim evidence runtime |
@@ -110,8 +110,8 @@ Không tick Done chỉ vì migration, schema, Jira ticket, UI mockup hoặc test
 | [ ] | UC-090 | System | Tính ownership review confidence | Planned | Chưa có runtime |
 | [x] | UC-091 | System | Dùng image/safe OCR tags làm tín hiệu matching | Done | AI tags và matching engine |
 | [ ] | UC-092 | Finder/Staff | Hiển thị review confidence cho Finder/Staff | Planned | Chưa có claim review UI |
-| [ ] | UC-093 | User | Xác thực và duy trì phiên qua PWA | Partial | Responsive auth có; manifest/service worker chưa có |
-| [ ] | UC-094 | User | Xem và cập nhật profile/activity qua PWA | Partial | Profile có; PWA infrastructure/activity chưa có |
+| [ ] | UC-093 | User | Xác thực và duy trì phiên qua PWA | Partial | Manifest/service worker/session flow có; cần manual installability/device evidence |
+| [ ] | UC-094 | User | Xem và cập nhật profile/activity qua PWA | Partial | Profile/activity/PWA shell có; cần manual offline/device evidence |
 | [ ] | UC-095 | Guest/User | Duyệt, tìm kiếm, lọc và xem detail trên mobile browser | Partial | Responsive page/mobile viewport test; chưa installable |
 | [ ] | UC-096 | User | Tạo và quản lý bài LOST/FOUND qua PWA | Partial | Responsive flow có; chưa offline/installability |
 | [ ] | UC-097 | User | Chụp/chọn và upload ảnh qua mobile browser | Partial | File input multiple có; camera/device matrix chưa có |

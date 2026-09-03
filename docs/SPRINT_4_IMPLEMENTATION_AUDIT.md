@@ -1,12 +1,14 @@
 # LNFS Sprint 4 Implementation Audit
 
-Cập nhật: **02/09/2026**
+Cập nhật: **03/09/2026**
 Nguồn Jira: **LNFS Sprint 4, sprint ID 70, snapshot 01/09/2026**
 Kho đối chiếu: **fptu-lost-found-system-main**
 
 > Đây là audit từ snapshot offline, không phải truy vấn Jira trực tiếp. Trạng thái Jira được giữ nguyên như snapshot; trạng thái code chỉ được kết luận từ runtime source, test và command đã chạy. Không chỉnh Jira, không chạy migration trên Aiven/shared DB.
 
 > Cập nhật phiên làm việc ngày 02/09/2026: sau snapshot trên, migration `039_admin_user_and_config_audit.sql` đã được chạy thành công trên shared Aiven bằng `npm run migrate`. Đã xác minh `schema_migrations`, bảng `admin_audit_logs` và các cột audit mới trong `config_history`. Các nhận định “chưa chạy migration” bên dưới phản ánh snapshot trước cập nhật.
+
+> Cập nhật implementation ngày 03/09/2026: LNFS-59 đã có moderation/report, dashboard KPI và aggregate export; target được suy ra từ report và moderation bảo vệ admin active cuối cùng. LNFS-60 đã có profile activity/reputation, PWA shell và avatar Cloudinary authenticated delivery. Cloudinary manual QA, device matrix và browser E2E admin/profile vẫn cần bằng chứng riêng trước khi gọi ticket release-ready.
 
 ## 1. Kết luận nhanh
 
@@ -43,8 +45,8 @@ Sprint 4 có hướng nghiệp vụ đúng nhưng backlog **chưa đủ chuẩn 
 | LNFS-56 | To Do, P1, assignee Võ Chiêu Quân | **Implemented and hardened; Jira status stale** | matching.engine.ts; matching.service.ts; matching.repository.ts; post.service.ts; apps/web/src/pages/post-matches-page.tsx; matching engine/service/repository/post-service tests; story-post-form.spec.ts | Baseline có normalize tiếng Việt, weighted tiered score, bounded candidates, persisted explanation, rate limit và Web analysis. Hardening ngày 02/09 bổ sung active-pair filtering, config fallback, ownership/role và private-signal tests. UC notification/polling vẫn planned theo LNFS-58. | Gắn branch, commit, test evidence và PR vào Jira rồi chuyển Done; không gộp notification/realtime của LNFS-58. |
 | LNFS-57 | To Do, P1, assignee Tran The Luong | **Not implemented; wrong ownership** | AI hiện nằm ở apps/api-node/src/services/gemini-image.service.ts; Java chỉ có JavaAdminServiceApplication.java và Actuator health. | Không có Java AI/OCR endpoint, integration, persistence confidence hoặc claim-review runtime. Node là core/write owner. Google Vision/OCR trong description chưa có runtime evidence. | Đổi thành Node.js Gemini decision-support nếu cần. Java chỉ giữ health skeleton; tách OCR provider integration thành task riêng nếu có provider, privacy và test. |
 | LNFS-58 | To Do, P1, assignee Truong Quang Dat | **Planned / not implemented** | apps/api-node/src/routes không có Socket.IO/chat/notification routes; Web không có conversation/message page; không có realtime runtime trong package/source. | Ticket quá rộng: chat, image message, retry/idempotency, seen/read, guided events, meetup events, notification, report/block, escalation. | Tách chat contract/room auth, text messages, private image messages, notification và retry/read state thành story nhỏ. |
-| LNFS-59 | To Do, P1, assignee PHAM NGUYEN ANH KHOA | **Partial** | admin-catalog.service.ts; admin.routes.ts; apps/web/src/pages/admin-page.tsx có catalog/handover, user/config tabs và limited catalog stats. | Không có moderation/report route, dashboard toàn hệ thống hoặc export. Role guard cho current admin catalog/user/config có, nhưng acceptance dashboard/statistic chưa đủ. | Tách moderation/report, dashboard KPI và export. Xác định nguồn dữ liệu và expected counts trước test. |
-| LNFS-60 | To Do, P1, assignee PHAM NGUYEN ANH KHOA | **Partial** | apps/web/src/main.tsx; route-guard.tsx; context/auth-context.tsx; auth pages; profile-page.tsx; responsive E2E. | Auth/refresh/profile cơ bản có. Chưa có manifest, service worker, installability, offline shell, avatar, activity hoặc reputation. Mobile phải hiểu là mobile-browser/PWA, không phải native mobile. | Tách PWA foundation khỏi profile/activity. Thêm installability/device matrix và privacy-safe offline acceptance criteria. |
+| LNFS-59 | To Do, P1, assignee PHAM NGUYEN ANH KHOA | **Implemented with hardening; browser QA pending** | admin-reporting.service.ts/repository.ts; admin-page.tsx; admin-reporting.service.test.ts; admin routes. | Moderation/report, KPI/trend/status, aggregate CSV/JSON export và admin guard đã có. Target không còn nhận tùy ý từ client; KPI snapshot tách khỏi metrics theo kỳ. Chưa có Playwright admin workflow evidence. | Chạy manual/browser QA và gắn branch/PR/Jira evidence trước release sign-off. |
+| LNFS-60 | To Do, P1, assignee PHAM NGUYEN ANH KHOA | **Implemented core; Cloudinary/device QA pending** | profile-page.tsx; auth-context.tsx; auth.service.ts; cloudinary-avatar-storage.ts; manifest.webmanifest; sw.js; PWA QA doc. | Profile/activity/reputation, Cloudinary authenticated avatar flow, manifest, service worker và offline shell đã có. Session fixture đã tương thích avatar; cần Cloudinary test account và device/installability evidence. | Chạy manual Cloudinary/PWA QA, gắn screenshots và xác nhận media bài đăng local storage gap riêng. |
 | LNFS-61 | To Do, P1, assignee field Truong Quang Dat; description ghi PHAM NGUYEN ANH KHOA | **Partial** | apps/web/src/pages/posts-page.tsx; post-detail-page.tsx; story-post-form.tsx; post.routes.ts; posts-page.spec.ts; story-post-form.spec.ts | Responsive board, detail, LOST/FOUND management và multi-image input có. Chưa có PWA installability/service worker/offline behavior/device matrix. Assignee bị lệch. | Ghi rõ Web baseline đã có; tách PWA shell/caching khỏi board/post UX. Đồng bộ assignee. |
 | LNFS-62 | To Do, P1, assignee Võ Chiêu Quân | **Planned / not implemented** | Không có claim/chat/appointment/notification runtime trong route/page inventory. | Trùng với LNFS-52 đến LNFS-58, gom toàn bộ peer-return journey và PWA vào một ticket. | Không giữ dạng story lớn. Đổi thành PWA integration test/release checklist sau khi feature nền hoàn thành. |
 | LNFS-63 | To Do, P0, assignee Võ Chiêu Quân | **Blocked / not ready** | Existing Playwright tests pass baseline: auth, posts, matching, mobile layout, Staff warehouse, Admin handover/map. | Chưa có P2P E2E từ claim đến private chat, guided questions, meetup và dual handover; chưa có custody alternative E2E, notification, no-show, dispute, PWA installability/offline evidence. Phụ thuộc LNFS-52 đến LNFS-62. | Để cuối sprint dưới dạng release gate. Không đánh dấu Done bằng test baseline hiện tại. |
@@ -58,7 +60,7 @@ Sprint 4 có hướng nghiệp vụ đúng nhưng backlog **chưa đủ chuẩn 
 - Ticket Done phải có code, test và evidence link. Migration, bảng database hoặc mockup không đủ.
 - Claim/evidence/chat/appointment phải có backend authorization, privacy boundary, state transition, idempotency/concurrency và negative tests.
 - AI/matching chỉ là decision support; không tự accept claim, đổi ownership hoặc hoàn tất handover.
-- PWA phải tách khỏi Native Mobile. Repository hiện có Web responsive và file input, nhưng chưa có manifest, service worker, installability, offline shell hoặc device/release evidence.
+- PWA phải tách khỏi Native Mobile. Repository hiện có manifest, service worker và offline shell; device/installability/release evidence vẫn cần bổ sung.
 
 ## 4. Xung đột backlog và đề xuất chuẩn hóa
 
@@ -104,7 +106,7 @@ Các command dưới đây được chạy trên repository fptu-lost-found-syst
 
 | Command | Kết quả |
 | --- | --- |
-| npm run test | **PASS**: 84 API test pass, 1 DB integration test skip an toàn; Web TypeScript check pass |
+| npm run test | **PASS**: 108 API test pass, 1 DB integration test skip an toàn; Web TypeScript check pass |
 | npm run build | **PASS**: API TypeScript build và Web Vite production build |
 | npm --workspace @lnfs/web run e2e:home | **PASS 16/16**: auth resilience, post creation, matching view, mobile layout, Staff warehouse và Admin handover/map |
 | npm run build:java | **BLOCKED**: máy không có Maven trong PATH; chưa kết luận Java source lỗi |
@@ -119,7 +121,7 @@ Các test hiện tại chưa bao phủ claim, private evidence, realtime chat, a
 | Channel | Status | Evidence/gap |
 | --- | --- | --- |
 | Web | **Implemented baseline** | Auth, board, my posts, detail, LOST/FOUND, catalog, handover admin, Gemini draft, matching, Staff warehouse |
-| PWA | **Partial** | Responsive/mobile-browser flow và file input có; manifest, service worker, installability, offline shell, device matrix chưa có |
+| PWA | **Partial** | Manifest, service worker, offline shell và responsive/mobile-browser flow có; device matrix/installability evidence còn thiếu |
 | Native Mobile | **Planned — project not created** | Không có Android/iOS/Expo/React Native/Flutter project trong repository |
 | Node.js API | **Core/write owner** | Auth, posts, catalog, matching, warehouse, Gemini, admin user và system config route/service hiện có |
 | Java | **Health skeleton only** | Chỉ Actuator health; không sở hữu AI, auth hoặc domain write |

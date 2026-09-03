@@ -1,6 +1,6 @@
 # Tổng quan dự án FPTU Lost & Found System
 
-Cập nhật: **01/09/2026**
+Cập nhật: **03/09/2026**
 
 ## 1. Định vị
 
@@ -46,21 +46,24 @@ LNFS hướng tới:
 Đã có runtime evidence trong repository:
 
 - Auth email OTP/SMTP, password login, JWT access/refresh, logout, forgot/reset password và profile cơ bản.
+- Profile avatar qua Cloudinary authenticated delivery, activity/reputation summary và owner-scoped profile activity endpoint.
 - Backend role guard cho USER, STUDENT, LECTURER, STAFF, ADMIN; frontend route guard cho Web.
 - Tạo/cập nhật/đóng/xóa mềm bài LOST/FOUND; board, my posts, detail, search/filter/sort/pagination.
 - Category hai cấp, campus area, building và public active-only handover point catalog.
 - Admin CRUD/toggle điểm bàn giao, map image upload, marker coordinates và guard không xóa điểm còn appointment/reference vận hành.
+- Admin moderation/report, dashboard KPI theo kỳ, current snapshot, status breakdown và aggregate CSV/JSON export; moderation target được suy ra từ report.
 - Post media local storage qua protected proxy, validation MIME/signature/size/count.
 - Gemini-assisted multi-image analysis tạo title/description/category/tags draft có thể chỉnh sửa.
 - Hybrid/rule-based matching dùng text normalization tiếng Việt, category, location, time, image/OCR tags, tier, score breakdown và explanation.
 - Staff warehouse receive/store/return, retention deadline, handover counts và storage log.
+- PWA manifest, service worker, application shell và offline fallback không cache API/private data.
 
 ### 4.2 Partial
 
-- Responsive web có mobile viewport checks nhưng chưa có PWA manifest/service worker/installability/offline shell.
+- Responsive web có mobile viewport checks, PWA manifest, service worker và privacy-safe offline shell; device/installability evidence vẫn cần manual QA.
 - Warehouse có receive/store/return và retention deadline; overdue disposition/donation/transfer/disposal documents chưa đủ.
-- Admin có catalog, handover management, user access management và system config; moderation, report và dashboard toàn hệ thống chưa đủ.
-- Local media chạy được cho một API host nhưng không phù hợp nhiều máy/instance dùng chung database.
+- Manual browser/device QA, Cloudinary credential verification và Playwright workflow cho toàn bộ admin/profile vẫn cần bổ sung evidence.
+- Avatar dùng Cloudinary authenticated storage; media bài đăng vẫn local nên chưa phù hợp nhiều máy/instance dùng chung database.
 
 ### 4.3 Planned product scope
 
@@ -212,9 +215,9 @@ Khi dùng Aiven/shared MySQL:
 
 ## 11. Kiểm thử và evidence
 
-Evidence đã kiểm tra ngày 02/09/2026:
+Evidence đã kiểm tra ngày 03/09/2026:
 
-- npm test: 84 API test pass, 1 DB integration test skip an toàn vì thiếu MySQL local _test; web TypeScript check pass.
+- npm test: 108 API test pass, 1 DB integration test skip an toàn vì thiếu MySQL local _test; web TypeScript check pass.
 - npm run build: API TypeScript build và Web production build pass.
 - npm run build:java: chưa chạy được vì Maven không có trong PATH.
 - `npm --workspace @lnfs/web run e2e:home`: 16/16 Playwright tests pass, gồm auth resilience, post creation, matching view, mobile layout, Staff warehouse và Admin handover/map.

@@ -8,6 +8,20 @@ import mysql from "mysql2/promise";
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 dotenv.config({ path: path.resolve(repositoryRoot, ".env"), override: false });
 
+if (process.env.NODE_ENV?.trim().toLowerCase() === "production") {
+  throw new Error("Moderation seed is disabled in production");
+}
+if (!["true", "1", "yes"].includes(process.env.ALLOW_DESTRUCTIVE_SEED?.trim().toLowerCase() ?? "")) {
+  throw new Error("Set ALLOW_DESTRUCTIVE_SEED=true to run the moderation seed");
+}
+const approvedDatabase = process.env.SEED_DATABASE_NAME?.trim();
+if (!approvedDatabase) throw new Error("SEED_DATABASE_NAME is required for moderation seed");
+if (approvedDatabase !== process.env.DB_NAME?.trim()) throw new Error("SEED_DATABASE_NAME must match DB_NAME");
+const seedHost = process.env.DB_HOST?.trim().toLowerCase();
+if (seedHost !== "localhost" && seedHost !== "127.0.0.1") {
+  throw new Error("Moderation seed is restricted to a local test database");
+}
+
 function required(name) {
   const value = process.env[name]?.trim();
   if (!value) throw new Error(`${name} is required`);
@@ -50,7 +64,7 @@ try {
   }
 
   const [users] = await connection.execute(
-    "SELECT id, email FROM users WHERE status = 'ACTIVE' ORDER BY created_at DESC, id DESC LIMIT 1"
+    "SELECT id FROM users WHERE status = 'ACTIVE' ORDER BY created_at DESC, id DESC LIMIT 1"
   );
   const [posts] = await connection.execute(
     "SELECT id, title FROM posts WHERE deleted_at IS NULL AND status <> 'HIDDEN' ORDER BY created_at DESC, id DESC LIMIT 1"
@@ -74,7 +88,6 @@ try {
 
   console.log(`Created report test: ${reportId}`);
   console.log(`Target post: ${posts[0].title} (${posts[0].id})`);
-  console.log(`Reporter: ${users[0].email}`);
 } finally {
   await connection.end();
 }
