@@ -7,6 +7,11 @@ export const mediaPolicy = {
   allowedMimeTypes: ["image/jpeg", "image/png", "image/webp"] as const
 };
 
+export const avatarMediaPolicy = {
+  maxBytes: 1 * 1024 * 1024,
+  allowedMimeTypes: mediaPolicy.allowedMimeTypes
+};
+
 export type ImageFormat = "jpg" | "png" | "webp";
 
 export interface ValidatedImage {
@@ -51,6 +56,12 @@ export function validateImageUpload(file: Express.Multer.File): ValidatedImage {
     extension: format,
     bytes: file.size
   };
+}
+
+export function validateAvatarUpload(file: Express.Multer.File): ValidatedImage {
+  const image = validateImageUpload(file);
+  if (image.bytes > avatarMediaPolicy.maxBytes) throw new HttpError(413, "Anh dai dien vuot qua gioi han 1MB");
+  return image;
 }
 
 export function mediaContentType(format: ImageFormat) {

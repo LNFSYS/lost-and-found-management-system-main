@@ -51,6 +51,20 @@ export const authController = {
   },
   async updateProfile(request: Request, response: Response) {
     response.json({ user: await authService.updateProfile(request.auth!.sub, updateProfileSchema.parse(request.body)) });
+  },
+  async updateAvatar(request: Request, response: Response) {
+    if (!request.file) throw new HttpError(400, "Can gui anh dai dien voi field name la file");
+    response.status(201).json({ user: await authService.updateAvatar(request.auth!.sub, request.file) });
+  },
+  async getAvatar(request: Request, response: Response) {
+    const avatar = await authService.getAvatarFile(request.auth!.sub);
+    response.setHeader("Cache-Control", "private, no-store");
+    response.setHeader("X-Content-Type-Options", "nosniff");
+    if (avatar.updatedAt) response.setHeader("Last-Modified", new Date(avatar.updatedAt).toUTCString());
+    response.type(avatar.contentType).sendFile(avatar.filePath);
+  },
+  async activity(request: Request, response: Response) {
+    response.json(await authService.getActivitySummary(request.auth!.sub));
   }
 };
 

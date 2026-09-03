@@ -1,23 +1,59 @@
 import type { PoolConnection } from "mysql2/promise";
 import type { RowDataPacket } from "mysql2";
 import { pool } from "../config/db.js";
-import type { Role, User } from "../types/auth.js";
+import type { ActivitySummary, Role, User } from "../types/auth.js";
 
 type Queryable = Pick<PoolConnection, "execute">;
 interface UserRow extends RowDataPacket {
   id: string; email: string; full_name: string; student_code: string | null; phone_number: string | null;
-  password_hash: string; status: "ACTIVE" | "DISABLED"; session_version: number; created_at: Date; updated_at: Date; roles: string | null;
+  password_hash: string; avatar_file_path: string | null; avatar_mime_type: string | null; avatar_size: number | null; avatar_updated_at: Date | null;
+  status: "ACTIVE" | "DISABLED"; session_version: number; created_at: Date; updated_at: Date; roles: string | null;
+}
+
+interface AvatarRow extends RowDataPacket {
+  avatar_file_path: string | null;
+  avatar_mime_type: string | null;
+  avatar_size: number | null;
+  avatar_updated_at: Date | null;
+}
+
+interface PostStatsRow extends RowDataPacket {
+  total: number;
+  open_total: number;
+}
+
+interface CountRow extends RowDataPacket {
+  total: number;
+}
+
+interface ReputationRow extends RowDataPacket {
+  total_points: number;
+  level: ActivitySummary["reputation"]["level"];
+  updated_at: Date;
+}
+
+interface ActivityEventRow extends RowDataPacket {
+  event_type: ActivitySummary["recentEvents"][number]["type"];
+  label: string;
+  occurred_at: Date;
+  points_delta: number | null;
 }
 
 function mapUser(row: UserRow): User & { sessionVersion: number } {
   return {
     id: row.id, email: row.email, fullName: row.full_name, studentCode: row.student_code, phoneNumber: row.phone_number,
+    avatar: {
+      hasAvatar: Boolean(row.avatar_file_path),
+      updatedAt: row.avatar_updated_at?.toISOString() ?? null
+    },
     status: row.status, sessionVersion: row.session_version, roles: (row.roles?.split(",").filter(Boolean) ?? []) as Role[],
     createdAt: row.created_at.toISOString(), updatedAt: row.updated_at.toISOString()
   };
 }
 
-const selectUser = `SELECT u.id, u.email, u.password_hash, u.full_name, u.student_code, u.phone_number, u.status, u.session_version, u.created_at, u.updated_at,
+const selectUser = `SELECT u.id, u.email, u.password_hash, u.full_name, u.student_code, u.phone_number,
+  u.avatar_file_path, u.avatar_mime_type, u.avatar_size, u.avatar_updated_at,
+  u.status, u.session_version, u.created_at, u.updated_at,
   GROUP_CONCAT(ur.role_code ORDER BY ur.role_code SEPARATOR ',') AS roles
   FROM users u LEFT JOIN user_roles ur ON ur.user_id = u.id`;
 
@@ -48,6 +84,117 @@ export const userRepository = {
     if (input.phoneNumber !== undefined) { fields.push("phone_number = ?"); values.push(input.phoneNumber); }
     await pool.execute(`UPDATE users SET ${fields.join(", ")} WHERE id = ?`, [...values, userId]);
     return this.findById(userId);
+  },
+  async findAvatarById(userId: string, connection: Queryable = pool) {
+    const [rows] = await connection.execute<AvatarRow[]>(
+      `SELECT avatar_file_path, avatar_mime_type, avatar_size, avatar_updated_at
+       FROM users
+       WHERE id = ? AND status = 'ACTIVE'
+       LIMIT 1`,
+      [userId]
+    );
+    const row = rows[0];
+    if (!row?.avatar_file_path || !row.avatar_mime_type) return null;
+    return {
+      filePath: row.avatar_file_path,
+      mimeType: row.avatar_mime_type,
+      size: row.avatar_size ?? 0,
+      updatedAt: row.avatar_updated_at?.toISOString() ?? null
+    };
+  },
+  async updateAvatar(userId: string, input: { filePath: string; mimeType: string; size: number }) {
+    await pool.execute(
+      `UPDATE users
+       SET avatar_file_path = ?, avatar_mime_type = ?, avatar_size = ?, avatar_updated_at = UTC_TIMESTAMP()
+       WHERE id = ? AND status = 'ACTIVE'`,
+      [input.filePath, input.mimeType, input.size, userId]
+    );
+    return this.findById(userId);
+  },
+  async getActivitySummary(userId: string): Promise<ActivitySummary> {
+    const [
+      [postRows],
+      [claimRows],
+      [returnRows],
+      [feedbackRows],
+      [reputationRows],
+      [eventRows]
+    ] = await Promise.all([
+      pool.execute<PostStatsRow[]>(
+        `SELECT COUNT(*) AS total,
+          COALESCE(SUM(CASE WHEN status IN ('OPEN', 'MATCHED') THEN 1 ELSE 0 END), 0) AS open_total
+         FROM posts
+         WHERE user_id = ? AND deleted_at IS NULL`,
+        [userId]
+      ),
+      pool.execute<CountRow[]>("SELECT COUNT(*) AS total FROM claims WHERE claimant_id = ?", [userId]),
+      pool.execute<CountRow[]>(
+        `SELECT COUNT(DISTINCT ra.id) AS total
+         FROM return_appointments ra
+         INNER JOIN claims c ON c.id = ra.claim_id
+         INNER JOIN posts p ON p.id = ra.post_id
+         WHERE ra.status = 'COMPLETED'
+           AND (c.claimant_id = ? OR p.user_id = ? OR ra.proposer_id = ?)`,
+        [userId, userId, userId]
+      ),
+      pool.execute<CountRow[]>("SELECT COUNT(*) AS total FROM return_feedback WHERE target_user_id = ?", [userId]),
+      pool.execute<ReputationRow[]>(
+        `SELECT total_points, level, updated_at
+         FROM reputation_scores
+         WHERE user_id = ?
+         LIMIT 1`,
+        [userId]
+      ),
+      pool.execute<ActivityEventRow[]>(
+        `SELECT event_type, label, occurred_at, points_delta
+         FROM (
+           SELECT 'POST_CREATED' AS event_type, CONCAT('Da tao bai ', p.type) AS label, p.created_at AS occurred_at, NULL AS points_delta
+           FROM posts p
+           WHERE p.user_id = ? AND p.deleted_at IS NULL
+           UNION ALL
+           SELECT 'CLAIM_CREATED' AS event_type, 'Da gui yeu cau claim' AS label, c.created_at AS occurred_at, NULL AS points_delta
+           FROM claims c
+           WHERE c.claimant_id = ?
+           UNION ALL
+           SELECT 'RETURN_COMPLETED' AS event_type, 'Da hoan tat tra nhan vat pham' AS label, COALESCE(ra.completed_at, ra.updated_at) AS occurred_at, NULL AS points_delta
+           FROM return_appointments ra
+           INNER JOIN claims c ON c.id = ra.claim_id
+           INNER JOIN posts p ON p.id = ra.post_id
+           WHERE ra.status = 'COMPLETED'
+             AND (c.claimant_id = ? OR p.user_id = ? OR ra.proposer_id = ?)
+           UNION ALL
+           SELECT 'REPUTATION_CHANGED' AS event_type, 'Diem uy tin thay doi' AS label, rl.created_at AS occurred_at, rl.delta AS points_delta
+           FROM reputation_logs rl
+           WHERE rl.user_id = ?
+         ) activity_events
+         ORDER BY occurred_at DESC
+         LIMIT 10`,
+        [userId, userId, userId, userId, userId, userId]
+      )
+    ]);
+
+    const reputation = reputationRows[0];
+    return {
+      ownerId: userId,
+      counts: {
+        posts: Number(postRows[0]?.total ?? 0),
+        openPosts: Number(postRows[0]?.open_total ?? 0),
+        claims: Number(claimRows[0]?.total ?? 0),
+        completedReturns: Number(returnRows[0]?.total ?? 0),
+        receivedFeedback: Number(feedbackRows[0]?.total ?? 0)
+      },
+      reputation: {
+        totalPoints: Number(reputation?.total_points ?? 0),
+        level: reputation?.level ?? "NEW",
+        updatedAt: reputation?.updated_at?.toISOString() ?? null
+      },
+      recentEvents: eventRows.map((event) => ({
+        type: event.event_type,
+        label: event.label,
+        occurredAt: event.occurred_at.toISOString(),
+        ...(event.points_delta === null ? {} : { pointsDelta: Number(event.points_delta) })
+      }))
+    };
   },
   async updateLastLogin(userId: string) { await pool.execute("UPDATE users SET last_login_at = UTC_TIMESTAMP() WHERE id = ?", [userId]); },
   async updatePasswordAndInvalidateSessions(userId: string, passwordHash: string, connection: Queryable) {

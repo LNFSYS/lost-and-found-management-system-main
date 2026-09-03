@@ -13,6 +13,7 @@ import { StaffPage } from "./pages/staff-page";
 import { PostsPage } from "./pages/posts-page";
 import { PostDetailPage } from "./pages/post-detail-page";
 import { PostMatchesPage } from "./pages/post-matches-page";
+import { registerPwa } from "./pwa";
 import "./styles.css";
 
 const HomePage = lazy(async () => {
@@ -51,3 +52,5 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
     </BrowserRouter>
   </React.StrictMode>
 );
+
+void registerPwa();

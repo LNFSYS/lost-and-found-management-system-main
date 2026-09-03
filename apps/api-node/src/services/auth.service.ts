@@ -1,18 +1,26 @@
 import bcrypt from "bcryptjs";
+import type { Express } from "express";
 import jwt, { type SignOptions } from "jsonwebtoken";
 import type { RowDataPacket } from "mysql2";
+import { mkdir, writeFile } from "node:fs/promises";
+import path from "node:path";
 import { env } from "../config/env.js";
 import { withTransaction } from "../config/db.js";
 import { authRepository, type OtpRow, type ResetRow } from "../repositories/auth.repository.js";
 import { userRepository } from "../repositories/user.repository.js";
-import type { AccessTokenPayload, AudienceRole, User } from "../types/auth.js";
+import type { AccessTokenPayload, ActivitySummary, AudienceRole, User } from "../types/auth.js";
 import { HttpError } from "../utils/http-error.js";
+import { validateAvatarUpload } from "../utils/media.js";
+import { ensureStoredFileExists, removeStoredFileIfPresent } from "../utils/media-storage.js";
 import { hashToken, id, normalizeEmail, randomOtp, randomToken } from "../utils/security.js";
 import type { ForgotPasswordInput, LoginInput, RegisterInput, RequestOtpInput, ResetPasswordInput, UpdateProfileInput } from "../validators/auth.validator.js";
 import { emailService } from "./email.service.js";
 
 type SessionMeta = { userAgent?: string; ipAddress?: string };
 type AuthResult = { user: User; accessToken: string; refreshToken: string; refreshExpiresAt: Date };
+type AvatarFile = { filePath: string; contentType: string; updatedAt: string | null };
+
+const avatarRoot = path.resolve(env.uploadDir, "avatars");
 
 function publicUser(user: User): User { return user; }
 
@@ -23,6 +31,19 @@ export function isAccessSessionValid(user: (User & { sessionVersion: number }) |
 function signAccessToken(user: User & { sessionVersion: number }) {
   const payload: AccessTokenPayload = { sub: user.id, email: user.email, roles: user.roles, sessionVersion: user.sessionVersion };
   return jwt.sign(payload, env.jwtAccessSecret, { expiresIn: env.jwtAccessExpiresIn } as SignOptions);
+}
+
+function makeAvatarStorage(userId: string, extension: string) {
+  const filename = `${userId}-${id()}.${extension}`;
+  const filePath = path.resolve(avatarRoot, filename);
+  if (!filePath.startsWith(`${avatarRoot}${path.sep}`)) throw new HttpError(400, "Duong dan avatar khong hop le");
+  return filePath;
+}
+
+function assertAvatarPath(filePath: string) {
+  const resolved = path.resolve(filePath);
+  if (!resolved.startsWith(`${avatarRoot}${path.sep}`)) throw new HttpError(404, "Avatar khong hop le");
+  return resolved;
 }
 
 function isUsable(row: { consumed_at: Date | null; expires_at: Date; attempt_count: number; max_attempts: number }) {
@@ -142,6 +163,46 @@ export const authService = {
     const updated = await userRepository.updateProfile(userId, input);
     if (!updated) throw new HttpError(404, "Không tìm thấy tài khoản");
     return publicUser(updated);
+  },
+
+  async updateAvatar(userId: string, file: Express.Multer.File) {
+    const image = validateAvatarUpload(file);
+    const previous = await userRepository.findAvatarById(userId);
+    const nextFilePath = makeAvatarStorage(userId, image.extension);
+
+    await mkdir(avatarRoot, { recursive: true });
+    await writeFile(nextFilePath, file.buffer, { flag: "wx" });
+    try {
+      const updated = await userRepository.updateAvatar(userId, {
+        filePath: nextFilePath,
+        mimeType: image.mimeType,
+        size: image.bytes
+      });
+      if (!updated) throw new HttpError(404, "Khong tim thay tai khoan");
+      if (previous?.filePath) {
+        try {
+          await removeStoredFileIfPresent(assertAvatarPath(previous.filePath));
+        } catch {
+          console.warn(`[avatar] old avatar cleanup skipped for user ${userId}`);
+        }
+      }
+      return publicUser(updated);
+    } catch (error) {
+      await removeStoredFileIfPresent(nextFilePath).catch(() => undefined);
+      throw error;
+    }
+  },
+
+  async getAvatarFile(userId: string): Promise<AvatarFile> {
+    const avatar = await userRepository.findAvatarById(userId);
+    if (!avatar) throw new HttpError(404, "Chua co anh dai dien");
+    const filePath = assertAvatarPath(avatar.filePath);
+    await ensureStoredFileExists(filePath);
+    return { filePath, contentType: avatar.mimeType, updatedAt: avatar.updatedAt };
+  },
+
+  async getActivitySummary(userId: string): Promise<ActivitySummary> {
+    return userRepository.getActivitySummary(userId);
   },
 
   async validateAccessSession(payload: AccessTokenPayload) {

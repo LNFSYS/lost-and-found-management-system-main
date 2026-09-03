@@ -16,6 +16,7 @@ const activeUser: User & { sessionVersion: number } = {
   fullName: "User",
   studentCode: null,
   phoneNumber: null,
+  avatar: { hasAvatar: false, updatedAt: null },
   status: "ACTIVE",
   roles: ["USER"],
   createdAt: new Date().toISOString(),

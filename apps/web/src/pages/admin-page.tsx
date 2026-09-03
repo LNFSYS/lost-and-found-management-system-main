@@ -1,12 +1,15 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import {
+  AlertTriangle,
   BarChart3,
   Building2,
   CheckCircle2,
   Clock3,
+  Download,
   Eye,
   EyeOff,
   Filter,
+  FileText,
   FolderTree,
   Handshake,
   Layers3,
@@ -16,16 +19,17 @@ import {
   Plus,
   RefreshCw,
   Settings2,
+  ShieldCheck,
   Trash2,
   UploadCloud,
   UserPlus,
   UsersRound,
   X
 } from "lucide-react";
-import { api, type AdminAccessRole, type AdminArea, type AdminBuilding, type AdminCatalog, type AdminCategory, type AdminHandoverPoint, type AdminHandoverPointPayload, type AdminUser, type AdminUserStatus, type ConfigHistoryEntry, type ConfigValueType, type SystemConfig } from "../services/api";
+import { api, type AdminAccessRole, type AdminArea, type AdminBuilding, type AdminCatalog, type AdminCategory, type AdminDashboardKpis, type AdminHandoverPoint, type AdminHandoverPointPayload, type AdminModerationReport, type AdminReportEntityType, type AdminReportStatus, type AdminUser, type AdminUserStatus, type ConfigHistoryEntry, type ConfigValueType, type ModerationActionType, type SystemConfig } from "../services/api";
 
-type AdminTab = "users" | "configs" | "categories" | "locations" | "handover";
-type PendingAction = "" | "load" | "users" | "user" | "user-toggle" | "configs" | "config" | "config-history" | "category" | "area" | "building" | "handover" | "toggle" | "delete";
+type AdminTab = "operations" | "users" | "configs" | "categories" | "locations" | "handover";
+type PendingAction = "" | "load" | "users" | "user" | "user-toggle" | "configs" | "config" | "config-history" | "reports" | "review" | "kpis" | "export" | "category" | "area" | "building" | "handover" | "toggle" | "delete";
 
 const emptyCategoryForm = { name: "", parentId: "", isActive: true };
 const emptyAreaForm = { name: "", description: "", isActive: true };
@@ -46,6 +50,32 @@ const emptyUserForm = { email: "", password: "", fullName: "", studentCode: "", 
 const emptyUserFilters = { q: "", role: "" as AdminAccessRole | "", status: "" as AdminUserStatus | "", page: 1, pageSize: 10 };
 const emptyConfigForm = { configKey: "", configValue: "", valueType: "STRING" as ConfigValueType, description: "", isPublic: false, reason: "" };
 const emptyConfigFilters = { q: "", valueType: "" as ConfigValueType | "", isPublic: "" as boolean | "", page: 1, pageSize: 10 };
+const emptyReportFilters = { q: "", status: "PENDING" as AdminReportStatus | "", entityType: "" as AdminReportEntityType | "", page: 1, pageSize: 10 };
+const emptyReviewForm = { actionType: "DISMISS_REPORT" as ModerationActionType, targetUserId: "", targetPostId: "", reason: "" };
+const reportEntityLabels: Record<AdminReportEntityType, string> = { POST: "Bài đăng", USER: "Người dùng", CLAIM: "Claim", CHAT: "Chat" };
+const reportStatusLabels: Record<AdminReportStatus, string> = { PENDING: "Chờ xử lý", REVIEWED: "Đã xử lý", DISMISSED: "Đã bỏ qua" };
+const moderationActionLabels: Record<ModerationActionType, string> = {
+  DISMISS_REPORT: "Bỏ qua report",
+  WARN_USER: "Cảnh báo user",
+  HIDE_POST: "Ẩn bài đăng",
+  DELETE_POST: "Xóa bài đăng",
+  BAN_USER: "Khóa user",
+  UNBAN_USER: "Mở khóa user"
+};
+const exportSectionLabels = {
+  overview: "Tổng quan",
+  trends: "Xu hướng",
+  statusBreakdown: "Trạng thái"
+};
+const exportSectionKeys = ["overview", "trends", "statusBreakdown"] as const;
+
+function shiftDate(days: number) {
+  const date = new Date();
+  date.setDate(date.getDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+const emptyKpiFilters = { from: shiftDate(-29), to: shiftDate(0) };
 
 function messageOf(reason: unknown, fallback: string) {
   return reason instanceof Error ? reason.message : fallback;
@@ -68,6 +98,12 @@ function StatusBadge({ active }: { active: boolean }) {
 function UserStatusBadge({ status }: { status: AdminUserStatus }) {
   return <span className={`admin-status ${status === "ACTIVE" ? "admin-status--active" : ""}`}>
     {status === "ACTIVE" ? "Active" : "Disabled"}
+  </span>;
+}
+
+function ReportStatusBadge({ status }: { status: AdminReportStatus }) {
+  return <span className={`admin-status admin-status--report-${status.toLowerCase()}`}>
+    {reportStatusLabels[status]}
   </span>;
 }
 
@@ -118,7 +154,10 @@ export function AdminPage() {
   const [userTotal, setUserTotal] = useState(0);
   const [configs, setConfigs] = useState<SystemConfig[]>([]);
   const [configTotal, setConfigTotal] = useState(0);
-  const [activeTab, setActiveTab] = useState<AdminTab>("users");
+  const [reports, setReports] = useState<AdminModerationReport[]>([]);
+  const [reportTotal, setReportTotal] = useState(0);
+  const [kpis, setKpis] = useState<AdminDashboardKpis | null>(null);
+  const [activeTab, setActiveTab] = useState<AdminTab>("operations");
   const [pendingAction, setPendingAction] = useState<PendingAction>("load");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -131,6 +170,12 @@ export function AdminPage() {
   const [configEditingId, setConfigEditingId] = useState<string | null>(null);
   const [configHistory, setConfigHistory] = useState<ConfigHistoryEntry[]>([]);
   const [historyConfig, setHistoryConfig] = useState<SystemConfig | null>(null);
+  const [reportFilters, setReportFilters] = useState(emptyReportFilters);
+  const [selectedReport, setSelectedReport] = useState<AdminModerationReport | null>(null);
+  const [reviewForm, setReviewForm] = useState(emptyReviewForm);
+  const [kpiFilters, setKpiFilters] = useState(emptyKpiFilters);
+  const [exportFormat, setExportFormat] = useState<"CSV" | "JSON">("CSV");
+  const [exportSections, setExportSections] = useState({ overview: true, trends: true, statusBreakdown: true });
   const [categoryForm, setCategoryForm] = useState(emptyCategoryForm);
   const [categoryEditingId, setCategoryEditingId] = useState<string | null>(null);
   const [areaForm, setAreaForm] = useState(emptyAreaForm);
@@ -185,14 +230,55 @@ export function AdminPage() {
     }
   }
 
+  async function loadReports(nextFilters = reportFilters, silent = false) {
+    if (!silent) setPendingAction("reports");
+    setError("");
+    try {
+      const result = await api.listAdminReports(nextFilters);
+      setReports(result.items);
+      setReportTotal(result.total);
+      setReportFilters({ ...nextFilters, page: result.page, pageSize: result.pageSize });
+    } catch (reason) {
+      setError(messageOf(reason, "Không thể tải hàng đợi report"));
+    } finally {
+      if (!silent) setPendingAction("");
+    }
+  }
+
+  async function loadKpis(nextFilters = kpiFilters, silent = false) {
+    if (!silent) setPendingAction("kpis");
+    setError("");
+    try {
+      setKpis(await api.getAdminDashboardKpis(nextFilters));
+      setKpiFilters(nextFilters);
+    } catch (reason) {
+      setError(messageOf(reason, "Không thể tải KPI vận hành"));
+    } finally {
+      if (!silent) setPendingAction("");
+    }
+  }
+
   useEffect(() => {
-    void Promise.all([loadCatalog(), loadUsers(emptyUserFilters, true), loadConfigs(emptyConfigFilters, true)]).finally(() => setPendingAction(""));
+    void Promise.all([
+      loadCatalog(),
+      loadUsers(emptyUserFilters, true),
+      loadConfigs(emptyConfigFilters, true),
+      loadReports(emptyReportFilters, true),
+      loadKpis(emptyKpiFilters, true)
+    ]).finally(() => setPendingAction(""));
   }, []);
 
   const mainCategories = useMemo(() => catalog?.categories.filter((category) => !category.parentId) ?? [], [catalog]);
   const childCategories = useMemo(() => catalog?.categories.filter((category) => category.parentId) ?? [], [catalog]);
   const activeAreas = useMemo(() => catalog?.areas.filter((area) => area.isActive) ?? [], [catalog]);
   const handoverBuildings = useMemo(() => catalog?.buildings.filter((building) => !handoverForm.areaId || building.areaId === handoverForm.areaId) ?? [], [catalog, handoverForm.areaId]);
+  const recentTrends = useMemo(() => kpis?.trends.slice(-14) ?? [], [kpis]);
+  const trendMax = useMemo(() => Math.max(1, ...recentTrends.flatMap((trend) => [trend.posts, trend.claims, trend.appointments, trend.returns, trend.custody, trend.reports])), [recentTrends]);
+  const selectedExportSections = useMemo(() => (Object.entries(exportSections)
+    .filter(([, enabled]) => enabled)
+    .map(([section]) => section) as Array<"overview" | "trends" | "statusBreakdown">), [exportSections]);
+  const reviewNeedsPost = reviewForm.actionType === "HIDE_POST" || reviewForm.actionType === "DELETE_POST";
+  const reviewNeedsUser = reviewForm.actionType === "WARN_USER" || reviewForm.actionType === "BAN_USER" || reviewForm.actionType === "UNBAN_USER";
 
   async function runAction(action: PendingAction, work: () => Promise<unknown>, success: string) {
     setPendingAction(action);
@@ -389,6 +475,93 @@ export function AdminPage() {
     }
   }
 
+  function applyReportFilters(event: FormEvent) {
+    event.preventDefault();
+    void loadReports({ ...reportFilters, page: 1 });
+  }
+
+  function changeReportPage(delta: number) {
+    const maxPage = Math.max(1, Math.ceil(reportTotal / reportFilters.pageSize));
+    const page = Math.min(maxPage, Math.max(1, reportFilters.page + delta));
+    if (page !== reportFilters.page) void loadReports({ ...reportFilters, page });
+  }
+
+  function applyKpiFilters(event: FormEvent) {
+    event.preventDefault();
+    void loadKpis(kpiFilters);
+  }
+
+  function selectReport(report: AdminModerationReport) {
+    setSelectedReport(report);
+    setReviewForm({
+      actionType: "DISMISS_REPORT",
+      targetPostId: report.entityType === "POST" ? report.entityId : "",
+      targetUserId: report.entityType === "USER" ? report.entityId : "",
+      reason: ""
+    });
+  }
+
+  function changeReviewAction(actionType: ModerationActionType) {
+    setReviewForm({
+      ...reviewForm,
+      actionType,
+      targetPostId: (actionType === "HIDE_POST" || actionType === "DELETE_POST") && selectedReport?.entityType === "POST" ? selectedReport.entityId : reviewForm.targetPostId,
+      targetUserId: (actionType === "WARN_USER" || actionType === "BAN_USER" || actionType === "UNBAN_USER") && selectedReport?.entityType === "USER" ? selectedReport.entityId : reviewForm.targetUserId
+    });
+  }
+
+  async function submitReview(event: FormEvent) {
+    event.preventDefault();
+    if (!selectedReport) return;
+    if (!window.confirm(`Áp dụng "${moderationActionLabels[reviewForm.actionType]}" cho report này?`)) return;
+    setPendingAction("review");
+    setError("");
+    setNotice("");
+    try {
+      await api.reviewAdminReport(selectedReport.id, {
+        actionType: reviewForm.actionType,
+        targetPostId: reviewNeedsPost ? reviewForm.targetPostId.trim() || null : undefined,
+        targetUserId: reviewNeedsUser ? reviewForm.targetUserId.trim() || null : undefined,
+        reason: reviewForm.reason.trim()
+      });
+      setNotice("Đã ghi nhận quyết định moderation");
+      setSelectedReport(null);
+      setReviewForm(emptyReviewForm);
+      await Promise.all([loadReports(reportFilters, true), loadKpis(kpiFilters, true), loadCatalog(true)]);
+    } catch (reason) {
+      setError(messageOf(reason, "Không thể xử lý report"));
+    } finally {
+      setPendingAction("");
+    }
+  }
+
+  async function exportStatistics() {
+    if (!selectedExportSections.length) {
+      setError("Chọn ít nhất một phần dữ liệu để xuất");
+      return;
+    }
+    setPendingAction("export");
+    setError("");
+    setNotice("");
+    try {
+      const result = await api.exportAdminStatistics({ ...kpiFilters, format: exportFormat, sections: selectedExportSections });
+      const blob = new Blob([result.content], { type: result.mimeType });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = result.fileName;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      setNotice(`Đã xuất ${result.rowCount} dòng aggregate`);
+    } catch (reason) {
+      setError(messageOf(reason, "Không thể xuất thống kê"));
+    } finally {
+      setPendingAction("");
+    }
+  }
+
   function resetCategoryForm() {
     setCategoryForm(emptyCategoryForm);
     setCategoryEditingId(null);
@@ -546,7 +719,7 @@ export function AdminPage() {
         <p className="eyebrow">ADMIN OPERATIONS</p>
         <h1>Bảng quản trị</h1>
       </div>
-      <button type="button" className="secondary-button" onClick={() => void Promise.all([loadCatalog(), loadUsers(userFilters, true), loadConfigs(configFilters, true)]).finally(() => setPendingAction(""))} disabled={pendingAction === "load"}><RefreshCw size={17} /> Làm mới</button>
+      <button type="button" className="secondary-button" onClick={() => void Promise.all([loadCatalog(), loadUsers(userFilters, true), loadConfigs(configFilters, true), loadReports(reportFilters, true), loadKpis(kpiFilters, true)]).finally(() => setPendingAction(""))} disabled={pendingAction === "load"}><RefreshCw size={17} /> Làm mới</button>
     </header>
 
     <div className="admin-stats" aria-label="Thống kê nhanh">
@@ -557,6 +730,7 @@ export function AdminPage() {
     </div>
 
     <div className="admin-tabs" role="tablist" aria-label="Chức năng quản trị">
+      <button type="button" className={activeTab === "operations" ? "active" : ""} onClick={() => setActiveTab("operations")}><ShieldCheck size={18} /> Vận hành</button>
       <button type="button" className={activeTab === "users" ? "active" : ""} onClick={() => setActiveTab("users")}><UsersRound size={18} /> Người dùng</button>
       <button type="button" className={activeTab === "configs" ? "active" : ""} onClick={() => setActiveTab("configs")}><Settings2 size={18} /> Cấu hình</button>
       <button type="button" className={activeTab === "categories" ? "active" : ""} onClick={() => setActiveTab("categories")}><FolderTree size={18} /> Danh mục</button>
@@ -566,6 +740,146 @@ export function AdminPage() {
 
     {notice && <p className="form-note admin-message">{notice}</p>}
     {error && <p className="form-error admin-message" role="alert">{error}</p>}
+
+    {activeTab === "operations" && <div className="admin-operations-layout">
+      <section className="admin-panel admin-panel--list admin-operations-dashboard">
+        <div className="admin-list-heading">
+          <div><p className="eyebrow">DASHBOARD KPI</p><h2>Chỉ số vận hành</h2></div>
+          <strong>{kpis?.filters.days ?? 0} ngày</strong>
+        </div>
+        <form className="admin-reporting-filters" onSubmit={applyKpiFilters}>
+          <label className="input-field"><span>Từ ngày</span><input type="date" value={kpiFilters.from} onChange={(event) => setKpiFilters({ ...kpiFilters, from: event.target.value })} required /></label>
+          <label className="input-field"><span>Đến ngày</span><input type="date" value={kpiFilters.to} onChange={(event) => setKpiFilters({ ...kpiFilters, to: event.target.value })} required /></label>
+          <button className="secondary-button" disabled={pendingAction === "kpis"}><Filter size={17} /> Lọc KPI</button>
+        </form>
+
+        <div className="admin-kpi-metrics">
+          <article><BarChart3 size={18} /><strong>{kpis?.totals.posts ?? 0}</strong><span>Bài đăng</span></article>
+          <article><Clock3 size={18} /><strong>{kpis?.totals.openPosts ?? 0}</strong><span>Đang mở</span></article>
+          <article><FileText size={18} /><strong>{kpis?.totals.claims ?? 0}</strong><span>Claims</span></article>
+          <article><Handshake size={18} /><strong>{kpis?.totals.appointments ?? 0}</strong><span>Lịch hẹn</span></article>
+          <article><CheckCircle2 size={18} /><strong>{kpis?.totals.returns ?? 0}</strong><span>Hoàn trả</span></article>
+          <article><Layers3 size={18} /><strong>{kpis?.totals.custodyItems ?? 0}</strong><span>Custody</span></article>
+          <article><AlertTriangle size={18} /><strong>{kpis?.totals.unresolvedReports ?? 0}</strong><span>Report mở</span></article>
+        </div>
+
+        <div className="admin-trend-table-wrap">
+          <table className="admin-trend-table">
+            <thead><tr><th>Ngày</th><th>Bài</th><th>Claim</th><th>Lịch</th><th>Return</th><th>Custody</th><th>Report</th></tr></thead>
+            <tbody>
+              {recentTrends.map((trend) => <tr key={trend.date}>
+                <td>{new Date(`${trend.date}T00:00:00`).toLocaleDateString("vi-VN")}</td>
+                {(["posts", "claims", "appointments", "returns", "custody", "reports"] as const).map((metric) => <td key={metric}>
+                  <span className="admin-trend-value">{trend[metric]}</span>
+                  <i className="admin-trend-bar"><b style={{ width: `${Math.max(3, trend[metric] / trendMax * 100)}%` }} /></i>
+                </td>)}
+              </tr>)}
+              {!recentTrends.length && <tr><td colSpan={7} className="admin-empty-cell">Chưa có dữ liệu KPI</td></tr>}
+            </tbody>
+          </table>
+        </div>
+
+        {kpis && <div className="admin-breakdown-grid">
+          {(Object.entries(kpis.statusBreakdown) as Array<[keyof AdminDashboardKpis["statusBreakdown"], Array<{ status: string; total: number }>] >).map(([group, items]) => <article key={group}>
+            <strong>{group}</strong>
+            {items.length ? items.map((item) => <span key={item.status}>{item.status}<b>{item.total}</b></span>) : <span>NONE<b>0</b></span>}
+          </article>)}
+        </div>}
+      </section>
+
+      <aside className="admin-panel admin-panel--form admin-export-panel">
+        <div className="admin-panel-heading">
+          <span><Download size={18} /></span>
+          <div><p className="eyebrow">EXPORT</p><h2>Xuất thống kê</h2></div>
+        </div>
+        <div className="admin-form">
+          <label className="input-field"><span>Định dạng</span><select value={exportFormat} onChange={(event) => setExportFormat(event.target.value as "CSV" | "JSON")}>
+            <option value="CSV">CSV</option>
+            <option value="JSON">JSON</option>
+          </select></label>
+          <div className="admin-export-sections">
+            {exportSectionKeys.map((section) => <label className="admin-check" key={section}>
+              <input type="checkbox" checked={exportSections[section]} onChange={(event) => setExportSections({ ...exportSections, [section]: event.target.checked })} />
+              <span>{exportSectionLabels[section]}</span>
+            </label>)}
+          </div>
+          <button type="button" className="primary-button" onClick={() => void exportStatistics()} disabled={pendingAction === "export"}><Download size={17} /> Xuất file</button>
+        </div>
+      </aside>
+
+      <section className="admin-panel admin-panel--list admin-reports-panel">
+        <div className="admin-list-heading"><div><p className="eyebrow">MODERATION</p><h2>Hàng đợi report</h2></div><strong>{reportTotal}</strong></div>
+        <form className="admin-reporting-filters admin-reporting-filters--reports" onSubmit={applyReportFilters}>
+          <label className="input-field"><span>Tìm kiếm</span><input value={reportFilters.q} onChange={(event) => setReportFilters({ ...reportFilters, q: event.target.value })} placeholder="Lý do, report text, tiêu đề..." /></label>
+          <label className="input-field"><span>Trạng thái</span><select value={reportFilters.status} onChange={(event) => setReportFilters({ ...reportFilters, status: event.target.value as AdminReportStatus | "" })}>
+            <option value="">Tất cả</option>
+            <option value="PENDING">Chờ xử lý</option>
+            <option value="REVIEWED">Đã xử lý</option>
+            <option value="DISMISSED">Đã bỏ qua</option>
+          </select></label>
+          <label className="input-field"><span>Loại</span><select value={reportFilters.entityType} onChange={(event) => setReportFilters({ ...reportFilters, entityType: event.target.value as AdminReportEntityType | "" })}>
+            <option value="">Tất cả</option>
+            <option value="POST">Bài đăng</option>
+            <option value="USER">Người dùng</option>
+            <option value="CLAIM">Claim</option>
+            <option value="CHAT">Chat</option>
+          </select></label>
+          <button className="secondary-button" disabled={pendingAction === "reports"}><Filter size={17} /> Lọc</button>
+        </form>
+
+        <div className="admin-user-table-wrap">
+          <table className="admin-user-table admin-report-table">
+            <thead><tr><th>Report</th><th>Đối tượng</th><th>Trạng thái</th><th>Thời gian</th><th></th></tr></thead>
+            <tbody>
+              {reports.map((report) => <tr key={report.id}>
+                <td>
+                  <strong>{report.reason}</strong>
+                  <span>{report.details || "Không có mô tả thêm"}</span>
+                  <small>{report.reporter.fullName} / {report.reporter.email}</small>
+                </td>
+                <td>
+                  <strong>{reportEntityLabels[report.entityType]}</strong>
+                  <span>{report.entity.title || report.entityId}</span>
+                  <small>{report.entity.status || "Không rõ"}{report.entity.ownerName ? ` / ${report.entity.ownerName}` : ""}</small>
+                </td>
+                <td><ReportStatusBadge status={report.status} /></td>
+                <td>{new Date(report.createdAt).toLocaleString("vi-VN")}</td>
+                <td><button type="button" className="secondary-button" onClick={() => selectReport(report)} disabled={report.status !== "PENDING"}><ShieldCheck size={17} /> Review</button></td>
+              </tr>)}
+              {!reports.length && <tr><td colSpan={5} className="admin-empty-cell">Không có report phù hợp</td></tr>}
+            </tbody>
+          </table>
+        </div>
+        <div className="admin-pagination">
+          <button type="button" className="secondary-button" onClick={() => changeReportPage(-1)} disabled={reportFilters.page <= 1}>Trước</button>
+          <span>Trang {reportFilters.page} / {Math.max(1, Math.ceil(reportTotal / reportFilters.pageSize))}</span>
+          <button type="button" className="secondary-button" onClick={() => changeReportPage(1)} disabled={reportFilters.page >= Math.max(1, Math.ceil(reportTotal / reportFilters.pageSize))}>Sau</button>
+        </div>
+      </section>
+
+      <aside className="admin-panel admin-panel--form admin-review-panel">
+        <div className="admin-panel-heading">
+          <span><ShieldCheck size={18} /></span>
+          <div><p className="eyebrow">ACTION</p><h2>Xác nhận moderation</h2></div>
+        </div>
+        {selectedReport ? <form className="admin-form" onSubmit={submitReview}>
+          <div className="admin-selected-report">
+            <strong>{reportEntityLabels[selectedReport.entityType]} / {selectedReport.reason}</strong>
+            <span>{selectedReport.entity.title || selectedReport.entityId}</span>
+          </div>
+          <label className="input-field"><span>Hành động</span><select value={reviewForm.actionType} onChange={(event) => changeReviewAction(event.target.value as ModerationActionType)}>
+            {Object.entries(moderationActionLabels).map(([action, label]) => <option key={action} value={action}>{label}</option>)}
+          </select></label>
+          {reviewNeedsPost && <label className="input-field"><span>Post ID</span><input value={reviewForm.targetPostId} onChange={(event) => setReviewForm({ ...reviewForm, targetPostId: event.target.value })} required /></label>}
+          {reviewNeedsUser && <label className="input-field"><span>User ID</span><input value={reviewForm.targetUserId} onChange={(event) => setReviewForm({ ...reviewForm, targetUserId: event.target.value })} required /></label>}
+          <label className="input-field"><span>Lý do</span><textarea rows={4} value={reviewForm.reason} onChange={(event) => setReviewForm({ ...reviewForm, reason: event.target.value })} required maxLength={255} /></label>
+          <div className="admin-form-actions">
+            <button type="button" className="secondary-button" onClick={() => setSelectedReport(null)}><X size={17} /> Hủy</button>
+            <button className="primary-button" disabled={pendingAction === "review"}><ShieldCheck size={17} /> Ghi nhận</button>
+          </div>
+        </form> : <div className="admin-empty admin-empty--compact"><ShieldCheck size={28} /><strong>Chưa chọn report</strong></div>}
+      </aside>
+    </div>}
 
     {activeTab === "users" && <div className="admin-grid admin-grid--users">
       <aside className="admin-panel admin-panel--form">
