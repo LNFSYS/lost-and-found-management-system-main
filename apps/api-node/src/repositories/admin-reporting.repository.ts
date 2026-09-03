@@ -59,14 +59,18 @@ export interface ModerationTargetRecord {
   type: "USER" | "POST";
   label: string;
   status: string;
+  isAdmin?: boolean;
 }
 
 export interface DashboardTotals {
   posts: number;
-  openPosts: number;
   claims: number;
   appointments: number;
   returns: number;
+}
+
+export interface DashboardSnapshot {
+  openPosts: number;
   custodyItems: number;
   unresolvedReports: number;
 }
@@ -137,6 +141,7 @@ interface ModerationTargetRow extends RowDataPacket {
   id: string;
   label: string;
   status: string;
+  is_admin?: number;
 }
 
 interface DashboardTotalsRow extends RowDataPacket {
@@ -323,10 +328,23 @@ export function createAdminReportingRepository(database: Queryable = pool) {
 
     async findUserTarget(userId: string, connection: Queryable = database, forUpdate = false): Promise<ModerationTargetRecord | null> {
       const [rows] = await connection.execute<ModerationTargetRow[]>(
-        `SELECT id, full_name AS label, status FROM users WHERE id = ? LIMIT 1${forUpdate ? " FOR UPDATE" : ""}`,
+        `SELECT u.id, u.full_name AS label, u.status,
+                EXISTS (SELECT 1 FROM user_roles ur WHERE ur.user_id = u.id AND ur.role_code = 'ADMIN') AS is_admin
+         FROM users u WHERE u.id = ? LIMIT 1${forUpdate ? " FOR UPDATE" : ""}`,
         [userId]
       );
-      return rows[0] ? { id: rows[0].id, type: "USER", label: rows[0].label, status: rows[0].status } : null;
+      return rows[0] ? { id: rows[0].id, type: "USER", label: rows[0].label, status: rows[0].status, isAdmin: Boolean(rows[0].is_admin) } : null;
+    },
+
+    async findPostOwnerTarget(postId: string, connection: Queryable = database, forUpdate = false): Promise<ModerationTargetRecord | null> {
+      const [rows] = await connection.execute<ModerationTargetRow[]>(
+        `SELECT u.id, u.full_name AS label, u.status,
+                EXISTS (SELECT 1 FROM user_roles ur WHERE ur.user_id = u.id AND ur.role_code = 'ADMIN') AS is_admin
+         FROM posts p INNER JOIN users u ON u.id = p.user_id
+         WHERE p.id = ? LIMIT 1${forUpdate ? " FOR UPDATE" : ""}`,
+        [postId]
+      );
+      return rows[0] ? { id: rows[0].id, type: "USER", label: rows[0].label, status: rows[0].status, isAdmin: Boolean(rows[0].is_admin) } : null;
     },
 
     async hidePost(postId: string, connection: Queryable) {
@@ -353,6 +371,19 @@ export function createAdminReportingRepository(database: Queryable = pool) {
       return result.affectedRows > 0;
     },
 
+    async lockActiveAdmins(connection: Queryable) {
+      const [rows] = await connection.execute<RowDataPacket[]>(
+        `SELECT u.id
+         FROM users u
+         INNER JOIN user_roles ur ON ur.user_id = u.id AND ur.role_code = 'ADMIN'
+         WHERE u.status = 'ACTIVE'
+         GROUP BY u.id
+         ORDER BY u.id
+         FOR UPDATE`
+      );
+      return rows.length;
+    },
+
     async revokeRefreshTokens(userId: string, connection: Queryable) {
       await connection.execute("UPDATE refresh_tokens SET revoked_at = UTC_TIMESTAMP() WHERE user_id = ? AND revoked_at IS NULL", [userId]);
     },
@@ -367,23 +398,27 @@ export function createAdminReportingRepository(database: Queryable = pool) {
       const [rows] = await database.execute<DashboardTotalsRow[]>(
         `SELECT
           (SELECT COUNT(*) FROM posts WHERE deleted_at IS NULL AND created_at >= ? AND created_at < ?) AS posts,
-          (SELECT COUNT(*) FROM posts WHERE deleted_at IS NULL AND status IN ('OPEN', 'MATCHED')) AS open_posts,
           (SELECT COUNT(*) FROM claims WHERE created_at >= ? AND created_at < ?) AS claims,
           (SELECT COUNT(*) FROM return_appointments WHERE created_at >= ? AND created_at < ?) AS appointments,
           (SELECT COUNT(*) FROM return_appointments WHERE status = 'COMPLETED' AND completed_at >= ? AND completed_at < ?) AS returns,
+          (SELECT COUNT(*) FROM posts WHERE deleted_at IS NULL AND status IN ('OPEN', 'MATCHED')) AS open_posts,
           (SELECT COUNT(*) FROM warehouse_items WHERE deleted_at IS NULL AND status IN ('PENDING_APPROVAL', 'RECEIVED', 'STORED', 'CLAIMED')) AS custody_items,
           (SELECT COUNT(*) FROM reports WHERE status = 'PENDING') AS unresolved_reports`,
         values
       );
       const row = rows[0];
       return {
-        posts: Number(row?.posts ?? 0),
-        openPosts: Number(row?.open_posts ?? 0),
-        claims: Number(row?.claims ?? 0),
-        appointments: Number(row?.appointments ?? 0),
-        returns: Number(row?.returns ?? 0),
-        custodyItems: Number(row?.custody_items ?? 0),
-        unresolvedReports: Number(row?.unresolved_reports ?? 0)
+        totals: {
+          posts: Number(row?.posts ?? 0),
+          claims: Number(row?.claims ?? 0),
+          appointments: Number(row?.appointments ?? 0),
+          returns: Number(row?.returns ?? 0)
+        },
+        snapshot: {
+          openPosts: Number(row?.open_posts ?? 0),
+          custodyItems: Number(row?.custody_items ?? 0),
+          unresolvedReports: Number(row?.unresolved_reports ?? 0)
+        }
       };
     },
 
@@ -438,7 +473,7 @@ export function createAdminReportingRepository(database: Queryable = pool) {
         query("SELECT status, COUNT(*) AS total FROM posts WHERE deleted_at IS NULL AND created_at >= ? AND created_at < ? GROUP BY status ORDER BY status", [window.start, window.endExclusive]),
         query("SELECT status, COUNT(*) AS total FROM claims WHERE created_at >= ? AND created_at < ? GROUP BY status ORDER BY status", [window.start, window.endExclusive]),
         query("SELECT status, COUNT(*) AS total FROM return_appointments WHERE created_at >= ? AND created_at < ? GROUP BY status ORDER BY status", [window.start, window.endExclusive]),
-        query("SELECT status, COUNT(*) AS total FROM warehouse_items WHERE deleted_at IS NULL GROUP BY status ORDER BY status"),
+        query("SELECT status, COUNT(*) AS total FROM warehouse_items WHERE deleted_at IS NULL AND received_at >= ? AND received_at < ? GROUP BY status ORDER BY status", [window.start, window.endExclusive]),
         query("SELECT status, COUNT(*) AS total FROM reports WHERE created_at >= ? AND created_at < ? GROUP BY status ORDER BY status", [window.start, window.endExclusive])
       ]);
 

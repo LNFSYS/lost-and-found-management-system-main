@@ -4,6 +4,7 @@ import type { PoolConnection } from "mysql2/promise";
 import type {
   AdminReportingRepository,
   DashboardBreakdown,
+  DashboardSnapshot,
   DashboardTotals,
   LockedReportRecord,
   ModerationReportRecord,
@@ -11,6 +12,7 @@ import type {
   ReportingWindow
 } from "../repositories/admin-reporting.repository.js";
 import { HttpError } from "../utils/http-error.js";
+import { reviewModerationReportSchema } from "../validators/admin-reporting.validator.js";
 import { createAdminReportingService } from "./admin-reporting.service.js";
 
 const fixedNow = new Date("2026-09-02T10:00:00.000Z");
@@ -45,19 +47,22 @@ function locked(report: ModerationReportRecord): LockedReportRecord {
   };
 }
 
-function fakeRepository(seedReports: ModerationReportRecord[] = []) {
+function fakeRepository(seedReports: ModerationReportRecord[] = [], options: { activeAdminCount?: number } = {}) {
   const reports = new Map(seedReports.map((report) => [report.id, { ...report }]));
   const targets = new Map<string, ModerationTargetRecord>([
     ["post-id", { id: "post-id", type: "POST", label: "Lost card", status: "OPEN" }],
-    ["user-id", { id: "user-id", type: "USER", label: "Problem User", status: "ACTIVE" }]
+    ["user-id", { id: "user-id", type: "USER", label: "Problem User", status: "ACTIVE", isAdmin: false }]
   ]);
+  let activeAdminLocks = 0;
   const actions: unknown[] = [];
   const totals: DashboardTotals = {
     posts: 4,
-    openPosts: 2,
     claims: 3,
     appointments: 2,
-    returns: 1,
+    returns: 1
+  };
+  const snapshot: DashboardSnapshot = {
+    openPosts: 2,
     custodyItems: 5,
     unresolvedReports: 1
   };
@@ -101,6 +106,11 @@ function fakeRepository(seedReports: ModerationReportRecord[] = []) {
       const target = targets.get(userId);
       return target && target.type === "USER" ? { ...target } : null;
     },
+    async findPostOwnerTarget(postId) {
+      if (postId !== "post-id") return null;
+      const target = targets.get("user-id");
+      return target && target.type === "USER" ? { ...target } : null;
+    },
     async hidePost(postId) {
       const target = targets.get(postId);
       if (!target) return false;
@@ -119,9 +129,13 @@ function fakeRepository(seedReports: ModerationReportRecord[] = []) {
       target.status = status;
       return true;
     },
+    async lockActiveAdmins() {
+      activeAdminLocks += 1;
+      return options.activeAdminCount ?? [...targets.values()].filter((target) => target.type === "USER" && target.isAdmin && target.status === "ACTIVE").length;
+    },
     async revokeRefreshTokens() {},
     async getDashboardTotals() {
-      return totals;
+      return { totals, snapshot };
     },
     async getDailyTrends(_window: ReportingWindow) {
       return [
@@ -135,14 +149,16 @@ function fakeRepository(seedReports: ModerationReportRecord[] = []) {
     }
   };
 
-  return { repository, reports, targets, actions };
+  return { repository, reports, targets, actions, getActiveAdminLocks: () => activeAdminLocks };
 }
 
-function serviceFor(repository: AdminReportingRepository, auditRecords: unknown[] = []) {
+type TestTransaction = <T>(work: (connection: PoolConnection) => Promise<T>) => Promise<T>;
+
+function serviceFor(repository: AdminReportingRepository, auditRecords: unknown[] = [], transaction: TestTransaction = async (work) => work({} as PoolConnection)) {
   return createAdminReportingService({
     repository,
     auditRepository: { async record(input) { auditRecords.push(input); } },
-    transaction: async (work) => work({} as PoolConnection),
+    transaction,
     idFactory: () => `id-${auditRecords.length}`,
     clock: () => fixedNow
   });
@@ -162,8 +178,11 @@ test("review report applies moderation action and records actor/reason without r
   assert.equal(reports.get("report-id")?.reviewer?.id, "admin-id");
   assert.equal(targets.get("post-id")?.status, "HIDDEN");
   assert.equal(actions.length, 1);
+  assert.equal((actions[0] as { targetType: string; targetId: string }).targetType, "POST");
+  assert.equal((actions[0] as { targetType: string; targetId: string }).targetId, "post-id");
   assert.match(JSON.stringify(actions[0]), /Policy violation/);
   assert.match(JSON.stringify(auditRecords[0]), /MODERATION_REPORT_REVIEWED/);
+  assert.match(JSON.stringify(auditRecords[0]), /post-id/);
   assert.equal(JSON.stringify(auditRecords).includes("DROP TABLE"), false);
   assert.equal(JSON.stringify(auditRecords).includes("<script>"), false);
 });
@@ -177,6 +196,98 @@ test("review report rejects concurrent moderation of an already handled report",
     reason: "Already reviewed"
   }), (error: unknown) => error instanceof HttpError && error.status === 409);
   assert.equal(actions.length, 0);
+});
+
+test("moderation request cannot provide arbitrary post or user target ids", () => {
+  for (const payload of [
+    { actionType: "HIDE_POST", targetPostId: "00000000-0000-4000-8000-000000000000", reason: "Policy violation" },
+    { actionType: "BAN_USER", targetUserId: "00000000-0000-4000-8000-000000000000", reason: "Policy violation" }
+  ]) {
+    assert.equal(reviewModerationReportSchema.safeParse(payload).success, false);
+  }
+});
+
+test("moderation derives the post owner for user actions", async () => {
+  const report = makeReport();
+  const { repository, actions } = fakeRepository([report]);
+  const service = serviceFor(repository);
+
+  await service.reviewReport("admin-id", report.id, { actionType: "WARN_USER", reason: "Policy violation" });
+  assert.equal(actions[0] && (actions[0] as { targetId: string }).targetId, "user-id");
+});
+
+test("moderation rejects self-ban and protects the last active admin", async () => {
+  const selfReport = makeReport({ entityType: "USER", entityId: "user-id", entity: { type: "USER", title: "Admin", status: "ACTIVE", ownerName: null, referenceId: "user-id" } });
+  const selfRepo = fakeRepository([selfReport]);
+  await assert.rejects(() => serviceFor(selfRepo.repository).reviewReport("user-id", selfReport.id, {
+    actionType: "BAN_USER",
+    reason: "Policy violation"
+  }), (error: unknown) => error instanceof HttpError && error.status === 409);
+
+  const lastReport = makeReport({ entityType: "USER", entityId: "user-id", entity: { type: "USER", title: "Admin", status: "ACTIVE", ownerName: null, referenceId: "user-id" } });
+  const lastRepo = fakeRepository([lastReport], { activeAdminCount: 1 });
+  lastRepo.targets.set("user-id", { id: "user-id", type: "USER", label: "Admin", status: "ACTIVE", isAdmin: true });
+  await assert.rejects(() => serviceFor(lastRepo.repository).reviewReport("other-admin", lastReport.id, {
+    actionType: "BAN_USER",
+    reason: "Policy violation"
+  }), (error: unknown) => error instanceof HttpError && error.status === 409);
+  assert.equal(lastRepo.getActiveAdminLocks(), 1);
+});
+
+test("moderation can ban a normal user", async () => {
+  const report = makeReport({ entityType: "USER", entityId: "user-id", entity: { type: "USER", title: "User", status: "ACTIVE", ownerName: null, referenceId: "user-id" } });
+  const state = fakeRepository([report]);
+  const service = serviceFor(state.repository);
+  await service.reviewReport("admin-id", report.id, { actionType: "BAN_USER", reason: "Policy violation" });
+  assert.equal(state.targets.get("user-id")?.status, "DISABLED");
+});
+
+test("moderation can unban a disabled user from a user report", async () => {
+  const report = makeReport({ id: "unban-report", entityType: "USER", entityId: "user-id", entity: { type: "USER", title: "User", status: "DISABLED", ownerName: null, referenceId: "user-id" } });
+  const state = fakeRepository([report]);
+  state.targets.set("user-id", { id: "user-id", type: "USER", label: "Problem User", status: "DISABLED", isAdmin: false });
+  const service = serviceFor(state.repository);
+  await service.reviewReport("admin-id", report.id, { actionType: "UNBAN_USER", reason: "Restriction reviewed" });
+  assert.equal(state.targets.get("user-id")?.status, "ACTIVE");
+});
+
+test("concurrent admin bans cannot disable the last active admin", async () => {
+  const firstReport = makeReport({ id: "admin-ban-a", entityType: "USER", entityId: "admin-a" });
+  const secondReport = makeReport({ id: "admin-ban-b", entityType: "USER", entityId: "admin-b" });
+  const state = fakeRepository([firstReport, secondReport]);
+  state.targets.set("admin-a", { id: "admin-a", type: "USER", label: "Admin A", status: "ACTIVE", isAdmin: true });
+  state.targets.set("admin-b", { id: "admin-b", type: "USER", label: "Admin B", status: "ACTIVE", isAdmin: true });
+
+  let queue = Promise.resolve();
+  const transaction: TestTransaction = async (work) => {
+    const previous = queue;
+    let release!: () => void;
+    queue = new Promise<void>((resolve) => { release = resolve; });
+    await previous;
+    try {
+      return await work({} as PoolConnection);
+    } finally {
+      release();
+    }
+  };
+  const service = serviceFor(state.repository, [], transaction);
+  const results = await Promise.allSettled([
+    service.reviewReport("root-admin", firstReport.id, { actionType: "BAN_USER", reason: "First decision" }),
+    service.reviewReport("root-admin", secondReport.id, { actionType: "BAN_USER", reason: "Second decision" })
+  ]);
+
+  assert.equal(results.filter((result) => result.status === "fulfilled").length, 1);
+  assert.equal(results.filter((result) => result.status === "rejected").length, 1);
+  assert.equal([state.targets.get("admin-a")?.status, state.targets.get("admin-b")?.status].filter((status) => status === "ACTIVE").length, 1);
+});
+
+test("moderation rejects actions that do not match claim or chat reports", async () => {
+  const report = makeReport({ entityType: "CLAIM", entityId: "claim-id" });
+  const state = fakeRepository([report]);
+  await assert.rejects(() => serviceFor(state.repository).reviewReport("admin-id", report.id, {
+    actionType: "HIDE_POST",
+    reason: "Policy violation"
+  }), (error: unknown) => error instanceof HttpError && error.status === 422);
 });
 
 test("dashboard KPIs are bounded and fill reproducible daily buckets", async () => {

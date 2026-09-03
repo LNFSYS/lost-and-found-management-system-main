@@ -5,6 +5,7 @@ import {
   adminReportingRepository,
   type AdminReportingRepository,
   type DashboardBreakdown,
+  type DashboardSnapshot,
   type DashboardTotals,
   type DailyTrendRow,
   type LockedReportRecord,
@@ -31,6 +32,7 @@ export interface DashboardKpiResponse {
   filters: { from: string; to: string; days: number; granularity: "day" };
   scope: { role: "ADMIN"; privateEvidenceIncluded: false };
   totals: DashboardTotals;
+  snapshot: DashboardSnapshot;
   trends: Array<{
     date: string;
     posts: number;
@@ -142,13 +144,6 @@ function actionTargetType(actionType: ModerationActionType): ModerationTargetTyp
   return "USER";
 }
 
-function targetIdForAction(actionType: ModerationActionType, report: LockedReportRecord, input: ReviewModerationReportInput) {
-  const targetType = actionTargetType(actionType);
-  if (targetType === "REPORT") return report.id;
-  if (targetType === "POST") return input.targetPostId ?? (report.entityType === "POST" ? report.entityId : null);
-  return input.targetUserId ?? (report.entityType === "USER" ? report.entityId : null);
-}
-
 function csvCell(value: string | number | null) {
   const raw = value === null ? "" : String(value);
   return /[",\n]/.test(raw) ? `"${raw.replace(/"/g, "\"\"")}"` : raw;
@@ -159,6 +154,9 @@ function buildExportRows(data: DashboardKpiResponse, sections: StatisticsExportS
   if (sections.includes("overview")) {
     for (const [metric, value] of Object.entries(data.totals)) {
       rows.push({ section: "overview", date: null, metric, status: null, value });
+    }
+    for (const [metric, value] of Object.entries(data.snapshot)) {
+      rows.push({ section: "overview", date: null, metric: `snapshot.${metric}`, status: "CURRENT", value });
     }
   }
   if (sections.includes("trends")) {
@@ -245,10 +243,17 @@ export function createAdminReportingService(options: {
     }
   }
 
+  function assertActionMatchesReport(actionType: ModerationActionType, report: LockedReportRecord) {
+    if (actionType === "DISMISS_REPORT") return;
+    if (report.entityType === "POST" && (actionType === "HIDE_POST" || actionType === "DELETE_POST" || actionType === "WARN_USER" || actionType === "BAN_USER" || actionType === "UNBAN_USER")) return;
+    if (report.entityType === "USER" && (actionType === "WARN_USER" || actionType === "BAN_USER" || actionType === "UNBAN_USER")) return;
+    throw new HttpError(422, "Hanh dong moderation khong phu hop voi doi tuong report");
+  }
+
   async function getDashboardKpis(input: DashboardKpiQuery = {}) {
     const parsed = dashboardKpiQuerySchema.parse(input);
     const window = normalizeWindow(parsed, clock());
-    const [totals, trendRows, statusBreakdown] = await Promise.all([
+    const [dashboardTotals, trendRows, statusBreakdown] = await Promise.all([
       repository.getDashboardTotals(window),
       repository.getDailyTrends(window),
       repository.getStatusBreakdown(window)
@@ -256,7 +261,8 @@ export function createAdminReportingService(options: {
     return {
       filters: { from: window.from, to: window.to, days: window.days, granularity: "day" as const },
       scope: { role: "ADMIN" as const, privateEvidenceIncluded: false as const },
-      totals,
+      totals: dashboardTotals.totals,
+      snapshot: dashboardTotals.snapshot,
       trends: fillDailyTrends(window, trendRows),
       statusBreakdown
     };
@@ -290,12 +296,28 @@ export function createAdminReportingService(options: {
         if (!report) throw new HttpError(404, "Khong tim thay report");
         if (report.status !== "PENDING") throw new HttpError(409, "Report da duoc xu ly");
 
+        assertActionMatchesReport(input.actionType, report);
         const targetType = actionTargetType(input.actionType);
-        const targetId = targetIdForAction(input.actionType, report, input);
-        if (!targetId) throw new HttpError(422, "Can chon doi tuong moderation phu hop voi hanh dong");
+        const targetId = report.entityType === "POST" && targetType === "USER"
+          ? (await repository.findPostOwnerTarget(report.entityId, connection, false))?.id
+          : targetType === "REPORT"
+            ? report.id
+            : report.entityType === targetType
+              ? report.entityId
+              : null;
+        if (!targetId) throw new HttpError(422, "Khong the suy ra doi tuong moderation tu report");
+
+        const activeAdminCount = input.actionType === "BAN_USER" ? await repository.lockActiveAdmins(connection) : null;
 
         const beforeTarget = await loadTargetForAction(input.actionType, targetId, connection, true);
         if (targetType !== "REPORT" && !beforeTarget) throw new HttpError(404, "Khong tim thay doi tuong moderation");
+
+        if (input.actionType === "BAN_USER") {
+          if (targetId === actorId) throw new HttpError(409, "Admin khong duoc tu khoa chinh minh");
+          if (beforeTarget?.isAdmin && beforeTarget.status === "ACTIVE" && (activeAdminCount ?? 0) <= 1) {
+            throw new HttpError(409, "Khong the khoa Admin active cuoi cung");
+          }
+        }
 
         await applyAction(input.actionType, targetId, connection);
         const afterTarget = await loadTargetForAction(input.actionType, targetId, connection, false);

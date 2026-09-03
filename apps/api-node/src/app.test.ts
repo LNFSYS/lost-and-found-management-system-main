@@ -172,7 +172,8 @@ test("admin HTTP routes enforce roles and expose user/config CRUD contracts", as
   adminReportingService.getDashboardKpis = async () => ({
     filters: { from: "2026-09-01", to: "2026-09-02", days: 2, granularity: "day" as const },
     scope: { role: "ADMIN" as const, privateEvidenceIncluded: false as const },
-    totals: { posts: 1, openPosts: 1, claims: 0, appointments: 0, returns: 0, custodyItems: 0, unresolvedReports: 1 },
+    totals: { posts: 1, claims: 0, appointments: 0, returns: 0 },
+    snapshot: { openPosts: 1, custodyItems: 0, unresolvedReports: 1 },
     trends: [],
     statusBreakdown: { posts: [], claims: [], appointments: [], custody: [], reports: [] }
   });

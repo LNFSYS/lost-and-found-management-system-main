@@ -51,7 +51,7 @@ const emptyUserFilters = { q: "", role: "" as AdminAccessRole | "", status: "" a
 const emptyConfigForm = { configKey: "", configValue: "", valueType: "STRING" as ConfigValueType, description: "", isPublic: false, reason: "" };
 const emptyConfigFilters = { q: "", valueType: "" as ConfigValueType | "", isPublic: "" as boolean | "", page: 1, pageSize: 10 };
 const emptyReportFilters = { q: "", status: "PENDING" as AdminReportStatus | "", entityType: "" as AdminReportEntityType | "", page: 1, pageSize: 10 };
-const emptyReviewForm = { actionType: "DISMISS_REPORT" as ModerationActionType, targetUserId: "", targetPostId: "", reason: "" };
+const emptyReviewForm = { actionType: "DISMISS_REPORT" as ModerationActionType, reason: "" };
 const reportEntityLabels: Record<AdminReportEntityType, string> = { POST: "Bài đăng", USER: "Người dùng", CLAIM: "Claim", CHAT: "Chat" };
 const reportStatusLabels: Record<AdminReportStatus, string> = { PENDING: "Chờ xử lý", REVIEWED: "Đã xử lý", DISMISSED: "Đã bỏ qua" };
 const moderationActionLabels: Record<ModerationActionType, string> = {
@@ -62,6 +62,12 @@ const moderationActionLabels: Record<ModerationActionType, string> = {
   BAN_USER: "Khóa user",
   UNBAN_USER: "Mở khóa user"
 };
+
+function moderationActionsForReport(report: AdminModerationReport): ModerationActionType[] {
+  if (report.entityType === "POST") return ["DISMISS_REPORT", "WARN_USER", "HIDE_POST", "DELETE_POST", "BAN_USER", "UNBAN_USER"];
+  if (report.entityType === "USER") return ["DISMISS_REPORT", "WARN_USER", "BAN_USER", "UNBAN_USER"];
+  return ["DISMISS_REPORT"];
+}
 const exportSectionLabels = {
   overview: "Tổng quan",
   trends: "Xu hướng",
@@ -495,8 +501,6 @@ export function AdminPage() {
     setSelectedReport(report);
     setReviewForm({
       actionType: "DISMISS_REPORT",
-      targetPostId: report.entityType === "POST" ? report.entityId : "",
-      targetUserId: report.entityType === "USER" ? report.entityId : "",
       reason: ""
     });
   }
@@ -505,8 +509,6 @@ export function AdminPage() {
     setReviewForm({
       ...reviewForm,
       actionType,
-      targetPostId: (actionType === "HIDE_POST" || actionType === "DELETE_POST") && selectedReport?.entityType === "POST" ? selectedReport.entityId : reviewForm.targetPostId,
-      targetUserId: (actionType === "WARN_USER" || actionType === "BAN_USER" || actionType === "UNBAN_USER") && selectedReport?.entityType === "USER" ? selectedReport.entityId : reviewForm.targetUserId
     });
   }
 
@@ -520,8 +522,6 @@ export function AdminPage() {
     try {
       await api.reviewAdminReport(selectedReport.id, {
         actionType: reviewForm.actionType,
-        targetPostId: reviewNeedsPost ? reviewForm.targetPostId.trim() || null : undefined,
-        targetUserId: reviewNeedsUser ? reviewForm.targetUserId.trim() || null : undefined,
         reason: reviewForm.reason.trim()
       });
       setNotice("Đã ghi nhận quyết định moderation");
@@ -755,13 +755,15 @@ export function AdminPage() {
 
         <div className="admin-kpi-metrics">
           <article><BarChart3 size={18} /><strong>{kpis?.totals.posts ?? 0}</strong><span>Bài đăng</span></article>
-          <article><Clock3 size={18} /><strong>{kpis?.totals.openPosts ?? 0}</strong><span>Đang mở</span></article>
           <article><FileText size={18} /><strong>{kpis?.totals.claims ?? 0}</strong><span>Claims</span></article>
           <article><Handshake size={18} /><strong>{kpis?.totals.appointments ?? 0}</strong><span>Lịch hẹn</span></article>
           <article><CheckCircle2 size={18} /><strong>{kpis?.totals.returns ?? 0}</strong><span>Hoàn trả</span></article>
-          <article><Layers3 size={18} /><strong>{kpis?.totals.custodyItems ?? 0}</strong><span>Custody</span></article>
-          <article><AlertTriangle size={18} /><strong>{kpis?.totals.unresolvedReports ?? 0}</strong><span>Report mở</span></article>
         </div>
+        <div className="admin-kpi-snapshot"><p className="eyebrow">SNAPSHOT HIỆN TẠI</p><div className="admin-kpi-metrics">
+          <article><Clock3 size={18} /><strong>{kpis?.snapshot.openPosts ?? 0}</strong><span>Đang mở</span></article>
+          <article><Layers3 size={18} /><strong>{kpis?.snapshot.custodyItems ?? 0}</strong><span>Custody</span></article>
+          <article><AlertTriangle size={18} /><strong>{kpis?.snapshot.unresolvedReports ?? 0}</strong><span>Report mở</span></article>
+        </div></div>
 
         <div className="admin-trend-table-wrap">
           <table className="admin-trend-table">
@@ -868,10 +870,9 @@ export function AdminPage() {
             <span>{selectedReport.entity.title || selectedReport.entityId}</span>
           </div>
           <label className="input-field"><span>Hành động</span><select value={reviewForm.actionType} onChange={(event) => changeReviewAction(event.target.value as ModerationActionType)}>
-            {Object.entries(moderationActionLabels).map(([action, label]) => <option key={action} value={action}>{label}</option>)}
+            {(selectedReport ? moderationActionsForReport(selectedReport) : ["DISMISS_REPORT"] as ModerationActionType[]).map((action) => <option key={action} value={action}>{moderationActionLabels[action]}</option>)}
           </select></label>
-          {reviewNeedsPost && <label className="input-field"><span>Post ID</span><input value={reviewForm.targetPostId} onChange={(event) => setReviewForm({ ...reviewForm, targetPostId: event.target.value })} required /></label>}
-          {reviewNeedsUser && <label className="input-field"><span>User ID</span><input value={reviewForm.targetUserId} onChange={(event) => setReviewForm({ ...reviewForm, targetUserId: event.target.value })} required /></label>}
+          {(reviewNeedsPost || reviewNeedsUser) && <div className="admin-selected-report"><strong>Đối tượng được suy ra từ report</strong><span>{selectedReport.entity.title || selectedReport.entityId}</span><small>{selectedReport.entity.ownerName ? `Chủ bài đăng: ${selectedReport.entity.ownerName}` : `ID: ${selectedReport.entityId}`}</small></div>}
           <label className="input-field"><span>Lý do</span><textarea rows={4} value={reviewForm.reason} onChange={(event) => setReviewForm({ ...reviewForm, reason: event.target.value })} required maxLength={255} /></label>
           <div className="admin-form-actions">
             <button type="button" className="secondary-button" onClick={() => setSelectedReport(null)}><X size={17} /> Hủy</button>

@@ -28,10 +28,8 @@ export const listModerationReportsQuerySchema = z.object({
 
 export const reviewModerationReportSchema = z.object({
   actionType: moderationActionTypeSchema,
-  targetUserId: uuid.nullable().optional(),
-  targetPostId: uuid.nullable().optional(),
   reason: z.string().trim().min(3).max(255)
-});
+}).strict();
 
 export const dashboardKpiQuerySchema = z.object({
   from: dateOnly.optional(),
