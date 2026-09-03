@@ -278,7 +278,10 @@ export function AdminPage() {
   const childCategories = useMemo(() => catalog?.categories.filter((category) => category.parentId) ?? [], [catalog]);
   const activeAreas = useMemo(() => catalog?.areas.filter((area) => area.isActive) ?? [], [catalog]);
   const handoverBuildings = useMemo(() => catalog?.buildings.filter((building) => !handoverForm.areaId || building.areaId === handoverForm.areaId) ?? [], [catalog, handoverForm.areaId]);
-  const recentTrends = useMemo(() => kpis?.trends.slice().sort((left, right) => right.date.localeCompare(left.date)).slice(0, 14) ?? [], [kpis]);
+  const recentTrends = useMemo(() => kpis?.trends
+    .filter((trend) => [trend.posts, trend.claims, trend.appointments, trend.returns, trend.custody, trend.reports].some((value) => value > 0))
+    .sort((left, right) => right.date.localeCompare(left.date))
+    .slice(0, 14) ?? [], [kpis]);
   const trendMax = useMemo(() => Math.max(1, ...recentTrends.flatMap((trend) => [trend.posts, trend.claims, trend.appointments, trend.returns, trend.custody, trend.reports])), [recentTrends]);
   const selectedExportSections = useMemo(() => (Object.entries(exportSections)
     .filter(([, enabled]) => enabled)
