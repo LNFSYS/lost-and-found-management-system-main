@@ -1,6 +1,6 @@
 # Luật nghiệp vụ LNFS
 
-Cập nhật: **01/09/2026**
+Cập nhật: **03/09/2026**
 
 ## 1. Quy ước
 
@@ -47,6 +47,9 @@ Cập nhật: **01/09/2026**
 | BR-26 | Public API chỉ trả handover point active. Admin không hard-delete point có appointment PENDING/ACCEPTED/RESCHEDULED hoặc reference vận hành; phải inactive. | UC-008–UC-010, UC-055–UC-057 | Enforced |
 | BR-27 | Migration đã chạy không được sửa; checksum mismatch phải dừng migration. | N/A | Enforced |
 | BR-28 | Node.js là write owner duy nhất; Java không ghi business state khi chưa có ownership và integration evidence. | N/A | Enforced theo kiến trúc |
+| BR-44 | Moderation phải suy ra target từ report hoặc quan hệ backend hợp lệ; không nhận target ID tùy ý từ client. BAN_USER không được tự khóa admin hoặc khóa Admin active cuối cùng. | UC-066 | Enforced |
+| BR-45 | Avatar được lưu bằng Cloudinary authenticated storage; database chỉ lưu metadata ổn định, không dùng local absolute path làm nguồn chính. | UC-038 | Enforced |
+| BR-46 | Dashboard tách metrics theo khoảng thời gian khỏi current snapshot; UI và export phải giữ nhãn scope tương ứng. | UC-067, UC-084 | Enforced |
 
 ## 4. Staff, custody và warehouse
 

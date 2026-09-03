@@ -8,6 +8,7 @@ interface AuthContextValue {
   logout(): Promise<void>;
   refreshUser(): Promise<void>;
   updateProfile(input: { fullName?: string; studentCode?: string | null; phoneNumber?: string | null }): Promise<void>;
+  updateAvatar(file: File): Promise<void>;
 }
 const AuthContext = createContext<AuthContextValue | null>(null);
 
@@ -26,7 +27,8 @@ export function AuthProvider({ children }: PropsWithChildren) {
       }
     },
     async refreshUser() { setUser(await api.me()); },
-    async updateProfile(input) { setUser(await api.updateProfile(input)); }
+    async updateProfile(input) { setUser(await api.updateProfile(input)); },
+    async updateAvatar(file) { setUser(await api.uploadProfileAvatar(file)); }
   }), [user, ready]);
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

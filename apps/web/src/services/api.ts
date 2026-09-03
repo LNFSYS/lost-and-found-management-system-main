@@ -1,5 +1,37 @@
 export type Role = "USER" | "STUDENT" | "LECTURER" | "STAFF" | "ADMIN";
-export interface CurrentUser { id: string; email: string; fullName: string; studentCode: string | null; phoneNumber: string | null; roles: Role[]; status: "ACTIVE" | "DISABLED"; createdAt: string; updatedAt: string; }
+export interface CurrentUser {
+  id: string;
+  email: string;
+  fullName: string;
+  studentCode: string | null;
+  phoneNumber: string | null;
+  avatar: { hasAvatar: boolean; updatedAt: string | null };
+  roles: Role[];
+  status: "ACTIVE" | "DISABLED";
+  createdAt: string;
+  updatedAt: string;
+}
+export interface ProfileActivitySummary {
+  ownerId: string;
+  counts: {
+    posts: number;
+    openPosts: number;
+    claims: number;
+    completedReturns: number;
+    receivedFeedback: number;
+  };
+  reputation: {
+    totalPoints: number;
+    level: "NEW" | "TRUSTED" | "RELIABLE" | "EXCELLENT";
+    updatedAt: string | null;
+  };
+  recentEvents: Array<{
+    type: "POST_CREATED" | "CLAIM_CREATED" | "RETURN_COMPLETED" | "REPUTATION_CHANGED";
+    label: string;
+    occurredAt: string;
+    pointsDelta?: number;
+  }>;
+}
 export interface AdminCategory { id: string; name: string; icon: string | null; parentId: string | null; parentName: string | null; isActive: boolean; sortOrder: number; childCount: number; createdAt: string; }
 export interface AdminArea { id: string; name: string; description: string | null; isActive: boolean; sortOrder: number; buildingCount: number; createdAt: string; }
 export interface AdminBuilding { id: string; areaId: string; areaName: string; name: string; isActive: boolean; sortOrder: number; createdAt: string; }
@@ -92,6 +124,50 @@ export interface ConfigHistoryResponse { items: ConfigHistoryEntry[]; }
 export interface PublicConfigResponse {
   items: Array<{ key: string; value: unknown; valueType: ConfigValueType; description: string | null }>;
   values: Record<string, unknown>;
+}
+export type AdminReportEntityType = "POST" | "USER" | "CLAIM" | "CHAT";
+export type AdminReportStatus = "PENDING" | "REVIEWED" | "DISMISSED";
+export type ModerationActionType = "WARN_USER" | "HIDE_POST" | "DELETE_POST" | "BAN_USER" | "UNBAN_USER" | "DISMISS_REPORT";
+export interface AdminModerationReport {
+  id: string;
+  reporter: { id: string; fullName: string; email: string };
+  entityType: AdminReportEntityType;
+  entityId: string;
+  reason: string;
+  details: string | null;
+  status: AdminReportStatus;
+  reviewer: { id: string; fullName: string } | null;
+  reviewedAt: string | null;
+  createdAt: string;
+  entity: { type: AdminReportEntityType; title: string | null; status: string | null; ownerName: string | null; referenceId: string | null };
+}
+export interface AdminReportFilters { q?: string; status?: AdminReportStatus | ""; entityType?: AdminReportEntityType | ""; page?: number; pageSize?: number; }
+export interface AdminReportListResponse { total: number; page: number; pageSize: number; items: AdminModerationReport[]; }
+export interface ReviewAdminReportPayload {
+  actionType: ModerationActionType;
+  reason: string;
+}
+export interface AdminDashboardKpis {
+  filters: { from: string; to: string; days: number; granularity: "day" };
+  scope: { role: "ADMIN"; privateEvidenceIncluded: false };
+  totals: { posts: number; claims: number; appointments: number; returns: number };
+  snapshot: { openPosts: number; custodyItems: number; unresolvedReports: number };
+  trends: Array<{ date: string; posts: number; claims: number; appointments: number; returns: number; custody: number; reports: number }>;
+  statusBreakdown: Record<"posts" | "claims" | "appointments" | "custody" | "reports", Array<{ status: string; total: number }>>;
+}
+export interface AdminKpiFilters { from?: string; to?: string; }
+export interface AdminStatisticsExportPayload extends AdminKpiFilters {
+  format?: "CSV" | "JSON";
+  sections?: Array<"overview" | "trends" | "statusBreakdown">;
+}
+export interface AdminStatisticsExportResponse {
+  fileName: string;
+  mimeType: string;
+  generatedAt: string;
+  rowCount: number;
+  filters: { from: string; to: string; days: number };
+  format: "CSV" | "JSON";
+  content: string;
 }
 export type WarehouseStatus = "PENDING_APPROVAL" | "RECEIVED" | "STORED" | "CLAIMED" | "RETURNED" | "EXPIRED" | "DISPOSED" | "DONATED" | "TRANSFERRED";
 export interface WarehouseCatalog {
@@ -309,11 +385,28 @@ const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3001/api";
 let accessToken: string | null = null;
 let refreshInFlight: Promise<SessionResponse | null> | null = null;
 
+function normalizeUser(user: CurrentUser): CurrentUser {
+  const legacyUser = user as CurrentUser & { avatar?: CurrentUser["avatar"] | null };
+  return {
+    ...legacyUser,
+    avatar: legacyUser.avatar ?? { hasAvatar: false, updatedAt: null }
+  };
+}
+
+function normalizeSession(session: SessionResponse): SessionResponse {
+  return { ...session, user: normalizeUser(session.user) };
+}
+
 async function raw<T>(path: string, init: RequestInit = {}, retry = true): Promise<T> {
   const headers = new Headers(init.headers);
   if (init.body && !(init.body instanceof FormData) && !headers.has("content-type")) headers.set("content-type", "application/json");
   if (accessToken) headers.set("authorization", `Bearer ${accessToken}`);
-  const response = await fetch(`${API_URL}${path}`, { ...init, headers, credentials: "include" });
+  let response: Response;
+  try {
+    response = await fetch(`${API_URL}${path}`, { ...init, headers, credentials: "include" });
+  } catch {
+    throw new Error("Khong co ket noi mang. Thao tac chua duoc ghi nhan, hay thu lai khi online.");
+  }
   if (response.status === 401 && retry && path !== "/auth/refresh") {
     const session = await refreshSession();
     if (session) return raw<T>(path, init, false);
@@ -329,14 +422,14 @@ async function raw<T>(path: string, init: RequestInit = {}, retry = true): Promi
 export async function refreshSession() {
   if (!refreshInFlight) {
     refreshInFlight = raw<SessionResponse>("/auth/refresh", { method: "POST" }, false)
-      .then((session) => { accessToken = session.accessToken; return session; })
+      .then((session) => { const normalized = normalizeSession(session); accessToken = normalized.accessToken; return normalized; })
       .catch(() => { accessToken = null; return null; })
       .finally(() => { refreshInFlight = null; });
   }
   return refreshInFlight;
 }
 
-function storeSession(session: SessionResponse) { accessToken = session.accessToken; return session.user; }
+function storeSession(session: SessionResponse) { const normalized = normalizeSession(session); accessToken = normalized.accessToken; return normalized.user; }
 
 function queryString(filters: object) {
   const query = new URLSearchParams();
@@ -347,12 +440,17 @@ function queryString(filters: object) {
   return value ? `?${value}` : "";
 }
 
-async function mediaBlob(path: string, retry = true): Promise<Blob> {
+async function mediaBlob(path: string, retry = true, errorMessage = "Khong the tai anh"): Promise<Blob> {
   const headers = new Headers();
   if (accessToken) headers.set("authorization", `Bearer ${accessToken}`);
-  const response = await fetch(`${API_URL}${path.replace(/^\/api/, "")}`, { headers, credentials: "include" });
-  if (response.status === 401 && retry && await refreshSession()) return mediaBlob(path, false);
-  if (!response.ok) throw new Error("Không thể tải ảnh vật phẩm");
+  let response: Response;
+  try {
+    response = await fetch(`${API_URL}${path.replace(/^\/api/, "")}`, { headers, credentials: "include" });
+  } catch {
+    throw new Error(errorMessage);
+  }
+  if (response.status === 401 && retry && await refreshSession()) return mediaBlob(path, false, errorMessage);
+  if (!response.ok) throw new Error(errorMessage);
   return response.blob();
 }
 
@@ -369,8 +467,15 @@ export const api = {
   },
   forgotPassword: (email: string) => raw<{ delivered: boolean; message: string }>("/auth/forgot-password", { method: "POST", body: JSON.stringify({ email }) }),
   resetPassword: (email: string, token: string, newPassword: string) => raw<{ reset: boolean }>("/auth/reset-password", { method: "POST", body: JSON.stringify({ email, token, newPassword }) }),
-  me: () => raw<{ user: CurrentUser }>("/auth/me").then((payload) => payload.user),
-  updateProfile: (payload: Partial<Pick<CurrentUser, "fullName" | "studentCode" | "phoneNumber">>) => raw<{ user: CurrentUser }>("/auth/profile", { method: "PATCH", body: JSON.stringify(payload) }).then((result) => result.user),
+  me: () => raw<{ user: CurrentUser }>("/auth/me").then((payload) => normalizeUser(payload.user)),
+  updateProfile: (payload: Partial<Pick<CurrentUser, "fullName" | "studentCode" | "phoneNumber">>) => raw<{ user: CurrentUser }>("/auth/profile", { method: "PATCH", body: JSON.stringify(payload) }).then((result) => normalizeUser(result.user)),
+  uploadProfileAvatar: (file: File) => {
+    const form = new FormData();
+    form.append("file", file);
+    return raw<{ user: CurrentUser }>("/auth/profile/avatar", { method: "PATCH", body: form }).then((result) => normalizeUser(result.user));
+  },
+  getProfileAvatar: () => mediaBlob("/auth/profile/avatar", true, "Khong the tai anh dai dien"),
+  getActivitySummary: () => raw<ProfileActivitySummary>("/auth/activity"),
   getPostCatalog: () => raw<PostCatalog>("/posts/catalog"),
   listPosts: (filters: PostListFilters = {}) => raw<PostListResponse>(`/posts${queryString(filters)}`),
   listMyPosts: (filters: PostListFilters = {}) => raw<PostListResponse>(`/posts/mine${queryString(filters)}`),
@@ -417,6 +522,10 @@ export const api = {
   changeAdminUserRole: (id: string, accessRole: AdminAccessRole, reason?: string) => raw<AdminUser>(`/admin/users/${id}/role`, { method: "PATCH", body: JSON.stringify({ accessRole, reason }) }),
   changeAdminUserStatus: (id: string, status: AdminUserStatus, reason?: string) => raw<AdminUser>(`/admin/users/${id}/status`, { method: "PATCH", body: JSON.stringify({ status, reason }) }),
   deleteAdminUser: (id: string) => raw<void>(`/admin/users/${id}`, { method: "DELETE" }),
+  listAdminReports: (filters: AdminReportFilters = {}) => raw<AdminReportListResponse>(`/admin/reports${queryString(filters)}`),
+  reviewAdminReport: (id: string, payload: ReviewAdminReportPayload) => raw<AdminModerationReport>(`/admin/reports/${id}/review`, { method: "PATCH", body: JSON.stringify(payload) }),
+  getAdminDashboardKpis: (filters: AdminKpiFilters = {}) => raw<AdminDashboardKpis>(`/admin/dashboard/kpis${queryString(filters)}`),
+  exportAdminStatistics: (payload: AdminStatisticsExportPayload) => raw<AdminStatisticsExportResponse>("/admin/statistics/export", { method: "POST", body: JSON.stringify(payload) }),
   listSystemConfigs: (filters: SystemConfigFilters = {}) => raw<SystemConfigListResponse>(`/admin/configs${queryString(filters)}`),
   getSystemConfig: (id: string) => raw<SystemConfig>(`/admin/configs/${id}`),
   createSystemConfig: (payload: Required<Pick<SystemConfigPayload, "configKey" | "configValue" | "valueType">> & SystemConfigPayload) => raw<SystemConfig>("/admin/configs", { method: "POST", body: JSON.stringify(payload) }),

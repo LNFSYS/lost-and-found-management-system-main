@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { Express } from "express";
-import { detectImageFormat, validateImageUpload } from "./media.js";
+import { avatarMediaPolicy, detectImageFormat, validateAvatarUpload, validateImageUpload } from "./media.js";
 import { HttpError } from "./http-error.js";
 
 function file(buffer: Buffer, mimetype: string): Express.Multer.File {
@@ -29,5 +29,16 @@ test("rejects MIME and signature mismatch", () => {
   assert.throws(
     () => validateImageUpload(file(Buffer.from([0xff, 0xd8, 0xff, 0x00]), "image/png")),
     HttpError
+  );
+});
+
+test("rejects oversized avatar uploads even when the image signature is valid", () => {
+  const oversizedJpeg = Buffer.alloc(avatarMediaPolicy.maxBytes + 1);
+  oversizedJpeg[0] = 0xff;
+  oversizedJpeg[1] = 0xd8;
+  oversizedJpeg[2] = 0xff;
+  assert.throws(
+    () => validateAvatarUpload(file(oversizedJpeg, "image/jpeg")),
+    (error: unknown) => error instanceof HttpError && error.status === 413
   );
 });

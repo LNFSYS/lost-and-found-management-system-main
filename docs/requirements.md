@@ -1,6 +1,6 @@
 # Yêu cầu hệ thống LNFS
 
-Cập nhật: **01/09/2026**
+Cập nhật: **03/09/2026**
 
 ## 1. Quy ước status
 
@@ -22,7 +22,7 @@ Requirements target bao phủ Web Application, PWA và Native Mobile. Status bê
 | FR-AUTH-01 | User yêu cầu OTP email, xác thực OTP và tạo tài khoản với audience Student/Lecturer; email FPT/edu không bắt buộc. | UC-031, UC-032 | P0 | Implemented |
 | FR-AUTH-02 | User đăng nhập password, nhận access token, refresh session và logout. | UC-033–UC-035 | P0 | Implemented |
 | FR-AUTH-03 | User yêu cầu và hoàn tất reset password bằng mã có hạn dùng. | UC-036 | P0 | Implemented |
-| FR-AUTH-04 | User xem và cập nhật profile cơ bản; avatar/activity/reputation là phần mở rộng. | UC-037–UC-039 | P1 | Partial |
+| FR-AUTH-04 | User xem/cập nhật profile cơ bản, quản lý avatar Cloudinary và xem activity/reputation. | UC-037–UC-039 | P1 | Implemented; Cloudinary live upload/delivery/cleanup smoke test pass, full UI/device QA còn pending |
 | FR-ROLE-01 | Backend xác thực JWT và kiểm tra USER/STUDENT/LECTURER/STAFF/ADMIN; Staff không truy cập Admin API. | UC-001, UC-002, UC-062 | P0 | Implemented |
 | FR-BOARD-01 | Guest chỉ xem public content; protected client xử lý loading, empty, error và unauthorized state. | UC-044–UC-047 | P0 | Implemented/Partial theo màn hình |
 
@@ -71,14 +71,14 @@ Requirements target bao phủ Web Application, PWA và Native Mobile. Status bê
 | FR-WAREHOUSE-01 | Staff/Admin receive/store/return item, retention deadline, storage log và handover counts. | UC-011–UC-015, UC-058–UC-061 | P1 | Partial: receive/store/return đã có; disposition chưa đủ |
 | FR-WAREHOUSE-02 | Overdue item chỉ được dispose/donate/transfer khi không còn claim/appointment/dispute pending và có chứng từ. | UC-016–UC-020 | P1 | Planned |
 | FR-ADMIN-01 | Admin CRUD/toggle category group, category con, area, building và handover point. | UC-008–UC-010, UC-064, UC-065 | P0 | Implemented |
-| FR-ADMIN-02 | Admin quản lý user, moderation, report, export, config và dashboard toàn hệ thống. | UC-063, UC-066, UC-067, UC-084, UC-085 | P1 | Partial |
+| FR-ADMIN-02 | Admin quản lý user, moderation, report, export, config và dashboard toàn hệ thống. | UC-063, UC-066, UC-067, UC-084, UC-085 | P1 | Implemented cho scope hiện tại; KPI snapshot đã tách contract |
 | FR-AUDIT-01 | Sensitive state transition và admin action lưu actor, action, before/after, lý do và timestamp. | UC-015, UC-018, UC-024, UC-063–UC-067 | P1 | Partial |
 
 ### 2.6 PWA và Native Mobile
 
 | ID | Requirement | UC | Priority | Status |
 | --- | --- | --- | --- | --- |
-| FR-PWA-01 | Web responsive có manifest, installability, service worker, application shell, safe offline/error fallback, retry và mobile-browser camera/gallery. Transaction chỉ thành công sau server confirmation. | UC-093–UC-100 | P1 | Partial: responsive/file input có; PWA infrastructure chưa có |
+| FR-PWA-01 | Web responsive có manifest, installability, service worker, application shell, safe offline/error fallback, retry và mobile-browser camera/gallery. Transaction chỉ thành công sau server confirmation. | UC-093–UC-100 | P1 | Partial: manifest/service worker/offline shell đã có; device matrix và manual installability evidence còn thiếu |
 | FR-MOBILE-01 | Native Mobile dùng chung API/auth/authorization/privacy/state rules, có auth, LOST/FOUND, matching, chat/image, meetup/handover và notification. | UC-M01–UC-M12 | P1 | Planned — project chưa được tạo |
 | FR-MOBILE-02 | Native Mobile có navigation, session refresh, upload, permission, device test và release build. | UC-M01–UC-M12 | P1 | Planned — công nghệ TBD |
 | FR-JAVA-01 | Java Spring Boot cung cấp health endpoint nhưng chưa sở hữu flow nghiệp vụ. | N/A | P2 | Implemented skeleton |
@@ -95,13 +95,13 @@ Requirements target bao phủ Web Application, PWA và Native Mobile. Status bê
 | NFR-DATA-01 | Migration tuần tự, checksum-protected; migration đã chạy không sửa. | P0 | Implemented trong migration runner/tests |
 | NFR-DATA-02 | Shared Aiven/dev DB không dùng cho destructive test; integration test dùng database local riêng. | P0 | Process rule |
 | NFR-PERF-01 | Board có pagination; matching có candidate limit/window và rerun rate limit. | P0 | Implemented ở tested baseline; chưa load test |
-| NFR-PORT-01 | Media tồn tại sau restart/deploy và đọc được từ mọi instance. | P0 | Not met: local storage |
+| NFR-PORT-01 | Media tồn tại sau restart/deploy và đọc được từ mọi instance. | P0 | Avatar dùng Cloudinary; media bài đăng vẫn local storage nên requirement tổng thể chưa đạt |
 | NFR-TEST-01 | API/Web build pass và logic quan trọng có unit/browser/integration evidence. | P0 | Partial: claim/chat/PWA/mobile chưa có |
 | NFR-CI-01 | Pull request tự chạy test/build với MySQL isolated. | P1 | Planned; chưa có workflow trong repository |
 | NFR-OBS-01 | Có health/readiness, structured request log và graceful shutdown. | P1 | Partial: health/readiness có; cần verify phần còn lại |
 | NFR-AUDIT-01 | Admin và sensitive transitions có audit trail đủ actor/action/before-after/time. | P1 | Partial |
 | NFR-AI-01 | AI/OCR/matching chỉ hỗ trợ quyết định; human verification bắt buộc trước trả đồ. | P0 | Implemented cho current AI/matching module; verification flow planned |
-| NFR-PWA-01 | Cached/offline UI không lộ private data và không báo transaction trước server confirmation. | P0 | Planned cùng PWA infrastructure |
+| NFR-PWA-01 | Cached/offline UI không lộ private data và không báo transaction trước server confirmation. | P0 | Implemented trong service worker/cache policy; cần manual device evidence |
 | NFR-MOBILE-01 | Native Mobile parity phải dùng shared contract và có device/release evidence. | P1 | Planned |
 
 ## 4. Acceptance và traceability
@@ -112,6 +112,6 @@ Mỗi requirement Implemented/Verified phải có route/service/UI/test path t�
 
 - Native Mobile framework và sprint/capacity.
 - Retention/disposition policy của trường.
-- Shared object storage và deployment platform.
+- Cloudinary đã dùng cho avatar; shared object storage cho media bài đăng và deployment platform vẫn cần xác nhận.
 - Quyền Staff khi xem case escalation.
 - Jira sprint dates, assignee, ticket history.

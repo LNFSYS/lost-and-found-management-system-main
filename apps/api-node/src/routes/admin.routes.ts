@@ -1,6 +1,7 @@
 import { Router, type NextFunction, type Request, type Response } from "express";
 import multer from "multer";
 import { adminCatalogController } from "../controllers/admin-catalog.controller.js";
+import { adminReportingController } from "../controllers/admin-reporting.controller.js";
 import { adminUserController } from "../controllers/admin-user.controller.js";
 import { systemConfigController } from "../controllers/system-config.controller.js";
 import { requireAnyRole, requireAuth } from "../middlewares/auth.middleware.js";
@@ -28,6 +29,11 @@ function uploadHandoverMap(request: Request, response: Response, next: NextFunct
 adminRoutes.use(requireAuth, requireAnyRole("ADMIN"));
 
 adminRoutes.get("/catalog", (req, res, next) => adminCatalogController.getCatalog(req, res).catch(next));
+
+adminRoutes.get("/reports", (req, res, next) => adminReportingController.listReports(req, res).catch(next));
+adminRoutes.patch("/reports/:id/review", (req, res, next) => adminReportingController.reviewReport(req, res).catch(next));
+adminRoutes.get("/dashboard/kpis", (req, res, next) => adminReportingController.getDashboardKpis(req, res).catch(next));
+adminRoutes.post("/statistics/export", (req, res, next) => adminReportingController.exportStatistics(req, res).catch(next));
 
 adminRoutes.get("/configs", (req, res, next) => systemConfigController.listConfigs(req, res).catch(next));
 adminRoutes.post("/configs", (req, res, next) => systemConfigController.createConfig(req, res).catch(next));
