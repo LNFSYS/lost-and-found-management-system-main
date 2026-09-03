@@ -21,6 +21,7 @@ const seedHost = process.env.DB_HOST?.trim().toLowerCase();
 if (seedHost !== "localhost" && seedHost !== "127.0.0.1") {
   throw new Error("Moderation seed is restricted to a local test database");
 }
+console.warn("[moderation-seed] LOCAL TEST DATABASE ONLY: destructive seed is enabled for the explicitly approved database.");
 
 function required(name) {
   const value = process.env[name]?.trim();
