@@ -55,7 +55,7 @@ Không tick Done chỉ vì migration, schema, Jira ticket, UI mockup hoặc test
 | [x] | UC-035 | User | Đăng xuất và revoke refresh token | Done | Logout route/service |
 | [x] | UC-036 | User | Đặt lại mật khẩu bằng mã email | Done | Forgot/reset routes |
 | [x] | UC-037 | User | Xem và cập nhật profile cơ bản | Done | auth me/profile và profile page |
-| [x] | UC-038 | User | Quản lý avatar người dùng | Done | Cloudinary avatar API, MIME/signature/size validation, cleanup tests; cần manual Cloudinary QA |
+| [x] | UC-038 | User | Quản lý avatar người dùng | Done | Cloudinary avatar API, live authenticated upload/signed delivery/cleanup smoke test, MIME/signature/size validation và cleanup tests; full UI/device QA còn pending |
 | [x] | UC-039 | User | Xem activity, reputation và feedback sau trả đồ | Done | Activity/reputation API owner-scoped, profile UI và auth tests |
 | [x] | UC-040 | Student/Lecturer | Tạo bài LOST qua API | Done | Post create route/service/UI |
 | [x] | UC-041 | Student/Lecturer | Tạo bài FOUND qua API | Done | FOUND validation và UI |

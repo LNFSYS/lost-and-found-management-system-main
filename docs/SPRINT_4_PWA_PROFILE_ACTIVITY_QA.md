@@ -1,6 +1,6 @@
 # Sprint 4 PWA/Profile/Activity QA
 
-Cập nhật implementation: **03/09/2026**. Automated API/Web checks đã pass; các mục manual bên dưới chỉ được đánh dấu hoàn thành khi có screenshot hoặc log đính kèm. Avatar runtime dùng Cloudinary authenticated delivery.
+Cập nhật implementation: **03/09/2026**. Automated API/Web checks đã pass; live Cloudinary smoke test upload/signed delivery/cleanup đã pass bằng test asset và không để lại asset. Các mục UI/device manual bên dưới chỉ được đánh dấu hoàn thành khi có screenshot hoặc log đính kèm. Avatar runtime dùng Cloudinary authenticated delivery.
 
 ## Scope
 

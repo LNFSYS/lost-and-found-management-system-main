@@ -62,7 +62,7 @@ LNFS hướng tới:
 
 - Responsive web có mobile viewport checks, PWA manifest, service worker và privacy-safe offline shell; device/installability evidence vẫn cần manual QA.
 - Warehouse có receive/store/return và retention deadline; overdue disposition/donation/transfer/disposal documents chưa đủ.
-- Manual browser/device QA, Cloudinary credential verification và Playwright workflow cho toàn bộ admin/profile vẫn cần bổ sung evidence.
+- Manual browser/device QA và Playwright workflow cho toàn bộ admin/profile vẫn cần bổ sung evidence; Cloudinary authenticated upload/delivery/cleanup smoke test đã pass.
 - Avatar dùng Cloudinary authenticated storage; media bài đăng vẫn local nên chưa phù hợp nhiều máy/instance dùng chung database.
 
 ### 4.3 Planned product scope

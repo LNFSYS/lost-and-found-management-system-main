@@ -22,7 +22,7 @@ Requirements target bao phủ Web Application, PWA và Native Mobile. Status bê
 | FR-AUTH-01 | User yêu cầu OTP email, xác thực OTP và tạo tài khoản với audience Student/Lecturer; email FPT/edu không bắt buộc. | UC-031, UC-032 | P0 | Implemented |
 | FR-AUTH-02 | User đăng nhập password, nhận access token, refresh session và logout. | UC-033–UC-035 | P0 | Implemented |
 | FR-AUTH-03 | User yêu cầu và hoàn tất reset password bằng mã có hạn dùng. | UC-036 | P0 | Implemented |
-| FR-AUTH-04 | User xem/cập nhật profile cơ bản, quản lý avatar Cloudinary và xem activity/reputation. | UC-037–UC-039 | P1 | Implemented; Cloudinary manual setup còn cần xác nhận |
+| FR-AUTH-04 | User xem/cập nhật profile cơ bản, quản lý avatar Cloudinary và xem activity/reputation. | UC-037–UC-039 | P1 | Implemented; Cloudinary live upload/delivery/cleanup smoke test pass, full UI/device QA còn pending |
 | FR-ROLE-01 | Backend xác thực JWT và kiểm tra USER/STUDENT/LECTURER/STAFF/ADMIN; Staff không truy cập Admin API. | UC-001, UC-002, UC-062 | P0 | Implemented |
 | FR-BOARD-01 | Guest chỉ xem public content; protected client xử lý loading, empty, error và unauthorized state. | UC-044–UC-047 | P0 | Implemented/Partial theo màn hình |
 

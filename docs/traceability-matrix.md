@@ -38,7 +38,7 @@ Nguồn status là code/test hiện tại. Mỗi dòng liên kết business rule
 | BR-31 | NFR-AUDIT-01 | UC-015, UC-064–UC-067 | Implemented/Partial | Warehouse storage log, admin user/config và moderation audit đã có; catalog audit và toàn bộ domain transition còn thiếu |
 
 | BR-31, BR-43 | FR-ADMIN-02 | UC-066, UC-067, UC-084 | Implemented/Verified current scope | admin-reporting.service/repository, admin-page.tsx, moderation/KPI/export tests; moderation target được suy ra từ report và KPI snapshot tách khỏi metrics theo kỳ |
-| BR-07, BR-41 | FR-AUTH-04 | UC-038, UC-039 | Implemented/Verified current scope | Cloudinary avatar adapter, profile activity API/UI, avatar cleanup tests; manual Cloudinary credential/device QA còn cần chạy |
+| BR-07, BR-41 | FR-AUTH-04 | UC-038, UC-039 | Implemented/Verified current scope | Cloudinary avatar adapter, live authenticated upload/signed delivery/cleanup smoke test, profile activity API/UI và avatar cleanup tests; full UI/device QA còn cần chạy |
 
 ## 3. Channel evidence
 
