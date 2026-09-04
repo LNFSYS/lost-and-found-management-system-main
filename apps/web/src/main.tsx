@@ -13,6 +13,7 @@ import { StaffPage } from "./pages/staff-page";
 import { PostsPage } from "./pages/posts-page";
 import { PostDetailPage } from "./pages/post-detail-page";
 import { PostMatchesPage } from "./pages/post-matches-page";
+import { ClaimsPage } from "./pages/claims-page";
 import "./styles.css";
 
 const HomePage = lazy(async () => {
@@ -37,6 +38,8 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
               <Route path="/my-posts" element={<PostsPage initialTab="mine" />} />
               <Route path="/posts/:postId/matches" element={<PostMatchesPage />} />
               <Route path="/posts/:postId" element={<PostDetailPage />} />
+              <Route path="/claims" element={<ClaimsPage />} />
+              <Route path="/claims/:claimId" element={<ClaimsPage />} />
               <Route element={<RouteGuard roles={["STAFF", "ADMIN"]} />}>
                 <Route path="/staff" element={<StaffPage />} />
               </Route>

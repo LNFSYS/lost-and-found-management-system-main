@@ -278,6 +278,82 @@ export interface PostMatchesResponse {
   weights: { text: number; category: number; location: number; time: number; image: number; ocr: number };
   results: PostMatchResult[];
 }
+export type ClaimStatus = "PENDING" | "CONVERSATION_OPEN" | "NEED_MORE_INFO" | "ACCEPTED" | "REJECTED" | "CANCELLED";
+export type FinderDecision = "PENDING" | "ACCEPTED" | "DECLINED";
+export interface ClaimParticipant {
+  claimId: string;
+  userId: string;
+  role: "CLAIMANT" | "FINDER";
+  consentStatus: "PENDING" | "ACCEPTED" | "DECLINED";
+  joinedAt: string | null;
+  fullName: string;
+}
+export interface ClaimRecord {
+  id: string;
+  lostPostId: string | null;
+  foundPostId: string;
+  claimantId: string;
+  finderId: string;
+  status: ClaimStatus;
+  finderDecision: FinderDecision;
+  description: string | null;
+  approximateLostAt: string | null;
+  approximateLocation: string | null;
+  rejectionReason: string | null;
+  moreInfoRequest: string | null;
+  acceptedAt: string | null;
+  rejectedAt: string | null;
+  cancelledAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  claimant: { id: string; fullName: string };
+  finder: { id: string; fullName: string };
+  posts: { lost: { id: string; title: string | null } | null; found: { id: string; title: string } };
+  roomId: string | null;
+  participants?: ClaimParticipant[];
+  room?: { id: string } | null;
+  canSend?: boolean;
+}
+export interface ClaimListResponse { items: ClaimRecord[]; }
+export interface ClaimRoomSummary { id: string; claimId: string; status: ClaimStatus; finder: ClaimRecord["finder"]; claimant: ClaimRecord["claimant"]; posts: ClaimRecord["posts"]; updatedAt: string; }
+export interface ClaimRoomsResponse { items: ClaimRoomSummary[]; }
+export interface ClaimMessage {
+  id: string;
+  roomId: string;
+  sender: { id: string; fullName: string };
+  clientMessageId: string | null;
+  content: string | null;
+  messageType: "TEXT" | "IMAGE" | "SYSTEM";
+  isRead: boolean;
+  readAt: string | null;
+  createdAt: string;
+}
+export interface ClaimMessagesResponse { room: { id: string; claimId: string; status: ClaimStatus; participantRole: "CLAIMANT" | "FINDER"; createdAt: string }; items: ClaimMessage[]; }
+export interface ClaimEvidence {
+  id: string;
+  claimId: string;
+  uploadedBy: { id: string; fullName: string };
+  mediaFormat: string | null;
+  mediaBytes: number | null;
+  evidenceType: "OWNERSHIP_PROOF" | "ADDITIONAL_DOC" | "PHOTO";
+  description: string | null;
+  createdAt: string;
+  url: string;
+}
+export interface ClaimEvidenceResponse { items: ClaimEvidence[]; }
+export type NotificationType = "CLAIM_REQUEST_RECEIVED" | "CLAIM_ACCEPTED";
+export interface AppNotification {
+  id: string;
+  type: NotificationType;
+  title: string;
+  body: string | null;
+  entityType: string | null;
+  entityId: string | null;
+  isRead: boolean;
+  readAt: string | null;
+  createdAt: string;
+}
+export interface NotificationListResponse { items: AppNotification[]; }
 export interface PostListResponse { total: number; page: number; pageSize: number; items: PostSummary[]; }
 export interface PostListFilters {
   q?: string;
@@ -391,6 +467,29 @@ export const api = {
   },
   getPostMatches: (postId: string) => raw<PostMatchesResponse>(`/posts/${postId}/matches`),
   recalculatePostMatches: (postId: string) => raw<PostMatchesResponse>(`/posts/${postId}/matches/recalculate`, { method: "POST" }),
+  listClaims: () => raw<ClaimListResponse>("/claims"),
+  getClaim: (claimId: string) => raw<ClaimRecord>(`/claims/${claimId}`),
+  createClaim: (payload: { lostPostId: string; foundPostId: string; description?: string; requestKey?: string }) => {
+    const requestKey = payload.requestKey ?? crypto.randomUUID();
+    return raw<ClaimRecord & { idempotent: boolean }>("/claims", { method: "POST", headers: { "Idempotency-Key": requestKey }, body: JSON.stringify({ ...payload, requestKey: undefined }) });
+  },
+  decideClaim: (claimId: string, decision: "ACCEPT" | "DECLINE" | "REQUEST_MORE_INFO", note?: string) => raw<ClaimRecord>(`/claims/${claimId}/decision`, { method: "POST", body: JSON.stringify({ decision, note }) }),
+  withdrawClaim: (claimId: string) => raw<ClaimRecord>(`/claims/${claimId}/withdraw`, { method: "POST" }),
+  listClaimRooms: () => raw<ClaimRoomsResponse>("/claims/rooms"),
+  getClaimRoom: (claimId: string) => raw<{ id: string; claimId: string; status: ClaimStatus; participantRole: "CLAIMANT" | "FINDER"; createdAt: string }>(`/claims/${claimId}/room`),
+  listClaimMessages: (claimId: string) => raw<ClaimMessagesResponse>(`/claims/${claimId}/messages`),
+  sendClaimMessage: (claimId: string, content: string, clientMessageId = crypto.randomUUID()) => raw<ClaimMessage>(`/claims/${claimId}/messages`, { method: "POST", headers: { "Idempotency-Key": clientMessageId }, body: JSON.stringify({ content }) }),
+  listClaimEvidence: (claimId: string) => raw<ClaimEvidenceResponse>(`/claims/${claimId}/evidence`),
+  uploadClaimEvidence: (claimId: string, file: File, description?: string) => {
+    const form = new FormData();
+    form.append("file", file);
+    if (description) form.append("description", description);
+    return raw<ClaimEvidence>(`/claims/${claimId}/evidence`, { method: "POST", body: form });
+  },
+  getClaimEvidenceMedia: (path: string) => mediaBlob(path),
+  listNotifications: (limit = 20) => raw<NotificationListResponse>(`/notifications?limit=${Math.min(50, Math.max(1, Math.trunc(limit)))}`),
+  markNotificationRead: (notificationId: string) => raw<{ read: boolean }>(`/notifications/${notificationId}/read`, { method: "POST" }),
+  markAllNotificationsRead: () => raw<{ read: boolean; count: number }>("/notifications/read-all", { method: "POST" }),
   getAdminCatalog: () => raw<AdminCatalog>("/admin/catalog"),
   createAdminCategory: (payload: Required<Pick<AdminCategoryPayload, "name">> & AdminCategoryPayload) => raw<AdminCategory>("/admin/categories", { method: "POST", body: JSON.stringify(payload) }),
   updateAdminCategory: (id: string, payload: AdminCategoryPayload) => raw<AdminCategory>(`/admin/categories/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),

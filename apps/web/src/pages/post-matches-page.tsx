@@ -6,12 +6,13 @@ import {
   Clock3,
   Database,
   MapPin,
+  MessageCircle,
   RefreshCw,
   ScanSearch,
   ShieldCheck
 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { PostImage } from "./posts-page";
 import {
   api,
@@ -66,7 +67,7 @@ function SignalTokens({ explanation }: { explanation: MatchExplanation | null })
   </div>)}</div>;
 }
 
-function MatchCandidateCard({ result, rank, weights }: { result: PostMatchResult; rank: number; weights: PostMatchesResponse["weights"] }) {
+function MatchCandidateCard({ result, rank, weights, onClaim, claiming }: { result: PostMatchResult; rank: number; weights: PostMatchesResponse["weights"]; onClaim?: () => void; claiming?: boolean }) {
   const explanation = result.explanation;
   return <article className={`match-analysis-card match-analysis-card--${result.scoreTier.toLowerCase()}`}>
     <header className="match-analysis-card__header">
@@ -98,6 +99,7 @@ function MatchCandidateCard({ result, rank, weights }: { result: PostMatchResult
     </div>
 
     <footer>
+      {onClaim && <button className="match-claim-button" type="button" disabled={claiming} onClick={onClaim}><MessageCircle /> {claiming ? "\u0110ang t\u1ea1o y\u00eau c\u1ea7u..." : "Y\u00eau c\u1ea7u trao \u0111\u1ed5i ri\u00eang"}</button>}
       <span><Database /> Đã lưu · {formatDate(result.calculatedAt)}</span>
       <Link to={`/posts/${result.candidate.id}`}>Xem bài đối ứng <ArrowRight /></Link>
     </footer>
@@ -106,9 +108,11 @@ function MatchCandidateCard({ result, rank, weights }: { result: PostMatchResult
 
 export function PostMatchesPage() {
   const { postId = "" } = useParams();
+  const navigate = useNavigate();
   const [data, setData] = useState<PostMatchesResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [recalculating, setRecalculating] = useState(false);
+  const [claimingMatchId, setClaimingMatchId] = useState<string | null>(null);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -131,6 +135,20 @@ export function PostMatchesPage() {
       setError(reason instanceof Error ? reason.message : "Không thể tính lại matching lúc này.");
     } finally {
       setRecalculating(false);
+    }
+  }
+
+  async function requestClaim(result: PostMatchResult) {
+    if (!data || data.source.type !== "LOST") return;
+    setClaimingMatchId(result.matchId);
+    setError("");
+    try {
+      const claim = await api.createClaim({ lostPostId: data.source.id, foundPostId: result.candidate.id });
+      navigate(`/claims/${claim.id}`);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "KhÃ´ng thá»ƒ táº¡o yÃªu cáº§u trao Ä‘á»•i.");
+    } finally {
+      setClaimingMatchId(null);
     }
   }
 
@@ -177,7 +195,7 @@ export function PostMatchesPage() {
 
     {error && <div className="match-page-warning"><AlertTriangle /> {error}</div>}
     {data.results.length ? <section className="match-analysis-list" aria-label="Danh sách ứng viên matching">
-      {data.results.map((result, index) => <MatchCandidateCard key={result.matchId} result={result} rank={index + 1} weights={data.weights} />)}
+      {data.results.map((result, index) => <MatchCandidateCard key={result.matchId} result={result} rank={index + 1} weights={data.weights} onClaim={data.source.type === "LOST" && result.totalScore >= data.thresholds.suggestion ? () => void requestClaim(result) : undefined} claiming={claimingMatchId === result.matchId} />)}
     </section> : <section className="matches-empty">
       <ScanSearch />
       <p className="eyebrow">Lượt quét đã hoàn tất</p>
