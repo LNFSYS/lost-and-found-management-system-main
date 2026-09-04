@@ -1,6 +1,8 @@
 import { ArrowLeft, ArrowRight, CalendarClock, Clock3, Eye, LockKeyhole, MapPin, PackageCheck, ScanSearch, Tag, UserRound } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
+import { useNetworkStatus } from "../hooks/use-network-status";
+import { useStaleDataNotice } from "../hooks/use-stale-data-notice";
 import { PostCard, PostImage } from "./posts-page";
 import { api, type PostSummary } from "../services/api";
 
@@ -20,6 +22,8 @@ export function PostDetailPage() {
   const [relatedLoading, setRelatedLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const { online } = useNetworkStatus();
+  const { stale, clearStale } = useStaleDataNotice(useCallback((path) => path.startsWith(`/posts/${postId}`), [postId]));
 
   useEffect(() => {
     let active = true;
@@ -31,6 +35,7 @@ export function PostDetailPage() {
       .then(async (value) => {
         if (!active) return;
         setPost(value);
+        if (online) clearStale();
         if (!value.category?.id) return;
         setRelatedLoading(true);
         try {
@@ -51,7 +56,7 @@ export function PostDetailPage() {
       .catch((reason: Error) => { if (active) setError(reason.message); })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, [postId]);
+  }, [postId, online, clearStale]);
 
   if (loading) return <section className="post-detail-page"><div className="post-detail-loading"><i /><div><span /><span /><span /></div></div></section>;
   if (error || !post) return <section className="post-detail-page"><div className="posts-state is-error"><PackageCheck /><h1>Không mở được bài đăng</h1><p>{error || "Bài đăng không tồn tại hoặc bạn không có quyền xem."}</p><Link to="/posts"><ArrowLeft /> Quay lại bảng tin</Link></div></section>;
@@ -62,6 +67,10 @@ export function PostDetailPage() {
       <Link className="post-detail-back" to="/posts"><ArrowLeft /> Quay lại bài đăng</Link>
       {post.canEdit && <Link className="post-detail-matches" to={`/posts/${post.id}/matches`}><ScanSearch /> Xem phân tích matching</Link>}
     </div>
+    {(!online || stale) && <div className="pwa-data-state" role="status">
+      <strong>{online ? "Đang hiển thị dữ liệu lưu tạm" : "Bạn đang offline"}</strong>
+      <span>{online ? "Kết nối đã khôi phục, hãy làm mới nếu cần dữ liệu mới nhất." : "Chi tiết bài có thể là dữ liệu cũ; thao tác cập nhật cần kết nối mạng."}</span>
+    </div>}
     <div className="post-detail-grid">
       <section className="post-detail-visual" aria-label="Ảnh vật phẩm"><PostImage post={post} detail /></section>
       <section className="post-detail-content">

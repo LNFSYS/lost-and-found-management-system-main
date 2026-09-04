@@ -131,3 +131,60 @@ test("private candidate explanations hide raw signals from the source owner but 
     matchingService.getStoredResults = originalGetStoredResults;
   }
 });
+
+test("public board hides evidence media and raw storage URLs", async () => {
+  const originalListBoard = postRepository.listBoard;
+  postRepository.listBoard = async () => ({
+    total: 1,
+    page: 1,
+    pageSize: 9,
+    items: [post({
+      media: [
+        { id: "item-media", postId: "11111111-1111-4111-8111-111111111111", mediaKind: "ITEM", resourceType: "image", format: "jpg", bytes: 1200, sortOrder: 0, createdAt: "2026-09-01T08:06:00.000Z" },
+        { id: "evidence-media", postId: "11111111-1111-4111-8111-111111111111", mediaKind: "EVIDENCE", resourceType: "image", format: "jpg", bytes: 1400, sortOrder: 1, createdAt: "2026-09-01T08:07:00.000Z" }
+      ]
+    })]
+  });
+  try {
+    const result = await postService.listBoard({ page: 1, pageSize: 9, sort: "newest" });
+    assert.equal(result.items[0].media.length, 1);
+    assert.equal(result.items[0].media[0].id, "item-media");
+    assert.equal(result.items[0].media[0].url, "/api/posts/11111111-1111-4111-8111-111111111111/media/item-media");
+    assert.equal(JSON.stringify(result).includes("private://"), false);
+    assert.equal(JSON.stringify(result).includes("evidence-media"), false);
+  } finally {
+    postRepository.listBoard = originalListBoard;
+  }
+});
+
+test("private post media blocks anonymous and unrelated viewers before file lookup", async () => {
+  const originalFindMedia = postRepository.findMedia;
+  postRepository.findMedia = async () => ({
+    id: "private-media",
+    postId: "11111111-1111-4111-8111-111111111111",
+    mediaKind: "ITEM",
+    resourceType: "image",
+    format: "jpg",
+    bytes: 1200,
+    sortOrder: 0,
+    createdAt: "2026-09-01T08:06:00.000Z",
+    secureUrl: "private://post-media/11111111-1111-4111-8111-111111111111/private-media.jpg",
+    publicId: "private-media",
+    ownerId: "owner-id",
+    postStatus: "OPEN",
+    postVisibilityMode: "PRIVATE_DETAILS",
+    postDeletedAt: null
+  });
+  try {
+    await assert.rejects(
+      postService.getMediaFile("11111111-1111-4111-8111-111111111111", "private-media"),
+      (error: unknown) => error instanceof Error && "status" in error && error.status === 401
+    );
+    await assert.rejects(
+      postService.getMediaFile("11111111-1111-4111-8111-111111111111", "private-media", viewer("other-user")),
+      (error: unknown) => error instanceof Error && "status" in error && error.status === 403
+    );
+  } finally {
+    postRepository.findMedia = originalFindMedia;
+  }
+});

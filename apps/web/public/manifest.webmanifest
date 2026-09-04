@@ -1,0 +1,33 @@
+{
+  "name": "FPTU Lost & Found",
+  "short_name": "LNFS",
+  "description": "Bảng tin báo mất và báo nhặt đồ thất lạc trong khuôn viên FPTU Đà Nẵng.",
+  "start_url": "/home",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#f36f21",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/icons/lnfs-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Bảng tin",
+      "short_name": "Bảng tin",
+      "url": "/posts",
+      "description": "Mở bảng tin LOST/FOUND"
+    },
+    {
+      "name": "Bài của tôi",
+      "short_name": "Bài của tôi",
+      "url": "/my-posts",
+      "description": "Xem bài đăng của tôi"
+    }
+  ]
+}

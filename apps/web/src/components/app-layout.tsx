@@ -1,9 +1,11 @@
 import { Files, FileUser, Home, LayoutDashboard, LogOut, ShieldCheck, UserRound } from "lucide-react";
 import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "../context/auth-context";
+import { useNetworkStatus } from "../hooks/use-network-status";
 
 export function AppLayout() {
   const { user, logout } = useAuth();
+  const { online } = useNetworkStatus();
   const location = useLocation();
   const isAdmin = user?.roles.includes("ADMIN");
   const viewingOwnMatch = /^\/posts\/[^/]+\/matches$/.test(location.pathname);
@@ -20,6 +22,7 @@ export function AppLayout() {
       </nav>
       <button className="icon-text-button" onClick={() => { void logout().catch(() => undefined); }}><LogOut size={18} /> Đăng xuất</button>
     </header>
+    {!online && <div className="offline-banner" role="status">Bạn đang offline. Ứng dụng chỉ hiển thị giao diện hoặc dữ liệu đã lưu tạm; thao tác gửi mới cần kết nối mạng.</div>}
     <main className="workspace"><Outlet /></main>
   </div>;
 }

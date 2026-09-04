@@ -1,6 +1,8 @@
 import { ArrowLeft, ArrowRight, CalendarClock, Files, ImageOff, LockKeyhole, MapPin, Plus, ScanSearch, Search, SlidersHorizontal } from "lucide-react";
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
+import { useNetworkStatus } from "../hooks/use-network-status";
+import { useStaleDataNotice } from "../hooks/use-stale-data-notice";
 import { api, type PostCatalog, type PostListFilters, type PostListResponse, type PostSummary } from "../services/api";
 
 type BoardTab = "explore" | "mine";
@@ -92,6 +94,8 @@ export function PostsPage({ initialTab = "explore" }: { initialTab?: BoardTab })
   const [searchDraft, setSearchDraft] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const { online } = useNetworkStatus();
+  const { stale, clearStale } = useStaleDataNotice(useCallback((path) => path.startsWith("/posts"), []));
 
   const leafCategories = useMemo(() => catalog?.categories.filter((category) => category.parentId !== null) ?? [], [catalog]);
   const totalPages = Math.max(1, Math.ceil((result?.total ?? 0) / (result?.pageSize ?? 9)));
@@ -102,11 +106,11 @@ export function PostsPage({ initialTab = "explore" }: { initialTab?: BoardTab })
     setLoading(true);
     setError("");
     const request = tab === "mine" ? api.listMyPosts(filters) : api.listPosts(filters);
-    request.then((value) => { if (active) setResult(value); })
+    request.then((value) => { if (active) { setResult(value); if (online) clearStale(); } })
       .catch((reason: Error) => { if (active) setError(reason.message); })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, [tab, filters]);
+  }, [tab, filters, online, clearStale]);
 
   function changeTab(nextTab: BoardTab) {
     setTab(nextTab);
@@ -143,6 +147,11 @@ export function PostsPage({ initialTab = "explore" }: { initialTab?: BoardTab })
     </div>
 
     <div className="posts-result-meta"><strong>{result?.total ?? 0}</strong><span>{tab === "mine" ? "bài đăng của bạn" : "bài đang hiển thị trên bảng tin"}</span></div>
+
+    {(!online || stale) && <div className="pwa-data-state" role="status">
+      <strong>{online ? "Đang hiển thị dữ liệu lưu tạm" : "Bạn đang offline"}</strong>
+      <span>{online ? "Kết nối đã khôi phục, hãy làm mới nếu cần dữ liệu mới nhất." : "Danh sách có thể là dữ liệu cũ; tạo, sửa hoặc tải ảnh cần kết nối mạng."}</span>
+    </div>}
 
     {loading ? <div className="post-grid" aria-label="Đang tải bài đăng">{Array.from({ length: 6 }, (_, index) => <div className="post-skeleton" key={index}><i /><span /><span /><span /></div>)}</div>
       : error ? <div className="posts-state is-error"><Files /><h2>Không tải được bài đăng</h2><p>{error}</p><button onClick={() => setFilters((current) => ({ ...current }))}>Thử lại</button></div>

@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useAuth } from "../context/auth-context";
+import { useNetworkStatus } from "../hooks/use-network-status";
 import {
   api,
   type CreatedPost,
@@ -82,6 +83,7 @@ export function StoryPostForm({
   onSessionReset
 }: StoryPostFormProps) {
   const { user } = useAuth();
+  const { online } = useNetworkStatus();
   const defaultContact = user?.phoneNumber || user?.email || "";
   const [catalog, setCatalog] = useState<PostCatalog | null>(null);
   const [catalogError, setCatalogError] = useState("");
@@ -192,6 +194,10 @@ export function StoryPostForm({
   async function analyzeImage() {
     if (!files.length || analyzing) return;
     setError("");
+    if (!online) {
+      setError("Bạn đang offline. Phân tích ảnh cần kết nối mạng và chưa được gửi.");
+      return;
+    }
     setAnalyzing(true);
     onAnalysisStart?.(files);
     try {
@@ -219,6 +225,10 @@ export function StoryPostForm({
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
+    if (!online) {
+      setError("Bạn đang offline. Bài đăng và ảnh chưa được gửi; hãy kết nối mạng rồi thử lại.");
+      return;
+    }
     if (!categoryId) {
       setError("Vui lòng chọn nhóm chính và danh mục cụ thể.");
       return;
@@ -298,6 +308,7 @@ export function StoryPostForm({
 
     {catalogError && <div className="story-form-message is-error">Không tải được danh mục: {catalogError}</div>}
     {!catalog && !catalogError && <div className="story-form-loading"><LoaderCircle /> Đang tải dữ liệu campus...</div>}
+    {!online && <div className="story-form-message is-warning">Bạn đang offline. Dữ liệu nhập chỉ ở trên màn hình này và chưa được gửi lên hệ thống.</div>}
 
     <div className="story-form-fields">
       <label className="story-field story-field--wide">
@@ -373,7 +384,7 @@ export function StoryPostForm({
             type="file"
             accept="image/jpeg,image/png,image/webp"
             multiple
-            disabled={analyzing || files.length >= MAX_IMAGE_COUNT}
+            disabled={!online || analyzing || files.length >= MAX_IMAGE_COUNT}
             onChange={(event) => {
               addFiles(Array.from(event.target.files ?? []));
               event.currentTarget.value = "";
@@ -389,7 +400,7 @@ export function StoryPostForm({
         </div>}
       </div>
       <div className="story-image-analysis-actions">
-        <button className="story-analyze-button" type="button" disabled={!files.length || analyzing} onClick={analyzeImage}>
+        <button className="story-analyze-button" type="button" disabled={!online || !files.length || analyzing} onClick={analyzeImage}>
           {analyzing ? <><LoaderCircle className="is-spinning" /> Đang phân tích {files.length} ảnh...</> : <><Sparkles /> Phân tích {files.length || "các"} ảnh</>}
         </button>
         <p>Chụp nhiều góc giúp đọc rõ hãng, model, chữ, phụ kiện và dấu hiệu riêng. Ảnh chỉ được gửi tới Gemini khi bạn chủ động phân tích.</p>
@@ -413,7 +424,7 @@ export function StoryPostForm({
     {error && <div className="story-form-message is-error">{error}</div>}
     <div className="story-post-form__footer">
       <span><Camera /> Ảnh và nội dung chỉ được đăng sau khi bạn xác nhận</span>
-      <button type="submit" disabled={submitting || analyzing || !catalog}>
+      <button type="submit" disabled={!online || submitting || analyzing || !catalog}>
         {submitting ? <><LoaderCircle className="is-spinning" /> Đang đăng...</> : <>Đăng bài {type} <ChevronRight /></>}
       </button>
     </div>

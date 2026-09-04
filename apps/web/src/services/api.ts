@@ -309,11 +309,22 @@ const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3001/api";
 let accessToken: string | null = null;
 let refreshInFlight: Promise<SessionResponse | null> | null = null;
 
+function isMutation(init: RequestInit) {
+  const method = (init.method ?? "GET").toUpperCase();
+  return !["GET", "HEAD"].includes(method);
+}
+
 async function raw<T>(path: string, init: RequestInit = {}, retry = true): Promise<T> {
+  if (typeof navigator !== "undefined" && !navigator.onLine && isMutation(init)) {
+    throw new Error("Bạn đang offline. Thao tác này chưa được gửi và cần kết nối mạng để thực hiện.");
+  }
   const headers = new Headers(init.headers);
   if (init.body && !(init.body instanceof FormData) && !headers.has("content-type")) headers.set("content-type", "application/json");
   if (accessToken) headers.set("authorization", `Bearer ${accessToken}`);
   const response = await fetch(`${API_URL}${path}`, { ...init, headers, credentials: "include" });
+  if (typeof window !== "undefined" && response.headers.get("x-lnfs-cache") === "stale") {
+    window.dispatchEvent(new CustomEvent("lnfs:stale-data", { detail: { path } }));
+  }
   if (response.status === 401 && retry && path !== "/auth/refresh") {
     const session = await refreshSession();
     if (session) return raw<T>(path, init, false);
