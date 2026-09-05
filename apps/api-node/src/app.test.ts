@@ -9,6 +9,7 @@ import { authService } from "./services/auth.service.js";
 import { adminUserService } from "./services/admin-user.service.js";
 import { systemConfigService } from "./services/system-config.service.js";
 import { adminReportingService } from "./services/admin-reporting.service.js";
+import { returnFeedbackService } from "./services/return-feedback.service.js";
 import type { AdminUserRecord } from "./repositories/admin-user.repository.js";
 import type { SystemConfigRecord } from "./repositories/system-config.repository.js";
 import type { Role } from "./types/auth.js";
@@ -16,6 +17,7 @@ import type { Role } from "./types/auth.js";
 const userId = "11111111-1111-4111-8111-111111111111";
 const configId = "22222222-2222-4222-8222-222222222222";
 const reportId = "33333333-3333-4333-8333-333333333333";
+const appointmentId = "44444444-4444-4444-8444-444444444444";
 
 function makeAccessToken(roles: Role[] = ["USER", "ADMIN"]) {
   return jwt.sign({ sub: "admin-id", email: "admin@example.com", roles, sessionVersion: 0 }, env.jwtAccessSecret);
@@ -353,6 +355,79 @@ test("profile activity and avatar routes are authenticated and owner scoped", as
     authService.validateAccessSession = originalValidateAccessSession;
     authService.getActivitySummary = originalActivity;
     authService.updateAvatar = originalUpdateAvatar;
+  }
+});
+
+test("return feedback routes require auth and keep participant contract", async () => {
+  const originalValidateAccessSession = authService.validateAccessSession;
+  const originalEligibility = returnFeedbackService.getEligibility;
+  const originalSubmit = returnFeedbackService.submitFeedback;
+  let submitInput: unknown;
+
+  authService.validateAccessSession = async () => true;
+  returnFeedbackService.getEligibility = async (currentAppointmentId, viewer) => ({
+    appointmentId: currentAppointmentId,
+    eligible: true,
+    reason: null,
+    returnStatus: "COMPLETED",
+    completedAt: "2026-09-05T08:00:00.000Z",
+    dualConfirmed: true,
+    custodyAuthorized: false,
+    currentUserFeedback: null,
+    feedbackCount: 0,
+    participants: {
+      claimant: { id: viewer.sub, fullName: "Claimant" },
+      finder: { id: "finder-id", fullName: "Finder" }
+    }
+  });
+  returnFeedbackService.submitFeedback = async (_currentAppointmentId, input, viewer) => {
+    submitInput = input;
+    return {
+      feedback: {
+        id: "feedback-id",
+        appointmentId,
+        reviewer: { id: viewer.sub, fullName: "Claimant" },
+        target: { id: "finder-id", fullName: "Finder" },
+        rating: input.rating,
+        comment: input.comment,
+        isNegative: false,
+        status: "NEW" as const,
+        createdAt: "2026-09-05T08:05:00.000Z"
+      },
+      reputationEventCreated: true,
+      idempotent: false
+    };
+  };
+
+  try {
+    await withServer(async () => undefined, async (baseUrl) => {
+      const unauthenticated = await fetch(`${baseUrl}/api/returns/${appointmentId}/feedback/eligibility`);
+      assert.equal(unauthenticated.status, 401);
+
+      const eligibility = await fetch(`${baseUrl}/api/returns/${appointmentId}/feedback/eligibility`, { headers: jsonHeaders(["USER"]) });
+      assert.equal(eligibility.status, 200);
+      assert.equal((await eligibility.json()).eligible, true);
+
+      const invalid = await fetch(`${baseUrl}/api/returns/${appointmentId}/feedback`, {
+        method: "POST",
+        headers: jsonHeaders(["USER"]),
+        body: JSON.stringify({ rating: 5, comment: "<b>xss</b>", idempotencyKey: "feedback-key" })
+      });
+      assert.equal(invalid.status, 422);
+
+      const created = await fetch(`${baseUrl}/api/returns/${appointmentId}/feedback`, {
+        method: "POST",
+        headers: { ...jsonHeaders(["USER"]), "idempotency-key": "header-key" },
+        body: JSON.stringify({ rating: 5, comment: "Cam on ban" })
+      });
+      assert.equal(created.status, 201);
+      assert.equal((await created.json()).reputationEventCreated, true);
+      assert.deepEqual(submitInput, { rating: 5, comment: "Cam on ban", idempotencyKey: "header-key" });
+    });
+  } finally {
+    authService.validateAccessSession = originalValidateAccessSession;
+    returnFeedbackService.getEligibility = originalEligibility;
+    returnFeedbackService.submitFeedback = originalSubmit;
   }
 });
 

@@ -4,6 +4,7 @@ import {
   Camera,
   History,
   Mail,
+  MessageSquare,
   PencilLine,
   RefreshCw,
   Save,
@@ -14,7 +15,7 @@ import {
 } from "lucide-react";
 import { type ChangeEvent, type FormEvent, useEffect, useState } from "react";
 import { useAuth } from "../context/auth-context";
-import { api, type ProfileActivitySummary } from "../services/api";
+import { api, type ProfileActivitySummary, type ReturnFeedbackEligibility } from "../services/api";
 
 const avatarTypes = ["image/jpeg", "image/png", "image/webp"];
 const avatarMaxBytes = 1 * 1024 * 1024;
@@ -57,6 +58,13 @@ export function ProfilePage() {
   const [activity, setActivity] = useState<ProfileActivitySummary | null>(null);
   const [activityLoading, setActivityLoading] = useState(false);
   const [activityError, setActivityError] = useState("");
+  const [feedbackAppointmentId, setFeedbackAppointmentId] = useState("");
+  const [feedbackEligibility, setFeedbackEligibility] = useState<ReturnFeedbackEligibility | null>(null);
+  const [feedbackRating, setFeedbackRating] = useState(5);
+  const [feedbackComment, setFeedbackComment] = useState("");
+  const [feedbackBusy, setFeedbackBusy] = useState(false);
+  const [feedbackNotice, setFeedbackNotice] = useState("");
+  const [feedbackError, setFeedbackError] = useState("");
 
   useEffect(() => {
     if (!user) return;
@@ -149,6 +157,45 @@ export function ProfilePage() {
       setAvatarError(reason instanceof Error ? reason.message : "Không thể cập nhật ảnh đại diện.");
     } finally {
       setAvatarBusy(false);
+    }
+  }
+
+  async function checkFeedbackEligibility(event: FormEvent) {
+    event.preventDefault();
+    setFeedbackBusy(true);
+    setFeedbackError("");
+    setFeedbackNotice("");
+    setFeedbackEligibility(null);
+    try {
+      setFeedbackEligibility(await api.getReturnFeedbackEligibility(feedbackAppointmentId.trim()));
+    } catch (reason) {
+      setFeedbackError(reason instanceof Error ? reason.message : "Không thể kiểm tra quyền gửi feedback.");
+    } finally {
+      setFeedbackBusy(false);
+    }
+  }
+
+  async function submitReturnFeedback(event: FormEvent) {
+    event.preventDefault();
+    if (!user) return;
+    setFeedbackBusy(true);
+    setFeedbackError("");
+    setFeedbackNotice("");
+    try {
+      const currentUserId = user.id;
+      const idempotencyKey = `feedback-${feedbackAppointmentId.trim()}-${currentUserId}`;
+      const result = await api.submitReturnFeedback(feedbackAppointmentId.trim(), {
+        rating: feedbackRating,
+        comment: feedbackComment || null,
+        idempotencyKey
+      });
+      setFeedbackNotice(result.idempotent ? "Feedback đã được ghi nhận trước đó." : "Đã gửi feedback và cập nhật điểm uy tín.");
+      setFeedbackEligibility(await api.getReturnFeedbackEligibility(feedbackAppointmentId.trim()));
+      await loadActivity();
+    } catch (reason) {
+      setFeedbackError(reason instanceof Error ? reason.message : "Không thể gửi feedback.");
+    } finally {
+      setFeedbackBusy(false);
     }
   }
 
@@ -271,6 +318,57 @@ export function ProfilePage() {
             </article>
           ))}
         </div>
+      </section>
+
+      <section className="profile-activity-panel return-feedback-panel">
+        <div className="profile-panel-heading">
+          <div>
+            <p className="eyebrow">FEEDBACK</p>
+            <h2>Feedback sau hoàn trả</h2>
+          </div>
+        </div>
+
+        <form className="return-feedback-check" onSubmit={checkFeedbackEligibility}>
+          <label className="input-field">
+            <span>Mã lịch hoàn trả</span>
+            <input value={feedbackAppointmentId} onChange={(event) => setFeedbackAppointmentId(event.target.value)} placeholder="UUID appointment" required />
+          </label>
+          <button type="submit" className="secondary-button" disabled={feedbackBusy || !feedbackAppointmentId.trim()}>
+            <MessageSquare size={17} /> Kiểm tra
+          </button>
+        </form>
+
+        {feedbackEligibility && (
+          <div className="return-feedback-status">
+            <strong>{feedbackEligibility.eligible ? "Bạn có thể gửi feedback" : "Chưa đủ điều kiện gửi feedback"}</strong>
+            <span>{feedbackEligibility.reason ?? `Return đã hoàn tất, ${feedbackEligibility.feedbackCount} feedback đã ghi nhận.`}</span>
+          </div>
+        )}
+
+        {feedbackEligibility?.eligible && (
+          <form className="return-feedback-form" onSubmit={submitReturnFeedback}>
+            <label className="input-field">
+              <span>Đánh giá</span>
+              <select value={feedbackRating} onChange={(event) => setFeedbackRating(Number(event.target.value))}>
+                {[5, 4, 3, 2, 1].map((rating) => <option key={rating} value={rating}>{rating}/5</option>)}
+              </select>
+            </label>
+            <label className="input-field">
+              <span>Bình luận</span>
+              <textarea value={feedbackComment} onChange={(event) => setFeedbackComment(event.target.value)} maxLength={500} placeholder="Không nhập thông tin liên hệ, bằng chứng riêng tư hoặc dữ liệu nhạy cảm." />
+            </label>
+            <button className="primary-button" disabled={feedbackBusy}><Save size={17} /> Gửi feedback</button>
+          </form>
+        )}
+
+        {feedbackEligibility?.currentUserFeedback && (
+          <div className="return-feedback-status is-done">
+            <strong>Bạn đã gửi {feedbackEligibility.currentUserFeedback.rating}/5</strong>
+            <span>{feedbackEligibility.currentUserFeedback.comment ?? "Không có bình luận."}</span>
+          </div>
+        )}
+        {feedbackNotice && <p className="form-note">{feedbackNotice}</p>}
+        {feedbackError && <p className="form-error">{feedbackError}</p>}
       </section>
     </section>
   );

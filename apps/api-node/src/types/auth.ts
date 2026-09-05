@@ -32,7 +32,7 @@ export interface ActivitySummary {
     updatedAt: string | null;
   };
   recentEvents: Array<{
-    type: "POST_CREATED" | "CLAIM_CREATED" | "RETURN_COMPLETED" | "REPUTATION_CHANGED";
+    type: "POST_CREATED" | "CLAIM_CREATED" | "RETURN_COMPLETED" | "FEEDBACK_RECEIVED" | "REPUTATION_CHANGED";
     label: string;
     occurredAt: string;
     pointsDelta?: number;

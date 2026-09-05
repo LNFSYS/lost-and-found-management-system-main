@@ -186,13 +186,17 @@ export const userRepository = {
            WHERE ra.status = 'COMPLETED'
              AND (c.claimant_id = ? OR p.user_id = ? OR ra.proposer_id = ?)
            UNION ALL
+           SELECT 'FEEDBACK_RECEIVED' AS event_type, CONCAT('Nhan feedback ', rf.rating, '/5 sau hoan tra') AS label, rf.created_at AS occurred_at, NULL AS points_delta
+           FROM return_feedback rf
+           WHERE rf.target_user_id = ?
+           UNION ALL
            SELECT 'REPUTATION_CHANGED' AS event_type, 'Diem uy tin thay doi' AS label, rl.created_at AS occurred_at, rl.delta AS points_delta
            FROM reputation_logs rl
            WHERE rl.user_id = ?
          ) activity_events
          ORDER BY occurred_at DESC
          LIMIT 10`,
-        [userId, userId, userId, userId, userId, userId]
+        [userId, userId, userId, userId, userId, userId, userId]
       )
     ]);
 

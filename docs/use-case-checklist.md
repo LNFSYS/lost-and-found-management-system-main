@@ -42,7 +42,7 @@ Không tick Done chỉ vì migration, schema, Jira ticket, UI mockup hoặc test
 | [ ] | UC-022 | Owner/Finder | Từ chối lịch hẹn kèm lý do | Planned | Chưa có appointment runtime |
 | [ ] | UC-023 | Owner/Finder | Đổi lịch hoặc hủy lịch trả đồ | Planned | Chưa có appointment runtime |
 | [ ] | UC-024 | Owner/Finder | Hoàn tất lịch hẹn và cập nhật resolved | Planned | Chưa có appointment runtime |
-| [ ] | UC-025 | System | Tính reputation sau business event | Planned | Chưa có reputation runtime |
+| [x] | UC-025 | System | Tính reputation sau business event | Done | Return feedback tạo reputation_logs/reputation_scores với idempotency và service tests |
 | [ ] | UC-026 | Admin/System | Thu thập dữ liệu training hợp lệ | Planned | Chưa có pipeline |
 | [ ] | UC-027 | Admin/Reviewer | Gắn nhãn TRUE_MATCH hoặc FALSE_MATCH | Planned | Schema foundation only |
 | [ ] | UC-028 | System | Ẩn danh dữ liệu training | Planned | Chưa có pipeline |

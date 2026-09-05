@@ -22,7 +22,7 @@ Requirements target bao phủ Web Application, PWA và Native Mobile. Status bê
 | FR-AUTH-01 | User yêu cầu OTP email, xác thực OTP và tạo tài khoản với audience Student/Lecturer; email FPT/edu không bắt buộc. | UC-031, UC-032 | P0 | Implemented |
 | FR-AUTH-02 | User đăng nhập password, nhận access token, refresh session và logout. | UC-033–UC-035 | P0 | Implemented |
 | FR-AUTH-03 | User yêu cầu và hoàn tất reset password bằng mã có hạn dùng. | UC-036 | P0 | Implemented |
-| FR-AUTH-04 | User xem/cập nhật profile cơ bản, quản lý avatar Cloudinary và xem activity/reputation. | UC-037–UC-039 | P1 | Implemented; Cloudinary live upload/delivery/cleanup smoke test pass, full UI/device QA còn pending |
+| FR-AUTH-04 | User xem/cập nhật profile cơ bản, quản lý avatar Cloudinary và xem activity/reputation. | UC-037–UC-039 | P1 | Implemented; activity có feedback/reputation event an toàn, full UI/device QA còn pending |
 | FR-ROLE-01 | Backend xác thực JWT và kiểm tra USER/STUDENT/LECTURER/STAFF/ADMIN; Staff không truy cập Admin API. | UC-001, UC-002, UC-062 | P0 | Implemented |
 | FR-BOARD-01 | Guest chỉ xem public content; protected client xử lý loading, empty, error và unauthorized state. | UC-044–UC-047 | P0 | Implemented/Partial theo màn hình |
 
@@ -59,6 +59,7 @@ Requirements target bao phủ Web Application, PWA và Native Mobile. Status bê
 | FR-CLAIM-01 | User tạo claim không trùng; evidence private được upload và chỉ actor có quyền mới xem. | UC-049, UC-052–UC-054 | P0 | Planned |
 | FR-APPT-01 | Chỉ accepted verification mới tạo appointment; hai bên đề xuất, accept, reschedule/cancel và complete. | UC-021–UC-024 | P1 | Planned |
 | FR-HANDOVER-02 | Direct return cần Finder xác nhận HANDED_OVER và Owner xác nhận RECEIVED; chỉ dual confirmation mới thành RETURNED. | UC-021–UC-024 | P0 | Planned |
+| FR-FEEDBACK-01 | Participant chỉ gửi một feedback sau completed return có dual confirmation hoặc custody outcome được ủy quyền; feedback tạo reputation event idempotent và profile activity chỉ trả dữ liệu an toàn. | UC-025, UC-039 | P1 | Implemented runtime; dữ liệu thật vẫn phụ thuộc LNFS-54 tạo completed return |
 | FR-CHAT-01 | Conversation gắn đúng Owner–Finder–LOST–FOUND, hỗ trợ text/image, room isolation, retry, seen/unread và report/block. | UC-077–UC-083 | P1 | Planned |
 | FR-RT-01 | Realtime transport được JWT-authenticated và không broadcast private data cho actor ngoài room. | UC-077–UC-083 | P1 | Planned |
 

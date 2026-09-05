@@ -26,7 +26,7 @@ export interface ProfileActivitySummary {
     updatedAt: string | null;
   };
   recentEvents: Array<{
-    type: "POST_CREATED" | "CLAIM_CREATED" | "RETURN_COMPLETED" | "REPUTATION_CHANGED";
+    type: "POST_CREATED" | "CLAIM_CREATED" | "RETURN_COMPLETED" | "FEEDBACK_RECEIVED" | "REPUTATION_CHANGED";
     label: string;
     occurredAt: string;
     pointsDelta?: number;
@@ -168,6 +168,37 @@ export interface AdminStatisticsExportResponse {
   filters: { from: string; to: string; days: number };
   format: "CSV" | "JSON";
   content: string;
+}
+export interface ReturnFeedbackRecord {
+  id: string;
+  appointmentId: string;
+  reviewer: { id: string; fullName: string | null };
+  target: { id: string; fullName: string | null };
+  rating: number;
+  comment: string | null;
+  isNegative: boolean;
+  status: "NEW" | "REVIEWED" | "FLAGGED" | "DISMISSED";
+  createdAt: string;
+}
+export interface ReturnFeedbackEligibility {
+  appointmentId: string;
+  eligible: boolean;
+  reason: string | null;
+  returnStatus: "PENDING" | "ACCEPTED" | "REJECTED" | "CANCELLED" | "COMPLETED" | "RESCHEDULED";
+  completedAt: string | null;
+  dualConfirmed: boolean;
+  custodyAuthorized: boolean;
+  currentUserFeedback: ReturnFeedbackRecord | null;
+  feedbackCount: number;
+  participants: {
+    claimant: { id: string; fullName: string };
+    finder: { id: string; fullName: string };
+  };
+}
+export interface SubmitReturnFeedbackResponse {
+  feedback: ReturnFeedbackRecord;
+  reputationEventCreated: boolean;
+  idempotent: boolean;
 }
 export type WarehouseStatus = "PENDING_APPROVAL" | "RECEIVED" | "STORED" | "CLAIMED" | "RETURNED" | "EXPIRED" | "DISPOSED" | "DONATED" | "TRANSFERRED";
 export interface WarehouseCatalog {
@@ -496,6 +527,8 @@ export const api = {
   },
   getPostMatches: (postId: string) => raw<PostMatchesResponse>(`/posts/${postId}/matches`),
   recalculatePostMatches: (postId: string) => raw<PostMatchesResponse>(`/posts/${postId}/matches/recalculate`, { method: "POST" }),
+  getReturnFeedbackEligibility: (appointmentId: string) => raw<ReturnFeedbackEligibility>(`/returns/${appointmentId}/feedback/eligibility`),
+  submitReturnFeedback: (appointmentId: string, payload: { rating: number; comment?: string | null; idempotencyKey: string }) => raw<SubmitReturnFeedbackResponse>(`/returns/${appointmentId}/feedback`, { method: "POST", body: JSON.stringify(payload) }),
   getAdminCatalog: () => raw<AdminCatalog>("/admin/catalog"),
   createAdminCategory: (payload: Required<Pick<AdminCategoryPayload, "name">> & AdminCategoryPayload) => raw<AdminCategory>("/admin/categories", { method: "POST", body: JSON.stringify(payload) }),
   updateAdminCategory: (id: string, payload: AdminCategoryPayload) => raw<AdminCategory>(`/admin/categories/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),

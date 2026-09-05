@@ -64,6 +64,7 @@ Cập nhật: **03/09/2026**
 | BR-35 | Evidence chỉ hiển thị cho claimant, post owner và reviewer có quyền; private answer không trả trước cho claimant. | UC-049, UC-054, UC-087–UC-092 | Planned |
 | BR-36 | Evidence confidence chỉ hỗ trợ review; không phải xác minh 100% và không thay thế human verification. | UC-089, UC-090, UC-092 | Planned |
 | BR-37 | Appointment chỉ tạo sau accepted verification; một claim chỉ có một active appointment. | UC-021–UC-024 | Planned |
+| BR-37A | Feedback sau trả đồ chỉ mở khi return COMPLETED có dual confirmation hoặc custody outcome được ủy quyền; mỗi participant gửi một lần và không tự cộng reputation cho chính mình. | UC-025, UC-039 | Enforced cho feedback runtime; phụ thuộc LNFS-54 để tạo completed return thật |
 | BR-38 | Disposition kho bị chặn nếu còn claim, appointment, dispute hoặc legal hold pending; overdue không tự động thanh lý. | UC-016–UC-020 | Planned |
 | BR-39 | Warehouse receive/store/return chỉ Staff/Admin; mỗi transition phải ghi actor, action, from/to, note và timestamp. | UC-011–UC-015, UC-059–UC-061 | Enforced |
 | BR-40 | FOUND mặc định do Finder giữ; Staff custody là escalation/optional branch và chỉ bắt đầu sau intake confirmation. | UC-016–UC-020 | Planned |

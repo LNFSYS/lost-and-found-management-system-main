@@ -758,6 +758,45 @@ textarea {
   color: var(--fpt-green);
 }
 
+.return-feedback-check,
+.return-feedback-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: end;
+}
+
+.return-feedback-form {
+  margin-top: 14px;
+  grid-template-columns: 150px minmax(0, 1fr) auto;
+}
+
+.return-feedback-form textarea {
+  min-height: 92px;
+  resize: vertical;
+}
+
+.return-feedback-status {
+  display: grid;
+  gap: 5px;
+  margin: 14px 0 0;
+  padding: 14px 16px;
+  border: 1px solid #cfe2f3;
+  border-radius: var(--radius);
+  color: var(--ink-soft);
+  background: #f7fbff;
+  font-size: 0.84rem;
+}
+
+.return-feedback-status strong {
+  color: var(--ink);
+}
+
+.return-feedback-status.is-done {
+  border-color: #bfe4ca;
+  background: #f1fbf4;
+}
+
 .staff-placeholder {
   padding: 34px;
   border: 1px solid var(--line);
@@ -4312,6 +4351,16 @@ textarea {
 
   .activity-stats {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .return-feedback-check,
+  .return-feedback-form {
+    grid-template-columns: 1fr;
+  }
+
+  .return-feedback-check .secondary-button,
+  .return-feedback-form .primary-button {
+    width: 100%;
   }
 
   .home-hero {
