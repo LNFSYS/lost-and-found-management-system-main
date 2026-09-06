@@ -2,6 +2,8 @@
 
 Cập nhật: **01/09/2026**
 
+> **Historical snapshot.** Báo cáo này ghi nhận đợt đồng bộ ngày 01/09/2026. Trạng thái hiện tại sau remediation ngày 06/09/2026 nằm tại [LNFS_AUDIT_FIX_REPORT_2026-09-06.md](LNFS_AUDIT_FIX_REPORT_2026-09-06.md) và các tài liệu nguồn sự thật đã được cập nhật. Các số liệu 47/7/46, 108 test, 16 Playwright và các nhận định “chưa có claim runtime” bên dưới không còn là current status.
+
 ## 1. Phạm vi và phương pháp
 
 Đợt này đọc và đối chiếu repository mới fptu-lost-found-system-main theo prompt master. Code, test và configuration được ưu tiên hơn tài liệu cũ. Không sửa source runtime, không chạy migration, không thao tác destructive trên Aiven/shared DB và không sửa Jira.

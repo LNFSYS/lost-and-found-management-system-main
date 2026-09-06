@@ -5105,6 +5105,11 @@ textarea {
 .claim-list { display: grid; }
 .claim-list-item { width: 100%; padding: 16px 14px; display: grid; grid-template-columns: 9px 1fr auto; align-items: center; gap: 11px; border: 0; border-bottom: 1px solid #e3edf3; color: var(--ink); background: transparent; text-align: left; cursor: pointer; }
 .claim-list-item:hover, .claim-list-item.active { background: #edf6fd; }
+.claim-load-older { min-height: 36px; margin: 10px 14px; padding: 0 10px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; border: 1px solid #c9ddea; border-radius: 6px; color: var(--fpt-blue-dark); background: #fff; font-size: .7rem; font-weight: 800; cursor: pointer; }
+.claim-load-older:hover:not(:disabled) { border-color: var(--fpt-blue); background: #eef8ff; }
+.claim-load-older:disabled { cursor: wait; opacity: .65; }
+.claim-load-older svg { width: 14px; }
+.claim-load-claims { width: calc(100% - 28px); margin-top: 12px; }
 .claim-list-item.active { box-shadow: inset 3px 0 var(--fpt-blue); }
 .claim-list-item > span:nth-child(2) { min-width: 0; display: grid; gap: 5px; }
 .claim-list-item strong { overflow: hidden; font-size: .79rem; text-overflow: ellipsis; white-space: nowrap; }

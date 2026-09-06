@@ -100,6 +100,27 @@ function serializePost(post: PostRecord, viewer?: AccessTokenPayload) {
   };
 }
 
+const postTransitions: Record<PostStatus, readonly PostStatus[]> = {
+  OPEN: ["OPEN", "CLOSED", "RESOLVED"],
+  MATCHED: ["MATCHED", "CLOSED", "RESOLVED"],
+  RESOLVED: ["RESOLVED"],
+  CLOSED: ["CLOSED"],
+  EXPIRED: ["EXPIRED"],
+  HIDDEN: ["HIDDEN"]
+};
+
+export function assertPostUpdateAllowed(current: Pick<PostRecord, "status">, input: Pick<UpdatePostInput, "status" | "title" | "description" | "categoryId" | "areaId" | "buildingId" | "roomText" | "customLocation" | "contactInfo" | "lostFoundAt" | "handoverPointId" | "visibilityMode">) {
+  const contentFields = ["title", "description", "categoryId", "areaId", "buildingId", "roomText", "customLocation", "contactInfo", "lostFoundAt", "handoverPointId", "visibilityMode"] as const;
+  const changesContent = contentFields.some((field) => input[field] !== undefined);
+  const nextStatus = input.status ?? current.status;
+  if (changesContent && ["RESOLVED", "CLOSED", "EXPIRED", "HIDDEN"].includes(current.status)) {
+    throw new HttpError(409, "Bai dang da ket thuc, khong the cap nhat noi dung");
+  }
+  if (!postTransitions[current.status].includes(nextStatus)) {
+    throw new HttpError(409, "Chuyen trang thai bai dang khong hop le");
+  }
+}
+
 function ensureWritableStatus(post: Pick<PostRecord, "status">) {
   if (post.status === "RESOLVED" || post.status === "CLOSED" || post.status === "EXPIRED") {
     throw new HttpError(409, "Bai dang da ket thuc, khong the cap nhat noi dung");
@@ -253,7 +274,7 @@ export const postService = {
   },
 
   async listBoard(filters: ListPostsQuery, viewer?: AccessTokenPayload) {
-    const result = await postRepository.listBoard(filters);
+    const result = await postRepository.listBoard(filters, viewer);
     return { ...result, items: result.items.map((post) => serializePost(post, viewer)) };
   },
 
@@ -311,30 +332,32 @@ export const postService = {
   },
 
   async updatePost(postId: string, ownerId: string, input: UpdatePostInput, viewer: AccessTokenPayload) {
-    const current = await requireOwnedPost(postId, ownerId);
-    if (input.status === undefined) ensureWritableStatus(current);
-    await ensureBusinessRefs(mergeForValidation(current, input));
-
-    const update = {
-      title: input.title,
-      titleNormalized: input.title === undefined ? undefined : normalizePostText(input.title),
-      description: input.description,
-      descriptionNormalized: input.description === undefined ? undefined : normalizePostText(input.description),
-      categoryId: input.categoryId,
-      areaId: input.areaId,
-      buildingId: input.buildingId,
-      roomText: input.roomText,
-      customLocation: input.customLocation,
-      contactInfo: input.contactInfo,
-      lostFoundAt: input.lostFoundAt,
-      handoverPointId: input.handoverPointId,
-      visibilityMode: input.visibilityMode,
-      status: input.status as PostStatus | undefined,
-      resolvedAt: input.status === "RESOLVED" ? new Date() : input.status ? null : undefined
-    };
-
-    await postRepository.updatePost(postId, update);
-    const updated = await requireOwnedPost(postId, ownerId);
+    const updated = await withTransaction(async (connection) => {
+      const current = await postRepository.findOwnedByIdForUpdate(postId, ownerId, connection);
+      if (!current) throw new HttpError(404, "Khong tim thay bai dang cua ban");
+      assertPostUpdateAllowed(current, input);
+      await ensureBusinessRefs(mergeForValidation(current, input));
+      await postRepository.updatePost(postId, {
+        title: input.title,
+        titleNormalized: input.title === undefined ? undefined : normalizePostText(input.title),
+        description: input.description,
+        descriptionNormalized: input.description === undefined ? undefined : normalizePostText(input.description),
+        categoryId: input.categoryId,
+        areaId: input.areaId,
+        buildingId: input.buildingId,
+        roomText: input.roomText,
+        customLocation: input.customLocation,
+        contactInfo: input.contactInfo,
+        lostFoundAt: input.lostFoundAt,
+        handoverPointId: input.handoverPointId,
+        visibilityMode: input.visibilityMode,
+        status: input.status as PostStatus | undefined,
+        resolvedAt: input.status === "RESOLVED" ? new Date() : input.status ? null : undefined
+      }, connection);
+      const refreshed = await postRepository.findOwnedById(postId, ownerId, connection);
+      if (!refreshed) throw new HttpError(500, "Khong the cap nhat bai dang");
+      return refreshed;
+    });
     if (updated.status === "OPEN" || updated.status === "MATCHED") {
       await refreshMatchingBestEffort(postId, "update");
     }

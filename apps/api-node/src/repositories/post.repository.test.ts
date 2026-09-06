@@ -3,7 +3,8 @@ import test from "node:test";
 import type { PoolConnection } from "mysql2/promise";
 import { runInTransaction } from "../config/db.js";
 import { matchingRepository } from "./matching.repository.js";
-import { postRepository } from "./post.repository.js";
+import { buildListWhere, postRepository } from "./post.repository.js";
+import type { AccessTokenPayload } from "../types/auth.js";
 
 function transactionConnection(execute: (sql: string, values?: unknown[]) => Promise<[unknown, unknown]>, events: string[]) {
   return {
@@ -30,6 +31,31 @@ test("media slot checks lock the parent post before counting existing media", as
   assert.equal(count, 4);
   assert.match(queries[0], /FOR UPDATE$/);
   assert.match(queries[1], /COUNT\(\*\)/);
+});
+
+test("owned post updates use a row lock before validating the merged state", async () => {
+  let query = "";
+  const connection = transactionConnection(async (sql) => {
+    query = sql.replace(/\s+/g, " ").trim();
+    return [[], []];
+  }, []);
+
+  await postRepository.findOwnedByIdForUpdate("post-id", "owner-id", connection);
+
+  assert.match(query, /LIMIT 1 FOR UPDATE$/);
+});
+
+test("board SQL excludes other users' private posts while retaining the viewer's own posts", () => {
+  const filters = { page: 1, pageSize: 20, sort: "newest" } as const;
+  const viewer: AccessTokenPayload = { sub: "viewer-id", email: "viewer@example.invalid", roles: ["USER"], sessionVersion: 0 };
+  const regular = buildListWhere(filters, undefined, viewer);
+  const anonymous = buildListWhere(filters);
+  const staff = buildListWhere(filters, undefined, { ...viewer, roles: ["USER", "STAFF"] });
+
+  assert.match(regular.sql, /p\.visibility_mode = 'PUBLIC' OR p\.user_id = \?/);
+  assert.deepEqual(regular.values.at(-1), "viewer-id");
+  assert.match(anonymous.sql, /p\.visibility_mode = 'PUBLIC'/);
+  assert.doesNotMatch(staff.sql, /p\.visibility_mode = 'PUBLIC' OR p\.user_id/);
 });
 
 test("analysis-tag failure rolls back the post insert transaction", async () => {

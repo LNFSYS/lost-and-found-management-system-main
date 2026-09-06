@@ -41,3 +41,19 @@ test("password reset OTP persists a non-default maximum attempt count", async ()
   assert.match(calls[0].sql, /max_attempts/);
   assert.equal(calls[0].values.at(-1), 7);
 });
+
+test("OTP failure updates are capped and cannot mutate expired or consumed rows", async () => {
+  const { queryable, calls } = recordingExecutor();
+
+  await authRepository.recordRegistrationOtpFailure("otp-id", queryable);
+  await authRepository.recordPasswordResetFailure("reset-id", queryable);
+
+  assert.equal(calls.length, 2);
+  for (const statement of calls) {
+    assert.match(statement.sql, /LEAST\(attempt_count \+ 1, max_attempts\)/);
+    assert.match(statement.sql, /consumed_at IS NULL/);
+    assert.match(statement.sql, /expires_at > UTC_TIMESTAMP\(\)/);
+  }
+  assert.deepEqual(calls[0].values, ["otp-id"]);
+  assert.deepEqual(calls[1].values, ["reset-id"]);
+});

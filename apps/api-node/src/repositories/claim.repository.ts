@@ -279,15 +279,47 @@ export const claimRepository = {
     return rows.map(mapParticipant);
   },
 
-  async listForUser(userId: string) {
+  async listParticipantsForClaims(claimIds: string[]) {
+    if (!claimIds.length) return new Map<string, ReturnType<typeof mapParticipant>[]>();
+    const placeholders = claimIds.map(() => "?").join(", ");
+    const [rows] = await pool.execute<ParticipantRow[]>(
+      `SELECT cp.claim_id, cp.user_id, cp.participant_role, cp.consent_status, cp.joined_at, u.full_name
+       FROM claim_participants cp INNER JOIN users u ON u.id = cp.user_id
+       WHERE cp.claim_id IN (${placeholders}) ORDER BY cp.claim_id, cp.participant_role`,
+      claimIds
+    );
+    const participants = new Map<string, ReturnType<typeof mapParticipant>[]>();
+    for (const row of rows) {
+      const item = mapParticipant(row);
+      participants.set(item.claimId, [...(participants.get(item.claimId) ?? []), item]);
+    }
+    return participants;
+  },
+
+  async listForUser(userId: string, query: { page: number; pageSize: number }) {
+    const page = Math.max(1, Math.trunc(query.page));
+    const limit = Math.min(50, Math.max(1, Math.trunc(query.pageSize)));
+    const offset = (page - 1) * limit;
     const [rows] = await pool.execute<ClaimRow[]>(
       `${claimSelect}
        INNER JOIN claim_participants visible_participant
          ON visible_participant.claim_id = c.id AND visible_participant.user_id = ?
-       ORDER BY c.updated_at DESC, c.id DESC`,
+       ORDER BY c.updated_at DESC, c.id DESC LIMIT ${limit + 1} OFFSET ${offset}`,
       [userId]
     );
-    return rows.map(mapClaim);
+    const [countRows] = await pool.execute<Array<RowDataPacket & { total: number }>>(
+      `SELECT COUNT(*) AS total FROM claims c
+       INNER JOIN claim_participants visible_participant
+         ON visible_participant.claim_id = c.id AND visible_participant.user_id = ?`,
+      [userId]
+    );
+    return {
+      total: Number(countRows[0]?.total ?? 0),
+      page,
+      pageSize: limit,
+      hasMore: rows.length > limit,
+      items: rows.slice(0, limit).map(mapClaim)
+    };
   },
 
   async updateFinderDecision(input: {
@@ -382,12 +414,20 @@ export const claimRepository = {
   },
 
   async listMessages(roomId: string, query: { before?: Date; beforeId?: string; limit: number }) {
+    const limit = Math.min(100, Math.max(1, query.limit));
     const [rows] = await pool.execute<MessageRow[]>(
       `${messageSelect} WHERE m.room_id = ? ${query.before ? "AND (m.created_at < ? OR (m.created_at = ? AND m.id < ?))" : ""}
-       ORDER BY m.created_at DESC, m.id DESC LIMIT ${Math.min(100, Math.max(1, query.limit))}`,
+       ORDER BY m.created_at DESC, m.id DESC LIMIT ${limit + 1}`,
       query.before ? [roomId, query.before, query.before, query.beforeId!] : [roomId]
     );
-    return rows.reverse().map(mapMessage);
+    const hasMore = rows.length > limit;
+    const items = rows.slice(0, limit).reverse().map(mapMessage);
+    const oldest = items[0];
+    return {
+      items,
+      hasMore,
+      nextCursor: hasMore && oldest ? { before: oldest.createdAt, beforeId: oldest.id } : null
+    };
   },
 
   async listEvidence(claimId: string) {

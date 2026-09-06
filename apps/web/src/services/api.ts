@@ -421,7 +421,7 @@ export interface ClaimRecord {
   room?: { id: string } | null;
   canSend?: boolean;
 }
-export interface ClaimListResponse { items: ClaimRecord[]; }
+export interface ClaimListResponse { items: ClaimRecord[]; total: number; page: number; pageSize: number; hasMore: boolean; }
 export interface ClaimRoomSummary { id: string; claimId: string; status: ClaimStatus; finder: ClaimRecord["finder"]; claimant: ClaimRecord["claimant"]; posts: ClaimRecord["posts"]; updatedAt: string; }
 export interface ClaimRoomsResponse { items: ClaimRoomSummary[]; }
 export interface ClaimMessage {
@@ -435,7 +435,12 @@ export interface ClaimMessage {
   readAt: string | null;
   createdAt: string;
 }
-export interface ClaimMessagesResponse { room: { id: string; claimId: string; status: ClaimStatus; participantRole: "CLAIMANT" | "FINDER"; createdAt: string }; items: ClaimMessage[]; }
+export interface ClaimMessagesResponse {
+  room: { id: string; claimId: string; status: ClaimStatus; participantRole: "CLAIMANT" | "FINDER"; createdAt: string };
+  items: ClaimMessage[];
+  hasMore: boolean;
+  nextCursor: { before: string; beforeId: string } | null;
+}
 export interface ClaimEvidence {
   id: string;
   claimId: string;
@@ -460,7 +465,7 @@ export interface AppNotification {
   readAt: string | null;
   createdAt: string;
 }
-export interface NotificationListResponse { items: AppNotification[]; }
+export interface NotificationListResponse { items: AppNotification[]; unreadTotal: number; }
 export interface PostListResponse { total: number; page: number; pageSize: number; items: PostSummary[]; }
 export interface PostListFilters {
   q?: string;
@@ -519,7 +524,8 @@ async function raw<T>(path: string, init: RequestInit = {}, retry = true): Promi
   let response: Response;
   try {
     response = await fetch(`${API_URL}${path}`, { ...init, headers, credentials: "include" });
-  } catch {
+  } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") throw error;
     throw new Error("Khong co ket noi mang. Thao tac chua duoc ghi nhan, hay thu lai khi online.");
   }
   if (typeof window !== "undefined" && response.headers.get("x-lnfs-cache") === "stale") {
@@ -616,8 +622,14 @@ export const api = {
   recalculatePostMatches: (postId: string) => raw<PostMatchesResponse>(`/posts/${postId}/matches/recalculate`, { method: "POST" }),
   getReturnFeedbackEligibility: (appointmentId: string) => raw<ReturnFeedbackEligibility>(`/returns/${appointmentId}/feedback/eligibility`),
   submitReturnFeedback: (appointmentId: string, payload: { rating: number; comment?: string | null; idempotencyKey: string }) => raw<SubmitReturnFeedbackResponse>(`/returns/${appointmentId}/feedback`, { method: "POST", body: JSON.stringify(payload) }),
-  listClaims: () => raw<ClaimListResponse>("/claims"),
-  getClaim: (claimId: string) => raw<ClaimRecord>(`/claims/${claimId}`),
+  listClaims: (query?: { page?: number; pageSize?: number }) => {
+    const params = new URLSearchParams();
+    if (query?.page) params.set("page", String(query.page));
+    if (query?.pageSize) params.set("pageSize", String(query.pageSize));
+    const suffix = params.toString() ? `?${params.toString()}` : "";
+    return raw<ClaimListResponse>(`/claims${suffix}`);
+  },
+  getClaim: (claimId: string, signal?: AbortSignal) => raw<ClaimRecord>(`/claims/${claimId}`, { signal }),
   createClaim: (payload: { lostPostId: string; foundPostId: string; description?: string; requestKey?: string }) => {
     const requestKey = payload.requestKey ?? crypto.randomUUID();
     return raw<ClaimRecord & { idempotent: boolean }>("/claims", { method: "POST", headers: { "Idempotency-Key": requestKey }, body: JSON.stringify({ ...payload, requestKey: undefined }) });
@@ -626,16 +638,16 @@ export const api = {
   withdrawClaim: (claimId: string) => raw<ClaimRecord>(`/claims/${claimId}/withdraw`, { method: "POST" }),
   listClaimRooms: () => raw<ClaimRoomsResponse>("/claims/rooms"),
   getClaimRoom: (claimId: string) => raw<{ id: string; claimId: string; status: ClaimStatus; participantRole: "CLAIMANT" | "FINDER"; createdAt: string }>(`/claims/${claimId}/room`),
-  listClaimMessages: (claimId: string, query?: { before?: string; beforeId?: string; limit?: number }) => {
+  listClaimMessages: (claimId: string, query?: { before?: string; beforeId?: string; limit?: number }, signal?: AbortSignal) => {
     const params = new URLSearchParams();
     if (query?.before) params.set("before", query.before);
     if (query?.beforeId) params.set("beforeId", query.beforeId);
     if (query?.limit) params.set("limit", String(query.limit));
     const suffix = params.toString() ? `?${params.toString()}` : "";
-    return raw<ClaimMessagesResponse>(`/claims/${claimId}/messages${suffix}`);
+    return raw<ClaimMessagesResponse>(`/claims/${claimId}/messages${suffix}`, { signal });
   },
-  sendClaimMessage: (claimId: string, content: string, clientMessageId = crypto.randomUUID()) => raw<ClaimMessage>(`/claims/${claimId}/messages`, { method: "POST", headers: { "Idempotency-Key": clientMessageId }, body: JSON.stringify({ content }) }),
-  listClaimEvidence: (claimId: string) => raw<ClaimEvidenceResponse>(`/claims/${claimId}/evidence`),
+  sendClaimMessage: (claimId: string, content: string, clientMessageId: string = crypto.randomUUID()) => raw<ClaimMessage>(`/claims/${claimId}/messages`, { method: "POST", headers: { "Idempotency-Key": clientMessageId }, body: JSON.stringify({ content }) }),
+  listClaimEvidence: (claimId: string, signal?: AbortSignal) => raw<ClaimEvidenceResponse>(`/claims/${claimId}/evidence`, { signal }),
   uploadClaimEvidence: (claimId: string, file: File, description?: string) => {
     const form = new FormData();
     form.append("file", file);

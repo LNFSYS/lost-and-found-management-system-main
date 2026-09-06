@@ -69,8 +69,12 @@ export const authController = {
 };
 
 export function errorHandler(error: unknown, _request: Request, response: Response, _next: unknown) {
-  if (error instanceof SyntaxError && (error as SyntaxError & { type?: string }).type === "entity.parse.failed") {
+  const parserError = error as SyntaxError & { type?: string; status?: number };
+  if (error instanceof SyntaxError && parserError.type === "entity.parse.failed") {
     return response.status(400).json({ message: "Nội dung JSON không hợp lệ" });
+  }
+  if (parserError.type === "entity.too.large" || parserError.status === 413) {
+    return response.status(413).json({ code: "PAYLOAD_TOO_LARGE", message: "Nội dung gửi lên vượt quá giới hạn cho phép" });
   }
   if (error instanceof ZodError) return response.status(422).json({ message: "Dữ liệu nhập chưa hợp lệ", errors: error.flatten().fieldErrors });
   if (error instanceof HttpError) return response.status(error.status).json({ message: error.message });

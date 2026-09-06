@@ -1,6 +1,6 @@
 # Tổng quan dự án FPTU Lost & Found System
 
-Cập nhật: **03/09/2026**
+Cập nhật: **06/09/2026**
 
 ## 1. Định vị
 
@@ -55,6 +55,7 @@ LNFS hướng tới:
 - Post media local storage qua protected proxy, validation MIME/signature/size/count.
 - Gemini-assisted multi-image analysis tạo title/description/category/tags draft có thể chỉnh sửa.
 - Hybrid/rule-based matching dùng text normalization tiếng Việt, category, location, time, image/OCR tags, tier, score breakdown và explanation.
+- Claim request/decision, participant-scoped private text room, cursor-paginated history, private evidence proxy và claim notification feed; đây là current partial peer-return runtime.
 - Staff warehouse receive/store/return, retention deadline, handover counts và storage log.
 - PWA manifest, service worker, application shell và offline fallback không cache API/private data.
 
@@ -62,8 +63,8 @@ LNFS hướng tới:
 
 - Responsive web có mobile viewport checks, PWA manifest, service worker và privacy-safe offline shell; device/installability evidence vẫn cần manual QA.
 - Warehouse có receive/store/return và retention deadline; overdue disposition/donation/transfer/disposal documents chưa đủ.
-- Manual browser/device QA và Playwright workflow cho toàn bộ admin/profile vẫn cần bổ sung evidence; Cloudinary authenticated upload/delivery/cleanup smoke test đã pass.
-- Avatar dùng Cloudinary authenticated storage; media bài đăng vẫn local nên chưa phù hợp nhiều máy/instance dùng chung database.
+- Manual browser/device QA cho toàn bộ admin/profile vẫn cần bổ sung evidence; Cloudinary authenticated upload/delivery/cleanup smoke test đã pass.
+- Claim evidence và post media vẫn local filesystem nên chưa phù hợp nhiều máy/instance dùng chung database; shared object storage là deployment blocker.
 
 ### 4.3 Planned product scope
 
@@ -71,7 +72,7 @@ Luồng nghiệp vụ mục tiêu là:
 
 LOST/FOUND post → matching suggestion → private verification chat → Finder decision → meetup → dual-confirmed direct handover
 
-Phạm vi target còn gồm claim/evidence, guided questions, multiple claimant isolation, realtime chat/notification, appointment, escalation/report, PWA và Native Mobile. Đây là product scope, không phải cam kết current implementation.
+Phạm vi target còn gồm guided questions, evidence review/confidence, multiple claimant policy end-to-end, realtime chat/notification, appointment, escalation/report, PWA installability và Native Mobile. Claim/private text chat/evidence/claim notification đã có runtime một phần, nhưng chưa phải full return journey.
 
 ### 4.4 Future/TBD
 
@@ -104,10 +105,12 @@ Bounded contexts mục tiêu:
 | Auth/account | Node.js, implemented |
 | Posts/catalog/media | Node.js, implemented; media shared storage planned |
 | Matching/AI assistance | Node.js, implemented theo rule-based/Gemini-assisted scope |
-| Claim/evidence/chat/appointment | Chưa có runtime; phải chọn một write owner trước khi làm |
+| Claim/evidence/private text chat | Node.js, current partial runtime; private local storage và review workflow còn gap |
+| Appointment/dual handover | Chưa có runtime; phải chọn một write owner trước khi làm |
 | Handover point catalog | Node.js, implemented cho public active-only và Admin CRUD |
 | Warehouse | Node.js, implemented một phần cho Staff operations |
-| Notification/realtime | Chưa có runtime |
+| Claim notification | Node.js, REST/in-app current scope |
+| Realtime transport | Chưa có runtime |
 | Native Mobile | Client planned, dùng shared API |
 
 Không cho Node và Java cùng ghi một business flow/table nếu chưa có API contract, transaction/integration test và one-writer rule.
@@ -143,6 +146,15 @@ Không cho Node và Java cùng ghi một business flow/table nếu chưa có API
 5. Owner có thể xem/recalculate bằng endpoint được bảo vệ và rate-limited.
 6. Score chỉ là gợi ý; không tự accept claim, xác minh sở hữu hay đổi trạng thái returned.
 
+### 6.5 Claim, private chat và evidence hiện tại
+
+1. Owner tạo claim từ cặp LOST/FOUND có matching đạt ngưỡng; backend tự suy ra Finder và khóa cặp trong transaction.
+2. Finder có thể accept, request thêm thông tin hoặc decline; decision và withdrawal dùng claim row lock/state guard.
+3. Khi được chấp nhận, hệ thống mở private room cho đúng claimant/Finder; người ngoài nhận phản hồi không tiết lộ claim.
+4. Tin nhắn text có idempotency key, cursor pagination; Web merge và deduplicate theo message ID, polling không chồng request và hủy khi đổi room.
+5. Evidence chỉ đi qua endpoint được authorization; API không trả raw storage URL. Local filesystem hiện chưa phù hợp multi-instance.
+6. Claim notification hiện là REST/in-app feed với `unreadTotal`; match notification, realtime transport, guided questions, appointment và dual handover chưa có.
+
 ### 6.4 Catalog và warehouse hiện tại
 
 1. Admin quản lý category, area, building và handover point.
@@ -154,14 +166,14 @@ Không cho Node và Java cùng ghi một business flow/table nếu chưa có API
 
 ## 7. Luồng nghiệp vụ mục tiêu: peer-to-peer first
 
-Luồng sau là thiết kế mục tiêu và chỉ được ghi Implemented khi code/test tương ứng xuất hiện:
+Luồng sau là target end-to-end. Current runtime mới bao phủ đến claim/private text verification ở mức Partial; các bước meetup/return chưa có đầy đủ:
 
 1. Owner tạo LOST report với public description và private details nếu cần.
 2. Finder tạo FOUND report và tiếp tục giữ vật phẩm; mặc định không chuyển thẳng vào Staff custody.
 3. Matching gợi ý các LOST/FOUND đối ứng và giải thích tín hiệu tương đồng.
 4. Owner gửi verification request cho FOUND phù hợp.
-5. Hệ thống mở conversation riêng đúng cặp Owner–Finder–LOST–FOUND.
-6. Finder dùng guided questions theo category; Owner trả lời mà không được xem trước private answer/attribute.
+5. Hệ thống mở conversation riêng đúng cặp Owner–Finder–LOST–FOUND (current partial runtime).
+6. Finder dùng guided questions theo category; Owner trả lời mà không được xem trước private answer/attribute (planned).
 7. Finder chọn MORE_INFO_REQUIRED, MEETUP_ACCEPTED, DECLINED hoặc ESCALATED.
 8. Hai bên đề xuất và cùng xác nhận thời gian/địa điểm; appointment chỉ confirmed khi có mutual agreement.
 9. Hai bên gặp trực tiếp; Finder xác nhận HANDED_OVER, Owner xác nhận RECEIVED.
@@ -203,7 +215,7 @@ Schema hiện tại có post status OPEN/MATCHED/RESOLVED/CLOSED/EXPIRED/HIDDEN,
 
 ## 10. Database, migration và media
 
-Migrations SQL nằm tại apps/api-node/src/migrations, được chạy theo thứ tự và kiểm tra checksum. Repository hiện có schema cho auth, posts, catalog, matching, claims, appointments, chat, notifications, warehouse, AI feedback và map/catalog, nhưng schema không thay thế runtime evidence.
+Migrations SQL nằm tại apps/api-node/src/migrations, được chạy theo thứ tự và kiểm tra checksum. Repository hiện có migration `001`–`046`; `046_feedback_idempotency_legacy_cleanup.sql` là forward corrective migration cho legacy feedback index và chưa được áp dụng lên Aiven/shared DB. Schema cho auth, posts, catalog, matching, claims, appointments, chat, notifications, warehouse, AI feedback và map/catalog không thay thế runtime evidence.
 
 Khi dùng Aiven/shared MySQL:
 
@@ -215,15 +227,17 @@ Khi dùng Aiven/shared MySQL:
 
 ## 11. Kiểm thử và evidence
 
-Evidence đã kiểm tra ngày 03/09/2026:
+Evidence đã kiểm tra ngày 06/09/2026:
 
-- npm test: 108 API test pass, 1 DB integration test skip an toàn vì thiếu MySQL local _test; web TypeScript check pass.
+- `npm --workspace @lnfs/api-node run test`: 137 pass, 1 DB integration test skip an toàn vì thiếu MySQL local `_test`.
+- `npm --workspace @lnfs/web run lint`: web TypeScript check pass.
 - npm run build: API TypeScript build và Web production build pass.
 - npm run build:java: chưa chạy được vì Maven không có trong PATH.
-- `npm --workspace @lnfs/web run e2e:home`: 16/16 Playwright tests pass, gồm auth resilience, post creation, matching view, mobile layout, Staff warehouse và Admin handover/map.
+- `npm --workspace @lnfs/web run e2e:home`: 23/23 Playwright tests pass, gồm auth resilience, post creation, matching view, claim-room stale response, mobile layout, Staff warehouse và Admin handover/map.
+- `.github/workflows/ci.yml`: có MySQL service riêng và browser job; workflow chưa được chạy từ checkout này.
 - `npm --workspace @lnfs/api-node run test:db-integration`: test được skip an toàn vì chưa cấu hình MySQL local `*_test`; không chạy trên Aiven/shared DB.
 
-Các gap còn lại: claim race/concurrency, evidence privacy, peer chat room isolation, appointment dual confirmation, full warehouse disposition, PWA browser/device matrix, Native Mobile, load test, UAT và deployment rollback.
+Các gap còn lại: MySQL concurrency/migration integration chưa chạy, appointment dual confirmation, guided review, full warehouse disposition, shared media storage, PWA browser/device matrix, Native Mobile, load test, UAT và deployment rollback.
 
 ## 12. Deployment và roadmap
 

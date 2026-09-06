@@ -22,8 +22,11 @@ export const authRepository = {
   async consumeRegistrationOtp(id: string, connection: Queryable) {
     await connection.execute("UPDATE email_otps SET consumed_at = UTC_TIMESTAMP() WHERE id = ? AND consumed_at IS NULL", [id]);
   },
-  async recordRegistrationOtpFailure(id: string, connection: Queryable) {
-    await connection.execute("UPDATE email_otps SET attempt_count = attempt_count + 1 WHERE id = ?", [id]);
+  async recordRegistrationOtpFailure(id: string, queryable: Queryable = pool) {
+    await queryable.execute(
+      "UPDATE email_otps SET attempt_count = LEAST(attempt_count + 1, max_attempts) WHERE id = ? AND consumed_at IS NULL AND expires_at > UTC_TIMESTAMP()",
+      [id]
+    );
   },
   async invalidatePasswordResets(userId: string) {
     await pool.execute("UPDATE password_reset_tokens SET consumed_at = UTC_TIMESTAMP() WHERE user_id = ? AND consumed_at IS NULL", [userId]);
@@ -38,8 +41,11 @@ export const authRepository = {
   async consumePasswordReset(id: string, connection: Queryable) {
     await connection.execute("UPDATE password_reset_tokens SET consumed_at = UTC_TIMESTAMP() WHERE id = ? AND consumed_at IS NULL", [id]);
   },
-  async recordPasswordResetFailure(id: string, connection: Queryable) {
-    await connection.execute("UPDATE password_reset_tokens SET attempt_count = attempt_count + 1 WHERE id = ?", [id]);
+  async recordPasswordResetFailure(id: string, queryable: Queryable = pool) {
+    await queryable.execute(
+      "UPDATE password_reset_tokens SET attempt_count = LEAST(attempt_count + 1, max_attempts) WHERE id = ? AND consumed_at IS NULL AND expires_at > UTC_TIMESTAMP()",
+      [id]
+    );
   },
   async createRefreshToken(input: { id: string; userId: string; tokenHash: string; expiresAt: Date; userAgent?: string; ipAddress?: string }, connection: Queryable = pool) {
     await connection.execute("INSERT INTO refresh_tokens (id, user_id, token_hash, expires_at, user_agent, ip_address) VALUES (?, ?, ?, ?, ?, ?)", [input.id, input.userId, input.tokenHash, input.expiresAt, input.userAgent ?? null, input.ipAddress ?? null]);

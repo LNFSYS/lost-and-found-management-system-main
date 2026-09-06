@@ -7,6 +7,7 @@ import {
   createClaimSchema,
   createMessageSchema,
   evidenceParamSchema,
+  listClaimsQuerySchema,
   listMessagesQuerySchema,
   uploadEvidenceSchema
 } from "../validators/claim.validator.js";
@@ -22,7 +23,7 @@ function idempotencyKey(request: Request) {
 
 export const claimController = {
   async listClaims(request: Request, response: Response) {
-    response.json(await claimService.listClaims(request.auth!.sub));
+    response.json(await claimService.listClaims(request.auth!.sub, listClaimsQuerySchema.parse(request.query)));
   },
 
   async listRooms(request: Request, response: Response) {

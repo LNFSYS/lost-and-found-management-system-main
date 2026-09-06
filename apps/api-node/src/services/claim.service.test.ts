@@ -67,3 +67,29 @@ test("authorized claim details expose participant-safe data only", async () => {
     claimRepository.listParticipants = originalListParticipants;
   }
 });
+
+test("claim list batches participant loading and exposes pagination metadata", async () => {
+  const originalListForUser = claimRepository.listForUser;
+  const originalListParticipantsForClaims = claimRepository.listParticipantsForClaims;
+  const participant = { claimId, userId: claimantId, role: "CLAIMANT" as const, consentStatus: "ACCEPTED" as const, joinedAt: "2026-09-03T00:00:00.000Z", fullName: "Claimant" };
+  let requestedQuery: unknown;
+  let requestedClaimIds: string[] = [];
+  claimRepository.listForUser = async (_userId, query) => {
+    requestedQuery = query;
+    return { total: 1, page: query.page, pageSize: query.pageSize, hasMore: false, items: [sampleClaim()] };
+  };
+  claimRepository.listParticipantsForClaims = async (claimIds) => {
+    requestedClaimIds = claimIds;
+    return new Map([[claimId, [participant]]]);
+  };
+  try {
+    const result = await claimService.listClaims(claimantId, { page: 2, pageSize: 1 });
+    assert.deepEqual(requestedQuery, { page: 2, pageSize: 1 });
+    assert.deepEqual(requestedClaimIds, [claimId]);
+    assert.deepEqual(result.items[0].participants, [participant]);
+    assert.equal(result.hasMore, false);
+  } finally {
+    claimRepository.listForUser = originalListForUser;
+    claimRepository.listParticipantsForClaims = originalListParticipantsForClaims;
+  }
+});

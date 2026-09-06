@@ -1,6 +1,6 @@
 # Tài liệu FPTU Lost & Found System
 
-Cập nhật: **03/09/2026**
+Cập nhật: **06/09/2026**
 
 ## 1. Mục đích
 
@@ -47,8 +47,9 @@ Không đánh dấu Done chỉ vì có migration, schema, ticket, mockup, skelet
 | [node-java-service-boundary.md](node-java-service-boundary.md) | Ownership Node.js/Java và one-writer rule |
 | [DOCUMENTATION_UPDATE_REPORT.md](DOCUMENTATION_UPDATE_REPORT.md) | Biên bản đối chiếu code và cập nhật tài liệu gần nhất |
 | [SPRINT_4_IMPLEMENTATION_AUDIT.md](SPRINT_4_IMPLEMENTATION_AUDIT.md) | Audit 17 Jira ticket Sprint 4 từ snapshot offline |
+| [LNFS_AUDIT_FIX_REPORT_2026-09-06.md](LNFS_AUDIT_FIX_REPORT_2026-09-06.md) | Audit và remediation B01–B08, R01–R06 ngày 06/09/2026 |
 
-## 5. Snapshot implementation ngày 03/09/2026
+## 5. Snapshot implementation ngày 06/09/2026
 
 **Đã có bằng chứng runtime/test:**
 
@@ -58,24 +59,28 @@ Không đánh dấu Done chỉ vì có migration, schema, ticket, mockup, skelet
 - Post media local protected proxy, validation và xóa media; avatar dùng Cloudinary authenticated storage và protected proxy.
 - Admin moderation/report, dashboard KPI theo kỳ, current snapshot và aggregate CSV/JSON export.
 - Gemini-assisted multi-image draft; hybrid/rule-based matching có tier và explanation.
+- Claim request/decision, participant authorization, private text room, cursor-paginated history, private evidence proxy và claim notification feed.
 - Staff warehouse receive/store/return, retention deadline, handover counts và storage log.
 
 **Partial hoặc planned:**
 
-- Claim/evidence, private verification chat, guided questions, multiple claimant, meetup và direct dual handover.
-- Socket.IO realtime, notification, unread/seen và image chat.
+- Guided questions, evidence review/confidence, multiple-claimant policy end-to-end, meetup và direct dual handover.
+- Socket.IO realtime, image chat, seen/unread realtime và realtime match notification; claim notification hiện là REST/in-app feed.
 - Warehouse overdue/disposition và claim/chat/appointment workflow đầy đủ.
-- PWA device matrix/installability QA và shared storage cho media bài đăng.
+- PWA device matrix/installability QA và shared object storage cho media bài đăng/evidence.
 - Native Mobile Application.
 - Shared object storage và Java business endpoints.
 
 ## 6. Evidence đã kiểm tra
 
-- API unit/service/repository/validator tests: **108 pass, 1 skip an toàn** cho DB integration chưa có MySQL local `_test`.
-- `npm test`: pass, gồm API tests và web TypeScript check.
+- API unit/service/repository/validator tests: **137 pass, 1 skip an toàn** cho DB integration chưa có MySQL local `_test`.
+- `npm --workspace @lnfs/api-node run test`: pass, API **137 pass, 1 skip**.
+- `npm --workspace @lnfs/web run lint`: pass, TypeScript check.
 - `npm run build`: pass cho API và Web production build.
 - `npm run build:java`: chưa chạy được vì Maven không có trong `PATH`.
-- `npm --workspace @lnfs/web run e2e:home`: **PASS 16/16**, gồm auth resilience, post creation, matching view, mobile layout, Staff warehouse và Admin handover/map.
+- `npm --workspace @lnfs/web run e2e:home`: **PASS 23/23**, gồm auth resilience, post creation, matching view, claim-room stale response, mobile layout, Staff warehouse và Admin handover/map.
+- `.github/workflows/ci.yml`: có job verify với MySQL service riêng và job browser Playwright; workflow chưa được chạy từ checkout này.
+- `apps/api-node/src/migrations/046_feedback_idempotency_legacy_cleanup.sql`: forward corrective migration; chưa áp dụng lên Aiven/shared DB.
 - Không chạy migration hoặc test destructive trên Aiven/shared DB.
 - Repository có 100 UC duy nhất từ `UC-001` đến `UC-100`.
 

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -131,4 +131,13 @@ test("blocks an automatic retry when a prior attempt was not fully recorded", as
     ));
     assert.equal(requestedConnection, false);
   });
+});
+
+test("forward feedback migration detects legacy indexes by existence, not column count", async () => {
+  const migration = await readFile(new URL("./046_feedback_idempotency_legacy_cleanup.sql", import.meta.url), "utf8");
+  assert.match(migration, /@legacy_feedback_idempotency_exists\s*>\s*0/);
+  assert.match(migration, /CREATE INDEX idx_return_feedback_reviewer_fk_support ON return_feedback \(reviewer_id\)/);
+  assert.match(migration, /DROP INDEX uq_return_feedback_reviewer_idempotency ON return_feedback/);
+  assert.doesNotMatch(migration, /@legacy_feedback_idempotency_exists\s*=\s*1/);
+  assert.ok(migration.indexOf("CREATE INDEX idx_return_feedback_reviewer_fk_support") < migration.indexOf("DROP INDEX uq_return_feedback_reviewer_idempotency"));
 });

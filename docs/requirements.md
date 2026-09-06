@@ -1,6 +1,6 @@
 # Yêu cầu hệ thống LNFS
 
-Cập nhật: **03/09/2026**
+Cập nhật: **06/09/2026**
 
 ## 1. Quy ước status
 
@@ -35,7 +35,7 @@ Requirements target bao phủ Web Application, PWA và Native Mobile. Status bê
 | FR-CATALOG-01 | Form dùng category hai cấp, area, building và handover point active. | UC-055, UC-064, UC-065 | P0 | Implemented |
 | FR-MEDIA-01 | Owner upload, xem qua protected media proxy và xóa media bài đăng; API kiểm MIME, size, signature và count. | UC-048, UC-050 | P0 | Implemented trên local storage |
 | FR-MEDIA-02 | Media dùng shared object storage để nhiều máy/instance không tạo reference file local bị thiếu. | UC-048, UC-050 | P0 | Planned |
-| FR-PRIVPOST-01 | FOUND có private attributes; public response che contact, vị trí chi tiết, media/tín hiệu nhạy cảm theo authorization. | UC-041, UC-044, UC-054 | P0 | Partial |
+| FR-PRIVPOST-01 | FOUND có private attributes; public response che contact, vị trí chi tiết, media/tín hiệu nhạy cảm theo authorization. | UC-041, UC-044, UC-054 | P0 | Implemented current post/search/match/private-media scope; guided private answers chưa có |
 | FR-HANDOVER-01 | Public chỉ thấy điểm bàn giao active; Admin CRUD/toggle map, marker, giờ hoạt động và hard-delete guard; Staff/Admin xem số item theo điểm. | UC-008–UC-010, UC-055–UC-058 | P0 | Implemented |
 
 ### 2.3 AI-assisted draft và hybrid matching
@@ -54,13 +54,13 @@ Requirements target bao phủ Web Application, PWA và Native Mobile. Status bê
 
 | ID | Requirement | UC | Priority | Status |
 | --- | --- | --- | --- | --- |
-| FR-VERIFY-01 | Owner gửi verification request cho FOUND; Finder giữ item và quyết định qua conversation riêng. | UC-003, UC-052 | P0 | Planned |
-| FR-VERIFY-02 | Finder dùng guided questions; Owner trả lời mà không xem trước private answer/attribute; hỗ trợ thêm thông tin, accept, decline hoặc escalate. | UC-003–UC-007, UC-089–UC-092 | P0 | Planned |
-| FR-CLAIM-01 | User tạo claim không trùng; evidence private được upload và chỉ actor có quyền mới xem. | UC-049, UC-052–UC-054 | P0 | Planned |
+| FR-VERIFY-01 | Owner gửi verification request cho FOUND; Finder giữ item và quyết định qua conversation riêng. | UC-003, UC-052 | P0 | Implemented current claim request/decision scope; meetup/return chưa có |
+| FR-VERIFY-02 | Finder dùng guided questions; Owner trả lời mà không xem trước private answer/attribute; hỗ trợ thêm thông tin, accept, decline hoặc escalate. | UC-003–UC-007, UC-089–UC-092 | P0 | Partial: request-more-info/accept/decline có; guided questions và review confidence chưa có |
+| FR-CLAIM-01 | User tạo claim không trùng; evidence private được upload và chỉ actor có quyền mới xem. | UC-049, UC-052–UC-054 | P0 | Implemented current API/UI scope; claim evidence còn local filesystem, chưa deploy-safe multi-instance |
 | FR-APPT-01 | Chỉ accepted verification mới tạo appointment; hai bên đề xuất, accept, reschedule/cancel và complete. | UC-021–UC-024 | P1 | Planned |
 | FR-HANDOVER-02 | Direct return cần Finder xác nhận HANDED_OVER và Owner xác nhận RECEIVED; chỉ dual confirmation mới thành RETURNED. | UC-021–UC-024 | P0 | Planned |
 | FR-FEEDBACK-01 | Participant chỉ gửi một feedback sau completed return có dual confirmation hoặc custody outcome được ủy quyền; feedback tạo reputation event idempotent theo appointment và profile activity chỉ trả dữ liệu an toàn. | UC-025, UC-039 | P1 | Implemented runtime; dữ liệu thật vẫn phụ thuộc LNFS-54 tạo completed return |
-| FR-CHAT-01 | Conversation gắn đúng Owner–Finder–LOST–FOUND, hỗ trợ text/image, room isolation, retry, seen/unread và report/block. | UC-077–UC-083 | P1 | Planned |
+| FR-CHAT-01 | Conversation gắn đúng Owner–Finder–LOST–FOUND, hỗ trợ text/image, room isolation, retry, seen/unread và report/block. | UC-077–UC-083 | P1 | Partial: private REST text room, isolation, retry idempotency và pagination có; image/seen/report/block chưa có |
 | FR-RT-01 | Realtime transport được JWT-authenticated và không broadcast private data cho actor ngoài room. | UC-077–UC-083 | P1 | Planned |
 
 ### 2.5 Staff custody, warehouse, admin và audit
@@ -92,13 +92,13 @@ Requirements target bao phủ Web Application, PWA và Native Mobile. Status bê
 | NFR-SEC-02 | Protected route trả 401/403 đúng; backend authorization là nguồn quyết định. | P0 | Implemented cho current routes |
 | NFR-SEC-03 | Auth, Gemini và matching rerun có rate limit phù hợp. | P0 | Implemented cho current module |
 | NFR-VALID-01 | Payload/query/params/upload được validate tại backend và merged update state được kiểm tra. | P0 | Implemented cho current post/catalog module |
-| NFR-PRIV-01 | Private post/media/match signal/evidence không lộ cho actor sai quyền. | P0 | Partial; claim evidence chưa có runtime |
+| NFR-PRIV-01 | Private post/media/match signal/evidence không lộ cho actor sai quyền. | P0 | Implemented authorization/proxy trong current API; shared local storage là deployment risk |
 | NFR-DATA-01 | Migration tuần tự, checksum-protected; migration đã chạy không sửa. | P0 | Implemented trong migration runner/tests |
 | NFR-DATA-02 | Shared Aiven/dev DB không dùng cho destructive test; integration test dùng database local riêng. | P0 | Process rule |
 | NFR-PERF-01 | Board có pagination; matching có candidate limit/window và rerun rate limit. | P0 | Implemented ở tested baseline; chưa load test |
 | NFR-PORT-01 | Media tồn tại sau restart/deploy và đọc được từ mọi instance. | P0 | Avatar dùng Cloudinary; media bài đăng vẫn local storage nên requirement tổng thể chưa đạt |
-| NFR-TEST-01 | API/Web build pass và logic quan trọng có unit/browser/integration evidence. | P0 | Partial: claim/chat/PWA/mobile chưa có |
-| NFR-CI-01 | Pull request tự chạy test/build với MySQL isolated. | P1 | Planned; chưa có workflow trong repository |
+| NFR-TEST-01 | API/Web build pass và logic quan trọng có unit/browser/integration evidence. | P0 | Partial: API/Web unit/browser pass; DB integration thật và full claim journey chưa chạy |
+| NFR-CI-01 | Pull request tự chạy test/build với MySQL isolated. | P1 | Implemented workflow config; CI run chưa được quan sát từ checkout này |
 | NFR-OBS-01 | Có health/readiness, structured request log và graceful shutdown. | P1 | Partial: health/readiness có; cần verify phần còn lại |
 | NFR-AUDIT-01 | Admin và sensitive transitions có audit trail đủ actor/action/before-after/time. | P1 | Partial |
 | NFR-AI-01 | AI/OCR/matching chỉ hỗ trợ quyết định; human verification bắt buộc trước trả đồ. | P0 | Implemented cho current AI/matching module; verification flow planned |

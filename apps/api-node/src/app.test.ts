@@ -96,6 +96,20 @@ test("malformed JSON returns a JSON 400 response", async () => {
   });
 });
 
+test("oversized JSON returns a JSON 413 response", async () => {
+  await withServer(async () => undefined, async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/api/auth/login`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email: "user@example.invalid", password: "x".repeat(150_000) })
+    });
+    assert.equal(response.status, 413);
+    const body = await response.json() as { code?: string; message?: string };
+    assert.equal(body.code, "PAYLOAD_TOO_LARGE");
+    assert.equal(typeof body.message, "string");
+  });
+});
+
 test("unknown API routes return the JSON error convention", async () => {
   await withServer(async () => undefined, async (baseUrl) => {
     const response = await fetch(`${baseUrl}/api/does-not-exist`);

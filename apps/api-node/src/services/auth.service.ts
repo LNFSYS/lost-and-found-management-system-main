@@ -33,6 +33,12 @@ function isUsable(row: { consumed_at: Date | null; expires_at: Date; attempt_cou
   return !row.consumed_at && row.expires_at.getTime() > Date.now() && row.attempt_count < row.max_attempts;
 }
 
+class InvalidCredentialAttemptError extends HttpError {
+  constructor(public readonly credentialId: string, message: string) {
+    super(400, message);
+  }
+}
+
 async function issueSession(user: User & { sessionVersion: number }, meta: SessionMeta, connection?: Parameters<typeof authRepository.createRefreshToken>[1]): Promise<AuthResult> {
   const refreshToken = randomToken();
   const refreshExpiresAt = new Date(Date.now() + env.refreshTokenDays * 24 * 60 * 60 * 1000);
@@ -44,8 +50,7 @@ async function validateRegistrationOtp(email: string, otp: string, connection: P
   const row = await authRepository.findLatestRegistrationOtpForUpdate(email, connection);
   if (!row || !isUsable(row)) throw new HttpError(400, "OTP không hợp lệ hoặc đã hết hạn");
   if (!(await bcrypt.compare(otp, row.otp_hash))) {
-    await authRepository.recordRegistrationOtpFailure(row.id, connection);
-    throw new HttpError(400, "OTP không hợp lệ hoặc đã hết hạn");
+    throw new InvalidCredentialAttemptError(row.id, "OTP không hợp lệ hoặc đã hết hạn");
   }
   return row;
 }
@@ -54,8 +59,7 @@ async function validateResetToken(userId: string, token: string, connection: Par
   const row = await authRepository.findLatestPasswordResetForUpdate(userId, connection);
   if (!row || !isUsable(row)) throw new HttpError(400, "Mã đặt lại mật khẩu không hợp lệ hoặc đã hết hạn");
   if (!(await bcrypt.compare(token, row.token_hash))) {
-    await authRepository.recordPasswordResetFailure(row.id, connection);
-    throw new HttpError(400, "Mã đặt lại mật khẩu không hợp lệ hoặc đã hết hạn");
+    throw new InvalidCredentialAttemptError(row.id, "Mã đặt lại mật khẩu không hợp lệ hoặc đã hết hạn");
   }
   return row;
 }
@@ -79,18 +83,25 @@ export function createAuthService(options: { avatarStorage?: AvatarStorage; avat
 
   async register(input: RegisterInput, meta: SessionMeta) {
     const normalizedEmail = normalizeEmail(input.email);
-    return withTransaction(async (connection) => {
-      if (await userRepository.findByEmail(normalizedEmail, connection)) throw new HttpError(409, "Email đã được đăng ký");
-      const otpRow = await validateRegistrationOtp(normalizedEmail, input.otp, connection);
-      const userId = id();
-      await userRepository.create({ id: userId, email: input.email.trim(), normalizedEmail, passwordHash: await bcrypt.hash(input.password, env.bcryptSaltRounds), fullName: input.fullName.trim(), studentCode: input.studentCode?.trim(), phoneNumber: input.phoneNumber?.trim() }, connection);
-      await userRepository.assignRole(userId, "USER", connection);
-      await userRepository.assignRole(userId, input.audienceRole as AudienceRole, connection);
-      await authRepository.consumeRegistrationOtp(otpRow.id, connection);
-      const user = await userRepository.findById(userId, connection);
-      if (!user) throw new HttpError(500, "Không thể tạo tài khoản");
-      return issueSession(user, meta, connection);
-    });
+    try {
+      return await withTransaction(async (connection) => {
+        if (await userRepository.findByEmail(normalizedEmail, connection)) throw new HttpError(409, "Email đã được đăng ký");
+        const otpRow = await validateRegistrationOtp(normalizedEmail, input.otp, connection);
+        const userId = id();
+        await userRepository.create({ id: userId, email: input.email.trim(), normalizedEmail, passwordHash: await bcrypt.hash(input.password, env.bcryptSaltRounds), fullName: input.fullName.trim(), studentCode: input.studentCode?.trim(), phoneNumber: input.phoneNumber?.trim() }, connection);
+        await userRepository.assignRole(userId, "USER", connection);
+        await userRepository.assignRole(userId, input.audienceRole as AudienceRole, connection);
+        await authRepository.consumeRegistrationOtp(otpRow.id, connection);
+        const user = await userRepository.findById(userId, connection);
+        if (!user) throw new HttpError(500, "Không thể tạo tài khoản");
+        return issueSession(user, meta, connection);
+      });
+    } catch (error) {
+      if (error instanceof InvalidCredentialAttemptError) {
+        await authRepository.recordRegistrationOtpFailure(error.credentialId);
+      }
+      throw error;
+    }
   },
 
   async login(input: LoginInput, meta: SessionMeta) {
@@ -132,14 +143,21 @@ export function createAuthService(options: { avatarStorage?: AvatarStorage; avat
 
   async resetPassword(input: ResetPasswordInput) {
     const normalizedEmail = normalizeEmail(input.email);
-    return withTransaction(async (connection) => {
-      const record = await userRepository.findAuthByEmail(normalizedEmail, connection);
-      if (!record || record.user.status !== "ACTIVE") throw new HttpError(400, "Mã đặt lại mật khẩu không hợp lệ hoặc đã hết hạn");
-      const resetRow = await validateResetToken(record.user.id, input.token, connection);
-      await authRepository.consumePasswordReset(resetRow.id, connection);
-      await userRepository.updatePasswordAndInvalidateSessions(record.user.id, await bcrypt.hash(input.newPassword, env.bcryptSaltRounds), connection);
-      return { reset: true };
-    });
+    try {
+      return await withTransaction(async (connection) => {
+        const record = await userRepository.findAuthByEmail(normalizedEmail, connection);
+        if (!record || record.user.status !== "ACTIVE") throw new HttpError(400, "Mã đặt lại mật khẩu không hợp lệ hoặc đã hết hạn");
+        const resetRow = await validateResetToken(record.user.id, input.token, connection);
+        await authRepository.consumePasswordReset(resetRow.id, connection);
+        await userRepository.updatePasswordAndInvalidateSessions(record.user.id, await bcrypt.hash(input.newPassword, env.bcryptSaltRounds), connection);
+        return { reset: true };
+      });
+    } catch (error) {
+      if (error instanceof InvalidCredentialAttemptError) {
+        await authRepository.recordPasswordResetFailure(error.credentialId);
+      }
+      throw error;
+    }
   },
 
   async getCurrentUser(userId: string) {
