@@ -1,7 +1,8 @@
-import { Files, FileUser, Home, LayoutDashboard, LogOut, ShieldCheck, UserRound } from "lucide-react";
+import { Files, FileUser, Home, LayoutDashboard, LogOut, MessageCircle, ShieldCheck, UserRound } from "lucide-react";
 import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "../context/auth-context";
 import { useNetworkStatus } from "../hooks/use-network-status";
+import { NotificationCenter } from "./notification-center";
 
 export function AppLayout() {
   const { user, logout } = useAuth();
@@ -19,8 +20,9 @@ export function AppLayout() {
         <NavLink to="/profile"><UserRound size={18} /> Hồ sơ</NavLink>
         {isAdmin && <NavLink to="/admin"><LayoutDashboard size={18} /> Quản trị</NavLink>}
         {user?.roles.some((role) => role === "STAFF" || role === "ADMIN") && <NavLink to="/staff"><ShieldCheck size={18} /> Khu vực nội bộ</NavLink>}
+        <NavLink to="/claims"><MessageCircle size={18} /> Trao đổi riêng</NavLink>
       </nav>
-      <button className="icon-text-button" onClick={() => { void logout().catch(() => undefined); }}><LogOut size={18} /> Đăng xuất</button>
+      <div className="topbar-actions"><NotificationCenter /><button className="icon-text-button" onClick={() => { void logout().catch(() => undefined); }}><LogOut size={18} /> Đăng xuất</button></div>
     </header>
     {!online && <div className="offline-banner" role="status">Bạn đang offline. Ứng dụng chỉ hiển thị giao diện hoặc dữ liệu đã lưu tạm; thao tác gửi mới cần kết nối mạng.</div>}
     <main className="workspace"><Outlet /></main>

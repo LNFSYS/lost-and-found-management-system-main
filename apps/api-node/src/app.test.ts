@@ -121,6 +121,29 @@ test("admin config routes require authentication", async () => {
   });
 });
 
+test("claim, room and private evidence routes require authentication", async () => {
+  await withServer(async () => undefined, async (baseUrl) => {
+    const claimList = await fetch(`${baseUrl}/api/claims`);
+    assert.equal(claimList.status, 401);
+
+    const room = await fetch(`${baseUrl}/api/claims/11111111-1111-4111-8111-111111111111/room`);
+    assert.equal(room.status, 401);
+
+    const evidence = await fetch(`${baseUrl}/api/claims/11111111-1111-4111-8111-111111111111/evidence/22222222-2222-4222-8222-222222222222`);
+    assert.equal(evidence.status, 401);
+  });
+});
+
+test("notification routes require authentication", async () => {
+  await withServer(async () => undefined, async (baseUrl) => {
+    const list = await fetch(`${baseUrl}/api/notifications`);
+    assert.equal(list.status, 401);
+
+    const markRead = await fetch(`${baseUrl}/api/notifications/11111111-1111-4111-8111-111111111111/read`, { method: "POST" });
+    assert.equal(markRead.status, 401);
+  });
+});
+
 test("public config route exposes safe config without authentication", async () => {
   const original = systemConfigService.listPublicConfigs;
   systemConfigService.listPublicConfigs = async () => ({ items: [], values: { "post.max_images": 5 } });

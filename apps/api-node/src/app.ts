@@ -13,6 +13,8 @@ import { postRoutes } from "./routes/post.routes.js";
 import { returnRoutes } from "./routes/return.routes.js";
 import { staffRoutes } from "./routes/staff.routes.js";
 import { handoverRoutes } from "./routes/handover.routes.js";
+import { claimRoutes } from "./routes/claim.routes.js";
+import { notificationRoutes } from "./routes/notification.routes.js";
 
 interface AppDependencies {
   checkReadiness?: () => Promise<void>;
@@ -43,6 +45,8 @@ export function createApp({ checkReadiness = async () => { await pool.query("SEL
   app.use("/api/auth", authRoutes);
   app.use("/api/posts", postRoutes);
   app.use("/api/returns", returnRoutes);
+  app.use("/api/claims", claimRoutes);
+  app.use("/api/notifications", notificationRoutes);
   app.use("/api/staff", staffRoutes);
   app.use("/api/handover-points", handoverRoutes);
   app.use("/api/admin", adminRoutes);
