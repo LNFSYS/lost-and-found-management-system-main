@@ -58,14 +58,17 @@ async function mockSessionAndPosts(page: Page) {
   }));
 }
 
-test("PWA manifest is installable and the service worker registers", async ({ page, request }) => {
+test("PWA manifest advertises required icons and the service worker registers", async ({ page, request }) => {
   const manifestResponse = await request.get("/manifest.webmanifest");
   expect(manifestResponse.ok()).toBeTruthy();
   const manifest = await manifestResponse.json();
   expect(manifest.name).toBe("FPTU Lost & Found");
   expect(manifest.start_url).toBe("/home");
   expect(manifest.display).toBe("standalone");
-  expect(manifest.icons.length).toBeGreaterThan(0);
+  expect(manifest.icons).toEqual(expect.arrayContaining([
+    expect.objectContaining({ src: "/icons/lnfs-icon-192.svg", sizes: "192x192" }),
+    expect.objectContaining({ src: "/icons/lnfs-icon-512.svg", sizes: "512x512" })
+  ]));
 
   const workerSource = await (await request.get("/sw.js")).text();
   expect(workerSource).toContain("hasAuthorization");

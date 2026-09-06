@@ -78,7 +78,7 @@ Requirements target bao phủ Web Application, PWA và Native Mobile. Status bê
 
 | ID | Requirement | UC | Priority | Status |
 | --- | --- | --- | --- | --- |
-| FR-PWA-01 | Web responsive có manifest, installability, service worker, application shell, safe offline/error fallback, retry và mobile-browser camera/gallery. Transaction chỉ thành công sau server confirmation. | UC-093–UC-100 | P1 | Partial: board/post PWA infrastructure, installability và offline unsent guard có; notification/background retry còn planned |
+| FR-PWA-01 | Web responsive có manifest, installability, service worker, application shell, safe offline/error fallback, retry và mobile-browser camera/gallery. Transaction chỉ thành công sau server confirmation. | UC-093–UC-100 | P1 | Partial: board/post manifest, service worker, shell và offline unsent guard đã có; browser installability/device matrix, notification/background retry còn pending |
 | FR-MOBILE-01 | Native Mobile dùng chung API/auth/authorization/privacy/state rules, có auth, LOST/FOUND, matching, chat/image, meetup/handover và notification. | UC-M01–UC-M12 | P1 | Planned — project chưa được tạo |
 | FR-MOBILE-02 | Native Mobile có navigation, session refresh, upload, permission, device test và release build. | UC-M01–UC-M12 | P1 | Planned — công nghệ TBD |
 | FR-JAVA-01 | Java Spring Boot cung cấp health endpoint nhưng chưa sở hữu flow nghiệp vụ. | N/A | P2 | Implemented skeleton |

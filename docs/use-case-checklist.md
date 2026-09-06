@@ -111,7 +111,7 @@ Không tick Done chỉ vì migration, schema, Jira ticket, UI mockup hoặc test
 | [x] | UC-091 | System | Dùng image/safe OCR tags làm tín hiệu matching | Done | AI tags và matching engine |
 | [ ] | UC-092 | Finder/Staff | Hiển thị review confidence cho Finder/Staff | Planned | Chưa có claim review UI |
 | [x] | UC-093 | User | Xác thực và duy trì phiên qua PWA | Done | Manifest, service worker app shell, auth refresh giữ nguyên và pwa-posts.spec.ts |
-| [ ] | UC-094 | User | Xem và cập nhật profile/activity qua PWA | Partial | Profile có; PWA infrastructure/activity chưa có |
+| [ ] | UC-094 | User | Xem và cập nhật profile/activity qua PWA | Partial | Profile/activity chưa thuộc branch board/post; PWA installability/device evidence còn pending |
 | [x] | UC-095 | Guest/User | Duyệt, tìm kiếm, lọc và xem detail trên mobile browser | Done | Responsive board/detail, search/filter và desktop/tablet/mobile Playwright evidence |
 | [x] | UC-096 | User | Tạo và quản lý bài LOST/FOUND qua PWA | Done | Create/list/detail/my-posts flow, manifest/service worker và offline unsent guard |
 | [x] | UC-097 | User | Chụp/chọn và upload ảnh qua mobile browser | Done | Browser file input multiple, upload validation pipeline và offline upload guard |
