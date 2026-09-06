@@ -14,7 +14,7 @@ All endpoints below require an active bearer session. The claim service returns 
 | `POST` | `/api/claims/:claimId/decision` | Finder accepts, declines or requests more information. |
 | `POST` | `/api/claims/:claimId/withdraw` | Claimant withdraws an active request. |
 | `GET`/`POST` | `/api/claims/:claimId/room` | Read the private room after Finder consent. Room creation is idempotent and server-owned. |
-| `GET`/`POST` | `/api/claims/:claimId/messages` | Read/send private text messages. Supports message idempotency. |
+| `GET`/`POST` | `/api/claims/:claimId/messages` | Read/send private text messages. Supports message idempotency; older-page reads use the `before` + `beforeId` composite cursor. |
 | `GET`/`POST` | `/api/claims/:claimId/evidence` | List/upload private images from the authorized room. |
 | `GET` | `/api/claims/:claimId/evidence/:evidenceId` | Stream an image through an authorization-checked, no-store proxy. |
 | `GET` | `/api/notifications` | List the authenticated user's private claim notifications. |

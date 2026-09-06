@@ -477,7 +477,14 @@ export const api = {
   withdrawClaim: (claimId: string) => raw<ClaimRecord>(`/claims/${claimId}/withdraw`, { method: "POST" }),
   listClaimRooms: () => raw<ClaimRoomsResponse>("/claims/rooms"),
   getClaimRoom: (claimId: string) => raw<{ id: string; claimId: string; status: ClaimStatus; participantRole: "CLAIMANT" | "FINDER"; createdAt: string }>(`/claims/${claimId}/room`),
-  listClaimMessages: (claimId: string) => raw<ClaimMessagesResponse>(`/claims/${claimId}/messages`),
+  listClaimMessages: (claimId: string, query?: { before?: string; beforeId?: string; limit?: number }) => {
+    const params = new URLSearchParams();
+    if (query?.before) params.set("before", query.before);
+    if (query?.beforeId) params.set("beforeId", query.beforeId);
+    if (query?.limit) params.set("limit", String(query.limit));
+    const suffix = params.toString() ? `?${params.toString()}` : "";
+    return raw<ClaimMessagesResponse>(`/claims/${claimId}/messages${suffix}`);
+  },
   sendClaimMessage: (claimId: string, content: string, clientMessageId = crypto.randomUUID()) => raw<ClaimMessage>(`/claims/${claimId}/messages`, { method: "POST", headers: { "Idempotency-Key": clientMessageId }, body: JSON.stringify({ content }) }),
   listClaimEvidence: (claimId: string) => raw<ClaimEvidenceResponse>(`/claims/${claimId}/evidence`),
   uploadClaimEvidence: (claimId: string, file: File, description?: string) => {

@@ -381,11 +381,11 @@ export const claimRepository = {
     return rows[0] ? mapMessage(rows[0]) : null;
   },
 
-  async listMessages(roomId: string, query: { before?: Date; limit: number }) {
+  async listMessages(roomId: string, query: { before?: Date; beforeId?: string; limit: number }) {
     const [rows] = await pool.execute<MessageRow[]>(
-      `${messageSelect} WHERE m.room_id = ? ${query.before ? "AND m.created_at < ?" : ""}
+      `${messageSelect} WHERE m.room_id = ? ${query.before ? "AND (m.created_at < ? OR (m.created_at = ? AND m.id < ?))" : ""}
        ORDER BY m.created_at DESC, m.id DESC LIMIT ${Math.min(100, Math.max(1, query.limit))}`,
-      query.before ? [roomId, query.before] : [roomId]
+      query.before ? [roomId, query.before, query.before, query.beforeId!] : [roomId]
     );
     return rows.reverse().map(mapMessage);
   },
