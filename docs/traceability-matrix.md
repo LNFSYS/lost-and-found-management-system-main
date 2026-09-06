@@ -1,6 +1,6 @@
 # Ma trận truy vết LNFS
 
-Cập nhật: **01/09/2026**
+Cập nhật: **03/09/2026**
 
 ## 1. Quy tắc
 
@@ -27,7 +27,7 @@ Nguồn status là code/test hiện tại. Mỗi dòng liên kết business rule
 | BR-38, BR-40, BR-42 | FR-CUSTODY-01, FR-WAREHOUSE-02 | UC-016–UC-020 | Planned/TBD | Disposition/custody guard và policy trường chưa có hoặc chưa được xác nhận |
 | BR-41, BR-43 | FR-CHAT-01, FR-RT-01 | UC-077–UC-083 | Planned | Chưa có Socket.IO/chat/realtime evidence |
 | BR-40 | FR-TRAIN-01 | UC-026–UC-030 | Planned | Chưa có dataset pipeline, evaluation hoặc model artifact |
-| BR-41 | FR-PWA-01, NFR-PWA-01 | UC-093–UC-100 | Partial/Planned | Board/post có responsive flow, manifest, service worker, application shell và offline unsent guard; installability/device matrix, notification/background retry còn pending |
+| BR-41 | FR-PWA-01, NFR-PWA-01 | UC-093–UC-100 | Partial | Manifest, service worker, offline shell và privacy-safe cache có; device matrix/manual evidence còn thiếu |
 | BR-41 | FR-MOBILE-01, FR-MOBILE-02, NFR-MOBILE-01 | UC-M01–UC-M12 | Planned | Không tìm thấy project Android/iOS/Expo/React Native/Flutter |
 | BR-03, BR-06, BR-14 | NFR-SEC-01–03, NFR-VALID-01 | UC-001, UC-002, UC-031–UC-036, UC-040, UC-041, UC-048 | Implemented/Verified current scope | Zod validators, auth utilities, middleware, rate limiters và tests |
 | BR-10, BR-15, BR-25 | NFR-PRIV-01 | UC-048, UC-050, UC-054, UC-076 | Partial | Post/media/matching serializer có; claim evidence chưa có |
@@ -35,18 +35,21 @@ Nguồn status là code/test hiện tại. Mỗi dòng liên kết business rule
 | BR-19, BR-27, BR-39 | NFR-TEST-01 | N/A | Partial | API tests/build và web typecheck có; complete product flow chưa có |
 | BR-27, BR-28 | NFR-DATA-02 | N/A | Process rule | README yêu cầu không destructive test trên Aiven/shared DB |
 | BR-27 | NFR-OBS-01 | N/A | Partial | /api/health và /api/ready có; graceful shutdown/observability cần verify thêm |
-| BR-31 | NFR-AUDIT-01 | UC-015, UC-064–UC-067 | Partial | Warehouse storage log và admin user/config audit đã có; audit catalog/moderation và toàn bộ transition còn thiếu |
+| BR-31 | NFR-AUDIT-01 | UC-015, UC-064–UC-067 | Implemented/Partial | Warehouse storage log, admin user/config và moderation audit đã có; catalog audit và toàn bộ domain transition còn thiếu |
+
+| BR-31, BR-43 | FR-ADMIN-02 | UC-066, UC-067, UC-084 | Implemented/Verified current scope | admin-reporting.service/repository, admin-page.tsx, moderation/KPI/export tests; moderation target được suy ra từ report và KPI snapshot tách khỏi metrics theo kỳ |
+| BR-07, BR-41 | FR-AUTH-04 | UC-038, UC-039 | Implemented/Verified current scope | Cloudinary avatar adapter, live authenticated upload/signed delivery/cleanup smoke test, profile activity API/UI và avatar cleanup tests; full UI/device QA còn cần chạy |
 
 ## 3. Channel evidence
 
 | Channel | Evidence hiện tại | Status |
 | --- | --- | --- |
 | Web | apps/web/src/main.tsx, pages, components, Playwright tests | Implemented cho baseline |
-| PWA | Responsive board/post flow, manifest, service worker, application shell và mobile file input; installability/device evidence còn pending | Partial |
+| PWA | Responsive CSS, manifest.webmanifest, sw.js, offline shell và mobile viewport/file input | Partial: device/installability evidence còn thiếu |
 | Native Mobile | Không có thư mục/project mobile | Planned — project not created yet |
 | Backend/API | Node routes/services/repositories/validators/migrations | Implemented theo module; claim/realtime còn planned |
 | Java | Spring Boot Actuator health skeleton | Implemented skeleton only |
-| Database | 001–038 migrations và checksum runner | Schema/migration implemented; không thay thế business runtime evidence |
+| Database | 001–044 migrations và checksum runner | Schema/migration implemented; migration 042 bổ sung Cloudinary avatar metadata và migration 044 scope idempotency feedback theo appointment; không thay thế business runtime evidence |
 | Test | Node tests và Web typecheck; một DB integration test skip an toàn khi thiếu local _test DB | Partial |
 
 ## 4. UC status totals

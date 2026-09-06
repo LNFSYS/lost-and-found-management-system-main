@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="LNFS">
+  <rect width="512" height="512" rx="96" fill="#f5f8fb"/>
+  <rect x="68" y="104" width="118" height="304" rx="28" fill="#0072ce"/>
+  <rect x="197" y="104" width="118" height="304" rx="28" fill="#f36f21"/>
+  <rect x="326" y="104" width="118" height="304" rx="28" fill="#37b34a"/>
+  <text x="127" y="296" text-anchor="middle" font-family="Arial, sans-serif" font-size="92" font-weight="800" fill="#fff">F</text>
+  <text x="256" y="296" text-anchor="middle" font-family="Arial, sans-serif" font-size="92" font-weight="800" fill="#fff">P</text>
+  <text x="385" y="296" text-anchor="middle" font-family="Arial, sans-serif" font-size="92" font-weight="800" fill="#fff">T</text>
+</svg>

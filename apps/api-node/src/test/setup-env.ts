@@ -16,7 +16,10 @@ const unitTestEnvironment: Record<string, string> = {
   SMTP_PASS: "unit-test-password",
   SMTP_FROM: "unit-test@example.invalid",
   COOKIE_SECURE: "false",
-  GEMINI_API_KEY: ""
+  GEMINI_API_KEY: "",
+  CLOUDINARY_CLOUD_NAME: "unit-test-cloud",
+  CLOUDINARY_API_KEY: "unit-test-key",
+  CLOUDINARY_API_SECRET: "unit-test-secret"
 };
 
 if (process.env.LNFS_TEST_USE_EXTERNAL_ENV !== "1") {

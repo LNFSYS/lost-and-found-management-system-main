@@ -1,6 +1,6 @@
 # Tài liệu FPTU Lost & Found System
 
-Cập nhật: **02/09/2026**
+Cập nhật: **03/09/2026**
 
 ## 1. Mục đích
 
@@ -9,7 +9,7 @@ Bộ tài liệu này mô tả phạm vi, nghiệp vụ, requirement, kiến tr�
 **Software type thống nhất:** Web Application with Progressive Web App (PWA) support and a Native Mobile Application.
 
 - Web là channel hiện có.
-- PWA là phần mở rộng của web responsive; infrastructure PWA hiện chưa có đầy đủ.
+- PWA là phần mở rộng của web responsive; manifest, service worker và offline shell đã có, còn cần device/installability evidence.
 - Native Mobile là scope mục tiêu bắt buộc theo kế hoạch, nhưng hiện chưa có project trong repository và phải ghi `Planned — project not created yet`.
 
 ## 2. Thứ tự nguồn sự thật
@@ -48,14 +48,15 @@ Không đánh dấu Done chỉ vì có migration, schema, ticket, mockup, skelet
 | [DOCUMENTATION_UPDATE_REPORT.md](DOCUMENTATION_UPDATE_REPORT.md) | Biên bản đối chiếu code và cập nhật tài liệu gần nhất |
 | [SPRINT_4_IMPLEMENTATION_AUDIT.md](SPRINT_4_IMPLEMENTATION_AUDIT.md) | Audit 17 Jira ticket Sprint 4 từ snapshot offline |
 
-## 5. Snapshot implementation ngày 02/09/2026
+## 5. Snapshot implementation ngày 03/09/2026
 
 **Đã có bằng chứng runtime/test:**
 
 - Auth email OTP/SMTP, password login, JWT access/refresh, logout, reset password và profile cơ bản.
 - Web board, my posts, post detail, create/update/close/soft-delete, search/filter/sort/pagination.
 - Category hai cấp, area, building, handover-point public active-only và Admin CRUD/map/marker.
-- Post media local protected proxy, validation và xóa media.
+- Post media local protected proxy, validation và xóa media; avatar dùng Cloudinary authenticated storage và protected proxy.
+- Admin moderation/report, dashboard KPI theo kỳ, current snapshot và aggregate CSV/JSON export.
 - Gemini-assisted multi-image draft; hybrid/rule-based matching có tier và explanation.
 - Staff warehouse receive/store/return, retention deadline, handover counts và storage log.
 
@@ -63,14 +64,14 @@ Không đánh dấu Done chỉ vì có migration, schema, ticket, mockup, skelet
 
 - Claim/evidence, private verification chat, guided questions, multiple claimant, meetup và direct dual handover.
 - Socket.IO realtime, notification, unread/seen và image chat.
-- Warehouse overdue/disposition, reports, moderation, full admin dashboard/config.
-- PWA notification/background retry; board/post manifest, service worker and offline shell now have browser evidence.
+- Warehouse overdue/disposition và claim/chat/appointment workflow đầy đủ.
+- PWA device matrix/installability QA và shared storage cho media bài đăng.
 - Native Mobile Application.
 - Shared object storage và Java business endpoints.
 
 ## 6. Evidence đã kiểm tra
 
-- API unit/service/repository/validator tests: **92 pass, 1 skip an toàn** cho DB integration chưa có MySQL local `_test`.
+- API unit/service/repository/validator tests: **108 pass, 1 skip an toàn** cho DB integration chưa có MySQL local `_test`.
 - `npm test`: pass, gồm API tests và web TypeScript check.
 - `npm run build`: pass cho API và Web production build.
 - `npm run build:java`: chưa chạy được vì Maven không có trong `PATH`.

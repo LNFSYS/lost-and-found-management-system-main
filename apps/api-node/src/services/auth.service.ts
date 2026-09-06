@@ -1,18 +1,22 @@
 import bcrypt from "bcryptjs";
+import type { Express } from "express";
 import jwt, { type SignOptions } from "jsonwebtoken";
 import type { RowDataPacket } from "mysql2";
 import { env } from "../config/env.js";
 import { withTransaction } from "../config/db.js";
 import { authRepository, type OtpRow, type ResetRow } from "../repositories/auth.repository.js";
 import { userRepository } from "../repositories/user.repository.js";
-import type { AccessTokenPayload, AudienceRole, User } from "../types/auth.js";
+import type { AccessTokenPayload, ActivitySummary, AudienceRole, User } from "../types/auth.js";
+import { cloudinaryAvatarStorage, type AvatarStorage } from "../utils/cloudinary-avatar-storage.js";
 import { HttpError } from "../utils/http-error.js";
+import { validateAvatarUpload } from "../utils/media.js";
 import { hashToken, id, normalizeEmail, randomOtp, randomToken } from "../utils/security.js";
 import type { ForgotPasswordInput, LoginInput, RegisterInput, RequestOtpInput, ResetPasswordInput, UpdateProfileInput } from "../validators/auth.validator.js";
 import { emailService } from "./email.service.js";
 
 type SessionMeta = { userAgent?: string; ipAddress?: string };
 type AuthResult = { user: User; accessToken: string; refreshToken: string; refreshExpiresAt: Date };
+type AvatarFile = { body: Buffer; contentType: string; updatedAt: string | null };
 
 function publicUser(user: User): User { return user; }
 
@@ -56,7 +60,13 @@ async function validateResetToken(userId: string, token: string, connection: Par
   return row;
 }
 
-export const authService = {
+type AvatarRepository = Pick<typeof userRepository, "findAvatarById" | "updateAvatar">;
+
+export function createAuthService(options: { avatarStorage?: AvatarStorage; avatarRepository?: AvatarRepository } = {}) {
+  const avatarStorage = options.avatarStorage ?? cloudinaryAvatarStorage;
+  const avatarRepository = options.avatarRepository ?? userRepository;
+
+  return {
   async requestRegistrationOtp(input: RequestOtpInput) {
     const normalizedEmail = normalizeEmail(input.email);
     if (await userRepository.findByEmail(normalizedEmail)) throw new HttpError(409, "Email đã được đăng ký");
@@ -144,8 +154,50 @@ export const authService = {
     return publicUser(updated);
   },
 
+  async updateAvatar(userId: string, file: Express.Multer.File) {
+    const image = validateAvatarUpload(file);
+    const previous = await avatarRepository.findAvatarById(userId);
+    const uploaded = await avatarStorage.upload({ buffer: file.buffer, format: image.format });
+    try {
+      const updated = await avatarRepository.updateAvatar(userId, {
+        publicId: uploaded.publicId,
+        assetId: uploaded.assetId,
+        version: uploaded.version,
+        format: uploaded.format,
+        resourceType: uploaded.resourceType,
+        size: uploaded.bytes
+      });
+      if (!updated) throw new HttpError(404, "Khong tim thay tai khoan");
+      if (previous?.publicId) {
+        try {
+          await avatarStorage.destroy(previous.publicId);
+        } catch {
+          console.warn(`[avatar] old avatar cleanup skipped for user ${userId}`);
+        }
+      }
+      return publicUser(updated);
+    } catch (error) {
+      await avatarStorage.destroy(uploaded.publicId).catch(() => undefined);
+      throw error;
+    }
+  },
+
+  async getAvatarFile(userId: string): Promise<AvatarFile> {
+    const avatar = await avatarRepository.findAvatarById(userId);
+    if (!avatar) throw new HttpError(404, "Chua co anh dai dien");
+    const downloaded = await avatarStorage.download({ publicId: avatar.publicId, version: avatar.version, format: avatar.format });
+    return { body: downloaded.body, contentType: downloaded.contentType, updatedAt: avatar.updatedAt };
+  },
+
+  async getActivitySummary(userId: string): Promise<ActivitySummary> {
+    return userRepository.getActivitySummary(userId);
+  },
+
   async validateAccessSession(payload: AccessTokenPayload) {
     const user = await userRepository.findById(payload.sub);
     return isAccessSessionValid(user, payload);
   }
-};
+  };
+}
+
+export const authService = createAuthService();
