@@ -64,7 +64,7 @@ Không đánh dấu Done chỉ vì có migration, schema, ticket, mockup, skelet
 - Claim/evidence, private verification chat, guided questions, multiple claimant, meetup và direct dual handover.
 - Socket.IO realtime, notification, unread/seen và image chat.
 - Warehouse overdue/disposition, reports, moderation, full admin dashboard/config.
-- PWA manifest/service worker/installability/offline shell.
+- PWA notification/background retry; board/post manifest, service worker and offline shell now have browser evidence.
 - Native Mobile Application.
 - Shared object storage và Java business endpoints.
 

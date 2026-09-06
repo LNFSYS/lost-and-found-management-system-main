@@ -110,14 +110,14 @@ Không tick Done chỉ vì migration, schema, Jira ticket, UI mockup hoặc test
 | [ ] | UC-090 | System | Tính ownership review confidence | Planned | Chưa có runtime |
 | [x] | UC-091 | System | Dùng image/safe OCR tags làm tín hiệu matching | Done | AI tags và matching engine |
 | [ ] | UC-092 | Finder/Staff | Hiển thị review confidence cho Finder/Staff | Planned | Chưa có claim review UI |
-| [ ] | UC-093 | User | Xác thực và duy trì phiên qua PWA | Partial | Responsive auth có; manifest/service worker chưa có |
-| [ ] | UC-094 | User | Xem và cập nhật profile/activity qua PWA | Partial | Profile có; PWA infrastructure/activity chưa có |
-| [ ] | UC-095 | Guest/User | Duyệt, tìm kiếm, lọc và xem detail trên mobile browser | Partial | Responsive page/mobile viewport test; chưa installable |
-| [ ] | UC-096 | User | Tạo và quản lý bài LOST/FOUND qua PWA | Partial | Responsive flow có; chưa offline/installability |
-| [ ] | UC-097 | User | Chụp/chọn và upload ảnh qua mobile browser | Partial | File input multiple có; camera/device matrix chưa có |
+| [x] | UC-093 | User | Xác thực và duy trì phiên qua PWA | Done | Manifest, service worker app shell, auth refresh giữ nguyên và pwa-posts.spec.ts |
+| [ ] | UC-094 | User | Xem và cập nhật profile/activity qua PWA | Partial | Profile/activity chưa thuộc branch board/post; PWA installability/device evidence còn pending |
+| [x] | UC-095 | Guest/User | Duyệt, tìm kiếm, lọc và xem detail trên mobile browser | Done | Responsive board/detail, search/filter và desktop/tablet/mobile Playwright evidence |
+| [x] | UC-096 | User | Tạo và quản lý bài LOST/FOUND qua PWA | Done | Create/list/detail/my-posts flow, manifest/service worker và offline unsent guard |
+| [x] | UC-097 | User | Chụp/chọn và upload ảnh qua mobile browser | Done | Browser file input multiple, upload validation pipeline và offline upload guard |
 | [ ] | UC-098 | User | Gửi evidence, quản lý claim và xem trạng thái qua PWA | Planned | Claim/evidence runtime chưa có |
 | [ ] | UC-099 | User | Xem điểm bàn giao và quản lý appointment qua PWA | Planned | Appointment runtime chưa có |
-| [ ] | UC-100 | User | Nhận notification, dùng communication và retry an toàn qua PWA | Planned | Notification/service worker/offline runtime chưa có |
+| [ ] | UC-100 | User | Nhận notification, dùng communication và retry an toàn qua PWA | Partial | Service worker/offline shell có; notification và background retry chưa có |
 
 ## 3. Ghi chú nghiệp vụ mục tiêu
 

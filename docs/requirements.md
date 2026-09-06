@@ -78,7 +78,7 @@ Requirements target bao phủ Web Application, PWA và Native Mobile. Status bê
 
 | ID | Requirement | UC | Priority | Status |
 | --- | --- | --- | --- | --- |
-| FR-PWA-01 | Web responsive có manifest, installability, service worker, application shell, safe offline/error fallback, retry và mobile-browser camera/gallery. Transaction chỉ thành công sau server confirmation. | UC-093–UC-100 | P1 | Partial: responsive/file input có; PWA infrastructure chưa có |
+| FR-PWA-01 | Web responsive có manifest, installability, service worker, application shell, safe offline/error fallback, retry và mobile-browser camera/gallery. Transaction chỉ thành công sau server confirmation. | UC-093–UC-100 | P1 | Partial: board/post manifest, service worker, shell và offline unsent guard đã có; browser installability/device matrix, notification/background retry còn pending |
 | FR-MOBILE-01 | Native Mobile dùng chung API/auth/authorization/privacy/state rules, có auth, LOST/FOUND, matching, chat/image, meetup/handover và notification. | UC-M01–UC-M12 | P1 | Planned — project chưa được tạo |
 | FR-MOBILE-02 | Native Mobile có navigation, session refresh, upload, permission, device test và release build. | UC-M01–UC-M12 | P1 | Planned — công nghệ TBD |
 | FR-JAVA-01 | Java Spring Boot cung cấp health endpoint nhưng chưa sở hữu flow nghiệp vụ. | N/A | P2 | Implemented skeleton |
@@ -101,7 +101,7 @@ Requirements target bao phủ Web Application, PWA và Native Mobile. Status bê
 | NFR-OBS-01 | Có health/readiness, structured request log và graceful shutdown. | P1 | Partial: health/readiness có; cần verify phần còn lại |
 | NFR-AUDIT-01 | Admin và sensitive transitions có audit trail đủ actor/action/before-after/time. | P1 | Partial |
 | NFR-AI-01 | AI/OCR/matching chỉ hỗ trợ quyết định; human verification bắt buộc trước trả đồ. | P0 | Implemented cho current AI/matching module; verification flow planned |
-| NFR-PWA-01 | Cached/offline UI không lộ private data và không báo transaction trước server confirmation. | P0 | Planned cùng PWA infrastructure |
+| NFR-PWA-01 | Cached/offline UI không lộ private data và không báo transaction trước server confirmation. | P0 | Implemented cho board/post shell: không cache API có credential/auth, mutation offline bị chặn và báo chưa gửi |
 | NFR-MOBILE-01 | Native Mobile parity phải dùng shared contract và có device/release evidence. | P1 | Planned |
 
 ## 4. Acceptance và traceability

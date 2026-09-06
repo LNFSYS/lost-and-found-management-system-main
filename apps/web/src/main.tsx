@@ -13,7 +13,10 @@ import { StaffPage } from "./pages/staff-page";
 import { PostsPage } from "./pages/posts-page";
 import { PostDetailPage } from "./pages/post-detail-page";
 import { PostMatchesPage } from "./pages/post-matches-page";
+import { registerServiceWorker } from "./pwa";
 import "./styles.css";
+
+registerServiceWorker();
 
 const HomePage = lazy(async () => {
   const module = await import("./pages/home-page");

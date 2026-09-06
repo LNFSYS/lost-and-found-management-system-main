@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="192" height="192" viewBox="0 0 512 512" role="img" aria-label="FPTU Lost and Found">
+  <rect width="512" height="512" rx="96" fill="#ffffff"/>
+  <path d="M92 116h328v280H92z" fill="#f6f9fc" stroke="#d7e4ef" stroke-width="18"/>
+  <path d="M128 158h256v52H128z" fill="#0b63b6"/>
+  <path d="M128 230h112v112H128z" fill="#f36f21"/>
+  <path d="M264 230h120v112H264z" fill="#16a34a"/>
+  <path d="M154 276h60M292 276h64" stroke="#ffffff" stroke-width="22" stroke-linecap="round"/>
+  <path d="M188 386c28-42 96-42 124 0" fill="none" stroke="#19314b" stroke-width="20" stroke-linecap="round"/>
+</svg>
