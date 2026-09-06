@@ -23,6 +23,7 @@ Current repository là baseline Web + Node.js API. Native Mobile, PWA infrastruc
 - Upload media bài đăng qua local protected media proxy, có kiểm tra loại, kích thước và file signature.
 - Gemini-assisted multi-image analysis tạo bản nháp có thể chỉnh sửa; không tự đăng bài và không tự xác minh quyền sở hữu.
 - Hybrid/rule-based matching với text normalization tiếng Việt, category, location, time, image/OCR tags, tier, score breakdown và explanation.
+- Claim peer-to-peer, participant authorization, private text room, cursor-paginated history, private evidence proxy và in-app claim notifications đã có runtime ở mức hiện tại; appointment, guided verification và realtime transport chưa có.
 - Staff warehouse operations: tiếp nhận, lưu, trả, retention deadline, handover counts và storage log.
 
 Các mục trên là **current implementation baseline**, không đồng nghĩa mọi workflow trong product scope đã hoàn tất end-to-end.
@@ -31,17 +32,17 @@ Các mục trên là **current implementation baseline**, không đồng nghĩa 
 
 Luồng nghiệp vụ mục tiêu là:
 
-`LOST/FOUND post → matching suggestion → private verification chat → finder decision → meetup → dual-confirmed direct handover`
+`LOST/FOUND post → matching suggestion → claim/private verification chat → finder decision → meetup → dual-confirmed direct handover`
 
-Staff custody/warehouse là nhánh hỗ trợ hoặc escalation khi Finder không thể tiếp tục giữ đồ, có dispute, item nhạy cảm/nguy hiểm hoặc policy yêu cầu chuyển vào kho. Claim/evidence, appointment, realtime chat/notification và phần PWA/native mobile chưa được mô tả là đã chạy nếu chưa có route, UI và test evidence.
+Staff custody/warehouse là nhánh hỗ trợ hoặc escalation khi Finder không thể tiếp tục giữ đồ, có dispute, item nhạy cảm/nguy hiểm hoặc policy yêu cầu chuyển vào kho. Claim, private text chat, evidence proxy và claim notification đã có route/UI/test evidence ở mức hiện tại; appointment, guided questions, realtime chat/notification và phần PWA/native mobile nâng cao vẫn chưa hoàn tất.
 
 ## Trạng thái chưa có runtime evidence
 
-- Peer-to-peer verification conversation, guided questions, claim/evidence upload/review, multiple claimant isolation.
+- Guided questions, claim evidence review/confidence, appointment/meetup và multiple-claimant policy end-to-end.
 - Meetup proposal/acceptance/reschedule và dual-confirmation direct handover.
 - Socket.IO realtime chat, image message, unread/seen và realtime notification.
 - Overdue disposition, donation/transfer/disposal document flow và dispute escalation.
-- PWA manifest, service worker, installability, offline shell và browser/device verification.
+- PWA installability và browser/device verification đầy đủ; manifest, service worker, offline shell và mobile-browser flow đã có ở mức hiện tại.
 - Native Mobile Application.
 - Custom-trained AI model, MLOps hoặc production model registry.
 - Shared object storage; media hiện lưu local filesystem.
@@ -53,7 +54,8 @@ Staff custody/warehouse là nhánh hỗ trợ hoặc escalation khi Finder khôn
 Web responsive client ─────┐
                             ├── Node.js/Express API ── MySQL
 PWA target (same web) ──────┘          ├── local media storage (current)
-                                       └── Gemini-assisted analysis (optional)
+                                        ├── Gemini-assisted analysis (optional)
+                                        └── claim/chat/evidence/notification (current partial runtime)
 
 Native Mobile (planned) ─── shared API/auth/business rules
 
@@ -115,7 +117,7 @@ npm run build:java
 npm --workspace @lnfs/web run e2e:home
 ```
 
-`build:java` cần Maven trong `PATH`. Database integration test chỉ được trỏ vào MySQL local riêng có tên kết thúc bằng `_test`; không dùng Aiven/shared DB.
+`build:java` cần Maven trong `PATH`. Database integration test chỉ được trỏ vào MySQL local riêng có tên kết thúc bằng `_test`; không dùng Aiven/shared DB. CI có MySQL service riêng và browser job Playwright; evidence mới nhất nằm tại [audit/fix report](docs/LNFS_AUDIT_FIX_REPORT_2026-09-06.md).
 
 ## Media và làm việc nhóm
 

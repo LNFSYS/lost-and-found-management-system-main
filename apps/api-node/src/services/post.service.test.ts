@@ -4,7 +4,7 @@ import type { PostRecord } from "../repositories/post.repository.js";
 import { postRepository } from "../repositories/post.repository.js";
 import type { AccessTokenPayload } from "../types/auth.js";
 import { matchingService } from "./matching.service.js";
-import { postService } from "./post.service.js";
+import { assertPostUpdateAllowed, postService } from "./post.service.js";
 
 function post(overrides: Partial<PostRecord> = {}): PostRecord {
   return {
@@ -44,6 +44,22 @@ function post(overrides: Partial<PostRecord> = {}): PostRecord {
 function viewer(sub: string, roles: AccessTokenPayload["roles"] = ["USER"]): AccessTokenPayload {
   return { sub, email: `${sub}@example.invalid`, roles, sessionVersion: 0 };
 }
+
+test("post update state machine rejects content changes after terminal status", () => {
+  assert.throws(
+    () => assertPostUpdateAllowed({ status: "CLOSED" }, { title: "Updated title" }),
+    (error: unknown) => error instanceof Error && "status" in error && error.status === 409
+  );
+  assert.throws(
+    () => assertPostUpdateAllowed({ status: "RESOLVED" }, { status: "OPEN" }),
+    (error: unknown) => error instanceof Error && "status" in error && error.status === 409
+  );
+});
+
+test("post update state machine allows content edits only while open or matched", () => {
+  assert.doesNotThrow(() => assertPostUpdateAllowed({ status: "OPEN" }, { title: "Updated title" }));
+  assert.doesNotThrow(() => assertPostUpdateAllowed({ status: "MATCHED" }, { status: "RESOLVED" }));
+});
 
 test("matching results require source ownership or Staff/Admin review access", async () => {
   const originalFindVisibleById = postRepository.findVisibleById;

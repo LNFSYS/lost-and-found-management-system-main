@@ -6,8 +6,12 @@ function safeLimit(value: number | undefined) {
 }
 
 export const notificationService = {
-  async list(userId: string, limit?: number): Promise<{ items: NotificationRecord[] }> {
-    return { items: await notificationRepository.listForUser(userId, safeLimit(limit)) };
+  async list(userId: string, limit?: number): Promise<{ items: NotificationRecord[]; unreadTotal: number }> {
+    const [items, unreadTotal] = await Promise.all([
+      notificationRepository.listForUser(userId, safeLimit(limit)),
+      notificationRepository.countUnreadForUser(userId)
+    ]);
+    return { items, unreadTotal };
   },
 
   async markRead(userId: string, notificationId: string) {

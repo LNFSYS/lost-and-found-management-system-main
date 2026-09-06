@@ -1,6 +1,6 @@
 # LNFS Business Process A–Z
 
-Cập nhật: **01/09/2026**
+Cập nhật: **06/09/2026**
 
 Đây là nguồn mô tả nghiệp vụ đầy đủ của FPTU Lost & Found System. Các phần có chữ **Current** là những gì repository đã có runtime evidence; **Target/Planned** là phạm vi sản phẩm cần hoàn thiện và không được trình bày như đã triển khai.
 
@@ -8,7 +8,7 @@ Cập nhật: **01/09/2026**
 
 LNFS giúp cộng đồng FPT University Đà Nẵng báo mất, báo nhặt, tìm kiếm, so sánh và phối hợp trả lại đồ. Sản phẩm mục tiêu có Web Application, PWA support và Native Mobile Application dùng chung Node.js API.
 
-Current baseline: authentication, LOST/FOUND posts, catalog, handover point management, local media, Gemini-assisted draft, hybrid matching và Staff warehouse operations.
+Current baseline: authentication, LOST/FOUND posts, catalog, handover point management, local media, Gemini-assisted draft, hybrid matching, claim/private text verification ở mức partial và Staff warehouse operations.
 
 Target workflow:
 
@@ -210,7 +210,7 @@ Không dùng:
 
 ## M. Notification, audit và KPI mục tiêu
 
-Notification target gồm OTP, match suggestion, verification request, new message, appointment change, handover confirmation và warehouse alert. Realtime/socket notification chưa có runtime evidence trong repository hiện tại.
+Notification target gồm OTP, match suggestion, verification request, new message, appointment change, handover confirmation và warehouse alert. Claim notification hiện có REST/in-app feed với unread total; match notification, realtime/socket và warehouse alert scheduler chưa có runtime evidence.
 
 Audit target ghi actor, action, entity, before/after, reason và timestamp cho admin action, claim decision, appointment, handover, custody và disposition.
 
@@ -234,12 +234,12 @@ KPI là target; không điền số liệu giả khi chưa có data/analytics ru
 | Auth/session | Current | Partial target | Planned |
 | LOST/FOUND | Current | Responsive partial | Planned |
 | Matching/explanation | Current | Planned parity | Planned |
-| Claim/evidence/chat | Planned | Planned | Planned |
+| Claim/evidence/chat | Partial current REST | Partial PWA current | Planned native client |
 | Meetup/dual handover | Planned | Planned | Planned |
 | Staff/Admin operations | Current một phần | Có thể ưu tiên Web | Có thể không bắt buộc |
 | Camera/gallery | File input current | Planned device verification | Planned |
-| Offline shell | Chưa có | Planned | Phụ thuộc app |
-| Notification/realtime | Chưa có runtime | Planned | Planned |
+| Offline shell | Chưa có | Current shell; installability QA pending | Phụ thuộc app |
+| Notification/realtime | Claim notification current REST; realtime planned | Claim notification current UI; realtime planned | Planned |
 
 PWA không phải native app. Mobile browser responsive không phải bằng chứng Native Mobile.
 
@@ -273,15 +273,15 @@ Node.js là core API, migration owner và write owner của current implementati
 - Quy trình xử lý sensitive item và legal hold.
 - Bộ dữ liệu hợp pháp cho future AI training.
 
-## R. Evidence repository ngày 01/09/2026
+## R. Evidence repository ngày 06/09/2026
 
-- Node routes: auth, posts, staff, handover-points và admin.
-- Web routes: home, profile, posts, my-posts, post detail, matches, staff và admin.
-- Tests: Node unit/service/repository/validator; guarded DB integration; Web Playwright tests và typecheck.
-- Migrations: 001 đến 038, checksum runner.
+- Node routes: auth, posts, claims/private room/evidence, notifications, staff, handover-points và admin.
+- Web routes: home, profile, posts, my-posts, post detail, matches, claims, staff và admin.
+- Tests: Node unit/service/repository/validator; guarded DB integration; Web Playwright tests và typecheck. Latest local evidence: API 137 pass/1 skip, Playwright 23/23 pass.
+- Migrations: 001 đến 046, checksum runner; 046 là corrective migration chưa áp dụng lên Aiven/shared DB.
 - Java: Spring Boot Actuator health skeleton.
 - Không có native mobile project.
-- Không có PWA manifest/service worker.
+- Có PWA manifest/service worker; installability/device evidence còn pending.
 - Không có Jira connector trong workspace.
 
 ## S. Definition of Done cho nghiệp vụ mới

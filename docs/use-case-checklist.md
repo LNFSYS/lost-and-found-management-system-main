@@ -1,14 +1,14 @@
 # Checklist Use Case LNFS
 
-Cập nhật: **03/09/2026**
+Cập nhật: **06/09/2026**
 
 ## 1. Quy ước và tổng hợp
 
 Mỗi dòng có actor, mục tiêu, status và evidence/gap. Preconditions chung là actor có quyền phù hợp; trigger là thao tác actor hoặc sự kiện hệ thống; postcondition chỉ được coi là đạt khi status có runtime evidence. Các ngoại lệ, privacy note và business rule chi tiết nằm trong LNFS_BUSINESS_PROCESS_A_TO_Z.md và business-rules.md.
 
-- [x] **Done/Implemented:** 55 UC có runtime và evidence phù hợp với baseline hiện tại.
-- [ ] **Partial:** 7 UC mới đáp ứng một phần acceptance criteria.
-- [ ] **Planned:** 38 UC chưa có runtime evidence.
+- [x] **Done/Implemented:** 56 UC có runtime và evidence phù hợp với baseline hiện tại.
+- [ ] **Partial:** 18 UC mới đáp ứng một phần acceptance criteria.
+- [ ] **Planned:** 26 UC chưa có runtime evidence.
 - [ ] **Deferred:** 0 UC.
 - Tổng: **100 ID duy nhất từ UC-001 đến UC-100**.
 
@@ -20,11 +20,11 @@ Không tick Done chỉ vì migration, schema, Jira ticket, UI mockup hoặc test
 | --- | --- | --- | --- | --- | --- |
 | [x] | UC-001 | System/User | Xác thực JWT tại Node.js API | Done | auth.middleware.ts |
 | [x] | UC-002 | System/Admin/Staff | Phân quyền User/Student/Lecturer/Staff/Admin tại backend | Done | auth middleware, admin/staff routes |
-| [ ] | UC-003 | Owner/Finder | Yêu cầu người claim bổ sung thông tin | Planned | Chưa có claim/chat runtime |
-| [ ] | UC-004 | Finder | Chấp nhận claim với transaction/row lock | Planned | Chưa có claim runtime |
-| [ ] | UC-005 | Finder | Từ chối claim kèm lý do | Planned | Chưa có claim runtime |
-| [ ] | UC-006 | Claimant | Hủy claim theo trạng thái hợp lệ | Planned | Chưa có claim runtime |
-| [ ] | UC-007 | System | Khóa ghi khi chuyển trạng thái claim | Planned | Chưa có claim runtime |
+| [ ] | UC-003 | Owner/Finder | Yêu cầu người claim bổ sung thông tin | Partial | `claim.service.ts` hỗ trợ REQUEST_MORE_INFO; guided question flow chưa có |
+| [ ] | UC-004 | Finder | Chấp nhận claim với transaction/row lock | Partial | `claim.service.ts` dùng transaction/claim row lock; appointment/return chưa có |
+| [ ] | UC-005 | Finder | Từ chối claim kèm lý do | Partial | Decision API/state có; chưa có browser journey riêng |
+| [ ] | UC-006 | Claimant | Hủy claim theo trạng thái hợp lệ | Partial | Withdraw API/state có; chưa có browser journey riêng |
+| [ ] | UC-007 | System | Khóa ghi khi chuyển trạng thái claim | Partial | Claim decision/withdraw/message/evidence đều dùng row lock; DB concurrency chưa chạy |
 | [x] | UC-008 | Admin | Tạo điểm bàn giao | Done | Admin API/UI, validation, admin-handover.spec.ts |
 | [x] | UC-009 | Admin | Cập nhật điểm bàn giao | Done | PATCH API, form và marker picker |
 | [x] | UC-010 | Admin | Đóng/mở điểm bàn giao | Done | Admin toggle, public active-only query |
@@ -66,12 +66,12 @@ Không tick Done chỉ vì migration, schema, Jira ticket, UI mockup hoặc test
 | [x] | UC-046 | Guest/User | Xem board LOST/FOUND | Done | List board API/page |
 | [x] | UC-047 | Guest/User | Tìm kiếm, lọc, sắp xếp và phân trang bài | Done | Query validator/repository/UI |
 | [x] | UC-048 | Owner | Upload ảnh bài đăng | Done | Multer, media validation/proxy |
-| [ ] | UC-049 | Claimant | Upload ảnh bằng chứng claim | Planned | Claim evidence runtime chưa có |
+| [ ] | UC-049 | Claimant | Upload ảnh bằng chứng claim | Partial | Private evidence API/UI/proxy có; local storage chưa deploy-safe và chưa có full browser upload journey |
 | [x] | UC-050 | Owner | Xóa ảnh bài đăng khỏi media storage hiện tại | Done | Owner-guarded delete |
 | [x] | UC-051 | Client | Cung cấp public config cho client validation | Done | Public route allowlist, typed parsing và service test |
-| [ ] | UC-052 | Owner | Gửi claim cho bài FOUND | Planned | Schema only |
-| [ ] | UC-053 | System | Ngăn duplicate claim cho cùng bài | Planned | Constraint foundation, chưa có API |
-| [ ] | UC-054 | Claimant/Owner/Reviewer | Kiểm soát quyền xem claim evidence/private data | Partial | Post privacy có; claim privacy chưa có |
+| [ ] | UC-052 | Owner | Gửi claim cho bài FOUND | Partial | Claim API/service tạo claim từ persisted match và owner guard; chưa có full browser journey |
+| [ ] | UC-053 | System | Ngăn duplicate claim cho cùng bài | Partial | Pair/request idempotency guard và migration constraint có; isolated DB concurrency chưa chạy |
+| [ ] | UC-054 | Claimant/Owner/Reviewer | Kiểm soát quyền xem claim evidence/private data | Partial | Participant authorization, private proxy và raw URL redaction có; guided private answer/reviewer flow chưa có |
 | [x] | UC-055 | User | Lấy danh sách handover point đang hoạt động cho form | Done | posts/catalog |
 | [x] | UC-056 | Admin | Quản lý handover point qua Admin API | Done | Admin CRUD, toggle và delete guard |
 | [x] | UC-057 | Admin | Lưu campus map và marker point | Done | Map upload, URL/path validation, X/Y picker |
@@ -96,8 +96,8 @@ Không tick Done chỉ vì migration, schema, Jira ticket, UI mockup hoặc test
 | [x] | UC-076 | Owner | Giải thích lý do và điểm thành phần của match | Done | Explanation JSON/UI; raw private signals được redact với người không có quyền |
 | [ ] | UC-077 | System | Khởi tạo Socket.IO server | Planned | Không có dependency/runtime |
 | [ ] | UC-078 | System | Xác thực socket bằng JWT | Planned | Chưa có socket server |
-| [ ] | UC-079 | Owner/Finder | Tạo hoặc join claim chat room | Planned | Chưa có claim/socket runtime |
-| [ ] | UC-080 | Owner/Finder | Gửi và nhận realtime message | Planned | Chưa có runtime |
+| [ ] | UC-079 | Owner/Finder | Tạo hoặc join claim chat room | Partial | Private REST room có participant consent guard; Socket.IO realtime chưa có |
+| [ ] | UC-080 | Owner/Finder | Gửi và nhận realtime message | Partial | Private REST text message, retry idempotency và cursor history có; realtime transport chưa có |
 | [ ] | UC-081 | Owner/Finder | Gửi ảnh trong realtime chat | Planned | Chưa có runtime |
 | [ ] | UC-082 | Owner/Finder | Hiển thị seen và unread realtime | Planned | Chưa có runtime |
 | [ ] | UC-083 | System | Gửi realtime notification cho chat/claim/appointment | Planned | Chưa có runtime |
@@ -115,9 +115,9 @@ Không tick Done chỉ vì migration, schema, Jira ticket, UI mockup hoặc test
 | [ ] | UC-095 | Guest/User | Duyệt, tìm kiếm, lọc và xem detail trên mobile browser | Partial | Responsive page/mobile viewport test; chưa installable |
 | [ ] | UC-096 | User | Tạo và quản lý bài LOST/FOUND qua PWA | Partial | Responsive flow có; chưa offline/installability |
 | [ ] | UC-097 | User | Chụp/chọn và upload ảnh qua mobile browser | Partial | File input multiple có; camera/device matrix chưa có |
-| [ ] | UC-098 | User | Gửi evidence, quản lý claim và xem trạng thái qua PWA | Planned | Claim/evidence runtime chưa có |
+| [ ] | UC-098 | User | Gửi evidence, quản lý claim và xem trạng thái qua PWA | Partial | Claim/evidence/notification REST UI có; installability/device evidence và appointment chưa có |
 | [ ] | UC-099 | User | Xem điểm bàn giao và quản lý appointment qua PWA | Planned | Appointment runtime chưa có |
-| [ ] | UC-100 | User | Nhận notification, dùng communication và retry an toàn qua PWA | Planned | Notification/service worker/offline runtime chưa có |
+| [ ] | UC-100 | User | Nhận notification, dùng communication và retry an toàn qua PWA | Partial | In-app notification unread total và chat idempotent retry có; realtime/offline transaction chưa có |
 
 ## 3. Ghi chú nghiệp vụ mục tiêu
 

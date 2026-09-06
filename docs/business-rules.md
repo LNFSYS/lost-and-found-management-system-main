@@ -1,6 +1,6 @@
 # Luật nghiệp vụ LNFS
 
-Cập nhật: **03/09/2026**
+Cập nhật: **06/09/2026**
 
 ## 1. Quy ước
 
@@ -23,7 +23,7 @@ Cập nhật: **03/09/2026**
 | BR-07 | Post chỉ có LOST hoặc FOUND; chỉ owner được update/delete/upload/delete media của bài. | UC-040–UC-043, UC-048, UC-050 | Enforced |
 | BR-08 | Post cần title, description, category cụ thể, contact, incident time không ở tương lai và location hợp lệ. | UC-040, UC-041 | Enforced |
 | BR-09 | Building phải thuộc area đã chọn; LOST không dùng handover point; FOUND phải có nơi lưu/area/custom location/handover hợp lệ. | UC-040, UC-041, UC-055 | Enforced |
-| BR-10 | PRIVATE_DETAILS chỉ dành cho FOUND; public response phải che contact, location chi tiết và tín hiệu nhận dạng nhạy cảm. | UC-041, UC-044, UC-054 | Partial; claim privacy chưa có runtime |
+| BR-10 | PRIVATE_DETAILS chỉ dành cho FOUND; public response phải che contact, location chi tiết và tín hiệu nhận dạng nhạy cảm. | UC-041, UC-044, UC-054 | Enforced current post/search/match/private-media scope; guided private answers chưa có |
 | BR-11 | Public board không trả post soft-deleted/hidden và chỉ trả status hợp lệ. | UC-043, UC-046, UC-047 | Enforced |
 | BR-12 | Category có hai cấp; post phải chọn danh mục cụ thể, không chọn nhóm chính. | UC-040, UC-041, UC-064 | Enforced |
 | BR-13 | Không hard-delete category/area/building còn reference; nếu còn dữ liệu phải chuyển inactive. | UC-064, UC-065 | Enforced |
@@ -59,9 +59,9 @@ Cập nhật: **03/09/2026**
 | BR-30 | Metadata media còn nhưng file mất phải trả 404 có kiểm soát, không để unhandled 500. | UC-048 | Enforced cho local post media |
 | BR-31 | Admin catalog write cần audit actor, action, before/after và timestamp. | UC-064, UC-065 | Planned |
 | BR-32 | Staff page chỉ công bố hoàn thành khi có operational flow và backend role evidence. | UC-062 | Enforced cho warehouse operations hiện tại |
-| BR-33 | Claim chỉ áp dụng FOUND; Owner không claim bài của mình và một user không tạo duplicate claim. | UC-052, UC-053 | Planned |
-| BR-34 | Claim state transition phải transaction/lock; một FOUND không có hai accepted claims. | UC-003–UC-007 | Planned |
-| BR-35 | Evidence chỉ hiển thị cho claimant, post owner và reviewer có quyền; private answer không trả trước cho claimant. | UC-049, UC-054, UC-087–UC-092 | Planned |
+| BR-33 | Claim chỉ áp dụng FOUND; Owner không claim bài của mình và một user không tạo duplicate claim. | UC-052, UC-053 | Enforced current claim API; full multi-claimant policy còn cần xác nhận |
+| BR-34 | Claim state transition phải transaction/lock; một FOUND không có hai accepted claims. | UC-003–UC-007 | Partial: claim row/active-pair lock có; constraint một FOUND duy nhất và appointment chưa có |
+| BR-35 | Evidence chỉ hiển thị cho claimant, post owner và reviewer có quyền; private answer không trả trước cho claimant. | UC-049, UC-054, UC-087–UC-092 | Partial: participant-scoped private evidence/proxy có; guided private answer/reviewer flow chưa có |
 | BR-36 | Evidence confidence chỉ hỗ trợ review; không phải xác minh 100% và không thay thế human verification. | UC-089, UC-090, UC-092 | Planned |
 | BR-37 | Appointment chỉ tạo sau accepted verification; một claim chỉ có một active appointment. | UC-021–UC-024 | Planned |
 | BR-37A | Feedback sau trả đồ chỉ mở khi return COMPLETED có dual confirmation hoặc custody outcome được ủy quyền; mỗi participant gửi một lần và không tự cộng reputation cho chính mình. | UC-025, UC-039 | Enforced cho feedback runtime; phụ thuộc LNFS-54 để tạo completed return thật |

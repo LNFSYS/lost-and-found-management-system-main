@@ -7,6 +7,10 @@ const pastDate = z.coerce.date().refine((value) => value.getTime() <= Date.now()
 export const claimIdParamSchema = z.object({ claimId: uuid });
 export const roomIdParamSchema = z.object({ roomId: uuid });
 export const evidenceParamSchema = z.object({ claimId: uuid, evidenceId: uuid });
+export const listClaimsQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(50).default(50)
+});
 
 export const createClaimSchema = z.object({
   lostPostId: uuid,
@@ -49,3 +53,4 @@ export type ClaimDecisionInput = z.infer<typeof claimDecisionSchema>;
 export type CreateMessageInput = z.infer<typeof createMessageSchema>;
 export type ListMessagesQuery = z.infer<typeof listMessagesQuerySchema>;
 export type UploadEvidenceInput = z.infer<typeof uploadEvidenceSchema>;
+export type ListClaimsQuery = z.infer<typeof listClaimsQuerySchema>;

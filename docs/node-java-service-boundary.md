@@ -1,6 +1,6 @@
 # Ranh giới Node.js và Java
 
-Cập nhật: **01/09/2026**
+Cập nhật: **06/09/2026**
 
 ## 1. Quyết định hiện tại
 
@@ -13,7 +13,7 @@ Không trình bày hệ thống hiện tại là production microservices. Khôn
 | Thành phần | Evidence | Status |
 | --- | --- | --- |
 | Node application | apps/api-node/src/app.ts mount auth, posts, staff, handover-points và admin routes | Runtime/API owner |
-| Node migrations | apps/api-node/src/migrations/001_auth.sql đến 038_seed_default_handover_point.sql | Schema owner |
+| Node migrations | apps/api-node/src/migrations/001_auth.sql đến 046_feedback_idempotency_legacy_cleanup.sql | Schema owner; 046 là forward corrective migration chưa áp dụng lên Aiven |
 | Node business modules | controllers, services, repositories, validators và tests | Current implementation |
 | Java application | apps/java-admin-service/src/main/java/.../JavaAdminServiceApplication.java | Health skeleton |
 | Java business API | Không tìm thấy controller/service/repository nghiệp vụ | Not implemented |
@@ -28,10 +28,12 @@ Không trình bày hệ thống hiện tại là production microservices. Khôn
 | LOST/FOUND posts và media | Node.js | Implemented; local media limitation | Java không ghi post/media state |
 | Category, area, building, handover point | Node.js | Implemented theo module | Java không ghi catalog nếu chưa có contract |
 | Gemini draft và hybrid matching | Node.js | Implemented theo decision-support scope | Không gọi custom-trained AI |
-| Claim/evidence/chat/appointment | Chưa có owner runtime | Planned | Chọn một owner trước khi triển khai |
+| Claim/evidence/private text chat | Node.js | Partial implemented | Node sở hữu route, authorization, private proxy, pagination và idempotency; shared storage và full review flow còn thiếu |
+| Appointment/dual handover | Chưa có owner runtime | Planned | Chọn một owner trước khi triển khai |
 | Warehouse receive/store/return | Node.js | Partial/implemented operational scope | Giữ Node owner trong current release |
 | Warehouse disposition | Chưa có runtime đầy đủ | Planned/TBD | Policy và owner cần chốt |
-| Notification/realtime | Chưa có runtime | Planned | Dự kiến Node nếu được triển khai |
+| Claim notification | Node.js | Implemented current scope | REST/in-app feed với unread total; match/realtime notification còn planned |
+| Realtime transport | Chưa có runtime | Planned | Dự kiến Node nếu được triển khai |
 | PWA | Cùng Web client | Partial/planned | Dùng shared API và rule |
 | Native Mobile | Client planned | Planned | Chỉ là client gọi shared Node API |
 

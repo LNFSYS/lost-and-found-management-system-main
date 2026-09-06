@@ -19,6 +19,7 @@ import type {
   ClaimDecisionInput,
   CreateClaimInput,
   CreateMessageInput,
+  ListClaimsQuery,
   ListMessagesQuery,
   UploadEvidenceInput
 } from "../validators/claim.validator.js";
@@ -152,13 +153,17 @@ export const claimService = {
     return { ...await details(result.claim.id, claimantId), idempotent: result.idempotent };
   },
 
-  async listClaims(userId: string) {
-    const claims = await claimRepository.listForUser(userId);
-    return { items: await Promise.all(claims.map(async (claim) => ({
-      ...serializeClaim(claim),
-      participants: await claimRepository.listParticipants(claim.id),
-      room: claim.roomId ? { id: claim.roomId } : null
-    }))) };
+  async listClaims(userId: string, query: ListClaimsQuery = { page: 1, pageSize: 50 }) {
+    const result = await claimRepository.listForUser(userId, query);
+    const participants = await claimRepository.listParticipantsForClaims(result.items.map((claim) => claim.id));
+    return {
+      ...result,
+      items: result.items.map((claim) => ({
+        ...serializeClaim(claim),
+        participants: participants.get(claim.id) ?? [],
+        room: claim.roomId ? { id: claim.roomId } : null
+      }))
+    };
   },
 
   async getClaim(claimId: string, userId: string) {
@@ -243,7 +248,7 @@ export const claimService = {
 
   async listMessages(claimId: string, userId: string, query: ListMessagesQuery) {
     const room = await this.getRoom(claimId, userId);
-    return { room, items: await claimRepository.listMessages(room.id, query) };
+    return { room, ...(await claimRepository.listMessages(room.id, query)) };
   },
 
   async sendMessage(claimId: string, userId: string, input: CreateMessageInput) {

@@ -3,6 +3,7 @@ import type { PoolConnection } from "mysql2/promise";
 import { pool } from "../config/db.js";
 import { normalizeVietnameseText } from "../utils/text.js";
 import type { ListOwnPostsQuery, ListPostsQuery } from "../validators/post.validator.js";
+import type { AccessTokenPayload } from "../types/auth.js";
 
 export type PostType = "LOST" | "FOUND";
 export type PostStatus = "OPEN" | "MATCHED" | "RESOLVED" | "CLOSED" | "EXPIRED" | "HIDDEN";
@@ -217,7 +218,11 @@ function mapPost(row: PostRow, media: PostMediaRecord[] = []): PostRecord {
   };
 }
 
-function buildListWhere(filters: ListPostsQuery | ListOwnPostsQuery, ownerId?: string) {
+function canReviewPrivatePosts(viewer?: AccessTokenPayload) {
+  return Boolean(viewer?.roles.some((role) => role === "STAFF" || role === "ADMIN"));
+}
+
+export function buildListWhere(filters: ListPostsQuery | ListOwnPostsQuery, ownerId?: string, viewer?: AccessTokenPayload) {
   const where = ["p.deleted_at IS NULL"];
   const values: SqlValue[] = [];
 
@@ -237,6 +242,14 @@ function buildListWhere(filters: ListPostsQuery | ListOwnPostsQuery, ownerId?: s
     } else {
       where.push("p.status IN ('OPEN', 'MATCHED')");
     }
+    if (ownerId || canReviewPrivatePosts(viewer)) {
+      // Staff/Admin need the complete moderation view; regular viewers only get their own private posts.
+    } else if (viewer) {
+      where.push("(p.visibility_mode = 'PUBLIC' OR p.user_id = ?)");
+      values.push(viewer.sub);
+    } else {
+      where.push("p.visibility_mode = 'PUBLIC'");
+    }
   }
 
   if (filters.type) {
@@ -252,13 +265,29 @@ function buildListWhere(filters: ListPostsQuery | ListOwnPostsQuery, ownerId?: s
     values.push(filters.areaId);
   }
   if (filters.buildingId) {
-    where.push("p.building_id = ?");
-    values.push(filters.buildingId);
+    if (ownerId || canReviewPrivatePosts(viewer)) {
+      where.push("p.building_id = ?");
+      values.push(filters.buildingId);
+    } else if (viewer) {
+      where.push("((p.visibility_mode = 'PUBLIC' AND p.building_id = ?) OR (p.user_id = ? AND p.building_id = ?))");
+      values.push(filters.buildingId, viewer.sub, filters.buildingId);
+    } else {
+      where.push("p.visibility_mode = 'PUBLIC' AND p.building_id = ?");
+      values.push(filters.buildingId);
+    }
   }
   if (filters.q) {
-    where.push("(p.title_normalized LIKE ? OR p.description_normalized LIKE ?)");
     const q = `%${normalizePostText(filters.q)}%`;
-    values.push(q, q);
+    if (ownerId || canReviewPrivatePosts(viewer)) {
+      where.push("(p.title_normalized LIKE ? OR p.description_normalized LIKE ?)");
+      values.push(q, q);
+    } else if (viewer) {
+      where.push("((p.visibility_mode = 'PUBLIC' AND (p.title_normalized LIKE ? OR p.description_normalized LIKE ?)) OR (p.user_id = ? AND (p.title_normalized LIKE ? OR p.description_normalized LIKE ?)))");
+      values.push(q, q, viewer.sub, q, q);
+    } else {
+      where.push("p.visibility_mode = 'PUBLIC' AND (p.title_normalized LIKE ? OR p.description_normalized LIKE ?)");
+      values.push(q, q);
+    }
   }
 
   return { sql: where.join(" AND "), values };
@@ -283,8 +312,8 @@ async function loadMedia(postIds: string[], queryable: Queryable = pool) {
   return byPost;
 }
 
-async function listPosts(filters: ListPostsQuery | ListOwnPostsQuery, ownerId?: string) {
-  const { sql, values } = buildListWhere(filters, ownerId);
+async function listPosts(filters: ListPostsQuery | ListOwnPostsQuery, ownerId?: string, viewer?: AccessTokenPayload) {
+  const { sql, values } = buildListWhere(filters, ownerId, viewer);
   const limit = filters.pageSize;
   const offset = (filters.page - 1) * filters.pageSize;
   const [countRows] = await pool.execute<CountRow[]>(`SELECT COUNT(*) AS total FROM posts p WHERE ${sql}`, values);
@@ -302,8 +331,8 @@ async function listPosts(filters: ListPostsQuery | ListOwnPostsQuery, ownerId?: 
   };
 }
 
-async function findPost(where: string, values: SqlValue[], queryable: Queryable = pool) {
-  const [rows] = await queryable.execute<PostRow[]>(`${postSelect} WHERE ${where} LIMIT 1`, values);
+async function findPost(where: string, values: SqlValue[], queryable: Queryable = pool, lock = false) {
+  const [rows] = await queryable.execute<PostRow[]>(`${postSelect} WHERE ${where} LIMIT 1${lock ? " FOR UPDATE" : ""}`, values);
   const row = rows[0];
   if (!row) return null;
   const mediaByPost = await loadMedia([row.id], queryable);
@@ -330,8 +359,8 @@ export const postRepository = {
     };
   },
 
-  listBoard(filters: ListPostsQuery) {
-    return listPosts(filters);
+  listBoard(filters: ListPostsQuery, viewer?: AccessTokenPayload) {
+    return listPosts(filters, undefined, viewer);
   },
 
   listByOwner(ownerId: string, filters: ListOwnPostsQuery) {
@@ -362,6 +391,10 @@ export const postRepository = {
 
   findOwnedById(postId: string, ownerId: string, queryable: Queryable = pool) {
     return findPost("p.id = ? AND p.user_id = ? AND p.deleted_at IS NULL AND p.status <> 'HIDDEN'", [postId, ownerId], queryable);
+  },
+
+  findOwnedByIdForUpdate(postId: string, ownerId: string, queryable: Queryable) {
+    return findPost("p.id = ? AND p.user_id = ? AND p.deleted_at IS NULL AND p.status <> 'HIDDEN'", [postId, ownerId], queryable, true);
   },
 
   async createPost(input: {
@@ -414,7 +447,7 @@ export const postRepository = {
     visibilityMode?: VisibilityMode;
     status?: PostStatus;
     resolvedAt?: Date | null;
-  }) {
+  }, queryable: Queryable = pool) {
     const fields: string[] = [];
     const values: SqlValue[] = [];
     if (input.title !== undefined) { fields.push("title = ?"); values.push(input.title); }
@@ -433,7 +466,7 @@ export const postRepository = {
     if (input.status !== undefined) { fields.push("status = ?"); values.push(input.status); }
     if (input.resolvedAt !== undefined) { fields.push("resolved_at = ?"); values.push(input.resolvedAt); }
     if (!fields.length) return;
-    await pool.execute(`UPDATE posts SET ${fields.join(", ")} WHERE id = ?`, [...values, postId]);
+    await queryable.execute(`UPDATE posts SET ${fields.join(", ")} WHERE id = ?`, [...values, postId]);
   },
 
   async softDeletePost(postId: string, ownerId: string) {

@@ -90,6 +90,14 @@ export const notificationRepository = {
     return rows.map(mapNotification);
   },
 
+  async countUnreadForUser(userId: string) {
+    const [rows] = await pool.execute<RowDataPacket[]>(
+      "SELECT COUNT(*) AS total FROM notifications WHERE user_id = ? AND is_read = FALSE",
+      [userId]
+    );
+    return Number(rows[0]?.total ?? 0);
+  },
+
   async markRead(userId: string, notificationId: string) {
     const [result] = await pool.execute<ResultSetHeader>(
       `UPDATE notifications SET is_read = TRUE, read_at = COALESCE(read_at, UTC_TIMESTAMP())

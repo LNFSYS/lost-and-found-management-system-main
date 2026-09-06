@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createClaimSchema, createMessageSchema, listMessagesQuerySchema, uploadEvidenceSchema } from "./claim.validator.js";
+import { createClaimSchema, createMessageSchema, listClaimsQuerySchema, listMessagesQuerySchema, uploadEvidenceSchema } from "./claim.validator.js";
 
 const lostPostId = "11111111-1111-4111-8111-111111111111";
 const foundPostId = "22222222-2222-4222-8222-222222222222";
@@ -24,4 +24,9 @@ test("message pagination requires a composite timestamp and message cursor", () 
   assert.equal(parsed.beforeId, lostPostId);
   assert.throws(() => listMessagesQuerySchema.parse({ before: "2026-09-05T08:00:00.000Z", limit: 20 }));
   assert.throws(() => listMessagesQuerySchema.parse({ beforeId: lostPostId, limit: 20 }));
+});
+
+test("claim list query bounds page size", () => {
+  assert.deepEqual(listClaimsQuerySchema.parse({ page: 2, pageSize: 25 }), { page: 2, pageSize: 25 });
+  assert.throws(() => listClaimsQuerySchema.parse({ page: 1, pageSize: 51 }));
 });

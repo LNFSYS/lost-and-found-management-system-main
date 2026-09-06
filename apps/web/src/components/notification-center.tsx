@@ -19,6 +19,7 @@ export function NotificationCenter() {
   const knownIds = useRef<Set<string>>(new Set());
   const initialized = useRef(false);
   const [items, setItems] = useState<AppNotification[]>([]);
+  const [unreadTotal, setUnreadTotal] = useState(0);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState<AppNotification | null>(null);
@@ -26,6 +27,7 @@ export function NotificationCenter() {
   useEffect(() => {
     if (!user) {
       setItems([]);
+      setUnreadTotal(0);
       setToast(null);
       setOpen(false);
       knownIds.current = new Set();
@@ -42,6 +44,7 @@ export function NotificationCenter() {
           ? result.items.find((item) => !knownIds.current.has(item.id) && !item.isRead)
           : undefined;
         setItems(result.items);
+        setUnreadTotal(result.unreadTotal);
         knownIds.current = new Set(result.items.map((item) => item.id));
         initialized.current = true;
         if (fresh) setToast(fresh);
@@ -83,13 +86,14 @@ export function NotificationCenter() {
 
   if (!user) return null;
 
-  const unreadCount = items.filter((item) => !item.isRead).length;
+  const unreadCount = unreadTotal;
 
   async function openNotification(item: AppNotification) {
     setOpen(false);
     setToast(null);
     if (!item.isRead) {
       setItems((current) => current.map((entry) => entry.id === item.id ? { ...entry, isRead: true } : entry));
+      setUnreadTotal((current) => Math.max(0, current - 1));
       void api.markNotificationRead(item.id).catch(() => undefined);
     }
     if (item.entityType === "CLAIM" && item.entityId) navigate(`/claims/${item.entityId}`);
@@ -98,6 +102,7 @@ export function NotificationCenter() {
   function markAllRead() {
     if (!unreadCount) return;
     setItems((current) => current.map((item) => ({ ...item, isRead: true })));
+    setUnreadTotal(0);
     void api.markAllNotificationsRead().catch(() => undefined);
   }
 
