@@ -128,8 +128,8 @@ export function createReturnFeedbackService(options: {
       const idempotencyKey = input.idempotencyKey ?? null;
       return runInTransaction(async (connection) => {
         if (idempotencyKey) {
-          const existing = await repository.findFeedbackByIdempotency(viewer.sub, idempotencyKey, connection);
-          if (existing) return { feedback: responseFeedback(existing), reputationEventCreated: true, idempotent: true };
+          const existing = await repository.findFeedbackByIdempotency(appointmentId, viewer.sub, idempotencyKey, connection);
+          if (existing) return { feedback: responseFeedback(existing), reputationEventCreated: false, idempotent: true };
         }
 
         const appointment = await repository.findAppointmentForFeedback(appointmentId, connection, true);

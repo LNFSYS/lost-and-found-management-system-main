@@ -7,6 +7,7 @@ import { returnFeedbackSchema } from "../validators/return-feedback.validator.js
 import { createReturnFeedbackService } from "./return-feedback.service.js";
 
 const appointmentId = "11111111-1111-4111-8111-111111111111";
+const secondAppointmentId = "88888888-8888-4888-8888-888888888888";
 const claimId = "22222222-2222-4222-8222-222222222222";
 const postId = "33333333-3333-4333-8333-333333333333";
 const claimantId = "44444444-4444-4444-8444-444444444444";
@@ -64,11 +65,14 @@ function createHarness(currentAppointment = appointment()) {
   const repository: ReturnFeedbackRepository = {
     findAppointmentForFeedback: async () => currentAppointment,
     listFeedbackForAppointment: async () => state.feedbacks,
-    findFeedbackByReviewer: async (_appointmentId, reviewerId) => state.feedbacks.find((item) => item.reviewerId === reviewerId) ?? null,
-    findFeedbackByIdempotency: async (reviewerId, key) => state.feedbacks.find((item) => item.reviewerId === reviewerId && item.idempotencyKey === key) ?? null,
+    findFeedbackByReviewer: async (appointmentId, reviewerId) => state.feedbacks.find((item) => item.appointmentId === appointmentId && item.reviewerId === reviewerId) ?? null,
+    findFeedbackByIdempotency: async (appointmentId, reviewerId, key) => state.feedbacks.find((item) => item.appointmentId === appointmentId && item.reviewerId === reviewerId && item.idempotencyKey === key) ?? null,
     createFeedback: async (input) => {
       state.feedbacks.push(feedback({
         id: input.id,
+        appointmentId: input.appointmentId,
+        claimId: input.claimId,
+        postId: input.postId,
         reviewerId: input.reviewerId,
         targetUserId: input.targetUserId,
         idempotencyKey: input.idempotencyKey,
@@ -125,9 +129,21 @@ test("same idempotency key returns the original result without duplication", asy
 
   assert.equal(first.idempotent, false);
   assert.equal(retry.idempotent, true);
-  assert.equal(retry.reputationEventCreated, true);
+  assert.equal(retry.reputationEventCreated, false);
   assert.equal(retry.feedback.id, first.feedback.id);
   assert.equal(state.feedbacks.length, 1);
+  assert.equal(state.reputationLogs, 1);
+});
+
+test("the same idempotency key can be used for a different appointment", async () => {
+  const { service, state } = createHarness(appointment({ id: secondAppointmentId }));
+  state.feedbacks.push(feedback({ appointmentId, idempotencyKey: "shared-key" }));
+
+  const result = await service.submitFeedback(secondAppointmentId, { rating: 4, comment: "Khac lich", idempotencyKey: "shared-key" }, viewer());
+
+  assert.equal(result.idempotent, false);
+  assert.equal(result.feedback.appointmentId, secondAppointmentId);
+  assert.equal(state.feedbacks.length, 2);
   assert.equal(state.reputationLogs, 1);
 });
 

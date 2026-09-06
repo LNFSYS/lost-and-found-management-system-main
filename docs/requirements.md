@@ -59,7 +59,7 @@ Requirements target bao phủ Web Application, PWA và Native Mobile. Status bê
 | FR-CLAIM-01 | User tạo claim không trùng; evidence private được upload và chỉ actor có quyền mới xem. | UC-049, UC-052–UC-054 | P0 | Planned |
 | FR-APPT-01 | Chỉ accepted verification mới tạo appointment; hai bên đề xuất, accept, reschedule/cancel và complete. | UC-021–UC-024 | P1 | Planned |
 | FR-HANDOVER-02 | Direct return cần Finder xác nhận HANDED_OVER và Owner xác nhận RECEIVED; chỉ dual confirmation mới thành RETURNED. | UC-021–UC-024 | P0 | Planned |
-| FR-FEEDBACK-01 | Participant chỉ gửi một feedback sau completed return có dual confirmation hoặc custody outcome được ủy quyền; feedback tạo reputation event idempotent và profile activity chỉ trả dữ liệu an toàn. | UC-025, UC-039 | P1 | Implemented runtime; dữ liệu thật vẫn phụ thuộc LNFS-54 tạo completed return |
+| FR-FEEDBACK-01 | Participant chỉ gửi một feedback sau completed return có dual confirmation hoặc custody outcome được ủy quyền; feedback tạo reputation event idempotent theo appointment và profile activity chỉ trả dữ liệu an toàn. | UC-025, UC-039 | P1 | Implemented runtime; dữ liệu thật vẫn phụ thuộc LNFS-54 tạo completed return |
 | FR-CHAT-01 | Conversation gắn đúng Owner–Finder–LOST–FOUND, hỗ trợ text/image, room isolation, retry, seen/unread và report/block. | UC-077–UC-083 | P1 | Planned |
 | FR-RT-01 | Realtime transport được JWT-authenticated và không broadcast private data cho actor ngoài room. | UC-077–UC-083 | P1 | Planned |
 

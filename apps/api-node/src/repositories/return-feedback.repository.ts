@@ -166,8 +166,8 @@ export const returnFeedbackRepository = {
     return rows[0] ? mapFeedback(rows[0]) : null;
   },
 
-  async findFeedbackByIdempotency(reviewerId: string, idempotencyKey: string, connection: Queryable = pool) {
-    const [rows] = await connection.execute<FeedbackRow[]>(`${feedbackSelect} WHERE rf.reviewer_id = ? AND rf.idempotency_key = ? LIMIT 1`, [reviewerId, idempotencyKey]);
+  async findFeedbackByIdempotency(appointmentId: string, reviewerId: string, idempotencyKey: string, connection: Queryable = pool) {
+    const [rows] = await connection.execute<FeedbackRow[]>(`${feedbackSelect} WHERE rf.appointment_id = ? AND rf.reviewer_id = ? AND rf.idempotency_key = ? LIMIT 1`, [appointmentId, reviewerId, idempotencyKey]);
     return rows[0] ? mapFeedback(rows[0]) : null;
   },
 

@@ -49,7 +49,7 @@ Nguồn status là code/test hiện tại. Mỗi dòng liên kết business rule
 | Native Mobile | Không có thư mục/project mobile | Planned — project not created yet |
 | Backend/API | Node routes/services/repositories/validators/migrations | Implemented theo module; claim/realtime còn planned |
 | Java | Spring Boot Actuator health skeleton | Implemented skeleton only |
-| Database | 001–042 migrations và checksum runner | Schema/migration implemented; migration 042 bổ sung Cloudinary avatar metadata; không thay thế business runtime evidence |
+| Database | 001–044 migrations và checksum runner | Schema/migration implemented; migration 042 bổ sung Cloudinary avatar metadata và migration 044 scope idempotency feedback theo appointment; không thay thế business runtime evidence |
 | Test | Node tests và Web typecheck; một DB integration test skip an toàn khi thiếu local _test DB | Partial |
 
 ## 4. UC status totals
