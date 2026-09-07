@@ -14,6 +14,6 @@ async function run() {
 }
 
 run().catch((error) => {
-  console.error("Migration failed", error instanceof Error ? error.message : "unknown error");
+  console.error("Migration failed", typeof error?.code === "string" ? error.code : error instanceof Error ? error.message : "unknown error");
   process.exitCode = 1;
 });

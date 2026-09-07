@@ -217,6 +217,8 @@ Schema hiện tại có post status OPEN/MATCHED/RESOLVED/CLOSED/EXPIRED/HIDDEN,
 
 Migrations SQL nằm tại apps/api-node/src/migrations, được chạy theo thứ tự và kiểm tra checksum. Repository hiện có migration `001`–`046`; `046_feedback_idempotency_legacy_cleanup.sql` là forward corrective migration cho legacy feedback index và chưa được áp dụng lên Aiven/shared DB. Schema cho auth, posts, catalog, matching, claims, appointments, chat, notifications, warehouse, AI feedback và map/catalog không thay thế runtime evidence.
 
+Đối chiếu trực tiếp ngày 07/09/2026: Aiven có 49 bảng, tất cả có nguồn gốc trong migration; 39/43 file SQL khớp ledger, 043–046 chưa được ghi nhận. Bản 040_peer_claim_conversations đã chạy có checksum khớp 045 hiện tại. Schema feedback thiếu cột của 043; không được chạy lại 045 nguyên trạng. Đã thêm preflight toàn bộ lịch sử, migration lock và công cụ reconciliation dry-run; shared DB chưa thay đổi. Không xóa các bảng planned/legacy chỉ vì trống. Xem [báo cáo và runbook](AIVEN_SCHEMA_RECONCILIATION_2026-09-07.md).
+
 Khi dùng Aiven/shared MySQL:
 
 - mỗi môi trường nên có database riêng;
@@ -237,7 +239,9 @@ Evidence đã kiểm tra ngày 06/09/2026:
 - `.github/workflows/ci.yml`: có MySQL service riêng và browser job; workflow chưa được chạy từ checkout này.
 - `npm --workspace @lnfs/api-node run test:db-integration`: test được skip an toàn vì chưa cấu hình MySQL local `*_test`; không chạy trên Aiven/shared DB.
 
-Các gap còn lại: MySQL concurrency/migration integration chưa chạy, appointment dual confirmation, guided review, full warehouse disposition, shared media storage, PWA browser/device matrix, Native Mobile, load test, UAT và deployment rollback.
+Cập nhật 07/09: API/unit/integration và Web typecheck pass với 152 tests, không skip; có MySQL local thật cho fresh/alias upgrade, partial DDL, ledger rollback, lock, feedback/chat retry và unique constraints. Đây không phải full claim-to-return UI evidence và không phải xác nhận CI từ xa. Evidence chi tiết nằm trong báo cáo reconciliation.
+
+Các gap còn lại: triển khai schema sửa lên Aiven sau phê duyệt, appointment dual confirmation, guided review, full warehouse disposition, shared media storage, PWA browser/device matrix, Native Mobile, load test, UAT và production backup/rollback.
 
 ## 12. Deployment và roadmap
 

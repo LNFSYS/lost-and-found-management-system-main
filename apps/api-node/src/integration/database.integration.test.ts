@@ -11,6 +11,7 @@ import mysql, { type Pool, type PoolOptions, type RowDataPacket } from "mysql2/p
 import { createApp } from "../app.js";
 import { runInTransaction } from "../config/db.js";
 import { runMigrations, type MigrationPool } from "../migrations/migration-runner.js";
+import { readMigrationFiles } from "../migrations/migration-state.js";
 import { createAdminUserRepository } from "../repositories/admin-user.repository.js";
 import { matchingRepository } from "../repositories/matching.repository.js";
 import { postRepository } from "../repositories/post.repository.js";
@@ -90,6 +91,9 @@ test("isolated MySQL integration: migrations, auth errors, and post/media integr
       const version = `999900_${suffix}.sql`;
       const probeTable = `lnfs_migration_probe_${suffix}`;
       const directory = await mkdtemp(path.join(os.tmpdir(), "lnfs-db-migration-"));
+      for (const file of await readMigrationFiles(migrationsDirectory)) {
+        await writeFile(path.join(directory, file.version), file.sql, "utf8");
+      }
       await writeFile(path.join(directory, version), `CREATE TABLE ${probeTable} (id INT PRIMARY KEY); INSERT INTO ${probeTable} (id) VALUES (1);`, "utf8");
       try {
         await runMigrations({ directory, pool: migrationPool as unknown as MigrationPool, log: () => undefined });

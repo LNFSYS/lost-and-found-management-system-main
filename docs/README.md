@@ -48,6 +48,7 @@ Không đánh dấu Done chỉ vì có migration, schema, ticket, mockup, skelet
 | [DOCUMENTATION_UPDATE_REPORT.md](DOCUMENTATION_UPDATE_REPORT.md) | Biên bản đối chiếu code và cập nhật tài liệu gần nhất |
 | [SPRINT_4_IMPLEMENTATION_AUDIT.md](SPRINT_4_IMPLEMENTATION_AUDIT.md) | Audit 17 Jira ticket Sprint 4 từ snapshot offline |
 | [LNFS_AUDIT_FIX_REPORT_2026-09-06.md](LNFS_AUDIT_FIX_REPORT_2026-09-06.md) | Audit và remediation B01–B08, R01–R06 ngày 06/09/2026 |
+| [AIVEN_SCHEMA_RECONCILIATION_2026-09-07.md](AIVEN_SCHEMA_RECONCILIATION_2026-09-07.md) | Audit Aiven read-only, alias reconciliation, real MySQL upgrade/concurrency tests và runbook chờ phê duyệt |
 
 ## 5. Snapshot implementation ngày 06/09/2026
 
@@ -72,6 +73,8 @@ Không đánh dấu Done chỉ vì có migration, schema, ticket, mockup, skelet
 - Shared object storage và Java business endpoints.
 
 ## 6. Evidence đã kiểm tra
+
+Các số liệu 06/09 bên dưới là snapshot lịch sử. Evidence mới ngày 07/09: **152 API/unit/integration tests pass, 0 skip**, Web typecheck pass; real MySQL migration/feedback/chat checks và shared Aiven read-only được mô tả trong báo cáo reconciliation. Không nâng status các workflow planned từ schema test.
 
 - API unit/service/repository/validator tests: **137 pass, 1 skip an toàn** cho DB integration chưa có MySQL local `_test`.
 - `npm --workspace @lnfs/api-node run test`: pass, API **137 pass, 1 skip**.

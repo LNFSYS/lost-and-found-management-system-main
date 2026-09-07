@@ -9,8 +9,9 @@
     "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\"",
     "build": "npm run clean && tsc -p tsconfig.json",
     "test": "tsx --import ./src/test/setup-env.ts --test src/**/*.test.ts",
-    "test:db-integration": "tsx --import ./src/test/setup-env.ts --test src/integration/database.integration.test.ts",
-    "migrate": "tsx src/migrations/run-migrations.ts"
+    "test:db-integration": "tsx --import ./src/test/setup-env.ts --test src/integration/*.integration.test.ts",
+    "migrate": "tsx src/migrations/run-migrations.ts",
+    "migrate:reconcile-claim": "tsx src/migrations/run-reconciliation.ts"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

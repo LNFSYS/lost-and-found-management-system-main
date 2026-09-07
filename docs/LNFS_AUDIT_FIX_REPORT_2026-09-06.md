@@ -7,6 +7,8 @@ Audit source: `docs/LNFS_FULL_AUDIT_AND_FIX_PROMPT.md`
 
 > Đây là báo cáo implementation/remediation từ checkout local. Không chạy migration, test destructive hoặc truy cập Aiven/shared database trong phiên này. Không ghi secret thật, token, OTP hoặc dữ liệu production vào repository.
 
+> Snapshot lịch sử 06/09. Phiên 07/09 đã đọc Aiven và chạy MySQL isolated thật; xem [reconciliation report](AIVEN_SCHEMA_RECONCILIATION_2026-09-07.md). Các giới hạn DB chưa kiểm thử bên dưới mô tả phiên cũ, không ghi đè evidence mới.
+
 ## 1. Tested Scope
 
 Đã đối chiếu source, route/controller/service/repository/validator, migrations, frontend route/page, PWA files, Java skeleton, CI workflow, test files và tài liệu chính.

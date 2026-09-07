@@ -95,6 +95,18 @@ DB_SSL_CA_PATH=certs/aiven-ca.pem
 
 Không tắt TLS verification để né lỗi certificate. Khi dùng database chung, chỉ một người được chạy migration sau khi review; không chạy test destructive trên database chung. Nên tách database dev/demo/test.
 
+### Migration reconciliation
+
+Trước khi migrate DB đã dùng nhánh claim cũ, chạy `npm run migrate:reconcile-claim` (mặc định **read-only dry-run**).
+Nếu kết quả là `READY`, DB còn tên `040_peer_claim_conversations.sql` trong khi source dùng `045`; không chạy lại DDL đó.
+Công cụ chỉ đối soát alias này sau khi kiểm tra checksum, columns/defaults, generated expression, indexes, foreign keys và participant backfill.
+Apply cần backup/restore rehearsal, maintenance window, phê duyệt của DB owner và xác nhận endpoint/database cụ thể.
+Quy trình, SQL và trạng thái Aiven nằm trong [báo cáo reconciliation 07/09](docs/AIVEN_SCHEMA_RECONCILIATION_2026-09-07.md).
+
+Runner kiểm tra toàn bộ ledger trước DDL, dùng một connection giữ named lock theo database cho cả phiên migration.
+DDL MySQL không rollback toàn bộ được; attempt lỗi phải điều tra schema trước khi retry.
+`migrate:diagnose-checksums` chỉ đọc; `migrate:repair-checksums` bị chặn để không ghi đè checksum hàng loạt.
+
 ## Chạy và kiểm tra
 
 ```bash
@@ -117,7 +129,7 @@ npm run build:java
 npm --workspace @lnfs/web run e2e:home
 ```
 
-`build:java` cần Maven trong `PATH`. Database integration test chỉ được trỏ vào MySQL local riêng có tên kết thúc bằng `_test`; không dùng Aiven/shared DB. CI có MySQL service riêng và browser job Playwright; evidence mới nhất nằm tại [audit/fix report](docs/LNFS_AUDIT_FIX_REPORT_2026-09-06.md).
+`build:java` cần Maven trong `PATH`. Database integration test chỉ được trỏ vào MySQL local riêng có tên kết thúc bằng `_test`; không dùng Aiven/shared DB. `npm --workspace @lnfs/api-node run test:db-integration` chạy cả runtime và migration upgrade tests khi `LNFS_DB_INTEGRATION=1` cùng `LNFS_TEST_DB_*` được cấu hình. Migration suite tạo/xóa database test ngẫu nhiên riêng, nên test user cần quyền CREATE/DROP DATABASE trên MySQL isolated. CI cấu hình MySQL 8.0/8.4 và browser job Playwright; evidence mới nhất nằm tại [reconciliation report](docs/AIVEN_SCHEMA_RECONCILIATION_2026-09-07.md).
 
 ## Media và làm việc nhóm
 

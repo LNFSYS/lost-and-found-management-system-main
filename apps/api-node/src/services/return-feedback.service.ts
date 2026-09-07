@@ -127,14 +127,15 @@ export function createReturnFeedbackService(options: {
     async submitFeedback(appointmentId: string, input: ReturnFeedbackInput, viewer: AccessTokenPayload) {
       const idempotencyKey = input.idempotencyKey ?? null;
       return runInTransaction(async (connection) => {
+        // Lock before any consistent read so a concurrent retry sees the committed feedback.
+        const appointment = await repository.findAppointmentForFeedback(appointmentId, connection, true);
+        if (!appointment) throw new HttpError(404, "Khong tim thay return appointment");
+        if (!isParticipant(appointment, viewer.sub)) throw new HttpError(403, "Chi participant cua return moi duoc gui feedback");
         if (idempotencyKey) {
           const existing = await repository.findFeedbackByIdempotency(appointmentId, viewer.sub, idempotencyKey, connection);
           if (existing) return { feedback: responseFeedback(existing), reputationEventCreated: false, idempotent: true };
         }
 
-        const appointment = await repository.findAppointmentForFeedback(appointmentId, connection, true);
-        if (!appointment) throw new HttpError(404, "Khong tim thay return appointment");
-        if (!isParticipant(appointment, viewer.sub)) throw new HttpError(403, "Chi participant cua return moi duoc gui feedback");
         const reason = returnEligibilityReason(appointment);
         if (reason) throw new HttpError(409, reason);
 

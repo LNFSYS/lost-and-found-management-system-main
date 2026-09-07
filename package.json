@@ -11,6 +11,7 @@
     "dev:web": "npm --workspace @lnfs/web run dev",
     "dev:java": "mvn -f apps/java-admin-service/pom.xml spring-boot:run",
     "migrate": "npm --workspace @lnfs/api-node run migrate",
+    "migrate:reconcile-claim": "npm --workspace @lnfs/api-node run migrate:reconcile-claim --",
     "migrate:diagnose-checksums": "node scripts/repair-migration-checksums.mjs",
     "migrate:repair-checksums": "node scripts/repair-migration-checksums.mjs --apply",
     "check:env": "node scripts/check-env.mjs",
