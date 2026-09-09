@@ -46,7 +46,7 @@ Cập nhật: **06/09/2026**
 | BR-25 | Match của PRIVATE_DETAILS không lộ raw tokens/OCR/location cho actor không có quyền. | UC-054, UC-076 | Enforced trong serializer |
 | BR-26 | Public API chỉ trả handover point active. Admin không hard-delete point có appointment PENDING/ACCEPTED/RESCHEDULED hoặc reference vận hành; phải inactive. | UC-008–UC-010, UC-055–UC-057 | Enforced |
 | BR-27 | Migration đã chạy không được sửa; toàn bộ lịch sử phải qua preflight trước DDL; runner và reconciliation dùng chung database lock. Alias chỉ được đối soát khi checksum/schema/backfill khớp và có phê duyệt. | N/A | Enforced trong runner và isolated MySQL tests 07/09; shared Aiven chưa reconcile |
-| BR-28 | Node.js là write owner duy nhất; Java không ghi business state khi chưa có ownership và integration evidence. | N/A | Enforced theo kiến trúc |
+| BR-28 | Node.js + TypeScript là backend, business-write và migration owner duy nhất; module phụ thuộc core qua public application contract. Java đã ngừng sử dụng. | N/A | Enforced: composition root, injected ports và architecture check |
 | BR-44 | Moderation phải suy ra target từ report hoặc quan hệ backend hợp lệ; không nhận target ID tùy ý từ client. BAN_USER không được tự khóa admin hoặc khóa Admin active cuối cùng. | UC-066 | Enforced |
 | BR-45 | Avatar được lưu bằng Cloudinary authenticated storage; database chỉ lưu metadata ổn định, không dùng local absolute path làm nguồn chính. | UC-038 | Enforced |
 | BR-46 | Dashboard tách metrics theo khoảng thời gian khỏi current snapshot; UI và export phải giữ nhãn scope tương ứng. | UC-067, UC-084 | Enforced |

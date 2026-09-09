@@ -46,30 +46,25 @@ Staff custody/warehouse là nhánh hỗ trợ hoặc escalation khi Finder khôn
 - Native Mobile Application.
 - Custom-trained AI model, MLOps hoặc production model registry.
 - Shared object storage; media hiện lưu local filesystem.
-- Java business endpoints; Java hiện chỉ là Spring Boot health skeleton.
 
 ## Kiến trúc hiện tại
 
 ```text
-Web responsive client ─────┐
-                            ├── Node.js/Express API ── MySQL
-PWA target (same web) ──────┘          ├── local media storage (current)
-                                        ├── Gemini-assisted analysis (optional)
-                                        └── claim/chat/evidence/notification (current partial runtime)
-
-Native Mobile (planned) ─── shared API/auth/business rules
-
-Java/Spring Boot: health skeleton only; no current business ownership
+Web / PWA -> Node.js + TypeScript modular monolith -> MySQL
+                 main: constructs and injects adapters
+                 interfaces/http -> application -> domain
+                 infrastructure -> application ports
+                 adapters: SMTP, Gemini, Cloudinary, private local media
+Native Mobile (planned) -> same API/auth/business rules
 ```
 
-Node.js là runtime và write owner duy nhất của các flow đang có. Xem [ranh giới Node.js và Java](docs/node-java-service-boundary.md).
+Node.js là backend, business-write owner và migration owner duy nhất. Toàn bộ Java skeleton/build đã được gỡ; không có microservice Java. Xem [Clean Architecture và dependency rules](docs/CLEAN_ARCHITECTURE.md), [mapping source](docs/CLEAN_ARCHITECTURE_FILE_MAP.md) và [draw.io ba trang](docs/LNFS_NODE_ONLY_ARCHITECTURE.drawio).
 
 ## Yêu cầu môi trường
 
 - Node.js 20+
 - npm 10+
 - MySQL 8+ hoặc Aiven MySQL có TLS
-- Java 21 + Maven chỉ khi kiểm tra Java health skeleton
 - SMTP provider và Gmail App Password nếu cần gửi email thật
 - Gemini API key tùy chọn, chỉ đặt server-side
 
@@ -125,11 +120,12 @@ Các lệnh kiểm tra có sẵn:
 ```bash
 npm test
 npm run build
-npm run build:java
+npm run check:architecture
 npm --workspace @lnfs/web run e2e:home
 ```
 
-`build:java` cần Maven trong `PATH`. Database integration test chỉ được trỏ vào MySQL local riêng có tên kết thúc bằng `_test`; không dùng Aiven/shared DB. `npm --workspace @lnfs/api-node run test:db-integration` chạy cả runtime và migration upgrade tests khi `LNFS_DB_INTEGRATION=1` cùng `LNFS_TEST_DB_*` được cấu hình. Migration suite tạo/xóa database test ngẫu nhiên riêng, nên test user cần quyền CREATE/DROP DATABASE trên MySQL isolated. CI cấu hình MySQL 8.0/8.4 và browser job Playwright; evidence mới nhất nằm tại [reconciliation report](docs/AIVEN_SCHEMA_RECONCILIATION_2026-09-07.md).
+Database integration test chỉ được trỏ vào MySQL local riêng có tên kết thúc bằng `_test`; không dùng Aiven/shared DB. `npm --workspace @lnfs/api-node run test:db-integration` chạy cả runtime và migration upgrade tests khi `LNFS_DB_INTEGRATION=1` cùng `LNFS_TEST_DB_*` được cấu hình. Migration suite tạo/xóa database test ngẫu nhiên riêng, nên test user cần quyền CREATE/DROP DATABASE trên MySQL isolated. CI cấu hình MySQL 8.0/8.4 và browser job Playwright. Dependency direction và circular dependency được kiểm tra tự động trong `npm test`.
+
 
 ## Media và làm việc nhóm
 
@@ -144,7 +140,8 @@ Metadata media nằm trong MySQL nhưng file hiện được lưu trên `UPLOAD_
 - [Business rules](docs/business-rules.md)
 - [Traceability matrix](docs/traceability-matrix.md)
 - [Use-case checklist](docs/use-case-checklist.md)
-- [Node.js/Java boundary](docs/node-java-service-boundary.md)
+- [Clean Architecture](docs/CLEAN_ARCHITECTURE.md)
+- [Node/Java boundary lịch sử, đã ngừng sử dụng](docs/node-java-service-boundary.md)
 - [Documentation update report](docs/DOCUMENTATION_UPDATE_REPORT.md)
 
 ## Cách trình bày trung thực

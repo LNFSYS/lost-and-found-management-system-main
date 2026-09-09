@@ -82,12 +82,13 @@ Requirements target bao phủ Web Application, PWA và Native Mobile. Status bê
 | FR-PWA-01 | Web responsive có manifest, installability, service worker, application shell, safe offline/error fallback, retry và mobile-browser camera/gallery. Transaction chỉ thành công sau server confirmation. | UC-093–UC-100 | P1 | Partial: manifest/service worker/offline shell đã có; device matrix và manual installability evidence còn thiếu |
 | FR-MOBILE-01 | Native Mobile dùng chung API/auth/authorization/privacy/state rules, có auth, LOST/FOUND, matching, chat/image, meetup/handover và notification. | UC-M01–UC-M12 | P1 | Planned — project chưa được tạo |
 | FR-MOBILE-02 | Native Mobile có navigation, session refresh, upload, permission, device test và release build. | UC-M01–UC-M12 | P1 | Planned — công nghệ TBD |
-| FR-JAVA-01 | Java Spring Boot cung cấp health endpoint nhưng chưa sở hữu flow nghiệp vụ. | N/A | P2 | Implemented skeleton |
+| FR-JAVA-01 | Java health skeleton cũ; giữ ID để truy vết lịch sử. | N/A | Retired | Ngừng sử dụng và đã gỡ ngày 09/09/2026; Node.js là backend duy nhất |
 
 ## 3. Non-functional requirements
 
 | ID | Requirement | Priority | Status/evidence |
 | --- | --- | --- | --- |
+| NFR-ARCH-01 | Node.js-only modular monolith; dependency hướng vào core; port thuộc application/domain; module contract công khai; không có circular dependency. | P0 | `scripts/check-architecture.mjs`, `src/main`, `src/modules`, `src/shared`; xem `CLEAN_ARCHITECTURE.md` |
 | NFR-SEC-01 | Password/OTP/refresh token được hash/protect; secret không xuất hiện trong source/log. | P0 | Implemented trong auth tests; production secret rotation vẫn là vận hành |
 | NFR-SEC-02 | Protected route trả 401/403 đúng; backend authorization là nguồn quyết định. | P0 | Implemented cho current routes |
 | NFR-SEC-03 | Auth, Gemini và matching rerun có rate limit phù hợp. | P0 | Implemented cho current module |

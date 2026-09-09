@@ -9,10 +9,9 @@ import mysql, { type Pool, type RowDataPacket } from "mysql2/promise";
 import { runMigrations } from "../migrations/migration-runner.js";
 import { migrationLockName, readMigrationFiles, type MigrationPool } from "../migrations/migration-state.js";
 import { canonicalClaimVersion, legacyClaimVersion, reconcileClaimMigration } from "../migrations/reconcile-claim-migration.js";
-import { claimRepository } from "../repositories/claim.repository.js";
-import { returnFeedbackRepository } from "../repositories/return-feedback.repository.js";
-import { createReturnFeedbackService } from "../services/return-feedback.service.js";
-import { runInTransaction } from "../config/db.js";
+import { createPersistence } from "../main/persistence.js";
+import { createReturnFeedbackUseCases } from "../modules/returns/application/return-feedback.use-cases.js";
+import { exerciseHttpRuntime } from "../test/http-runtime-scenario.js";
 
 const enabled = process.env.LNFS_DB_INTEGRATION === "1";
 const directory = fileURLToPath(new URL("../migrations/", import.meta.url));
@@ -89,6 +88,7 @@ test("isolated MySQL: fresh/legacy migration reconciliation and runtime contract
       const [fk] = await pool.query<RowDataPacket[]>("SELECT CONSTRAINT_NAME FROM information_schema.REFERENTIAL_CONSTRAINTS WHERE CONSTRAINT_SCHEMA=DATABASE() AND CONSTRAINT_NAME='fk_return_feedback_reviewer'");
       assert.equal(fk.length, 1);
       await exerciseRuntime(pool);
+      await exerciseHttpRuntime(pool);
     });
 
     await t.test("old alias blocks runner before 043; dry-run writes nothing; rename preserves history and data", async () => {
@@ -203,6 +203,8 @@ test("isolated MySQL: fresh/legacy migration reconciliation and runtime contract
 });
 
 async function exerciseRuntime(pool: Pool) {
+  const persistence = createPersistence(pool);
+  const { claimRepository, returnFeedbackRepository } = persistence;
   const data = await fixture(pool);
   const room = await claimRepository.createRoom(data.claim, pool);
   assert.ok(await claimRepository.findRoomForParticipant(room.id, data.owner, pool));
@@ -227,12 +229,14 @@ async function exerciseRuntime(pool: Pool) {
   const [rows] = await pool.query<RowDataPacket[]>("SELECT id FROM return_appointments");
   const appointmentId = rows[0].id as string;
   await pool.execute("UPDATE return_appointments SET status='COMPLETED',completed_at=UTC_TIMESTAMP(),finder_confirmed_at=UTC_TIMESTAMP(),owner_confirmed_at=UTC_TIMESTAMP() WHERE id=?", [appointmentId]);
-  const service = createReturnFeedbackService({ repository: returnFeedbackRepository, runInTransaction: async (work) => {
-    const c = await pool.getConnection();
-    try { return await runInTransaction(c, work); } finally { c.release(); }
-  } });
+  const service = createReturnFeedbackUseCases({
+    repository: returnFeedbackRepository,
+    runInTransaction: persistence.transaction,
+    adminAuditRepository: persistence.adminAuditRepository,
+    id: randomUUID
+  });
   const viewer = { sub: data.owner, email: "fixture@example.invalid", roles: ["USER" as const], sessionVersion: 1 };
-  await assert.rejects(service.submitFeedback(appointmentId, { rating: 5, comment: null, idempotencyKey: "outsider" }, { ...viewer, sub: data.outsider }), (e: unknown) => (e as { status: number }).status === 403);
+  await assert.rejects(service.submitFeedback(appointmentId, { rating: 5, comment: null, idempotencyKey: "outsider" }, { ...viewer, sub: data.outsider }), (e: unknown) => (e as { code: string }).code === "forbidden");
   const feedback = await Promise.allSettled(Array.from({ length: 3 }, () => service.submitFeedback(appointmentId, { rating: 5, comment: "Test", idempotencyKey: "feedback-retry" }, viewer)));
   for (const result of feedback) {
     if (result.status === "rejected") throw result.reason;
@@ -244,7 +248,7 @@ async function exerciseRuntime(pool: Pool) {
   assert.equal((await returnFeedbackRepository.findAppointmentForFeedback(appointmentId, pool))?.ownerConfirmedAt !== null, true);
   const nextAppointment = randomUUID();
   await pool.execute("INSERT INTO return_appointments (id,claim_id,post_id,proposer_id,proposed_at,status,completed_at,finder_confirmed_at) VALUES (?,?,?,?,UTC_TIMESTAMP(),'COMPLETED',UTC_TIMESTAMP(),UTC_TIMESTAMP())", [nextAppointment, data.claim, data.found, data.finder]);
-  await assert.rejects(service.submitFeedback(nextAppointment, { rating: 5, comment: null, idempotencyKey: "feedback-retry" }, viewer), (e: unknown) => (e as { status: number }).status === 409);
+  await assert.rejects(service.submitFeedback(nextAppointment, { rating: 5, comment: null, idempotencyKey: "feedback-retry" }, viewer), (e: unknown) => (e as { code: string }).code === "conflict");
   await pool.execute("UPDATE return_appointments SET owner_confirmed_at=UTC_TIMESTAMP() WHERE id=?", [nextAppointment]);
   const secondReturn = await service.submitFeedback(nextAppointment, { rating: 5, comment: null, idempotencyKey: "feedback-retry" }, viewer);
   assert.equal(secondReturn.idempotent, false);

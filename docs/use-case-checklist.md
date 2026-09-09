@@ -20,8 +20,8 @@ Không tick Done chỉ vì migration, schema, Jira ticket, UI mockup hoặc test
 | --- | --- | --- | --- | --- | --- |
 | [x] | UC-001 | System/User | Xác thực JWT tại Node.js API | Done | auth.middleware.ts |
 | [x] | UC-002 | System/Admin/Staff | Phân quyền User/Student/Lecturer/Staff/Admin tại backend | Done | auth middleware, admin/staff routes |
-| [ ] | UC-003 | Owner/Finder | Yêu cầu người claim bổ sung thông tin | Partial | `claim.service.ts` hỗ trợ REQUEST_MORE_INFO; guided question flow chưa có |
-| [ ] | UC-004 | Finder | Chấp nhận claim với transaction/row lock | Partial | `claim.service.ts` dùng transaction/claim row lock; appointment/return chưa có |
+| [ ] | UC-003 | Owner/Finder | Yêu cầu người claim bổ sung thông tin | Partial | `claim.use-cases.ts` hỗ trợ REQUEST_MORE_INFO; guided question flow chưa có |
+| [ ] | UC-004 | Finder | Chấp nhận claim với transaction/row lock | Partial | `claim.use-cases.ts` dùng transaction/claim row lock; appointment/return chưa có |
 | [ ] | UC-005 | Finder | Từ chối claim kèm lý do | Partial | Decision API/state có; chưa có browser journey riêng |
 | [ ] | UC-006 | Claimant | Hủy claim theo trạng thái hợp lệ | Partial | Withdraw API/state có; chưa có browser journey riêng |
 | [ ] | UC-007 | System | Khóa ghi khi chuyển trạng thái claim | Partial | Claim decision/withdraw/message/evidence đều dùng row lock; DB concurrency chưa chạy |

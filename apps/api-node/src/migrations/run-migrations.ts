@@ -1,6 +1,6 @@
 import { fileURLToPath } from "node:url";
 import path from "node:path";
-import { createMigrationPool } from "../config/db.js";
+import { createMigrationPool } from "../shared/infrastructure/config/db.js";
 import { runMigrations, type MigrationPool } from "./migration-runner.js";
 
 async function run() {

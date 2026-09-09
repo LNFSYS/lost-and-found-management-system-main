@@ -1,8 +1,8 @@
 import { parseArgs } from "node:util";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
-import { createDatabasePool } from "../config/db.js";
-import { env } from "../config/env.js";
+import { createDatabasePool } from "../shared/infrastructure/config/db.js";
+import { env } from "../shared/infrastructure/config/env.js";
 import { reconcileClaimMigration } from "./reconcile-claim-migration.js";
 
 async function run() {

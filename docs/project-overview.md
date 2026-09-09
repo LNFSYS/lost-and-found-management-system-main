@@ -93,10 +93,10 @@ flowchart LR
   API --> Media[Local media storage - current]
   API --> SMTP[SMTP email - optional]
   API --> Gemini[Gemini image analysis - optional]
-  Java[Java Spring Boot health skeleton] -. no business ownership .-> API
+  API --> Avatar[Cloudinary authenticated avatar]
 ~~~
 
-Node.js là runtime và write owner duy nhất của các flow đang chạy, đồng thời là owner của migrations. Java hiện chỉ có Spring Boot Actuator health endpoint; chưa có controller/service/repository nghiệp vụ, chưa tích hợp JWT hay frontend.
+Node.js + TypeScript là backend và write/migration owner duy nhất. Java skeleton đã được gỡ ngày 09/09/2026. Backend dùng Clean Architecture modular monolith: `interfaces -> application -> domain`, `infrastructure -> application ports`; `src/main` khởi tạo và inject adapter. Xem [dependency rules](CLEAN_ARCHITECTURE.md) và [draw.io](LNFS_NODE_ONLY_ARCHITECTURE.drawio).
 
 Bounded contexts mục tiêu:
 
@@ -113,7 +113,7 @@ Bounded contexts mục tiêu:
 | Realtime transport | Chưa có runtime |
 | Native Mobile | Client planned, dùng shared API |
 
-Không cho Node và Java cùng ghi một business flow/table nếu chưa có API contract, transaction/integration test và one-writer rule.
+Module chỉ truy cập module khác qua public application contract. Application không import MySQL, Express, provider SDK hoặc environment; transaction context không chứa `PoolConnection` trong core.
 
 ## 6. Luồng hiện tại có thể kiểm tra
 
@@ -229,12 +229,14 @@ Khi dùng Aiven/shared MySQL:
 
 ## 11. Kiểm thử và evidence
 
+Refactor kiến trúc 09/09 có kết quả riêng tại [Clean Architecture verification](CLEAN_ARCHITECTURE_VERIFICATION.md): 156 API/unit/integration tests, 23 browser E2E, typecheck/build và dependency check pass. Scope chỉ thay đổi kiến trúc; không nâng trạng thái hoàn thành các workflow còn thiếu.
+
 Evidence đã kiểm tra ngày 06/09/2026:
 
 - `npm --workspace @lnfs/api-node run test`: 137 pass, 1 DB integration test skip an toàn vì thiếu MySQL local `_test`.
 - `npm --workspace @lnfs/web run lint`: web TypeScript check pass.
 - npm run build: API TypeScript build và Web production build pass.
-- npm run build:java: chưa chạy được vì Maven không có trong PATH.
+- Java build thuộc snapshot cũ, đã ngừng sử dụng và gỡ ngày 09/09/2026.
 - `npm --workspace @lnfs/web run e2e:home`: 23/23 Playwright tests pass, gồm auth resilience, post creation, matching view, claim-room stale response, mobile layout, Staff warehouse và Admin handover/map.
 - `.github/workflows/ci.yml`: có MySQL service riêng và browser job; workflow chưa được chạy từ checkout này.
 - `npm --workspace @lnfs/api-node run test:db-integration`: test được skip an toàn vì chưa cấu hình MySQL local `*_test`; không chạy trên Aiven/shared DB.
@@ -256,4 +258,4 @@ Không ghi sprint date, assignee hoặc Jira status nếu chưa được kiểm 
 - Business rules: business-rules.md
 - Traceability matrix: traceability-matrix.md
 - Use-case checklist: use-case-checklist.md
-- Node/Java boundary: node-java-service-boundary.md
+- Clean Architecture: CLEAN_ARCHITECTURE.md; Node/Java boundary cũ chỉ giữ làm lịch sử.

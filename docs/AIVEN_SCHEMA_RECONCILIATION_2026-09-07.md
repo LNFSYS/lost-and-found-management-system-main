@@ -1,5 +1,8 @@
 # Aiven Schema Reconciliation
 
+> Historical architecture notice (2026-09-09): Java source/runtime/build has been retired and removed. Backend paths below describe the earlier layout. Current Node.js-only architecture and source mapping: [Clean Architecture](CLEAN_ARCHITECTURE.md). Product/ticket findings and prior verification results remain historical evidence.
+
+
 Ngày: **07/09/2026** (Asia/Bangkok)
 Repository: `fptu-lost-found-system-main`
 Branch: `fix/aiven-schema-migration-reconciliation`

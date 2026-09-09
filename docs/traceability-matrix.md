@@ -10,19 +10,19 @@ Nguồn status là code/test hiện tại. Mỗi dòng liên kết business rule
 
 | Business rules | Requirement | Use cases | Status | Evidence hoặc gap |
 | --- | --- | --- | --- | --- |
-| BR-01–BR-06 | FR-AUTH-01–03, FR-ROLE-01 | UC-001, UC-002, UC-031–UC-036 | Implemented/Verified | apps/api-node/src/routes/auth.routes.ts; auth.service.ts; auth.middleware.ts; auth.validator.test.ts; security.test.ts |
-| BR-07–BR-12 | FR-WEB-01, FR-POST-01, FR-POST-02, FR-BOARD-01 | UC-040–UC-047 | Implemented/Verified | post.routes.ts; post.service.ts; post.repository.ts; post.validator.ts; posts-page.tsx; post-detail-page.tsx; post validator tests |
+| BR-01–BR-06 | FR-AUTH-01–03, FR-ROLE-01 | UC-001, UC-002, UC-031–UC-036 | Implemented/Verified | apps/api-node/src/modules/auth/interfaces/http/auth.routes.ts; auth.use-cases.ts; auth.middleware.ts; auth.validator.test.ts; security.test.ts |
+| BR-07–BR-12 | FR-WEB-01, FR-POST-01, FR-POST-02, FR-BOARD-01 | UC-040–UC-047 | Implemented/Verified | post.routes.ts; post.use-cases.ts; post.repository.ts; post.validator.ts; posts-page.tsx; post-detail-page.tsx; post validator tests |
 | BR-10, BR-15, BR-18 | FR-PRIVPOST-01, FR-MEDIA-01 | UC-041, UC-044, UC-048, UC-050, UC-054 | Implemented current scope | post.repository.ts visibility predicates; media.ts; media-storage.ts; post/match/private-evidence serializer and authorization tests; guided private answers chưa có |
-| BR-13 | FR-CATALOG-01, FR-ADMIN-01 | UC-064, UC-065 | Implemented/Verified | admin-catalog.repository.ts; admin-catalog.service.ts; admin-page.tsx; catalog tests |
-| BR-16–BR-18 | FR-AI-01, FR-AI-02 | UC-086, UC-088, UC-091 | Implemented/Verified | gemini-image.service.ts; gemini-image.service.test.ts; story-post-form.tsx |
-| BR-19–BR-25 | FR-MATCH-01–03 | UC-068–UC-072, UC-075, UC-076 | Implemented/Verified | matching.service.ts; matching.engine.ts; matching.repository.ts; matching.engine.test.ts; post-matches-page.tsx |
+| BR-13 | FR-CATALOG-01, FR-ADMIN-01 | UC-064, UC-065 | Implemented/Verified | admin-catalog.repository.ts; admin-catalog.use-cases.ts; admin-page.tsx; catalog tests |
+| BR-16–BR-18 | FR-AI-01, FR-AI-02 | UC-086, UC-088, UC-091 | Implemented/Verified | gemini-image-analyzer.ts; gemini-image.service.test.ts; story-post-form.tsx |
+| BR-19–BR-25 | FR-MATCH-01–03 | UC-068–UC-072, UC-075, UC-076 | Implemented/Verified | matching.use-cases.ts; matching.engine.ts; matching.repository.ts; matching.engine.test.ts; post-matches-page.tsx |
 | BR-26 | FR-HANDOVER-01 | UC-008–UC-010, UC-055–UC-058 | Implemented/Verified | handover.routes.ts; admin.routes.ts; admin-catalog.*; admin-handover.spec.ts |
-| BR-32, BR-39 | FR-STAFF-01, FR-WAREHOUSE-01 | UC-011–UC-015, UC-058–UC-062 | Implemented/Partial | staff.routes.ts; warehouse.service.ts; warehouse.repository.ts; warehouse.service.test.ts; staff-page.tsx; staff-page.spec.ts |
+| BR-32, BR-39 | FR-STAFF-01, FR-WAREHOUSE-01 | UC-011–UC-015, UC-058–UC-062 | Implemented/Partial | staff.routes.ts; warehouse.use-cases.ts; warehouse.repository.ts; warehouse.use-cases.test.ts; staff-page.tsx; staff-page.spec.ts |
 | BR-27 | NFR-DATA-01 | N/A | Implemented/Verified | migration-runner.ts; migration-runner.test.ts; numbered SQL migrations |
-| BR-28 | FR-JAVA-01 | N/A | Implemented skeleton | JavaAdminServiceApplication.java; no business endpoint or Node integration |
+| BR-28 | NFR-ARCH-01; FR-JAVA-01 retired | N/A | Implemented | src/main composition; application ports; domain policies; scripts/check-architecture.mjs; Java source/build removed |
 | BR-29, BR-30 | FR-MEDIA-02, NFR-PORT-01 | UC-048, UC-050 | Partial/Planned | Local media/evidence 404 handling có; shared object storage và multi-instance test chưa có |
 | BR-31 | FR-AUDIT-01 | UC-064, UC-065 | Planned | Catalog audit before/after chưa có runtime evidence |
-| BR-33–BR-36 | FR-VERIFY-01, FR-VERIFY-02, FR-CLAIM-01 | UC-003–UC-007, UC-049, UC-052–UC-054, UC-087–UC-092 | Partial | claim.routes.ts, claim.service.ts, claim.repository.ts, claims-page.tsx; participant privacy, pagination, state-lock và idempotency tests; guided questions/review confidence/appointment chưa có |
+| BR-33–BR-36 | FR-VERIFY-01, FR-VERIFY-02, FR-CLAIM-01 | UC-003–UC-007, UC-049, UC-052–UC-054, UC-087–UC-092 | Partial | claim.routes.ts, claim.use-cases.ts, claim.repository.ts, claims-page.tsx; participant privacy, pagination, state-lock và idempotency tests; guided questions/review confidence/appointment chưa có |
 | BR-37 | FR-APPT-01, FR-HANDOVER-02 | UC-021–UC-024 | Planned | Chưa có appointment và dual-confirmation runtime |
 | BR-38, BR-40, BR-42 | FR-CUSTODY-01, FR-WAREHOUSE-02 | UC-016–UC-020 | Planned/TBD | Disposition/custody guard và policy trường chưa có hoặc chưa được xác nhận |
 | BR-41, BR-43 | FR-CHAT-01, FR-RT-01 | UC-077–UC-083 | Partial/Planned | Private REST text room, participant guard, retry idempotency, cursor history và claim notifications có; Socket.IO, image chat, seen/unread realtime và escalation review chưa có |
@@ -47,8 +47,8 @@ Nguồn status là code/test hiện tại. Mỗi dòng liên kết business rule
 | Web | apps/web/src/main.tsx, pages, components, Playwright tests | Implemented cho baseline |
 | PWA | Responsive CSS, manifest.webmanifest, sw.js, offline shell và mobile viewport/file input | Partial: device/installability evidence còn thiếu |
 | Native Mobile | Không có thư mục/project mobile | Planned — project not created yet |
-| Backend/API | Node routes/services/repositories/validators/migrations | Implemented theo module; claim/realtime còn planned |
-| Java | Spring Boot Actuator health skeleton | Implemented skeleton only |
+| Backend/API | Node.js Clean Architecture: modules/domain/application/infrastructure/interfaces + main/shared | Implemented theo module; advanced claim/realtime vẫn partial/planned |
+| Java | Không còn source/runtime/build trong repository | Retired 09/09/2026 |
 | Database | 001–046 migrations và checksum runner | Schema/migration implemented; migration 046 là corrective cleanup cho legacy feedback index, chưa áp dụng lên Aiven/shared DB; không thay thế business runtime evidence |
 | Test | Node tests và Web typecheck; một DB integration test skip an toàn khi thiếu local _test DB | Partial |
 

@@ -7,7 +7,8 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import { runMigrations } from "./migration-runner.js";
-import { migrationChecksums, type MigrationPool, type LedgerRow, type AttemptRow } from "./migration-state.js";
+import { migrationChecksums } from "./migration-state.js";
+import { type MigrationPool, type LedgerRow, type AttemptRow } from "./migration-state.js";
 
 async function withMigration(sql: string, run: (directory: string) => Promise<void>) {
   const directory = await mkdtemp(path.join(os.tmpdir(), "lnfs-migration-test-"));
