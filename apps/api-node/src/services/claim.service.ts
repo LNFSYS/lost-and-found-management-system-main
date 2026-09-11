@@ -14,14 +14,27 @@ import { notificationRepository } from "../repositories/notification.repository.
 import { HttpError } from "../utils/http-error.js";
 import { mediaContentType, validateImageUpload } from "../utils/media.js";
 import { ensureStoredFileExists, removeStoredFileIfPresent } from "../utils/media-storage.js";
-import { id } from "../utils/security.js";
+import { hashToken, id } from "../utils/security.js";
+import { isAppointmentEligible } from "./appointment-eligibility.js";
+import {
+  promptForKey,
+  safeAnswer,
+  safeReason,
+  templateForCategory,
+  validateCustomQuestion,
+  type VerificationPrompt
+} from "./verification-templates.js";
 import type {
   ClaimDecisionInput,
   CreateClaimInput,
   CreateMessageInput,
   ListClaimsQuery,
   ListMessagesQuery,
-  UploadEvidenceInput
+  UploadEvidenceInput,
+  VerificationAnswerInput,
+  VerificationQuestionInput,
+  VerificationReviewInput,
+  WithdrawClaimInput
 } from "../validators/claim.validator.js";
 
 const evidenceRoot = path.resolve(env.uploadDir, "claim-evidence");
@@ -86,12 +99,105 @@ async function openRoomIfNeeded(claimId: string, queryable: PoolConnection) {
 
 async function details(claimId: string, userId: string) {
   const { claim, participant } = await requireClaimParticipant(claimId, userId);
+  const verification = claim.status === "ACCEPTED" && claim.roomId
+    ? await verificationData(claim, participant.role)
+    : null;
   return {
     ...serializeClaim(claim),
     participants: await claimRepository.listParticipants(claimId),
     room: claim.roomId ? { id: claim.roomId } : null,
-    canSend: canUseRoom(claim.status, participant.consentStatus)
+    canSend: canUseRoom(claim.status, participant.consentStatus),
+    appointmentEligible: verification?.appointmentEligible ?? false,
+    verificationOutcome: verification?.latestDecision?.action ?? null
   };
+}
+
+type VerificationAudit = Awaited<ReturnType<typeof claimRepository.listClaimAuditEvents>>[number];
+
+function metadataString(event: VerificationAudit, key: string) {
+  const value = event.metadata?.[key];
+  return typeof value === "string" ? value : undefined;
+}
+
+function metadataNumber(event: VerificationAudit, key: string) {
+  const value = event.metadata?.[key];
+  return typeof value === "number" ? value : undefined;
+}
+
+function verificationSnapshot(claim: StoredClaim, participantRole: "CLAIMANT" | "FINDER", categoryName: string | null, prompts: Array<VerificationPrompt & { source: "BUILT_IN" | "DB"; questionId?: string; privacyLevel?: string }>, audits: VerificationAudit[]) {
+  const template = templateForCategory(categoryName);
+  const sentQuestions = audits
+    .filter((event) => event.action === "VERIFICATION_QUESTION_SENT")
+    .map((event) => ({
+      questionKey: metadataString(event, "questionKey") ?? "unknown",
+      prompt: metadataString(event, "prompt") ?? "Câu hỏi xác minh riêng tư",
+      senderId: event.actorId,
+      sentAt: event.createdAt,
+      messageId: metadataString(event, "messageId") ?? null,
+      templateId: metadataString(event, "templateId") ?? template.id,
+      templateVersion: metadataNumber(event, "templateVersion") ?? template.version
+    }));
+  const answers = audits
+    .filter((event) => event.action === "VERIFICATION_ANSWER_SUBMITTED")
+    .map((event) => ({
+      questionKey: metadataString(event, "questionKey") ?? "unknown",
+      answeredBy: event.actorId,
+      answerLength: metadataNumber(event, "answerLength") ?? 0,
+      answeredAt: event.createdAt,
+      messageId: metadataString(event, "messageId") ?? null
+    }));
+  const reviews = audits
+    .filter((event) => event.action === "VERIFICATION_REVIEW_RECORDED")
+    .map((event) => ({
+      questionKey: metadataString(event, "questionKey") ?? "unknown",
+      result: metadataString(event, "result") ?? "UNCLEAR",
+      confidence: metadataNumber(event, "confidence") ?? 0,
+      reason: participantRole === "FINDER" ? metadataString(event, "reason") ?? "" : undefined,
+      reviewedAt: event.createdAt
+    }));
+  const finalDecision = [...audits].reverse().find((event) => [
+    "FINDER_VERIFIED_FOR_MEETUP",
+    "FINDER_DECLINED",
+    "CUSTODY_ESCALATION_REQUESTED"
+  ].includes(event.action));
+  const answerKeys = new Set(answers.map((answer) => answer.questionKey));
+  const latestAnswerAt = new Map<string, string>();
+  answers.forEach((answer) => latestAnswerAt.set(answer.questionKey, answer.answeredAt));
+  const passKeys = new Set(reviews.filter((review) => review.result === "PASS" && latestAnswerAt.get(review.questionKey) && review.reviewedAt >= latestAnswerAt.get(review.questionKey)!).map((review) => review.questionKey));
+  const appointmentEligible = isAppointmentEligible({ claimStatus: claim.status, latestDecisionAction: finalDecision?.action });
+  return {
+    category: categoryName,
+    template: { id: template.id, version: template.version, minimumAnswers: template.minimumAnswers },
+    prompts: participantRole === "FINDER" ? prompts : sentQuestions.map((question) => ({ key: question.questionKey, prompt: question.prompt, questionType: "TEXT" as const })),
+    sentQuestions,
+    answers: participantRole === "FINDER" ? answers : answers.filter((answer) => answer.answeredBy === claim.claimantId),
+    reviews: participantRole === "FINDER" ? reviews : [],
+    latestDecision: finalDecision ? { action: finalDecision.action, reason: participantRole === "FINDER" ? metadataString(finalDecision, "reason") ?? null : null, createdAt: finalDecision.createdAt } : null,
+    canVerify: participantRole === "FINDER" && answerKeys.size >= template.minimumAnswers && [...passKeys].some((key) => answerKeys.has(key)),
+    appointmentEligible
+  };
+}
+
+function promptList(categoryName: string | null, dbQuestions: Awaited<ReturnType<typeof claimRepository.listVerificationQuestions>>) {
+  const template = templateForCategory(categoryName);
+  const configured = template.prompts.map((prompt) => ({ ...prompt, source: "BUILT_IN" as const }));
+  const stored = dbQuestions.map((question) => ({
+    key: question.id,
+    prompt: question.prompt,
+    questionType: question.questionType === "MASKED_SERIAL" ? "TEXT" as const : question.questionType,
+    options: question.options,
+    source: "DB" as const,
+    questionId: question.id,
+    privacyLevel: question.privacyLevel
+  }));
+  return [...configured, ...stored];
+}
+
+async function verificationData(claim: StoredClaim, participantRole: "CLAIMANT" | "FINDER", queryable?: PoolConnection) {
+  const categoryName = await claimRepository.findFoundCategory(claim.foundPostId, queryable);
+  const dbQuestions = await claimRepository.listVerificationQuestions(claim.id, queryable);
+  const audits = await claimRepository.listClaimAuditEvents(claim.id, queryable);
+  return verificationSnapshot(claim, participantRole, categoryName, promptList(categoryName, dbQuestions), audits);
 }
 
 export const claimService = {
@@ -170,51 +276,193 @@ export const claimService = {
     return details(claimId, userId);
   },
 
+  async getVerification(claimId: string, userId: string) {
+    const { claim, participant } = await requireClaimParticipant(claimId, userId, true);
+    return verificationData(claim, participant.role);
+  },
+
+  async sendVerificationQuestion(claimId: string, finderId: string, input: VerificationQuestionInput) {
+    const result = await withTransaction(async (connection) => {
+      const claim = await claimRepository.findByIdForUpdate(claimId, connection);
+      const participant = claim ? await claimRepository.findParticipant(claimId, finderId, connection) : null;
+      if (!claim || !participant || participant.role !== "FINDER" || claim.finderId !== finderId || !canUseRoom(claim.status, participant.consentStatus)) throw claimNotFound();
+      if (!["CONVERSATION_OPEN", "NEED_MORE_INFO"].includes(claim.status)) throw new HttpError(409, "Phần xác minh đã đóng ở trạng thái hiện tại");
+      const duplicate = await claimRepository.findAuditByIdempotency(claimId, finderId, input.idempotencyKey, connection);
+      if (duplicate?.action === "VERIFICATION_QUESTION_SENT") {
+        const room = await claimRepository.findRoomByClaim(claimId, connection);
+        const message = room ? await claimRepository.findMessageByClientId(room.id, finderId, input.idempotencyKey, connection) : null;
+        return { message, idempotent: true };
+      }
+      if (duplicate) throw new HttpError(409, "Idempotency-Key đã được dùng cho thao tác xác minh khác");
+      const priorAudits = await claimRepository.listClaimAuditEvents(claimId, connection);
+      if ([...priorAudits].reverse().find((event) => event.action === "CUSTODY_ESCALATION_REQUESTED")) throw new HttpError(409, "Case đã chuyển custody và không còn nhận câu hỏi mới");
+      const categoryName = await claimRepository.findFoundCategory(claim.foundPostId, connection);
+      const template = templateForCategory(categoryName);
+      if (input.templateId !== template.id || input.templateVersion !== template.version) throw new HttpError(409, "Template câu hỏi đã cũ, vui lòng tải lại");
+      const dbQuestions = await claimRepository.listVerificationQuestions(claimId, connection);
+      const configuredPrompt = promptForKey(template, input.questionKey);
+      const storedPrompt = dbQuestions.find((question) => question.id === input.questionKey);
+      if (!configuredPrompt && !storedPrompt && input.questionKey !== "custom") throw new HttpError(400, "Câu hỏi không thuộc template đang hoạt động");
+      if (input.questionKey === "custom") {
+        const customError = validateCustomQuestion(input.prompt);
+        if (customError) throw new HttpError(422, customError);
+      } else {
+        const expectedPrompt = configuredPrompt?.prompt ?? storedPrompt?.prompt;
+        if (expectedPrompt !== input.prompt.trim()) throw new HttpError(409, "Nội dung câu hỏi không khớp phiên bản template");
+      }
+      const room = await openRoomIfNeeded(claimId, connection);
+      const message = await claimRepository.createMessage({ roomId: room.id, senderId: finderId, content: input.prompt.trim(), clientMessageId: input.idempotencyKey }, connection);
+      if (!message) throw new HttpError(500, "Không thể gửi câu hỏi xác minh");
+      await claimRepository.writeAudit({
+        claimId,
+        actorId: finderId,
+        action: "VERIFICATION_QUESTION_SENT",
+        metadata: {
+          idempotencyKey: input.idempotencyKey,
+          questionKey: input.questionKey,
+          prompt: input.prompt.trim(),
+          templateId: input.templateId,
+          templateVersion: input.templateVersion,
+          messageId: message.id,
+          custom: input.questionKey === "custom"
+        }
+      }, connection);
+      return { message, idempotent: false };
+    });
+    return result;
+  },
+
+  async submitVerificationAnswer(claimId: string, claimantId: string, input: VerificationAnswerInput) {
+    const result = await withTransaction(async (connection) => {
+      const claim = await claimRepository.findByIdForUpdate(claimId, connection);
+      const participant = claim ? await claimRepository.findParticipant(claimId, claimantId, connection) : null;
+      if (!claim || !participant || participant.role !== "CLAIMANT" || claim.claimantId !== claimantId || !canUseRoom(claim.status, participant.consentStatus)) throw claimNotFound();
+      if (!["CONVERSATION_OPEN", "NEED_MORE_INFO"].includes(claim.status)) throw new HttpError(409, "Phần xác minh đã đóng ở trạng thái hiện tại");
+      const duplicate = await claimRepository.findAuditByIdempotency(claimId, claimantId, input.idempotencyKey, connection);
+      if (duplicate?.action === "VERIFICATION_ANSWER_SUBMITTED") {
+        const room = await claimRepository.findRoomByClaim(claimId, connection);
+        const message = room ? await claimRepository.findMessageByClientId(room.id, claimantId, input.idempotencyKey, connection) : null;
+        return { message, idempotent: true };
+      }
+      if (duplicate) throw new HttpError(409, "Idempotency-Key đã được dùng cho thao tác xác minh khác");
+      const audits = await claimRepository.listClaimAuditEvents(claimId, connection);
+      if ([...audits].reverse().find((event) => event.action === "CUSTODY_ESCALATION_REQUESTED")) throw new HttpError(409, "Case đã chuyển custody và không còn nhận câu trả lời mới");
+      const sent = [...audits].reverse().find((event) => event.action === "VERIFICATION_QUESTION_SENT" && metadataString(event, "questionKey") === input.questionKey);
+      if (!sent) throw new HttpError(409, "Câu hỏi này chưa được Finder gửi trong phòng riêng");
+      const answerError = safeAnswer(input.answer);
+      if (answerError) throw new HttpError(422, answerError);
+      const room = await openRoomIfNeeded(claimId, connection);
+      const message = await claimRepository.createMessage({ roomId: room.id, senderId: claimantId, content: input.answer.trim(), clientMessageId: input.idempotencyKey }, connection);
+      if (!message) throw new HttpError(500, "Không thể gửi câu trả lời xác minh");
+      const dbQuestion = (await claimRepository.listVerificationQuestions(claimId, connection)).find((question) => question.id === input.questionKey);
+      if (dbQuestion) await claimRepository.recordVerificationAnswer({ claimId, questionId: dbQuestion.id, answeredBy: claimantId, isMatch: hashToken(input.answer.trim()) === dbQuestion.expectedAnswerHash }, connection);
+      await claimRepository.writeAudit({
+        claimId,
+        actorId: claimantId,
+        action: "VERIFICATION_ANSWER_SUBMITTED",
+        metadata: {
+          idempotencyKey: input.idempotencyKey,
+          questionKey: input.questionKey,
+          messageId: message.id,
+          answerLength: input.answer.trim().length
+        }
+      }, connection);
+      return { message, idempotent: false };
+    });
+    return result;
+  },
+
+  async reviewVerificationQuestion(claimId: string, finderId: string, input: VerificationReviewInput) {
+    const result = await withTransaction(async (connection) => {
+      const claim = await claimRepository.findByIdForUpdate(claimId, connection);
+      const participant = claim ? await claimRepository.findParticipant(claimId, finderId, connection) : null;
+      if (!claim || !participant || participant.role !== "FINDER" || claim.finderId !== finderId || !canUseRoom(claim.status, participant.consentStatus)) throw claimNotFound();
+      if (!["CONVERSATION_OPEN", "NEED_MORE_INFO"].includes(claim.status)) throw new HttpError(409, "Phần xác minh đã đóng ở trạng thái hiện tại");
+      const duplicate = await claimRepository.findAuditByIdempotency(claimId, finderId, input.idempotencyKey, connection);
+      if (duplicate?.action === "VERIFICATION_REVIEW_RECORDED") return { idempotent: true };
+      if (duplicate) throw new HttpError(409, "Idempotency-Key đã được dùng cho thao tác xác minh khác");
+      const audits = await claimRepository.listClaimAuditEvents(claimId, connection);
+      if ([...audits].reverse().find((event) => event.action === "CUSTODY_ESCALATION_REQUESTED")) throw new HttpError(409, "Case đã chuyển custody và không còn review routine");
+      if (!audits.some((event) => event.action === "VERIFICATION_ANSWER_SUBMITTED" && metadataString(event, "questionKey") === input.questionKey)) throw new HttpError(409, "Chưa có câu trả lời để đánh giá");
+      await claimRepository.writeAudit({
+        claimId,
+        actorId: finderId,
+        action: "VERIFICATION_REVIEW_RECORDED",
+        metadata: {
+          idempotencyKey: input.idempotencyKey,
+          questionKey: input.questionKey,
+          result: input.result,
+          confidence: input.confidence,
+          reason: safeReason(input.reason)
+        }
+      }, connection);
+      return { idempotent: false };
+    });
+    return { ...await claimService.getVerification(claimId, finderId), idempotent: result.idempotent };
+  },
+
   async decide(claimId: string, finderId: string, input: ClaimDecisionInput) {
     const result = await withTransaction(async (connection) => {
       const claim = await claimRepository.findByIdForUpdate(claimId, connection);
       const participant = claim ? await claimRepository.findParticipant(claimId, finderId, connection) : null;
       if (!claim || !participant || participant.role !== "FINDER" || claim.finderId !== finderId) throw claimNotFound();
+      const duplicate = await claimRepository.findAuditByIdempotency(claimId, finderId, input.idempotencyKey, connection);
+      if (duplicate && (duplicate.action.startsWith("FINDER_") || duplicate.action === "CUSTODY_ESCALATION_REQUESTED")) return claim;
+      if (duplicate) throw new HttpError(409, "Idempotency-Key đã được dùng cho thao tác xác minh khác");
+      if (input.expectedStatus && input.expectedStatus !== claim.status) throw new HttpError(409, "Trạng thái yêu cầu đã thay đổi, vui lòng tải lại");
+      const decision = input.decision === "ACCEPT" ? "OPEN_CONVERSATION" : input.decision;
+      const reason = safeReason(input.note);
+      if (decision === "VERIFY_FOR_MEETUP") {
+        const priorVerification = await verificationData(claim, "FINDER", connection);
+        if (priorVerification.latestDecision?.action === "CUSTODY_ESCALATION_REQUESTED") throw new HttpError(409, "Case đã chuyển custody và không thể xác minh để hẹn gặp");
+      }
 
-      if (input.decision === "ACCEPT" || input.decision === "REQUEST_MORE_INFO") {
-        const nextStatus: ClaimStatus = input.decision === "ACCEPT" ? "CONVERSATION_OPEN" : "NEED_MORE_INFO";
-        if (claim.finderDecision === "ACCEPTED" && claim.roomId && claim.status === nextStatus) return claim;
-        if (!["PENDING", "NEED_MORE_INFO", "CONVERSATION_OPEN"].includes(claim.status)) {
-          throw new HttpError(409, "Yêu cầu này không còn chờ phản hồi");
-        }
+      if (decision === "OPEN_CONVERSATION" || decision === "REQUEST_MORE_INFO") {
+        if (!["PENDING", "NEED_MORE_INFO", "CONVERSATION_OPEN"].includes(claim.status)) throw new HttpError(409, "Yêu cầu này không còn chờ phản hồi");
+        const nextStatus: ClaimStatus = decision === "OPEN_CONVERSATION" ? "CONVERSATION_OPEN" : "NEED_MORE_INFO";
+        if (decision === "OPEN_CONVERSATION" && claim.status === nextStatus && claim.roomId) return claim;
         await claimRepository.updateFinderParticipant(claimId, finderId, "ACCEPTED", connection);
-        await claimRepository.updateFinderDecision({
-          claimId,
-          status: nextStatus,
-          finderDecision: "ACCEPTED",
-          note: input.note,
-          acceptedAt: true
-        }, connection);
+        await claimRepository.updateFinderDecision({ claimId, status: nextStatus, finderDecision: "ACCEPTED", note: reason ?? undefined, acceptedAt: true }, connection);
         await openRoomIfNeeded(claimId, connection);
         await claimRepository.writeAudit({
           claimId,
           actorId: finderId,
-          action: input.decision === "ACCEPT" ? "FINDER_ACCEPTED" : "MORE_INFO_REQUESTED",
+          action: decision === "OPEN_CONVERSATION" ? "FINDER_OPENED_CONVERSATION" : "FINDER_REQUESTED_MORE_INFO",
           fromStatus: claim.status,
           toStatus: nextStatus,
-          metadata: input.note ? { noteProvided: true } : undefined
+          metadata: { idempotencyKey: input.idempotencyKey, reason, decision }
         }, connection);
-        if (input.decision === "ACCEPT") {
-          await notificationRepository.create({
-            userId: claim.claimantId,
-            type: "CLAIM_ACCEPTED",
-            title: "Y\u00eau c\u1ea7u trao \u0111\u1ed5i ri\u00eang \u0111\u00e3 \u0111\u01b0\u1ee3c x\u00e1c nh\u1eadn",
-            body: "Finder \u0111\u00e3 x\u00e1c nh\u1eadn. Ph\u00f2ng trao \u0111\u1ed5i ri\u00eang \u0111\u00e3 m\u1edf \u0111\u1ec3 hai b\u00ean nh\u1eafn tin v\u00e0 chia s\u1ebb evidence.",
-            entityType: "CLAIM",
-            entityId: claimId,
-            dedupeKey: `claim:${claimId}:accepted`
-          }, connection);
-        }
-      } else {
-        if (claim.status !== "PENDING" || claim.finderDecision !== "PENDING") throw new HttpError(409, "Yêu cầu này không còn chờ phản hồi");
+        if (decision === "OPEN_CONVERSATION") await notificationRepository.create({
+          userId: claim.claimantId,
+          type: "CLAIM_CONVERSATION_OPENED",
+          title: "Phòng trao đổi riêng đã được mở",
+          body: "Finder đã mở phòng trao đổi. Đây chưa phải xác minh quyền sở hữu.",
+          entityType: "CLAIM",
+          entityId: claimId,
+          dedupeKey: `claim:${claimId}:conversation-open`
+        }, connection);
+      } else if (decision === "VERIFY_FOR_MEETUP") {
+        if (!["CONVERSATION_OPEN", "NEED_MORE_INFO"].includes(claim.status)) throw new HttpError(409, "Cần mở phòng trao đổi trước khi xác minh");
+        const verification = await verificationData(claim, "FINDER", connection);
+        if (!verification.canVerify) throw new HttpError(409, "Cần ít nhất một câu trả lời và đánh giá PASS trước khi cho phép hẹn gặp");
+        await claimRepository.updateFinderParticipant(claimId, finderId, "ACCEPTED", connection);
+        await claimRepository.updateFinderDecision({ claimId, status: "ACCEPTED", finderDecision: "ACCEPTED", note: reason ?? undefined, acceptedAt: true }, connection);
+        await claimRepository.writeAudit({ claimId, actorId: finderId, action: "FINDER_VERIFIED_FOR_MEETUP", fromStatus: claim.status, toStatus: "ACCEPTED", metadata: { idempotencyKey: input.idempotencyKey, reason, appointmentEligible: true } }, connection);
+      } else if (decision === "DECLINE") {
+        if (!["PENDING", "CONVERSATION_OPEN", "NEED_MORE_INFO"].includes(claim.status)) throw new HttpError(409, "Yêu cầu này không còn chờ phản hồi");
         await claimRepository.updateFinderParticipant(claimId, finderId, "DECLINED", connection);
-        await claimRepository.updateFinderDecision({ claimId, status: "REJECTED", finderDecision: "DECLINED", note: input.note, rejectedAt: true }, connection);
-        await claimRepository.writeAudit({ claimId, actorId: finderId, action: "FINDER_DECLINED", fromStatus: claim.status, toStatus: "REJECTED" }, connection);
+        await claimRepository.updateFinderDecision({ claimId, status: "REJECTED", finderDecision: "DECLINED", note: reason ?? undefined, rejectedAt: true }, connection);
+        await claimRepository.writeAudit({ claimId, actorId: finderId, action: "FINDER_DECLINED", fromStatus: claim.status, toStatus: "REJECTED", metadata: { idempotencyKey: input.idempotencyKey, reason } }, connection);
+      } else if (decision === "ESCALATE_TO_CUSTODY") {
+        if (!["PENDING", "CONVERSATION_OPEN", "NEED_MORE_INFO"].includes(claim.status)) throw new HttpError(409, "Yêu cầu này không thể chuyển custody ở trạng thái hiện tại");
+        let toStatus = claim.status;
+        if (claim.status === "PENDING") {
+          toStatus = "CONVERSATION_OPEN";
+          await claimRepository.updateFinderParticipant(claimId, finderId, "ACCEPTED", connection);
+          await claimRepository.updateFinderDecision({ claimId, status: toStatus, finderDecision: "ACCEPTED", note: reason ?? undefined, acceptedAt: true }, connection);
+          await openRoomIfNeeded(claimId, connection);
+        }
+        await claimRepository.writeAudit({ claimId, actorId: finderId, action: "CUSTODY_ESCALATION_REQUESTED", fromStatus: claim.status, toStatus, metadata: { idempotencyKey: input.idempotencyKey, reason, appointmentEligible: false } }, connection);
       }
       return claimRepository.findById(claimId, connection);
     });
@@ -223,13 +471,16 @@ export const claimService = {
     return details(claimId, finderId);
   },
 
-  async withdraw(claimId: string, claimantId: string) {
+  async withdraw(claimId: string, claimantId: string, input: WithdrawClaimInput = { idempotencyKey: id() }) {
     await withTransaction(async (connection) => {
       const claim = await claimRepository.findByIdForUpdate(claimId, connection);
       if (!claim || claim.claimantId !== claimantId) throw claimNotFound();
+      const duplicate = await claimRepository.findAuditByIdempotency(claimId, claimantId, input.idempotencyKey, connection);
+      if (duplicate?.action === "CLAIM_WITHDRAWN") return;
+      if (duplicate) throw new HttpError(409, "Idempotency-Key đã được dùng cho thao tác khác");
       const withdrawn = await claimRepository.withdrawClaim(claimId, claimantId, connection);
       if (!withdrawn) throw new HttpError(409, "Yêu cầu này không thể rút ở trạng thái hiện tại");
-      await claimRepository.writeAudit({ claimId, actorId: claimantId, action: "CLAIM_WITHDRAWN", fromStatus: claim.status, toStatus: "CANCELLED" }, connection);
+      await claimRepository.writeAudit({ claimId, actorId: claimantId, action: "CLAIM_WITHDRAWN", fromStatus: claim.status, toStatus: "CANCELLED", metadata: { idempotencyKey: input.idempotencyKey, reason: safeReason(input.note) } }, connection);
     });
     return details(claimId, claimantId);
   },

@@ -1,14 +1,14 @@
-import { AlertTriangle, ArrowLeft, Check, Clock3, ImagePlus, LockKeyhole, MessageCircle, RefreshCw, Send, ShieldCheck, Upload, UserRound, X } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Check, Clock3, ImagePlus, LockKeyhole, MessageCircle, RefreshCw, Send, ShieldAlert, ShieldCheck, Upload, UserRound, X } from "lucide-react";
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "../context/auth-context";
-import { api, type ClaimEvidence, type ClaimMessage, type ClaimRecord, type ClaimStatus } from "../services/api";
+import { api, type ClaimDecision, type ClaimEvidence, type ClaimMessage, type ClaimRecord, type ClaimStatus, type ClaimVerification } from "../services/api";
 
 const statusLabels: Record<ClaimStatus, string> = {
   PENDING: "Đang chờ Finder phản hồi",
   CONVERSATION_OPEN: "Đang trao đổi riêng",
   NEED_MORE_INFO: "Cần bổ sung thông tin",
-  ACCEPTED: "Đã xác nhận",
+  ACCEPTED: "Đã xác minh để hẹn gặp",
   REJECTED: "Đã từ chối",
   CANCELLED: "Đã rút yêu cầu"
 };
@@ -64,6 +64,89 @@ function MessageBubble({ message, own }: { message: ClaimMessage; own: boolean }
     <p>{message.content}</p>
     <time dateTime={message.createdAt}>{formatDate(message.createdAt)}</time>
   </div>;
+}
+
+function VerificationPanel({ claim, onError }: { claim: ClaimRecord; onError: (message: string) => void }) {
+  const { user } = useAuth();
+  const [verification, setVerification] = useState<ClaimVerification | null>(null);
+  const [selectedQuestion, setSelectedQuestion] = useState("");
+  const [questionDraft, setQuestionDraft] = useState("");
+  const [customQuestion, setCustomQuestion] = useState("");
+  const [answerDrafts, setAnswerDrafts] = useState<Record<string, string>>({});
+  const [reviewDrafts, setReviewDrafts] = useState<Record<string, { result: "PASS" | "FAIL" | "UNCLEAR"; confidence: string; reason: string }>>({});
+  const [busy, setBusy] = useState("");
+  const isFinder = Boolean(user?.id && user.id === claim.finderId);
+
+  async function load() {
+    try {
+      const result = await api.getClaimVerification(claim.id);
+      setVerification(result);
+      if (!selectedQuestion && result.prompts[0]) {
+        setSelectedQuestion(result.prompts[0].key);
+        setQuestionDraft(result.prompts[0].prompt);
+      }
+    } catch (reason) {
+      onError(reason instanceof Error ? reason.message : "Không thể tải câu hỏi xác minh");
+    }
+  }
+
+  useEffect(() => { void load(); }, [claim.id, claim.status]);
+
+  if (!verification) return <section className="claim-verification"><RefreshCw className="is-spinning" /><span>Đang tải hướng dẫn xác minh...</span></section>;
+  const currentVerification = verification;
+
+  async function sendQuestion() {
+    const prompt = (selectedQuestion === "custom" ? customQuestion : questionDraft).trim();
+    if (!prompt) return;
+    setBusy("question");
+    try {
+      await api.sendVerificationQuestion(claim.id, { questionKey: selectedQuestion || "custom", prompt, templateId: currentVerification.template.id, templateVersion: currentVerification.template.version });
+      setCustomQuestion("");
+      await load();
+    } catch (reason) { onError(reason instanceof Error ? reason.message : "Không thể gửi câu hỏi"); }
+    finally { setBusy(""); }
+  }
+
+  async function sendAnswer(questionKey: string) {
+    const answer = answerDrafts[questionKey]?.trim();
+    if (!answer) return;
+    setBusy(`answer:${questionKey}`);
+    try {
+      await api.submitVerificationAnswer(claim.id, questionKey, answer);
+      setAnswerDrafts((current) => ({ ...current, [questionKey]: "" }));
+      await load();
+    } catch (reason) { onError(reason instanceof Error ? reason.message : "Không thể gửi câu trả lời"); }
+    finally { setBusy(""); }
+  }
+
+  async function submitReview(questionKey: string) {
+    const draft = reviewDrafts[questionKey] ?? { result: "UNCLEAR" as const, confidence: "0.5", reason: "" };
+    if (draft.reason.trim().length < 3) return onError("Cần ghi lý do đánh giá câu trả lời.");
+    setBusy(`review:${questionKey}`);
+    try {
+      await api.reviewVerificationQuestion(claim.id, { questionKey, result: draft.result, confidence: Number(draft.confidence), reason: draft.reason.trim() });
+      await load();
+    } catch (reason) { onError(reason instanceof Error ? reason.message : "Không thể lưu đánh giá"); }
+    finally { setBusy(""); }
+  }
+
+  return <section className="claim-verification">
+    <header><div><p className="eyebrow">GUIDED OWNERSHIP CHECK</p><h3>Câu hỏi xác minh riêng tư</h3><span>Template {verification.template.id} · phiên bản {verification.template.version}</span></div><ShieldAlert /></header>
+    {isFinder ? <>
+      <div className="claim-verification__prompts"><strong>Gợi ý theo danh mục</strong>{verification.prompts.map((prompt) => <button type="button" className={selectedQuestion === prompt.key ? "active" : ""} key={prompt.key} onClick={() => { setSelectedQuestion(prompt.key); setQuestionDraft(prompt.prompt); }}>{prompt.prompt}</button>)}<button type="button" className={selectedQuestion === "custom" ? "active" : ""} onClick={() => { setSelectedQuestion("custom"); setQuestionDraft(""); }}>+ Câu hỏi tùy chỉnh an toàn</button></div>
+      {selectedQuestion === "custom" ? <textarea aria-label="Câu hỏi tùy chỉnh" value={customQuestion} onChange={(event) => setCustomQuestion(event.target.value)} maxLength={500} placeholder="Nhập câu hỏi không yêu cầu mật khẩu, OTP hoặc mã định danh đầy đủ" /> : <textarea aria-label="Câu hỏi đang chọn" value={questionDraft} onChange={(event) => setQuestionDraft(event.target.value)} maxLength={500} />}
+      <button type="button" disabled={busy === "question" || !(selectedQuestion === "custom" ? customQuestion.trim() : questionDraft.trim())} onClick={() => void sendQuestion()}><Send /> {busy === "question" ? "Đang gửi..." : "Gửi câu hỏi"}</button>
+      <div className="claim-verification__reviews"><strong>Đánh giá câu trả lời</strong>{verification.sentQuestions.map((question) => {
+        const answer = verification.answers.find((item) => item.questionKey === question.questionKey);
+        const draft = reviewDrafts[question.questionKey] ?? { result: "UNCLEAR" as const, confidence: "0.5", reason: "" };
+        return <article key={`${question.questionKey}-${question.sentAt}`}><span>{question.prompt}</span>{answer ? <><small>Đã nhận câu trả lời ({answer.answerLength} ký tự)</small><div><select value={draft.result} onChange={(event) => setReviewDrafts((current) => ({ ...current, [question.questionKey]: { ...draft, result: event.target.value as "PASS" | "FAIL" | "UNCLEAR" } }))}><option value="PASS">Phù hợp</option><option value="UNCLEAR">Chưa rõ</option><option value="FAIL">Không phù hợp</option></select><input type="number" min="0" max="1" step="0.05" value={draft.confidence} onChange={(event) => setReviewDrafts((current) => ({ ...current, [question.questionKey]: { ...draft, confidence: event.target.value } }))} /><input value={draft.reason} onChange={(event) => setReviewDrafts((current) => ({ ...current, [question.questionKey]: { ...draft, reason: event.target.value } }))} placeholder="Lý do đánh giá" /><button type="button" disabled={busy === `review:${question.questionKey}`} onClick={() => void submitReview(question.questionKey)}><Check /> Lưu đánh giá</button></div></> : <small>Đang chờ claimant trả lời</small>}</article>;
+      })}</div>
+      <div className="claim-verification__status"><ShieldCheck /> {verification.canVerify ? "Đã đủ dữ liệu để Finder cân nhắc xác minh." : `Cần ít nhất ${verification.template.minimumAnswers} câu trả lời và một đánh giá phù hợp.`}</div>
+    </> : <div className="claim-verification__answers"><strong>Câu hỏi Finder đã gửi</strong>{verification.sentQuestions.map((question) => {
+      const answered = verification.answers.some((answer) => answer.questionKey === question.questionKey && answer.answeredBy === claim.claimantId);
+      return <article key={`${question.questionKey}-${question.sentAt}`}><span>{question.prompt}</span>{answered ? <small>Đã gửi câu trả lời riêng tư.</small> : <><textarea aria-label={`Câu trả lời cho ${question.prompt}`} value={answerDrafts[question.questionKey] ?? ""} onChange={(event) => setAnswerDrafts((current) => ({ ...current, [question.questionKey]: event.target.value }))} maxLength={2000} placeholder="Câu trả lời của bạn" /><button type="button" disabled={busy === `answer:${question.questionKey}` || !answerDrafts[question.questionKey]?.trim()} onClick={() => void sendAnswer(question.questionKey)}><Send /> Gửi câu trả lời</button></>}</article>;
+    })}</div>}
+  </section>;
 }
 
 export function ClaimsPage() {
@@ -242,12 +325,12 @@ export function ClaimsPage() {
     } finally { setSending(false); }
   }
 
-  async function respond(nextDecision: "ACCEPT" | "DECLINE" | "REQUEST_MORE_INFO") {
+  async function respond(nextDecision: ClaimDecision) {
     if (!claimId) return;
     setDecision(true);
     setError("");
     try {
-      const updated = await api.decideClaim(claimId, nextDecision, decisionNote.trim() || undefined);
+      const updated = await api.decideClaim(claimId, nextDecision, decisionNote.trim() || undefined, claim?.status);
       setClaim(updated);
       setDecisionNote("");
       await loadClaimRoom(claimId);
@@ -289,7 +372,8 @@ export function ClaimsPage() {
     } finally { setUploading(false); }
   }
 
-  const canDecide = Boolean(claim && user?.id === claim.finderId && claim.finderDecision === "PENDING" && claim.status === "PENDING");
+  const canOpenConversation = Boolean(claim && user?.id === claim.finderId && claim.finderDecision === "PENDING" && claim.status === "PENDING");
+  const canMakeFinalDecision = Boolean(claim && user?.id === claim.finderId && claim.canSend && ["CONVERSATION_OPEN", "NEED_MORE_INFO"].includes(claim.status));
 
   return <main className="claims-page">
     <header className="claims-heading">
@@ -305,8 +389,10 @@ export function ClaimsPage() {
             {claim.claimantId === user?.id && ["PENDING", "CONVERSATION_OPEN", "NEED_MORE_INFO"].includes(claim.status) && <button className="claim-withdraw-button" type="button" disabled={withdrawing} onClick={() => void withdraw()}><X /> {withdrawing ? "Đang rút..." : "Rút yêu cầu"}</button>}
             <header className="claim-room__header"><div><span className={`claim-status claim-status--${claim.status.toLowerCase()}`}>{statusLabels[claim.status]}</span><h2>{claimTitle(claim)}</h2><p>FOUND: {claim.posts.found.title} · Cập nhật {formatDate(claim.updatedAt)}</p></div><LockKeyhole /></header>
             <div className="claim-participants"><span><UserRound /> Claimant: <strong>{claim.claimant.fullName}</strong></span><span><UserRound /> Finder: <strong>{claim.finder.fullName}</strong></span></div>
-            {canDecide && <section className="claim-decision"><div><strong>Finder, bạn có muốn mở trao đổi với claimant này?</strong><p>Bạn có thể chấp nhận, yêu cầu thêm thông tin hoặc từ chối. Mỗi claimant có một phòng riêng.</p></div><textarea value={decisionNote} onChange={(event) => setDecisionNote(event.target.value)} maxLength={2000} placeholder="Ghi chú tùy chọn..." /><div className="claim-decision__actions"><button disabled={decision} onClick={() => void respond("ACCEPT")}><Check /> Chấp nhận</button><button disabled={decision} onClick={() => void respond("REQUEST_MORE_INFO")}><MessageCircle /> Yêu cầu thêm thông tin</button><button className="danger" disabled={decision} onClick={() => void respond("DECLINE")}><X /> Từ chối</button></div></section>}
+            {canOpenConversation && <section className="claim-decision"><div><strong>Finder, bạn có muốn mở trao đổi với claimant này?</strong><p>Mở phòng chỉ bắt đầu trao đổi, chưa xác minh quyền sở hữu.</p></div><textarea value={decisionNote} onChange={(event) => setDecisionNote(event.target.value)} maxLength={2000} placeholder="Lý do mở phòng (bắt buộc)" /><div className="claim-decision__actions"><button disabled={decision || decisionNote.trim().length < 3} onClick={() => void respond("OPEN_CONVERSATION")}><MessageCircle /> Mở trao đổi</button><button disabled={decision || decisionNote.trim().length < 3} onClick={() => void respond("REQUEST_MORE_INFO")}><MessageCircle /> Yêu cầu thêm thông tin</button><button className="danger" disabled={decision || decisionNote.trim().length < 3} onClick={() => void respond("DECLINE")}><X /> Từ chối</button></div></section>}
+            {canMakeFinalDecision && <section className="claim-decision"><div><strong>Quyết định xác minh của Finder</strong><p>Chỉ nút xác minh để hẹn gặp mới làm claim đủ điều kiện tạo appointment.</p></div><textarea value={decisionNote} onChange={(event) => setDecisionNote(event.target.value)} maxLength={2000} placeholder="Bắt buộc ghi lý do quyết định" /><div className="claim-decision__actions"><button disabled={decision || decisionNote.trim().length < 3} onClick={() => void respond("VERIFY_FOR_MEETUP")}><Check /> Xác minh để hẹn gặp</button><button disabled={decision || decisionNote.trim().length < 3} onClick={() => void respond("REQUEST_MORE_INFO")}><MessageCircle /> Yêu cầu thêm thông tin</button><button disabled={decision || decisionNote.trim().length < 3} onClick={() => void respond("ESCALATE_TO_CUSTODY")}><ShieldAlert /> Chuyển custody</button><button className="danger" disabled={decision || decisionNote.trim().length < 3} onClick={() => void respond("DECLINE")}><X /> Từ chối</button></div></section>}
             {!claim.canSend ? <div className="claim-pending"><Clock3 /><strong>{claim.finderDecision === "DECLINED" ? "Finder đã từ chối yêu cầu này." : "Phòng riêng chưa mở."}</strong><span>{claim.finderDecision === "PENDING" ? "Bạn sẽ có thể nhắn tin và chia sẻ ảnh sau khi Finder chấp nhận." : "Bạn không thể gửi thêm nội dung trong yêu cầu này."}</span></div> : <>
+              <VerificationPanel claim={claim} onError={setError} />
               <div className="claim-room__body"><div className="claim-messages">{messageCursor && <button className="claim-load-older" type="button" disabled={loadingOlder} onClick={() => void loadOlderMessages()}><RefreshCw className={loadingOlder ? "is-spinning" : ""} /> {loadingOlder ? "Đang tải..." : "Tải tin nhắn cũ hơn"}</button>}{messages.length ? messages.map((message) => <MessageBubble key={message.id} message={message} own={message.sender.id === user?.id} />) : <div className="claim-messages__empty"><MessageCircle /><span>Chưa có tin nhắn. Hãy bắt đầu trao đổi riêng.</span></div>}</div>
                 <form className="claim-message-form" onSubmit={submitMessage}><textarea aria-label="Tin nhắn riêng" value={messageDraft} onChange={(event) => setMessageDraft(event.target.value)} maxLength={5000} placeholder="Nhập câu hỏi hoặc thông tin xác minh..." /><button disabled={sending || !messageDraft.trim()}><Send /> {sending ? "Đang gửi..." : "Gửi"}</button></form>
               </div>

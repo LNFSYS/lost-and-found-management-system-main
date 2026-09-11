@@ -22,8 +22,45 @@ export const createClaimSchema = z.object({
 });
 
 export const claimDecisionSchema = z.object({
-  decision: z.enum(["ACCEPT", "DECLINE", "REQUEST_MORE_INFO"]),
-  note: z.string().trim().min(3).max(2000).optional()
+  decision: z.enum(["ACCEPT", "OPEN_CONVERSATION", "DECLINE", "REQUEST_MORE_INFO", "VERIFY_FOR_MEETUP", "ESCALATE_TO_CUSTODY"]),
+  note: z.string().trim().min(3).max(2000).optional(),
+  expectedStatus: z.enum(["PENDING", "CONVERSATION_OPEN", "NEED_MORE_INFO", "ACCEPTED", "REJECTED", "CANCELLED"]).optional(),
+  idempotencyKey: safeKey
+}).superRefine((value, context) => {
+  if (value.decision !== "ACCEPT" && !value.note) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ["note"], message: "Quyết định này cần lý do." });
+  }
+});
+
+const verificationKey = z.string().trim().min(1).max(190).regex(/^[A-Za-z0-9._:-]+$/, "Mã câu hỏi không hợp lệ");
+
+export const verificationQuestionSchema = z.object({
+  questionKey: verificationKey,
+  prompt: z.string().trim().min(8).max(500),
+  templateId: z.string().trim().min(1).max(100),
+  templateVersion: z.number().int().positive(),
+  idempotencyKey: safeKey
+});
+
+export const verificationAnswerSchema = z.object({
+  questionKey: verificationKey,
+  answer: z.string().trim().min(1).max(2000),
+  idempotencyKey: safeKey
+});
+
+export const verificationReviewSchema = z.object({
+  questionKey: verificationKey,
+  result: z.enum(["PASS", "FAIL", "UNCLEAR"]),
+  confidence: z.coerce.number().min(0).max(1),
+  reason: z.string().trim().min(3).max(1000),
+  idempotencyKey: safeKey
+});
+
+export const verificationIdParamSchema = z.object({ claimId: uuid });
+
+export const withdrawClaimSchema = z.object({
+  note: z.string().trim().min(3).max(500).optional(),
+  idempotencyKey: safeKey
 });
 
 export const createMessageSchema = z.object({
@@ -50,6 +87,10 @@ export const uploadEvidenceSchema = z.object({
 
 export type CreateClaimInput = z.infer<typeof createClaimSchema>;
 export type ClaimDecisionInput = z.infer<typeof claimDecisionSchema>;
+export type VerificationQuestionInput = z.infer<typeof verificationQuestionSchema>;
+export type VerificationAnswerInput = z.infer<typeof verificationAnswerSchema>;
+export type VerificationReviewInput = z.infer<typeof verificationReviewSchema>;
+export type WithdrawClaimInput = z.infer<typeof withdrawClaimSchema>;
 export type CreateMessageInput = z.infer<typeof createMessageSchema>;
 export type ListMessagesQuery = z.infer<typeof listMessagesQuerySchema>;
 export type UploadEvidenceInput = z.infer<typeof uploadEvidenceSchema>;

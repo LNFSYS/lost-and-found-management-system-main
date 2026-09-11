@@ -11,7 +11,11 @@ All endpoints below require an active bearer session. The claim service returns 
 | `POST` | `/api/claims` | Create a claim for an existing LOST–FOUND match. Supports `Idempotency-Key`. |
 | `GET` | `/api/claims` | List claims for the authenticated claimant/finder participant set. |
 | `GET` | `/api/claims/:claimId` | Read claim and participant-safe metadata. |
-| `POST` | `/api/claims/:claimId/decision` | Finder accepts, declines or requests more information. |
+| `POST` | `/api/claims/:claimId/decision` | Finder opens conversation, requests more information, verifies for meetup, declines or escalates to custody; requires reason and idempotency key. |
+| `GET` | `/api/claims/:claimId/verification` | Participant-scoped template, sent-question, answer-metadata, review and appointment-eligibility summary. |
+| `POST` | `/api/claims/:claimId/verification/questions` | Finder sends a version-checked built-in or safe custom question. |
+| `POST` | `/api/claims/:claimId/verification/answers` | Claimant submits a private answer; raw answer stays in the room. |
+| `POST` | `/api/claims/:claimId/verification/reviews` | Finder records human result, confidence and reason for a submitted answer. |
 | `POST` | `/api/claims/:claimId/withdraw` | Claimant withdraws an active request. |
 | `GET`/`POST` | `/api/claims/:claimId/room` | Read the private room after Finder consent. Room creation is idempotent and server-owned. |
 | `GET`/`POST` | `/api/claims/:claimId/messages` | Read/send private text messages. Supports message idempotency; older-page reads use the `before` + `beforeId` composite cursor. |
@@ -25,11 +29,11 @@ All endpoints below require an active bearer session. The claim service returns 
 
 1. A claim can only be created by the owner of the LOST post for a persisted match at or above the configured suggestion threshold. The FOUND owner is derived from the FOUND post; client-supplied participant IDs are not trusted.
 2. Creation inserts exactly one CLAIMANT and one FINDER participant. The claimant is accepted immediately; the Finder starts as pending.
-3. Finder `ACCEPT` changes the claim to `CONVERSATION_OPEN`, accepts the Finder participant and creates one `chat_rooms` row. `REQUEST_MORE_INFO` uses `NEED_MORE_INFO` and also opens the room. `DECLINE` changes the claim to `REJECTED` and does not open a room.
+3. Finder `OPEN_CONVERSATION` changes the claim to `CONVERSATION_OPEN`, accepts the Finder participant and creates one `chat_rooms` row. `REQUEST_MORE_INFO` uses `NEED_MORE_INFO` and also opens the room. `VERIFY_FOR_MEETUP` is the separate audited transition to claim `ACCEPTED`; `DECLINE` changes the claim to `REJECTED` and does not open a room.
 4. Claimant withdrawal is allowed only from `PENDING`, `CONVERSATION_OPEN` or `NEED_MORE_INFO`. Decision and withdrawal operations lock the claim row in a transaction.
 5. Every read/write checks the `claim_participants` row and accepted consent before accessing a room, message or evidence. Staff/Admin roles do not bypass routine peer-room authorization.
 6. Private evidence is stored below the server upload directory with a `private://` key. Responses expose only `/api/claims/.../evidence/...`; raw storage URL and public ID are never serialized. Claim endpoints set `Cache-Control: private, no-store`.
-7. Creating a claim writes one idempotent `CLAIM_REQUEST_RECEIVED` notification for the Finder. Finder `ACCEPT` writes one idempotent `CLAIM_ACCEPTED` notification for the Claimant. The PWA polls the private notification feed and shows a dismissible toast plus a notification-center badge; no browser permission or public post payload is involved.
+7. Creating a claim writes one idempotent `CLAIM_REQUEST_RECEIVED` notification for the Finder. Finder `OPEN_CONVERSATION` writes one idempotent `CLAIM_CONVERSATION_OPENED` notification for the Claimant; only `VERIFY_FOR_MEETUP` reaches claim `ACCEPTED`. The PWA polls the private notification feed and shows a dismissible toast plus a notification-center badge; no browser permission or public post payload is involved.
 
 ## Verification evidence
 

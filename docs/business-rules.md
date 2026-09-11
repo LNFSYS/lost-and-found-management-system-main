@@ -60,10 +60,10 @@ Cập nhật: **06/09/2026**
 | BR-31 | Admin catalog write cần audit actor, action, before/after và timestamp. | UC-064, UC-065 | Planned |
 | BR-32 | Staff page chỉ công bố hoàn thành khi có operational flow và backend role evidence. | UC-062 | Enforced cho warehouse operations hiện tại |
 | BR-33 | Claim chỉ áp dụng FOUND; Owner không claim bài của mình và một user không tạo duplicate claim. | UC-052, UC-053 | Enforced current claim API; full multi-claimant policy còn cần xác nhận |
-| BR-34 | Claim state transition phải transaction/lock; một FOUND không có hai accepted claims. | UC-003–UC-007 | Partial: claim row/active-pair lock có; constraint một FOUND duy nhất và appointment chưa có |
-| BR-35 | Evidence chỉ hiển thị cho claimant, post owner và reviewer có quyền; private answer không trả trước cho claimant. | UC-049, UC-054, UC-087–UC-092 | Partial: participant-scoped private evidence/proxy có; guided private answer/reviewer flow chưa có |
-| BR-36 | Evidence confidence chỉ hỗ trợ review; không phải xác minh 100% và không thay thế human verification. | UC-089, UC-090, UC-092 | Planned |
-| BR-37 | Appointment chỉ tạo sau accepted verification; một claim chỉ có một active appointment. | UC-021–UC-024 | Planned |
+| BR-34 | Claim state transition phải transaction/lock; một FOUND không có hai accepted claims. Mọi decision/question/review có actor, reason, server time, audit và idempotency. | UC-003–UC-007 | Enforced current Node flow; DB uniqueness từ migration 023 |
+| BR-35 | Evidence chỉ hiển thị cho claimant, post owner và reviewer có quyền; private answer không trả trước cho claimant, audit chỉ giữ metadata/hash. | UC-049, UC-054, UC-087–UC-092 | Enforced current private endpoints and verification APIs |
+| BR-36 | Evidence/review confidence chỉ hỗ trợ review; không phải xác minh 100% và không thay thế human verification. AI/OCR không được ghi ownership state. | UC-089, UC-090, UC-092 | Enforced by final-decision service boundary |
+| BR-37 | Appointment chỉ tạo sau outcome `FINDER_VERIFIED_FOR_MEETUP` trên claim `ACCEPTED`; `CONVERSATION_OPEN` không đủ điều kiện; một claim chỉ có một active appointment. | UC-021–UC-024 | Eligibility guard contract implemented; appointment lifecycle thuộc LNFS-54 |
 | BR-37A | Feedback sau trả đồ chỉ mở khi return COMPLETED có dual confirmation hoặc custody outcome được ủy quyền; mỗi participant gửi một lần và không tự cộng reputation cho chính mình. | UC-025, UC-039 | Enforced cho feedback runtime; phụ thuộc LNFS-54 để tạo completed return thật |
 | BR-38 | Disposition kho bị chặn nếu còn claim, appointment, dispute hoặc legal hold pending; overdue không tự động thanh lý. | UC-016–UC-020 | Planned |
 | BR-39 | Warehouse receive/store/return chỉ Staff/Admin; mỗi transition phải ghi actor, action, from/to, note và timestamp. | UC-011–UC-015, UC-059–UC-061 | Enforced |
@@ -84,8 +84,8 @@ REPORTED → HELD_BY_FINDER → CHATTING → RESERVED → MEETUP_SCHEDULED
 Verification conversation:
 
 ~~~text
-REQUESTED → CONVERSATION_OPEN → MORE_INFO_REQUIRED
-→ MEETUP_ACCEPTED / DECLINED / ESCALATED
+REQUESTED → CONVERSATION_OPEN → NEED_MORE_INFO
+→ ACCEPTED / REJECTED / CUSTODY_ESCALATION_REQUESTED
 → SCHEDULED → COMPLETED / NO_SHOW / CANCELLED
 ~~~
 

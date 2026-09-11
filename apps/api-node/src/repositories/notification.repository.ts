@@ -3,7 +3,7 @@ import type { PoolConnection } from "mysql2/promise";
 import { pool } from "../config/db.js";
 import { id } from "../utils/security.js";
 
-export type NotificationType = "CLAIM_REQUEST_RECEIVED" | "CLAIM_ACCEPTED";
+export type NotificationType = "CLAIM_REQUEST_RECEIVED" | "CLAIM_CONVERSATION_OPENED" | "CLAIM_ACCEPTED";
 
 export interface NotificationRecord {
   id: string;
