@@ -22,8 +22,8 @@ Nguồn status là code/test hiện tại. Mỗi dòng liên kết business rule
 | BR-28 | FR-JAVA-01 | N/A | Implemented skeleton | JavaAdminServiceApplication.java; no business endpoint or Node integration |
 | BR-29, BR-30 | FR-MEDIA-02, NFR-PORT-01 | UC-048, UC-050 | Partial/Planned | Local media/evidence 404 handling có; shared object storage và multi-instance test chưa có |
 | BR-31 | FR-AUDIT-01 | UC-064, UC-065 | Planned | Catalog audit before/after chưa có runtime evidence |
-| BR-33–BR-36 | FR-VERIFY-01, FR-VERIFY-02, FR-CLAIM-01 | UC-003–UC-007, UC-049, UC-052–UC-054, UC-087–UC-092 | Partial | claim.routes.ts, claim.service.ts, claim.repository.ts, claims-page.tsx; participant privacy, pagination, state-lock và idempotency tests; guided questions/review confidence/appointment chưa có |
-| BR-37 | FR-APPT-01, FR-HANDOVER-02 | UC-021–UC-024 | Planned | Chưa có appointment và dual-confirmation runtime |
+| BR-33–BR-36 | FR-VERIFY-01, FR-VERIFY-02, FR-CLAIM-01 | UC-003–UC-007, UC-049, UC-052–UC-054, UC-087–UC-092 | Implemented current scope | claim routes/controller/service/repository, verification-templates.ts, claims-page.tsx; participant guard, category templates, safe custom question, private answer metadata, human review, audit/idempotency and negative eligibility tests |
+| BR-37 | FR-APPT-01, FR-HANDOVER-02 | UC-021–UC-024 | Partial | appointment-eligibility.ts rejects `CONVERSATION_OPEN`; LNFS-54 still owns appointment/return lifecycle |
 | BR-38, BR-40, BR-42 | FR-CUSTODY-01, FR-WAREHOUSE-02 | UC-016–UC-020 | Planned/TBD | Disposition/custody guard và policy trường chưa có hoặc chưa được xác nhận |
 | BR-41, BR-43 | FR-CHAT-01, FR-RT-01 | UC-077–UC-083 | Partial/Planned | Private REST text room, participant guard, retry idempotency, cursor history và claim notifications có; Socket.IO, image chat, seen/unread realtime và escalation review chưa có |
 | BR-40 | FR-TRAIN-01 | UC-026–UC-030 | Planned | Chưa có dataset pipeline, evaluation hoặc model artifact |

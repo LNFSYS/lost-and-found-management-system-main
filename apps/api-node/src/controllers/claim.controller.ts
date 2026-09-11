@@ -9,7 +9,11 @@ import {
   evidenceParamSchema,
   listClaimsQuerySchema,
   listMessagesQuerySchema,
-  uploadEvidenceSchema
+  uploadEvidenceSchema,
+  verificationAnswerSchema,
+  verificationQuestionSchema,
+  verificationReviewSchema,
+  withdrawClaimSchema
 } from "../validators/claim.validator.js";
 
 function claimId(request: Request) {
@@ -41,11 +45,42 @@ export const claimController = {
   },
 
   async decide(request: Request, response: Response) {
-    response.json(await claimService.decide(claimId(request), request.auth!.sub, claimDecisionSchema.parse(request.body)));
+    response.json(await claimService.decide(claimId(request), request.auth!.sub, claimDecisionSchema.parse({
+      ...request.body,
+      idempotencyKey: idempotencyKey(request) ?? request.body?.idempotencyKey
+    })));
+  },
+
+  async getVerification(request: Request, response: Response) {
+    response.json(await claimService.getVerification(claimId(request), request.auth!.sub));
+  },
+
+  async sendVerificationQuestion(request: Request, response: Response) {
+    response.status(201).json(await claimService.sendVerificationQuestion(claimId(request), request.auth!.sub, verificationQuestionSchema.parse({
+      ...request.body,
+      idempotencyKey: idempotencyKey(request) ?? request.body?.idempotencyKey
+    })));
+  },
+
+  async submitVerificationAnswer(request: Request, response: Response) {
+    response.status(201).json(await claimService.submitVerificationAnswer(claimId(request), request.auth!.sub, verificationAnswerSchema.parse({
+      ...request.body,
+      idempotencyKey: idempotencyKey(request) ?? request.body?.idempotencyKey
+    })));
+  },
+
+  async reviewVerificationQuestion(request: Request, response: Response) {
+    response.status(201).json(await claimService.reviewVerificationQuestion(claimId(request), request.auth!.sub, verificationReviewSchema.parse({
+      ...request.body,
+      idempotencyKey: idempotencyKey(request) ?? request.body?.idempotencyKey
+    })));
   },
 
   async withdraw(request: Request, response: Response) {
-    response.json(await claimService.withdraw(claimId(request), request.auth!.sub));
+    response.json(await claimService.withdraw(claimId(request), request.auth!.sub, withdrawClaimSchema.parse({
+      ...request.body,
+      idempotencyKey: idempotencyKey(request) ?? request.body?.idempotencyKey
+    })));
   },
 
   async getRoom(request: Request, response: Response) {

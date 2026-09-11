@@ -166,15 +166,15 @@ Không cho Node và Java cùng ghi một business flow/table nếu chưa có API
 
 ## 7. Luồng nghiệp vụ mục tiêu: peer-to-peer first
 
-Luồng sau là target end-to-end. Current runtime mới bao phủ đến claim/private text verification ở mức Partial; các bước meetup/return chưa có đầy đủ:
+Luồng sau là target end-to-end. Current runtime bao phủ claim/private text verification và Finder decision; các bước meetup/return chưa có đầy đủ:
 
 1. Owner tạo LOST report với public description và private details nếu cần.
 2. Finder tạo FOUND report và tiếp tục giữ vật phẩm; mặc định không chuyển thẳng vào Staff custody.
 3. Matching gợi ý các LOST/FOUND đối ứng và giải thích tín hiệu tương đồng.
 4. Owner gửi verification request cho FOUND phù hợp.
 5. Hệ thống mở conversation riêng đúng cặp Owner–Finder–LOST–FOUND (current partial runtime).
-6. Finder dùng guided questions theo category; Owner trả lời mà không được xem trước private answer/attribute (planned).
-7. Finder chọn MORE_INFO_REQUIRED, MEETUP_ACCEPTED, DECLINED hoặc ESCALATED.
+6. Finder dùng guided questions theo category; Owner trả lời mà không được xem trước private answer/attribute.
+7. Finder chọn `REQUEST_MORE_INFO`, `VERIFY_FOR_MEETUP`, `DECLINE` hoặc `ESCALATE_TO_CUSTODY`; `OPEN_CONVERSATION` chỉ mở room.
 8. Hai bên đề xuất và cùng xác nhận thời gian/địa điểm; appointment chỉ confirmed khi có mutual agreement.
 9. Hai bên gặp trực tiếp; Finder xác nhận HANDED_OVER, Owner xác nhận RECEIVED.
 10. Chỉ khi dual confirmation hợp lệ, hệ thống mới chuyển item sang RETURNED/đóng hồ sơ.

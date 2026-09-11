@@ -54,10 +54,10 @@ Requirements target bao phủ Web Application, PWA và Native Mobile. Status bê
 
 | ID | Requirement | UC | Priority | Status |
 | --- | --- | --- | --- | --- |
-| FR-VERIFY-01 | Owner gửi verification request cho FOUND; Finder giữ item và quyết định qua conversation riêng. | UC-003, UC-052 | P0 | Implemented current claim request/decision scope; meetup/return chưa có |
-| FR-VERIFY-02 | Finder dùng guided questions; Owner trả lời mà không xem trước private answer/attribute; hỗ trợ thêm thông tin, accept, decline hoặc escalate. | UC-003–UC-007, UC-089–UC-092 | P0 | Partial: request-more-info/accept/decline có; guided questions và review confidence chưa có |
+| FR-VERIFY-01 | Owner gửi verification request cho FOUND; Finder giữ item và quyết định qua conversation riêng. `OPEN_CONVERSATION` chỉ mở room, không xác minh ownership. | UC-003, UC-052 | P0 | Implemented: participant-scoped request/open flow |
+| FR-VERIFY-02 | Finder dùng template câu hỏi có version theo category; Owner trả lời mà không xem trước private answer/attribute; Finder review và chọn `VERIFY_FOR_MEETUP`, `REQUEST_MORE_INFO`, `DECLINE` hoặc `ESCALATE_TO_CUSTODY`. | UC-003–UC-007, UC-089–UC-092 | P0 | Implemented Node/PWA: built-in versioned templates, safe custom prompts, private answer metadata, human review, audit and idempotency |
 | FR-CLAIM-01 | User tạo claim không trùng; evidence private được upload và chỉ actor có quyền mới xem. | UC-049, UC-052–UC-054 | P0 | Implemented current API/UI scope; claim evidence còn local filesystem, chưa deploy-safe multi-instance |
-| FR-APPT-01 | Chỉ accepted verification mới tạo appointment; hai bên đề xuất, accept, reschedule/cancel và complete. | UC-021–UC-024 | P1 | Planned |
+| FR-APPT-01 | Chỉ claim có `status = ACCEPTED` và audit outcome `FINDER_VERIFIED_FOR_MEETUP` mới tạo appointment; hai bên đề xuất, accept, reschedule/cancel và complete. | UC-021–UC-024 | P1 | Guard contract implemented; appointment lifecycle remains LNFS-54 |
 | FR-HANDOVER-02 | Direct return cần Finder xác nhận HANDED_OVER và Owner xác nhận RECEIVED; chỉ dual confirmation mới thành RETURNED. | UC-021–UC-024 | P0 | Planned |
 | FR-FEEDBACK-01 | Participant chỉ gửi một feedback sau completed return có dual confirmation hoặc custody outcome được ủy quyền; feedback tạo reputation event idempotent theo appointment và profile activity chỉ trả dữ liệu an toàn. | UC-025, UC-039 | P1 | Implemented runtime; dữ liệu thật vẫn phụ thuộc LNFS-54 tạo completed return |
 | FR-CHAT-01 | Conversation gắn đúng Owner–Finder–LOST–FOUND, hỗ trợ text/image, room isolation, retry, seen/unread và report/block. | UC-077–UC-083 | P1 | Partial: private REST text room, isolation, retry idempotency và pagination có; image/seen/report/block chưa có |

@@ -5162,6 +5162,25 @@ textarea {
 .claim-decision__actions button:disabled, .claim-message-form button:disabled, .claim-upload > button:disabled { cursor: not-allowed; opacity: .55; }
 .claim-decision__actions svg, .claim-message-form svg, .claim-upload > button svg { width: 15px; }
 
+.claim-verification { margin: 18px 24px 0; padding: 16px; display: grid; gap: 12px; border: 1px solid #cfe0eb; border-left: 4px solid var(--fpt-blue); background: #f7fbfe; }
+.claim-verification > header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.claim-verification > header h3 { margin: 5px 0 3px; color: var(--ink); font-size: .95rem; }
+.claim-verification > header span, .claim-verification small { color: var(--muted); font-size: .68rem; }
+.claim-verification > header > svg { width: 22px; color: var(--fpt-blue); }
+.claim-verification__prompts, .claim-verification__reviews, .claim-verification__answers { display: grid; gap: 8px; }
+.claim-verification__prompts strong, .claim-verification__reviews > strong, .claim-verification__answers > strong { color: var(--ink-soft); font-size: .76rem; }
+.claim-verification__prompts button { padding: 9px 10px; border: 1px solid #cbdce8; border-radius: 5px; color: var(--ink-soft); background: #fff; font: inherit; font-size: .7rem; text-align: left; cursor: pointer; }
+.claim-verification__prompts button.active, .claim-verification__prompts button:hover { border-color: var(--fpt-blue); background: #eef8ff; }
+.claim-verification textarea, .claim-verification input, .claim-verification select { width: 100%; min-height: 36px; padding: 8px 9px; border: 1px solid #cbdce8; border-radius: 5px; color: var(--ink); background: #fff; font: inherit; font-size: .7rem; }
+.claim-verification textarea { min-height: 62px; resize: vertical; }
+.claim-verification > button, .claim-verification article button { min-height: 34px; padding: 0 10px; display: inline-flex; align-items: center; justify-content: center; gap: 5px; border: 1px solid #b9d7ec; border-radius: 5px; color: #fff; background: var(--fpt-blue); font-size: .68rem; font-weight: 800; cursor: pointer; }
+.claim-verification button:disabled { cursor: not-allowed; opacity: .55; }
+.claim-verification__reviews article, .claim-verification__answers article { padding: 10px; display: grid; gap: 7px; border: 1px solid #dbe7ef; background: #fff; }
+.claim-verification__reviews article > span, .claim-verification__answers article > span { color: var(--ink-soft); font-size: .72rem; line-height: 1.4; }
+.claim-verification__reviews article > div { display: grid; grid-template-columns: 120px 90px minmax(100px, 1fr) auto; gap: 6px; align-items: center; }
+.claim-verification__status { display: flex; align-items: center; gap: 6px; color: var(--fpt-green); font-size: .7rem; }
+.claim-verification__status svg { width: 15px; }
+
 .claim-pending { min-height: 280px; padding: 30px; display: grid; place-items: center; align-content: center; gap: 8px; color: var(--muted); text-align: center; }
 .claim-pending svg { width: 35px; color: var(--fpt-orange); }
 .claim-pending strong { color: var(--ink-soft); }
@@ -5216,11 +5235,13 @@ textarea {
   .claim-list { max-height: 210px; overflow-y: auto; }
   .claim-welcome { min-height: 300px; }
   .claim-decision { margin-left: 14px; margin-right: 14px; }
+  .claim-verification { margin-left: 14px; margin-right: 14px; }
   .claim-room__header { padding: 18px 14px; }
   .claim-participants, .claim-messages, .claim-message-form, .claim-evidence, .claim-privacy-note { padding-left: 14px; padding-right: 14px; }
   .claim-message { max-width: 88%; }
   .claim-message-form { grid-template-columns: 1fr; }
   .claim-message-form button { min-height: 40px; }
+  .claim-verification__reviews article > div { grid-template-columns: 1fr 1fr; }
   .claim-upload > button { flex: 1 1 100%; }
 }
 

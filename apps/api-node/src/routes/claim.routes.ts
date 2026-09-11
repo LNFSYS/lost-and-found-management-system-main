@@ -37,6 +37,14 @@ const evidenceLimit = rateLimit({
   message: { message: "Bạn đã tải lên quá nhiều evidence. Vui lòng thử lại sau." }
 });
 
+const verificationLimit = rateLimit({
+  windowMs: 60_000,
+  limit: 40,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: "Bạn đang thực hiện quá nhiều thao tác xác minh. Vui lòng thử lại sau." }
+});
+
 function uploadSingleEvidence(request: Request, response: Response, next: NextFunction) {
   evidenceUpload.single("file")(request, response, (error: unknown) => {
     if (error instanceof multer.MulterError) {
@@ -57,7 +65,11 @@ claimRoutes.get("/rooms", (req, res, next) => claimController.listRooms(req, res
 claimRoutes.get("/", (req, res, next) => claimController.listClaims(req, res).catch(next));
 claimRoutes.post("/", claimCreateLimit, (req, res, next) => claimController.createClaim(req, res).catch(next));
 claimRoutes.get("/:claimId", (req, res, next) => claimController.getClaim(req, res).catch(next));
-claimRoutes.post("/:claimId/decision", (req, res, next) => claimController.decide(req, res).catch(next));
+claimRoutes.post("/:claimId/decision", verificationLimit, (req, res, next) => claimController.decide(req, res).catch(next));
+claimRoutes.get("/:claimId/verification", verificationLimit, (req, res, next) => claimController.getVerification(req, res).catch(next));
+claimRoutes.post("/:claimId/verification/questions", verificationLimit, (req, res, next) => claimController.sendVerificationQuestion(req, res).catch(next));
+claimRoutes.post("/:claimId/verification/answers", verificationLimit, (req, res, next) => claimController.submitVerificationAnswer(req, res).catch(next));
+claimRoutes.post("/:claimId/verification/reviews", verificationLimit, (req, res, next) => claimController.reviewVerificationQuestion(req, res).catch(next));
 claimRoutes.post("/:claimId/withdraw", (req, res, next) => claimController.withdraw(req, res).catch(next));
 claimRoutes.get("/:claimId/room", (req, res, next) => claimController.getRoom(req, res).catch(next));
 claimRoutes.post("/:claimId/room", (req, res, next) => claimController.getRoom(req, res).catch(next));

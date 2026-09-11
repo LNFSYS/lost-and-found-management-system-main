@@ -20,9 +20,9 @@ Không tick Done chỉ vì migration, schema, Jira ticket, UI mockup hoặc test
 | --- | --- | --- | --- | --- | --- |
 | [x] | UC-001 | System/User | Xác thực JWT tại Node.js API | Done | auth.middleware.ts |
 | [x] | UC-002 | System/Admin/Staff | Phân quyền User/Student/Lecturer/Staff/Admin tại backend | Done | auth middleware, admin/staff routes |
-| [ ] | UC-003 | Owner/Finder | Yêu cầu người claim bổ sung thông tin | Partial | `claim.service.ts` hỗ trợ REQUEST_MORE_INFO; guided question flow chưa có |
-| [ ] | UC-004 | Finder | Chấp nhận claim với transaction/row lock | Partial | `claim.service.ts` dùng transaction/claim row lock; appointment/return chưa có |
-| [ ] | UC-005 | Finder | Từ chối claim kèm lý do | Partial | Decision API/state có; chưa có browser journey riêng |
+| [ ] | UC-003 | Owner/Finder | Yêu cầu người claim bổ sung thông tin | Partial | Verification API/PWA hỗ trợ `REQUEST_MORE_INFO`; browser journey và appointment chưa có |
+| [ ] | UC-004 | Finder | Mở conversation hoặc xác minh claim với transaction/row lock | Partial | `claim.service.ts` dùng transaction/claim row lock; appointment/return chưa có |
+| [ ] | UC-005 | Finder | Từ chối claim kèm lý do | Partial | Decision API/state/audit có; chưa có browser journey riêng |
 | [ ] | UC-006 | Claimant | Hủy claim theo trạng thái hợp lệ | Partial | Withdraw API/state có; chưa có browser journey riêng |
 | [ ] | UC-007 | System | Khóa ghi khi chuyển trạng thái claim | Partial | Claim decision/withdraw/message/evidence đều dùng row lock; DB concurrency chưa chạy |
 | [x] | UC-008 | Admin | Tạo điểm bàn giao | Done | Admin API/UI, validation, admin-handover.spec.ts |
@@ -71,7 +71,7 @@ Không tick Done chỉ vì migration, schema, Jira ticket, UI mockup hoặc test
 | [x] | UC-051 | Client | Cung cấp public config cho client validation | Done | Public route allowlist, typed parsing và service test |
 | [ ] | UC-052 | Owner | Gửi claim cho bài FOUND | Partial | Claim API/service tạo claim từ persisted match và owner guard; chưa có full browser journey |
 | [ ] | UC-053 | System | Ngăn duplicate claim cho cùng bài | Partial | Pair/request idempotency guard và migration constraint có; isolated DB concurrency chưa chạy |
-| [ ] | UC-054 | Claimant/Owner/Reviewer | Kiểm soát quyền xem claim evidence/private data | Partial | Participant authorization, private proxy và raw URL redaction có; guided private answer/reviewer flow chưa có |
+| [ ] | UC-054 | Claimant/Owner/Reviewer | Kiểm soát quyền xem claim evidence/private data | Partial | Participant authorization, private proxy, guided answer/review và raw URL/answer redaction có; reviewer escalation scope còn thiếu |
 | [x] | UC-055 | User | Lấy danh sách handover point đang hoạt động cho form | Done | posts/catalog |
 | [x] | UC-056 | Admin | Quản lý handover point qua Admin API | Done | Admin CRUD, toggle và delete guard |
 | [x] | UC-057 | Admin | Lưu campus map và marker point | Done | Map upload, URL/path validation, X/Y picker |
@@ -106,10 +106,10 @@ Không tick Done chỉ vì migration, schema, Jira ticket, UI mockup hoặc test
 | [x] | UC-086 | User | Phân tích ảnh vật phẩm bằng Gemini provider | Done | Gemini service/tests/UI |
 | [ ] | UC-087 | System | Trích OCR từ claim evidence | Planned | Chưa có claim evidence runtime |
 | [x] | UC-088 | User | Gợi ý tag và danh mục từ ảnh post | Done | Gemini mapping và tests |
-| [ ] | UC-089 | Finder | Đánh giá claim evidence | Planned | Chưa có runtime |
-| [ ] | UC-090 | System | Tính ownership review confidence | Planned | Chưa có runtime |
+| [ ] | UC-089 | Finder | Đánh giá claim evidence | Partial | Finder verification review API/PWA lưu result, confidence và reason; evidence scoring chưa có |
+| [ ] | UC-090 | System | Tính ownership review confidence | Partial | Confidence là Finder-entered review metadata; không phải auto-verification |
 | [x] | UC-091 | System | Dùng image/safe OCR tags làm tín hiệu matching | Done | AI tags và matching engine |
-| [ ] | UC-092 | Finder/Staff | Hiển thị review confidence cho Finder/Staff | Planned | Chưa có claim review UI |
+| [ ] | UC-092 | Finder/Staff | Hiển thị review confidence cho Finder/Staff | Partial | Finder PWA review panel có; Staff escalation view chưa có |
 | [ ] | UC-093 | User | Xác thực và duy trì phiên qua PWA | Partial | Manifest/service worker/session flow có; cần manual installability/device evidence |
 | [ ] | UC-094 | User | Xem và cập nhật profile/activity qua PWA | Partial | Profile/activity/PWA shell có; cần manual offline/device evidence |
 | [ ] | UC-095 | Guest/User | Duyệt, tìm kiếm, lọc và xem detail trên mobile browser | Partial | Responsive page/mobile viewport test; chưa installable |
@@ -123,7 +123,7 @@ Không tick Done chỉ vì migration, schema, Jira ticket, UI mockup hoặc test
 
 - Luồng chính là Owner tạo LOST, Finder tạo FOUND và tiếp tục giữ vật phẩm.
 - Matching chỉ tạo gợi ý có giải thích; không tự xác minh ownership, accept claim hoặc return item.
-- Finder xác minh qua conversation riêng, dùng guided questions mà không lộ private answer trước cho Owner.
+- Finder xác minh qua conversation riêng, dùng versioned guided questions mà không lộ private answer trước cho Owner; chỉ `FINDER_VERIFIED_FOR_MEETUP` trên claim `ACCEPTED` đủ điều kiện appointment.
 - Appointment cần hai bên cùng xác nhận; direct handover cần Finder xác nhận đã giao và Owner xác nhận đã nhận.
 - Staff custody/warehouse là nhánh optional hoặc escalation, không phải default flow.
 - PWA là phần mở rộng của Web; Native Mobile là scope mục tiêu riêng nhưng repository hiện chưa có project.

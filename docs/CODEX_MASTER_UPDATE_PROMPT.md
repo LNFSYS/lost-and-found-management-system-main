@@ -94,11 +94,11 @@ Luồng chính phải được mô tả thống nhất như sau:
 7. Giao diện chat của Finder hiển thị các câu hỏi xác minh có sẵn theo category.
 8. Owner trả lời mà không được xem trước private attributes/đáp án do Finder giữ.
 9. Finder đánh giá câu trả lời và chọn:
-   - `MORE_INFO_REQUIRED`;
-   - `MEETUP_ACCEPTED`;
-   - `DECLINED`;
-   - `ESCALATED`.
-10. Khi Finder chọn `MEETUP_ACCEPTED`, hai bên đề xuất và cùng xác nhận điểm gặp/thời gian ngay trong chat.
+   - `REQUEST_MORE_INFO`;
+   - `VERIFY_FOR_MEETUP` (claim chuyển `ACCEPTED` và đủ điều kiện appointment);
+   - `DECLINE`;
+   - `ESCALATE_TO_CUSTODY`.
+10. `OPEN_CONVERSATION` chỉ mở private room; khi Finder chọn `VERIFY_FOR_MEETUP`, hai bên mới được đề xuất và cùng xác nhận điểm gặp/thời gian ngay trong chat.
 11. Finder và Owner gặp trực tiếp.
 12. Finder xác nhận `HANDED_OVER`; Owner xác nhận `RECEIVED`.
 13. Chỉ khi xác nhận hai chiều hợp lệ, hệ thống chuyển item thành `RETURNED` và đóng hồ sơ.
@@ -177,11 +177,11 @@ Staff không phải người duyệt evidence trong luồng thường và không
 - Một item chỉ có tối đa một active reservation/meetup.
 - Khi chọn một Owner để meetup, các request khác tạm dừng.
 - Nếu meetup bị hủy/no-show, Finder có thể mở lại request khác.
-- Case không phân giải được có thể chuyển `ESCALATED` và optional Staff custody.
+- Case không phân giải được có thể chuyển `ESCALATE_TO_CUSTODY` và optional Staff custody.
 
 ## 4.5 Meetup và direct handover
 
-- Chỉ conversation `MEETUP_ACCEPTED` mới tạo appointment.
+- Chỉ claim `ACCEPTED` có audit outcome `FINDER_VERIFIED_FOR_MEETUP` mới tạo appointment; `CONVERSATION_OPEN` không đủ điều kiện.
 - Một bên đề xuất, bên còn lại accept hoặc counter-propose.
 - Appointment chỉ `CONFIRMED` khi cả hai đồng ý.
 - Ưu tiên campus meeting points an toàn.
@@ -259,8 +259,8 @@ IN_CUSTODY
 ```text
 REQUESTED
 → CONVERSATION_OPEN
-→ MORE_INFO_REQUIRED
-→ MEETUP_ACCEPTED / DECLINED / ESCALATED
+→ NEED_MORE_INFO
+→ ACCEPTED / REJECTED / CUSTODY_ESCALATION_REQUESTED
 → SCHEDULED
 → COMPLETED / NO_SHOW / CANCELLED
 ```

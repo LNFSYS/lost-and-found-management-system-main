@@ -100,7 +100,7 @@ Matching là gợi ý. Không có auto ownership verification, auto claim accept
 2. Finder chọn guided question theo category hoặc viết câu hỏi an toàn.
 3. Câu hỏi tập trung vào phụ kiện, dấu xước, nội dung màn hình, bốn số cuối serial hoặc chi tiết chỉ chủ sở hữu biết.
 4. Owner trả lời nhưng không xem trước private answer của Finder.
-5. Finder chọn MORE_INFO_REQUIRED, MEETUP_ACCEPTED, DECLINED hoặc ESCALATED.
+5. Finder chọn `REQUEST_MORE_INFO`, `VERIFY_FOR_MEETUP`, `DECLINE` hoặc `ESCALATE_TO_CUSTODY`; `OPEN_CONVERSATION` chỉ mở private room.
 6. Claim/evidence chỉ hiển thị cho claimant, post owner và reviewer có quyền.
 
 Staff không xem routine conversation mặc định; chỉ truy cập case đã escalate, có reason, permission, minimum data và audit.
@@ -173,8 +173,8 @@ IN_CUSTODY → OVERDUE → TRANSFERRED/DISPOSED → CLOSED
 ### J4. Verification conversation target
 
 ~~~text
-REQUESTED → CONVERSATION_OPEN → MORE_INFO_REQUIRED
-→ MEETUP_ACCEPTED / DECLINED / ESCALATED
+REQUESTED → CONVERSATION_OPEN → NEED_MORE_INFO
+→ ACCEPTED / REJECTED / CUSTODY_ESCALATION_REQUESTED
 → SCHEDULED → COMPLETED / NO_SHOW / CANCELLED
 ~~~
 

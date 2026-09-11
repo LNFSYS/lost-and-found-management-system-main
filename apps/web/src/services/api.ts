@@ -387,6 +387,7 @@ export interface PostMatchesResponse {
 }
 export type ClaimStatus = "PENDING" | "CONVERSATION_OPEN" | "NEED_MORE_INFO" | "ACCEPTED" | "REJECTED" | "CANCELLED";
 export type FinderDecision = "PENDING" | "ACCEPTED" | "DECLINED";
+export type ClaimDecision = "ACCEPT" | "OPEN_CONVERSATION" | "DECLINE" | "REQUEST_MORE_INFO" | "VERIFY_FOR_MEETUP" | "ESCALATE_TO_CUSTODY";
 export interface ClaimParticipant {
   claimId: string;
   userId: string;
@@ -420,6 +421,8 @@ export interface ClaimRecord {
   participants?: ClaimParticipant[];
   room?: { id: string } | null;
   canSend?: boolean;
+  appointmentEligible?: boolean;
+  verificationOutcome?: string | null;
 }
 export interface ClaimListResponse { items: ClaimRecord[]; total: number; page: number; pageSize: number; hasMore: boolean; }
 export interface ClaimRoomSummary { id: string; claimId: string; status: ClaimStatus; finder: ClaimRecord["finder"]; claimant: ClaimRecord["claimant"]; posts: ClaimRecord["posts"]; updatedAt: string; }
@@ -453,7 +456,22 @@ export interface ClaimEvidence {
   url: string;
 }
 export interface ClaimEvidenceResponse { items: ClaimEvidence[]; }
-export type NotificationType = "CLAIM_REQUEST_RECEIVED" | "CLAIM_ACCEPTED";
+export interface VerificationPrompt { key: string; prompt: string; questionType: "TEXT" | "MULTIPLE_CHOICE" | "VISUAL_DETAIL"; options?: string[]; source?: "BUILT_IN" | "DB"; }
+export interface VerificationSentQuestion { questionKey: string; prompt: string; senderId: string; sentAt: string; messageId: string | null; templateId: string; templateVersion: number; }
+export interface VerificationAnswerMetadata { questionKey: string; answeredBy: string; answerLength: number; answeredAt: string; messageId: string | null; }
+export interface VerificationReview { questionKey: string; result: "PASS" | "FAIL" | "UNCLEAR"; confidence: number; reason?: string; reviewedAt: string; }
+export interface ClaimVerification {
+  category: string | null;
+  template: { id: string; version: number; minimumAnswers: number };
+  prompts: VerificationPrompt[];
+  sentQuestions: VerificationSentQuestion[];
+  answers: VerificationAnswerMetadata[];
+  reviews: VerificationReview[];
+  latestDecision: { action: string; reason: string | null; createdAt: string } | null;
+  canVerify: boolean;
+  appointmentEligible: boolean;
+}
+export type NotificationType = "CLAIM_REQUEST_RECEIVED" | "CLAIM_CONVERSATION_OPENED" | "CLAIM_ACCEPTED";
 export interface AppNotification {
   id: string;
   type: NotificationType;
@@ -634,8 +652,27 @@ export const api = {
     const requestKey = payload.requestKey ?? crypto.randomUUID();
     return raw<ClaimRecord & { idempotent: boolean }>("/claims", { method: "POST", headers: { "Idempotency-Key": requestKey }, body: JSON.stringify({ ...payload, requestKey: undefined }) });
   },
-  decideClaim: (claimId: string, decision: "ACCEPT" | "DECLINE" | "REQUEST_MORE_INFO", note?: string) => raw<ClaimRecord>(`/claims/${claimId}/decision`, { method: "POST", body: JSON.stringify({ decision, note }) }),
-  withdrawClaim: (claimId: string) => raw<ClaimRecord>(`/claims/${claimId}/withdraw`, { method: "POST" }),
+  decideClaim: (claimId: string, decision: ClaimDecision, note?: string, expectedStatus?: ClaimStatus) => {
+    const idempotencyKey = crypto.randomUUID();
+    return raw<ClaimRecord>(`/claims/${claimId}/decision`, { method: "POST", headers: { "Idempotency-Key": idempotencyKey }, body: JSON.stringify({ decision, note, expectedStatus }) });
+  },
+  getClaimVerification: (claimId: string, signal?: AbortSignal) => raw<ClaimVerification>(`/claims/${claimId}/verification`, { signal }),
+  sendVerificationQuestion: (claimId: string, payload: { questionKey: string; prompt: string; templateId: string; templateVersion: number }) => {
+    const idempotencyKey = crypto.randomUUID();
+    return raw<{ message: ClaimMessage; idempotent: boolean }>(`/claims/${claimId}/verification/questions`, { method: "POST", headers: { "Idempotency-Key": idempotencyKey }, body: JSON.stringify({ ...payload, idempotencyKey }) });
+  },
+  submitVerificationAnswer: (claimId: string, questionKey: string, answer: string) => {
+    const idempotencyKey = crypto.randomUUID();
+    return raw<{ message: ClaimMessage; idempotent: boolean }>(`/claims/${claimId}/verification/answers`, { method: "POST", headers: { "Idempotency-Key": idempotencyKey }, body: JSON.stringify({ questionKey, answer, idempotencyKey }) });
+  },
+  reviewVerificationQuestion: (claimId: string, payload: { questionKey: string; result: "PASS" | "FAIL" | "UNCLEAR"; confidence: number; reason: string }) => {
+    const idempotencyKey = crypto.randomUUID();
+    return raw<ClaimVerification & { idempotent: boolean }>(`/claims/${claimId}/verification/reviews`, { method: "POST", headers: { "Idempotency-Key": idempotencyKey }, body: JSON.stringify({ ...payload, idempotencyKey }) });
+  },
+  withdrawClaim: (claimId: string) => {
+    const idempotencyKey = crypto.randomUUID();
+    return raw<ClaimRecord>(`/claims/${claimId}/withdraw`, { method: "POST", headers: { "Idempotency-Key": idempotencyKey }, body: JSON.stringify({ idempotencyKey }) });
+  },
   listClaimRooms: () => raw<ClaimRoomsResponse>("/claims/rooms"),
   getClaimRoom: (claimId: string) => raw<{ id: string; claimId: string; status: ClaimStatus; participantRole: "CLAIMANT" | "FINDER"; createdAt: string }>(`/claims/${claimId}/room`),
   listClaimMessages: (claimId: string, query?: { before?: string; beforeId?: string; limit?: number }, signal?: AbortSignal) => {
