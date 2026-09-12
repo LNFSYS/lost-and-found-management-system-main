@@ -20,8 +20,8 @@ Không tick Done chỉ vì migration, schema, Jira ticket, UI mockup hoặc test
 | --- | --- | --- | --- | --- | --- |
 | [x] | UC-001 | System/User | Xác thực JWT tại Node.js API | Done | auth.middleware.ts |
 | [x] | UC-002 | System/Admin/Staff | Phân quyền User/Student/Lecturer/Staff/Admin tại backend | Done | auth middleware, admin/staff routes |
-| [ ] | UC-003 | Owner/Finder | Yêu cầu người claim bổ sung thông tin | Partial | `claim.service.ts` hỗ trợ REQUEST_MORE_INFO; guided question flow chưa có |
-| [ ] | UC-004 | Finder | Chấp nhận claim với transaction/row lock | Partial | `claim.service.ts` dùng transaction/claim row lock; appointment/return chưa có |
+| [ ] | UC-003 | Owner/Finder | Yêu cầu người claim bổ sung thông tin | Partial | `claim.use-cases.ts` hỗ trợ REQUEST_MORE_INFO; guided question flow chưa có |
+| [ ] | UC-004 | Finder | Chấp nhận claim với transaction/row lock | Partial | `claim.use-cases.ts` dùng transaction/claim row lock; appointment/return chưa có |
 | [ ] | UC-005 | Finder | Từ chối claim kèm lý do | Partial | Decision API/state có; chưa có browser journey riêng |
 | [ ] | UC-006 | Claimant | Hủy claim theo trạng thái hợp lệ | Partial | Withdraw API/state có; chưa có browser journey riêng |
 | [ ] | UC-007 | System | Khóa ghi khi chuyển trạng thái claim | Partial | Claim decision/withdraw/message/evidence đều dùng row lock; DB concurrency chưa chạy |
@@ -70,7 +70,7 @@ Không tick Done chỉ vì migration, schema, Jira ticket, UI mockup hoặc test
 | [x] | UC-050 | Owner | Xóa ảnh bài đăng khỏi media storage hiện tại | Done | Owner-guarded delete |
 | [x] | UC-051 | Client | Cung cấp public config cho client validation | Done | Public route allowlist, typed parsing và service test |
 | [ ] | UC-052 | Owner | Gửi claim cho bài FOUND | Partial | Claim API/service tạo claim từ persisted match và owner guard; chưa có full browser journey |
-| [ ] | UC-053 | System | Ngăn duplicate claim cho cùng bài | Partial | Pair/request idempotency guard và migration constraint có; isolated DB concurrency chưa chạy |
+| [ ] | UC-053 | System | Ngăn duplicate claim cho cùng bài | Partial | Pair/request guard có; 07/09 đã test unique accepted-claim constraint trên MySQL isolated. Chưa coi constraint test là full concurrent create-claim API evidence; xem reconciliation report |
 | [ ] | UC-054 | Claimant/Owner/Reviewer | Kiểm soát quyền xem claim evidence/private data | Partial | Participant authorization, private proxy và raw URL redaction có; guided private answer/reviewer flow chưa có |
 | [x] | UC-055 | User | Lấy danh sách handover point đang hoạt động cho form | Done | posts/catalog |
 | [x] | UC-056 | Admin | Quản lý handover point qua Admin API | Done | Admin CRUD, toggle và delete guard |

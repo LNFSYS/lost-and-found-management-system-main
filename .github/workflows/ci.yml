@@ -9,9 +9,12 @@ on:
 jobs:
   verify:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        mysql-version: ["8.0", "8.4"]
     services:
       mysql:
-        image: mysql:8.0
+        image: mysql:${{ matrix.mysql-version }}
         env:
           MYSQL_ROOT_PASSWORD: root
           MYSQL_DATABASE: lnfs_test

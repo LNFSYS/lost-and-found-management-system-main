@@ -459,18 +459,18 @@ Nếu không có project mobile, ghi chính xác:
 
 ## 10.4 Backend
 
-- Node routes/controllers/services/repositories/validators;
+- Node.js Clean Architecture modules: domain/application/infrastructure/interfaces và main/shared;
 - realtime transport implementation;
 - attachment storage;
 - authorization;
 - idempotency;
 - state transitions;
-- Java controllers/services và integration;
+- dependency direction, public module contracts và circular-dependency check;
 - database migrations;
 - audit/notification jobs;
 - deployment configuration và CI/CD.
 
-Không gọi Java skeleton là integrated business service.
+Java backend đã ngừng sử dụng; không khôi phục skeleton hoặc Java build.
 Không gọi local filesystem là deploy-safe shared media storage.
 Không ghi Socket.IO/Cloudinary/Docker/staging nếu không có evidence.
 
@@ -614,8 +614,8 @@ Không tạo evidence giả.
 ## 11.6 Architecture và service ownership
 
 - Xác định write owner thật cho từng domain.
-- Node/Java ownership phải dựa trên runtime code.
-- Nếu Java chỉ là skeleton, ghi đúng là skeleton/planned.
+- Node.js + TypeScript là backend, business-write và migration owner duy nhất.
+- Kiến trúc hiện hành ở `docs/CLEAN_ARCHITECTURE.md`; tài liệu Node/Java chỉ là lịch sử.
 - Web/PWA có thể dùng cùng web codebase.
 - Native Mobile là client riêng dùng shared API.
 - Realtime service/transport chỉ nêu công nghệ khi có evidence.
@@ -645,7 +645,7 @@ Không tạo evidence giả.
 - Responsibility:
   - Quân: team leadership, matching and integration;
   - Đạt: Node.js/API;
-  - Lượng: Java/backend/mobile theo assignment thực tế;
+  - Lượng: backend/mobile theo assignment thực tế;
   - Khoa: UI/PWA/mobile support theo assignment thực tế.
 - Không tự thay assignee nếu Jira khác.
 - Không ghi Google Vision, Docker/Staging hoặc coverage cụ thể nếu chưa có evidence/commitment.

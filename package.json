@@ -9,14 +9,15 @@
     "dev": "concurrently -n API,WEB -c blue,green \"npm run dev:api\" \"npm run dev:web\"",
     "dev:api": "npm --workspace @lnfs/api-node run dev",
     "dev:web": "npm --workspace @lnfs/web run dev",
-    "dev:java": "mvn -f apps/java-admin-service/pom.xml spring-boot:run",
     "migrate": "npm --workspace @lnfs/api-node run migrate",
-    "migrate:diagnose-checksums": "node scripts/repair-migration-checksums.mjs",
+    "migrate:preflight": "npm --workspace @lnfs/api-node run migrate:preflight",
+    "migrate:reconcile-claim": "npm --workspace @lnfs/api-node run migrate:reconcile-claim --",
+    "migrate:diagnose-checksums": "npm run migrate:preflight",
     "migrate:repair-checksums": "node scripts/repair-migration-checksums.mjs --apply",
     "check:env": "node scripts/check-env.mjs",
-    "test": "npm --workspace @lnfs/api-node run test && npm --workspace @lnfs/web run lint",
-    "build": "npm --workspace @lnfs/api-node run build && npm --workspace @lnfs/web run build",
-    "build:java": "mvn -f apps/java-admin-service/pom.xml package -DskipTests"
+    "check:architecture": "node --test scripts/check-architecture.test.mjs && node scripts/check-architecture.mjs",
+    "test": "npm run check:architecture && npm --workspace @lnfs/api-node run test && npm --workspace @lnfs/web run lint",
+    "build": "npm --workspace @lnfs/api-node run build && npm --workspace @lnfs/web run build"
   },
   "devDependencies": {
     "concurrently": "^9.1.2"

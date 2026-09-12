@@ -1,11 +1,16 @@
 # LNFS Audit and Fix Report
 
+> Historical architecture notice (2026-09-09): Java source/runtime/build has been retired and removed. Backend paths below describe the earlier layout. Current Node.js-only architecture and source mapping: [Clean Architecture](CLEAN_ARCHITECTURE.md). Product/ticket findings and prior verification results remain historical evidence.
+
+
 Cập nhật: **06/09/2026**  
 Repository: `fptu-lost-found-system-main`  
 Branch: `fix/audit-remediation-2026-09-06`  
 Audit source: `docs/LNFS_FULL_AUDIT_AND_FIX_PROMPT.md`
 
 > Đây là báo cáo implementation/remediation từ checkout local. Không chạy migration, test destructive hoặc truy cập Aiven/shared database trong phiên này. Không ghi secret thật, token, OTP hoặc dữ liệu production vào repository.
+
+> Snapshot lịch sử 06/09. Phiên 07/09 đã đọc Aiven và chạy MySQL isolated thật; xem [reconciliation report](AIVEN_SCHEMA_RECONCILIATION_2026-09-07.md). Các giới hạn DB chưa kiểm thử bên dưới mô tả phiên cũ, không ghi đè evidence mới.
 
 ## 1. Tested Scope
 

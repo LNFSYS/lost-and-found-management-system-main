@@ -93,10 +93,10 @@ flowchart LR
   API --> Media[Local media storage - current]
   API --> SMTP[SMTP email - optional]
   API --> Gemini[Gemini image analysis - optional]
-  Java[Java Spring Boot health skeleton] -. no business ownership .-> API
+  API --> Avatar[Cloudinary authenticated avatar]
 ~~~
 
-Node.js là runtime và write owner duy nhất của các flow đang chạy, đồng thời là owner của migrations. Java hiện chỉ có Spring Boot Actuator health endpoint; chưa có controller/service/repository nghiệp vụ, chưa tích hợp JWT hay frontend.
+Node.js + TypeScript là backend và write/migration owner duy nhất. Java skeleton đã được gỡ ngày 09/09/2026. Backend dùng Clean Architecture modular monolith: `interfaces -> application -> domain`, `infrastructure -> application ports`; `src/main` khởi tạo và inject adapter. Xem [dependency rules](CLEAN_ARCHITECTURE.md) và [draw.io](LNFS_NODE_ONLY_ARCHITECTURE.drawio).
 
 Bounded contexts mục tiêu:
 
@@ -113,7 +113,7 @@ Bounded contexts mục tiêu:
 | Realtime transport | Chưa có runtime |
 | Native Mobile | Client planned, dùng shared API |
 
-Không cho Node và Java cùng ghi một business flow/table nếu chưa có API contract, transaction/integration test và one-writer rule.
+Module chỉ truy cập module khác qua public application contract. Application không import MySQL, Express, provider SDK hoặc environment; transaction context không chứa `PoolConnection` trong core.
 
 ## 6. Luồng hiện tại có thể kiểm tra
 
@@ -217,6 +217,8 @@ Schema hiện tại có post status OPEN/MATCHED/RESOLVED/CLOSED/EXPIRED/HIDDEN,
 
 Migrations SQL nằm tại apps/api-node/src/migrations, được chạy theo thứ tự và kiểm tra checksum. Repository hiện có migration `001`–`046`; `046_feedback_idempotency_legacy_cleanup.sql` là forward corrective migration cho legacy feedback index và chưa được áp dụng lên Aiven/shared DB. Schema cho auth, posts, catalog, matching, claims, appointments, chat, notifications, warehouse, AI feedback và map/catalog không thay thế runtime evidence.
 
+Đối chiếu trực tiếp ngày 07/09/2026: Aiven có 49 bảng, tất cả có nguồn gốc trong migration; 39/43 file SQL khớp ledger, 043–046 chưa được ghi nhận. Bản 040_peer_claim_conversations đã chạy có checksum khớp 045 hiện tại. Schema feedback thiếu cột của 043; không được chạy lại 045 nguyên trạng. Đã thêm preflight toàn bộ lịch sử, migration lock và công cụ reconciliation dry-run; shared DB chưa thay đổi. Không xóa các bảng planned/legacy chỉ vì trống. Xem [báo cáo và runbook](AIVEN_SCHEMA_RECONCILIATION_2026-09-07.md).
+
 Khi dùng Aiven/shared MySQL:
 
 - mỗi môi trường nên có database riêng;
@@ -227,17 +229,21 @@ Khi dùng Aiven/shared MySQL:
 
 ## 11. Kiểm thử và evidence
 
+Refactor kiến trúc 09/09 có kết quả riêng tại [Clean Architecture verification](CLEAN_ARCHITECTURE_VERIFICATION.md): 156 API/unit/integration tests, 23 browser E2E, typecheck/build và dependency check pass. Scope chỉ thay đổi kiến trúc; không nâng trạng thái hoàn thành các workflow còn thiếu.
+
 Evidence đã kiểm tra ngày 06/09/2026:
 
 - `npm --workspace @lnfs/api-node run test`: 137 pass, 1 DB integration test skip an toàn vì thiếu MySQL local `_test`.
 - `npm --workspace @lnfs/web run lint`: web TypeScript check pass.
 - npm run build: API TypeScript build và Web production build pass.
-- npm run build:java: chưa chạy được vì Maven không có trong PATH.
+- Java build thuộc snapshot cũ, đã ngừng sử dụng và gỡ ngày 09/09/2026.
 - `npm --workspace @lnfs/web run e2e:home`: 23/23 Playwright tests pass, gồm auth resilience, post creation, matching view, claim-room stale response, mobile layout, Staff warehouse và Admin handover/map.
 - `.github/workflows/ci.yml`: có MySQL service riêng và browser job; workflow chưa được chạy từ checkout này.
 - `npm --workspace @lnfs/api-node run test:db-integration`: test được skip an toàn vì chưa cấu hình MySQL local `*_test`; không chạy trên Aiven/shared DB.
 
-Các gap còn lại: MySQL concurrency/migration integration chưa chạy, appointment dual confirmation, guided review, full warehouse disposition, shared media storage, PWA browser/device matrix, Native Mobile, load test, UAT và deployment rollback.
+Cập nhật 07/09: API/unit/integration và Web typecheck pass với 152 tests, không skip; có MySQL local thật cho fresh/alias upgrade, partial DDL, ledger rollback, lock, feedback/chat retry và unique constraints. Đây không phải full claim-to-return UI evidence và không phải xác nhận CI từ xa. Evidence chi tiết nằm trong báo cáo reconciliation.
+
+Các gap còn lại: triển khai schema sửa lên Aiven sau phê duyệt, appointment dual confirmation, guided review, full warehouse disposition, shared media storage, PWA browser/device matrix, Native Mobile, load test, UAT và production backup/rollback.
 
 ## 12. Deployment và roadmap
 
@@ -252,4 +258,4 @@ Không ghi sprint date, assignee hoặc Jira status nếu chưa được kiểm 
 - Business rules: business-rules.md
 - Traceability matrix: traceability-matrix.md
 - Use-case checklist: use-case-checklist.md
-- Node/Java boundary: node-java-service-boundary.md
+- Clean Architecture: CLEAN_ARCHITECTURE.md; Node/Java boundary cũ chỉ giữ làm lịch sử.

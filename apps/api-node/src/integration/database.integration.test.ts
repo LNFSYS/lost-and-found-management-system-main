@@ -8,13 +8,13 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 import mysql, { type Pool, type PoolOptions, type RowDataPacket } from "mysql2/promise";
-import { createApp } from "../app.js";
-import { runInTransaction } from "../config/db.js";
+import { createApp } from "../main/app.js";
+import { runInTransaction } from "../shared/infrastructure/config/db.js";
 import { runMigrations, type MigrationPool } from "../migrations/migration-runner.js";
-import { createAdminUserRepository } from "../repositories/admin-user.repository.js";
-import { matchingRepository } from "../repositories/matching.repository.js";
-import { postRepository } from "../repositories/post.repository.js";
-import { createAdminUserService } from "../services/admin-user.service.js";
+import { readMigrationFiles } from "../migrations/migration-state.js";
+import { createAdminUserRepository } from "../modules/admin/infrastructure/admin-user.repository.js";
+import { createPersistence } from "../main/persistence.js";
+import { createAdminUserUseCases } from "../modules/admin/application/admin-user.use-cases.js";
 
 const integrationEnabled = process.env.LNFS_DB_INTEGRATION === "1";
 const skipReason = integrationEnabled
@@ -75,6 +75,8 @@ async function removeFixture(pool: Pool, postIds: string[], categoryId: string, 
 test("isolated MySQL integration: migrations, auth errors, and post/media integrity", { skip: skipReason }, async (context) => {
   const migrationPool = mysql.createPool(isolatedPoolOptions(true));
   const applicationPool = mysql.createPool(isolatedPoolOptions(false));
+  const persistence = createPersistence(applicationPool);
+  const { matchingRepository, postRepository } = persistence;
   const migrationsDirectory = path.dirname(fileURLToPath(new URL("../migrations/run-migrations.ts", import.meta.url)));
 
   try {
@@ -90,6 +92,9 @@ test("isolated MySQL integration: migrations, auth errors, and post/media integr
       const version = `999900_${suffix}.sql`;
       const probeTable = `lnfs_migration_probe_${suffix}`;
       const directory = await mkdtemp(path.join(os.tmpdir(), "lnfs-db-migration-"));
+      for (const file of await readMigrationFiles(migrationsDirectory)) {
+        await writeFile(path.join(directory, file.version), file.sql, "utf8");
+      }
       await writeFile(path.join(directory, version), `CREATE TABLE ${probeTable} (id INT PRIMARY KEY); INSERT INTO ${probeTable} (id) VALUES (1);`, "utf8");
       try {
         await runMigrations({ directory, pool: migrationPool as unknown as MigrationPool, log: () => undefined });
@@ -132,17 +137,12 @@ test("isolated MySQL integration: migrations, auth errors, and post/media integr
         [secondAdminId, `${secondAdminId}@example.invalid`, "Second concurrency admin"]
       ] as const;
       const repository = createAdminUserRepository(applicationPool);
-      const service = createAdminUserService({
+      const service = createAdminUserUseCases({
         repository,
         auditRepository: { async record() {} },
-        transaction: async (work) => {
-          const connection = await applicationPool.getConnection();
-          try {
-            return await runInTransaction(connection, work);
-          } finally {
-            connection.release();
-          }
-        }
+        transaction: persistence.transaction,
+        idFactory: randomUUID,
+        hashPassword: async () => { throw new Error("Password hashing is outside this concurrency scenario"); }
       });
 
       for (const [userId, email, fullName] of fixtureUsers) {
@@ -167,7 +167,7 @@ test("isolated MySQL integration: migrations, auth errors, and post/media integr
         const rejected = outcomes.filter((outcome): outcome is PromiseRejectedResult => outcome.status === "rejected");
         assert.equal(successful.length, 1);
         assert.equal(rejected.length, 1);
-        assert.equal((rejected[0]?.reason as { status?: number }).status, 409);
+        assert.equal((rejected[0]?.reason as { code?: string }).code, "conflict");
 
         const [rows] = await applicationPool.execute<RowDataPacket[]>(
           `SELECT COUNT(DISTINCT u.id) AS total
@@ -213,9 +213,8 @@ test("isolated MySQL integration: migrations, auth errors, and post/media integr
       });
 
       try {
-        const rollbackConnection = await applicationPool.getConnection();
-        try {
-          await assert.rejects(runInTransaction(rollbackConnection, async (transaction) => {
+          await assert.rejects(persistence.transaction(async (transaction) => {
+            assert.equal("execute" in transaction, false);
             await postRepository.createPost(postInput(rolledBackPostId), transaction);
             await matchingRepository.replaceAnalysisTags(rolledBackPostId, {
               visualAttributes: ["black wallet"],
@@ -224,21 +223,17 @@ test("isolated MySQL integration: migrations, auth errors, and post/media integr
             }, transaction);
             throw new Error("simulated tag persistence failure");
           }), /simulated tag persistence failure/);
-        } finally {
-          rollbackConnection.release();
-        }
 
         const [rolledBackPosts] = await applicationPool.execute<RowDataPacket[]>("SELECT COUNT(*) AS total FROM posts WHERE id = ?", [rolledBackPostId]);
         const [rolledBackTags] = await applicationPool.execute<RowDataPacket[]>("SELECT COUNT(*) AS total FROM ai_tags WHERE post_id = ?", [rolledBackPostId]);
         assert.equal(Number(rolledBackPosts[0]?.total), 0);
         assert.equal(Number(rolledBackTags[0]?.total), 0);
 
-        const createConnection = await applicationPool.getConnection();
-        try {
-          await runInTransaction(createConnection, (transaction) => postRepository.createPost(postInput(persistedPostId), transaction));
-        } finally {
-          createConnection.release();
-        }
+        await persistence.transaction(async (transaction) => {
+          await postRepository.createPost(postInput(persistedPostId), transaction);
+          await matchingRepository.replaceAnalysisTags(persistedPostId, { visualAttributes: ["wallet"], visibleText: [], confidence: 0.9 }, transaction);
+          assert.ok(await postRepository.findOwnedById(persistedPostId, userId, transaction));
+        });
 
         const first = await applicationPool.getConnection();
         const second = await applicationPool.getConnection();

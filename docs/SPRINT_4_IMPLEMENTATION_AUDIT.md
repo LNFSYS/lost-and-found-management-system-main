@@ -1,5 +1,8 @@
 # LNFS Sprint 4 Implementation Audit
 
+> Historical architecture notice (2026-09-09): Java source/runtime/build has been retired and removed. Backend paths below describe the earlier layout. Current Node.js-only architecture and source mapping: [Clean Architecture](CLEAN_ARCHITECTURE.md). Product/ticket findings and prior verification results remain historical evidence.
+
+
 Cập nhật: **06/09/2026**
 Nguồn Jira: **LNFS Sprint 4, sprint ID 70, snapshot 01/09/2026**
 Kho đối chiếu: **fptu-lost-found-system-main**
@@ -7,6 +10,8 @@ Kho đối chiếu: **fptu-lost-found-system-main**
 > Đây là audit từ snapshot offline, không phải truy vấn Jira trực tiếp. Trạng thái Jira được giữ nguyên như snapshot; trạng thái code chỉ được kết luận từ runtime source, test và command đã chạy. Không chỉnh Jira, không chạy migration trên Aiven/shared DB. Các nhận định “chưa có claim/chat runtime” ở snapshot cũ đã được thay bằng current status trong bảng và [audit/fix report 06/09/2026](LNFS_AUDIT_FIX_REPORT_2026-09-06.md).
 
 > Cập nhật phiên làm việc ngày 02/09/2026: sau snapshot trên, migration `039_admin_user_and_config_audit.sql` đã được chạy thành công trên shared Aiven bằng `npm run migrate`. Đã xác minh `schema_migrations`, bảng `admin_audit_logs` và các cột audit mới trong `config_history`. Các nhận định “chưa chạy migration” bên dưới phản ánh snapshot trước cập nhật.
+
+> Evidence bổ sung 07/09: isolated MySQL migration upgrade/alias, feedback retry, chat idempotency và unique-constraint concurrency đã chạy. Shared Aiven chỉ được đọc, còn pending schema 043–046/alias reconciliation; không nâng Jira Done. Xem [báo cáo mới](AIVEN_SCHEMA_RECONCILIATION_2026-09-07.md).
 
 > Cập nhật implementation ngày 03/09/2026: LNFS-59 đã có moderation/report, dashboard KPI và aggregate export; target được suy ra từ report và moderation bảo vệ admin active cuối cùng. LNFS-60 đã có profile activity/reputation, PWA shell và avatar Cloudinary authenticated delivery. Live Cloudinary upload/signed delivery/cleanup smoke test đã pass; device matrix và browser E2E admin/profile vẫn cần bằng chứng riêng trước khi gọi ticket release-ready.
 
