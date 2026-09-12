@@ -91,7 +91,7 @@ test("isolated MySQL: fresh/legacy migration reconciliation and runtime contract
       await exerciseHttpRuntime(pool);
     });
 
-    await t.test("old alias blocks runner before 043; dry-run writes nothing; rename preserves history and data", async () => {
+    await t.test("audited old alias is accepted; pending migrations run and reconciliation preserves history and data", async () => {
       const { pool, name } = await newDatabase();
       const beforeAlias = await migrationDirectory(42);
       await runMigrations({ directory: beforeAlias, pool: asMigrationPool(pool), log: silent });
@@ -99,9 +99,15 @@ test("isolated MySQL: fresh/legacy migration reconciliation and runtime contract
       const oldDir = await migrationDirectory(42);
       await writeFile(path.join(oldDir, legacyClaimVersion), files.find((f) => f.version === canonicalClaimVersion)!.sql);
       await runMigrations({ directory: oldDir, pool: asMigrationPool(pool), log: silent });
+      await runMigrations({ directory, pool: asMigrationPool(pool), log: silent });
       const [before] = await pool.query<RowDataPacket[]>("SELECT * FROM schema_migrations ORDER BY version");
-      await assert.rejects(runMigrations({ directory, pool: asMigrationPool(pool), log: silent }), /Unknown applied migration/);
-      await assert.rejects(pool.query("SELECT idempotency_key FROM return_feedback LIMIT 0"), { code: "ER_BAD_FIELD_ERROR" });
+      const [feedbackColumns] = await pool.query<RowDataPacket[]>("SELECT idempotency_key FROM return_feedback LIMIT 0");
+      assert.deepEqual(feedbackColumns, []);
+      const [appliedVersions] = await pool.query<RowDataPacket[]>("SELECT version FROM schema_migrations ORDER BY version");
+      for (const version of ["043_return_feedback_reputation_activity.sql", "044_return_feedback_idempotency_scope.sql", "046_feedback_idempotency_legacy_cleanup.sql", "049_realtime_claim_chat_contract.sql", "050_notification_type_text_contract.sql"]) {
+        assert.ok(appliedVersions.some((row) => row.version === version), `Expected ${version} to be applied`);
+      }
+      assert.ok(!appliedVersions.some((row) => row.version === canonicalClaimVersion));
       assert.equal((await inspect(pool)).after, "READY");
       const [afterDryRun] = await pool.query("SELECT * FROM schema_migrations ORDER BY version");
       assert.deepEqual(afterDryRun, before);
