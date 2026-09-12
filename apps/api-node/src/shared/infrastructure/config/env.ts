@@ -72,7 +72,7 @@ export const env = {
   },
   gemini: {
     apiKey: process.env.GEMINI_API_KEY?.trim() || null,
-    model: process.env.GEMINI_MODEL?.trim() || "gemini-3.6-flash",
+    model: process.env.GEMINI_MODEL?.trim() || "gemini-3.5-flash-lite",
     timeoutMs: number("GEMINI_TIMEOUT_MS", 30_000)
   },
   cloudinary: {

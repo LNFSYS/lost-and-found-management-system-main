@@ -1,7 +1,7 @@
 import type { PrivateMediaStorage } from "../../../shared/application/media-storage.port.js";
 import type { TransactionContext, TransactionRunner } from "../../../shared/application/transaction.js";
 import { AppError } from "../../../shared/domain/app-error.js";
-import { mediaContentType, validateImageUpload } from "../../../shared/domain/media.js";
+import { validateImageUpload } from "../../../shared/domain/media.js";
 import type { ImageUpload } from "../../../shared/domain/upload.js";
 import type { MatchingRepository } from "../../matching/application/index.js";
 import type { NotificationRepository } from "../../notifications/application/index.js";
@@ -83,13 +83,9 @@ export function createClaimUseCases(options: ClaimDependencies) {
         if (pair.claimant_id !== claimantId) throw claimNotFound();
         if (pair.finder_id === claimantId) throw new AppError("conflict", "Bạn không thể yêu cầu xác minh bài đăng của chính mình");
 
-        const existing = await claimRepository.findByPair(input.lostPostId, input.foundPostId, claimantId, connection);
+        const existing = await claimRepository.findByFoundPostForClaimant(input.foundPostId, claimantId, connection);
         if (existing) {
-          if (input.requestKey && existing.id) {
-            const sameKey = await claimRepository.findByRequestKey(claimantId, input.requestKey, connection);
-            if (sameKey) return { claim: sameKey, idempotent: true };
-          }
-          throw new AppError("conflict", "Bạn đã gửi yêu cầu cho cặp bài đăng này");
+          return { claim: existing, idempotent: true };
         }
 
         const claimId = id();
@@ -277,8 +273,8 @@ export function createClaimUseCases(options: ClaimDependencies) {
       await requireClaimParticipant(claimId, userId, true);
       const evidence = await claimRepository.findEvidence(claimId, evidenceId);
       if (!evidence) throw new AppError("not_found", "Không tìm thấy evidence");
-      const filePath = await mediaStorage.resolve(evidence.secureUrl);
-      return { filePath, contentType: mediaContentType((evidence.mediaFormat ?? "jpg") as "jpg" | "png" | "webp") };
+      const resolved = await mediaStorage.resolve(evidence.secureUrl, evidence.mediaFormat ?? "jpg");
+      return { body: resolved.body, contentType: resolved.contentType };
     }
   };
   return claimService;

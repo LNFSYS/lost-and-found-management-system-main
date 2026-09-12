@@ -88,7 +88,7 @@ export function createPostController({ postService, geminiImageService }: {
       const media = await postService.getMediaFile(params.postId, params.mediaId, request.auth);
       response.setHeader("Cache-Control", "private, max-age=300");
       response.setHeader("X-Content-Type-Options", "nosniff");
-      response.type(media.contentType).sendFile(media.filePath);
+      response.type(media.contentType).send(media.body);
     },
 
     async deleteMedia(request: Request, response: Response) {

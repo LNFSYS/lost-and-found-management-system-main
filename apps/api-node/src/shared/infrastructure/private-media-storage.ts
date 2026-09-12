@@ -1,7 +1,8 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { PrivateMediaStorage } from "../application/media-storage.port.js";
 import { AppError } from "../domain/app-error.js";
+import { mediaContentType } from "../domain/media.js";
 import { ensureStoredFileExists, removeStoredFileIfPresent } from "./media-storage.js";
 
 export function createPrivateMediaStorage(options: {
@@ -36,10 +37,10 @@ export function createPrivateMediaStorage(options: {
       await writeFile(filePath, bytes, { flag: "wx" });
       return { secureUrl: `${prefix}${ownerId}/${filename}`, publicId: `${options.namespace}/${ownerId}/${mediaId}` };
     },
-    async resolve(secureUrl) {
+    async resolve(secureUrl, format = "jpg") {
       const filePath = resolvePath(secureUrl);
       await ensureStoredFileExists(filePath);
-      return filePath;
+      return { body: await readFile(filePath), contentType: mediaContentType(format as "jpg" | "png" | "webp") };
     },
     async remove(secureUrl) {
       await removeStoredFileIfPresent(resolvePath(secureUrl));

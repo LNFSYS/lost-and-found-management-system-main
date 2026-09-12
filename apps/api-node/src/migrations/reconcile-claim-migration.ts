@@ -1,4 +1,6 @@
 import { verifyClaimConversationSchema } from "./claim-schema-verification.js";
+import { legacyMigrationCompatibility } from "./legacy-migration-compatibility.js";
+import { verifyMigrationCompatibility } from "./legacy-schema-verification.js";
 import {
   checksumMatches, readMigrationFiles, readMigrationState, validateMigrationState, withMigrationLock,
   type MigrationConnection, type MigrationFile, type MigrationPool
@@ -13,17 +15,26 @@ async function inspect(connection: MigrationConnection, files: MigrationFile[]) 
   const state = await readMigrationState(connection);
   const old = state.ledger.find((r) => r.version === legacyClaimVersion);
   const current = state.ledger.find((r) => r.version === canonicalClaimVersion);
-  if (old && current) throw new Error("Both alias ledger versions exist; manual investigation required");
+  const expectedLegacy = legacyMigrationCompatibility.find((entry) => entry.version === legacyClaimVersion);
+  if (old && old.checksum !== expectedLegacy?.checksum && !checksumMatches(old.checksum, file)) {
+    throw new Error("Legacy claim migration checksum mismatch");
+  }
   if (!old && state.attempts.some((r) => r.version === legacyClaimVersion)) {
     throw new Error("Legacy attempt has no matching legacy ledger; manual investigation required");
   }
-  if (old && !checksumMatches(old.checksum, file)) throw new Error("Legacy claim migration checksum mismatch");
+  if (old && current) {
+    const compatibilityMatches = validateMigrationState(files, state, legacyMigrationCompatibility);
+    await verifyMigrationCompatibility(connection, compatibilityMatches);
+    await verifyClaimConversationSchema(connection);
+    return { status: "BOTH_VERIFIED" as const, hasLegacyAttempt: state.attempts.some((r) => r.version === legacyClaimVersion) };
+  }
   const normalized = {
     ledger: state.ledger.map((r) => r.version === legacyClaimVersion ? { ...r, version: canonicalClaimVersion } : r),
     attempts: state.attempts.map((r) => r.version === legacyClaimVersion ? { ...r, version: canonicalClaimVersion } : r)
   };
   if (state.attempts.some((r) => r.version === canonicalClaimVersion) && old) throw new Error("Canonical claim migration already has an attempt; manual investigation required");
-  validateMigrationState(files, normalized);
+  const compatibilityMatches = validateMigrationState(files, normalized, legacyMigrationCompatibility);
+  await verifyMigrationCompatibility(connection, compatibilityMatches);
   if (old || current) await verifyClaimConversationSchema(connection);
   return { status: old ? "READY" as const : current ? "ALREADY_CANONICAL" as const : "NOT_NEEDED" as const,
     hasLegacyAttempt: state.attempts.some((r) => r.version === legacyClaimVersion) };
@@ -59,12 +70,5 @@ export async function reconcileClaimMigration(input: {
       throw error;
     }
   };
-  if (input.apply) return withMigrationLock(input.pool, work);
-  const connection = await input.pool.getConnection();
-  try {
-    const [rows] = await connection.query("SELECT DATABASE() AS name");
-    const database = (rows as { name: string | null }[])[0]?.name;
-    if (!database) throw new Error("A database must be selected");
-    return await work(connection, database);
-  } finally { connection.release(); }
+  return withMigrationLock(input.pool, work);
 }

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { claimRepository, claimService } from "../../../test/use-case-fixtures.js";
+import { claimRepository, claimService, matchingRepository } from "../../../test/use-case-fixtures.js";
 
 const claimId = "11111111-1111-4111-8111-111111111111";
 const claimantId = "22222222-2222-4222-8222-222222222222";
@@ -90,5 +90,51 @@ test("claim list batches participant loading and exposes pagination metadata", a
   } finally {
     claimRepository.listForUser = originalListForUser;
     claimRepository.listParticipantsForClaims = originalListParticipantsForClaims;
+  }
+});
+
+test("creating a claim for an already requested found post reopens the existing request", async () => {
+  const existing = sampleClaim();
+  const originalFindByRequestKey = claimRepository.findByRequestKey;
+  const originalFindMatchPairForUpdate = claimRepository.findMatchPairForUpdate;
+  const originalFindByFoundPostForClaimant = claimRepository.findByFoundPostForClaimant;
+  const originalFindById = claimRepository.findById;
+  const originalFindParticipant = claimRepository.findParticipant;
+  const originalListParticipants = claimRepository.listParticipants;
+  const originalGetConfigNumber = matchingRepository.getConfigNumber;
+  const differentLostPostId = "88888888-8888-4888-8888-888888888888";
+
+  try {
+    claimRepository.findByRequestKey = async () => null;
+    matchingRepository.getConfigNumber = async () => 0.6;
+    claimRepository.findMatchPairForUpdate = async () => ({
+      lost_post_id: differentLostPostId,
+      found_post_id: existing.foundPostId,
+      claimant_id: claimantId,
+      finder_id: existing.finderId,
+      total_score: 0.83,
+      score_tier: "NOTIFY"
+    });
+    claimRepository.findByFoundPostForClaimant = async () => existing;
+    claimRepository.findById = async () => existing;
+    claimRepository.findParticipant = async () => ({ claimId, userId: claimantId, role: "CLAIMANT", consentStatus: "ACCEPTED", joinedAt: existing.createdAt, fullName: "Claimant" });
+    claimRepository.listParticipants = async () => [];
+
+    const result = await claimService.createClaim(claimantId, {
+      lostPostId: differentLostPostId,
+      foundPostId: existing.foundPostId,
+      requestKey: "new-request-key"
+    });
+
+    assert.equal(result.id, existing.id);
+    assert.equal(result.idempotent, true);
+  } finally {
+    claimRepository.findByRequestKey = originalFindByRequestKey;
+    claimRepository.findMatchPairForUpdate = originalFindMatchPairForUpdate;
+    claimRepository.findByFoundPostForClaimant = originalFindByFoundPostForClaimant;
+    claimRepository.findById = originalFindById;
+    claimRepository.findParticipant = originalFindParticipant;
+    claimRepository.listParticipants = originalListParticipants;
+    matchingRepository.getConfigNumber = originalGetConfigNumber;
   }
 });

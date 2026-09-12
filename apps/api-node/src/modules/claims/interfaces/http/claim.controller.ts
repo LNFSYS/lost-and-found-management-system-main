@@ -80,7 +80,7 @@ export function createClaimController({ claimService }: {
       const evidence = await claimService.getEvidenceFile(params.claimId, params.evidenceId, request.auth!.sub);
       response.setHeader("Cache-Control", "private, no-store");
       response.setHeader("X-Content-Type-Options", "nosniff");
-      response.type(evidence.contentType).sendFile(evidence.filePath);
+      response.type(evidence.contentType).send(evidence.body);
     }
   };
   return claimController;

@@ -133,7 +133,7 @@ export interface ClaimRepository {
     };
     roomId: string | null;
   } | null>;
-  findByPair(lostPostId: string, foundPostId: string, claimantId: string, queryable?: TransactionContext): Promise<{
+  findByFoundPostForClaimant(foundPostId: string, claimantId: string, queryable?: TransactionContext): Promise<{
     id: string;
     lostPostId: string | null;
     foundPostId: string;

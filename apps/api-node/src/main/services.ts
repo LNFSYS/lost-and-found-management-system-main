@@ -15,6 +15,7 @@ import { createReturnFeedbackUseCases } from "../modules/returns/application/ret
 import { createSystemConfigUseCases } from "../modules/system-config/application/system-config.use-cases.js";
 import { createWarehouseUseCases } from "../modules/warehouse/application/warehouse.use-cases.js";
 import { env } from "../shared/infrastructure/config/env.js";
+import { createCloudinaryPrivateMediaStorage } from "../shared/infrastructure/cloudinary-private-media-storage.js";
 import { createPrivateMediaStorage } from "../shared/infrastructure/private-media-storage.js";
 import { id } from "../shared/infrastructure/security.js";
 import type { Persistence } from "./persistence.js";
@@ -29,17 +30,27 @@ export function createServices(persistence: Persistence, config: typeof env = en
   const security = createAuthSecurity(config);
   const avatarStorage = createCloudinaryAvatarStorage({ config: config.cloudinary });
   const emailService = createEmailDelivery(config);
-  const postMediaStorage = createPrivateMediaStorage({
+  const postLocalMediaStorage = createPrivateMediaStorage({
     uploadDir: config.uploadDir,
     namespace: "post-media",
     invalidPathMessage: "Duong dan media khong hop le",
     notFoundMessage: "Media khong hop le"
   });
-  const claimMediaStorage = createPrivateMediaStorage({
+  const claimLocalMediaStorage = createPrivateMediaStorage({
     uploadDir: config.uploadDir,
     namespace: "claim-evidence",
     invalidPathMessage: "\u0110\u01b0\u1eddng d\u1eabn evidence kh\u00f4ng h\u1ee3p l\u1ec7",
     notFoundMessage: "Kh\u00f4ng t\u00ecm th\u1ea5y evidence"
+  });
+  const postMediaStorage = createCloudinaryPrivateMediaStorage({
+    config: config.cloudinary,
+    namespace: "post-media",
+    fallback: postLocalMediaStorage
+  });
+  const claimMediaStorage = createCloudinaryPrivateMediaStorage({
+    config: config.cloudinary,
+    namespace: "claim-evidence",
+    fallback: claimLocalMediaStorage
   });
   const notificationService = createNotificationUseCases({ notificationRepository });
   const systemConfigService = createSystemConfigUseCases({

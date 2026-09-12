@@ -9,7 +9,9 @@ test("chat message persistence uses a server-side idempotency key", async () => 
   const queryable = {
     execute: async (sql: string) => {
       statements.push(sql);
-      if (sql.startsWith("INSERT")) return [{ affectedRows: 1 }, []];
+      if (sql.startsWith("SELECT next_sequence")) return [[{ sequence: 7 }], []];
+      if (sql.includes("WHERE m.room_id = ? AND m.sender_id = ?")) return [[], []];
+      if (sql.startsWith("UPDATE") || sql.startsWith("INSERT")) return [{ affectedRows: 1 }, []];
       return [[{
         id: "22222222-2222-4222-8222-222222222222",
         room_id: "33333333-3333-4333-8333-333333333333",
@@ -34,6 +36,8 @@ test("chat message persistence uses a server-side idempotency key", async () => 
   }, queryable);
 
   assert.equal(message?.clientMessageId, clientMessageId);
-  assert.match(statements[0], /client_message_id/);
-  assert.match(statements[0], /ON DUPLICATE KEY UPDATE/);
+  assert.match(statements[0], /next_sequence.*FOR UPDATE/);
+  assert.match(statements[2], /next_sequence = next_sequence \+ 1/);
+  assert.match(statements[3], /room_id, sequence, sender_id/);
+  assert.match(statements[3], /ON DUPLICATE KEY UPDATE/);
 });

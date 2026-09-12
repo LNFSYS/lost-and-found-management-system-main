@@ -1,7 +1,9 @@
 import {
-  readMigrationFiles, readMigrationState, recoveryInstruction, validateMigrationState,
+  pendingMigrationFiles, readMigrationFiles, readMigrationState, recoveryInstruction, validateMigrationState,
   withMigrationLock, type MigrationPool
 } from "./migration-state.js";
+import { legacyMigrationCompatibility } from "./legacy-migration-compatibility.js";
+import { verifyMigrationCompatibility } from "./legacy-schema-verification.js";
 
 export type { MigrationPool } from "./migration-state.js";
 
@@ -22,7 +24,9 @@ export async function runMigrations(input: {
   await withMigrationLock(input.pool, async (connection) => {
     const state = await readMigrationState(connection);
     // Validate all history before even the first pending migration can auto-commit DDL.
-    validateMigrationState(files, state);
+    const compatibilityMatches = validateMigrationState(files, state, legacyMigrationCompatibility);
+    await verifyMigrationCompatibility(connection, compatibilityMatches);
+    const pending = pendingMigrationFiles(files, state, compatibilityMatches);
     await connection.query(`CREATE TABLE IF NOT EXISTS schema_migrations (
       version VARCHAR(100) PRIMARY KEY, checksum CHAR(64) NOT NULL,
       applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -32,8 +36,7 @@ export async function runMigrations(input: {
       status VARCHAR(16) NOT NULL, started_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
       completed_at TIMESTAMP NULL, failure_point VARCHAR(100) NULL, error_message VARCHAR(500) NULL
     )`);
-    for (const file of files) {
-      if (state.ledger.some((row) => row.version === file.version)) continue;
+    for (const file of pending) {
       await connection.query(
         "INSERT INTO schema_migration_attempts (version, checksum, status) VALUES (?, ?, 'RUNNING')",
         [file.version, file.raw]

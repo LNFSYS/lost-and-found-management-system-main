@@ -402,8 +402,7 @@ textarea {
   gap: 24px;
   padding: 0 56px;
   border-bottom: 1px solid rgba(197, 212, 228, 0.82);
-  background: rgba(255, 255, 255, 0.92);
-  backdrop-filter: blur(18px);
+  background: rgba(255, 255, 255, 0.98);
   box-shadow: 0 8px 24px rgba(25, 49, 75, 0.05);
 }
 
@@ -2343,10 +2342,9 @@ textarea {
   border-left: 4px solid var(--fpt-orange);
   border-radius: var(--radius);
   background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0.56)),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.97), rgba(255, 255, 255, 0.9)),
     linear-gradient(90deg, rgba(244, 123, 32, 0.08), transparent 34%);
   box-shadow: 0 24px 70px rgba(25, 49, 75, 0.08);
-  backdrop-filter: blur(16px);
 }
 
 .hero-copy::after {
@@ -2536,6 +2534,7 @@ textarea {
   position: absolute;
   inset: 3% 0 5% 0;
   overflow: hidden;
+  contain: paint;
   margin: 0;
   border: 1px solid rgba(197, 212, 228, 0.9);
   border-radius: var(--radius);
@@ -2578,9 +2577,8 @@ textarea {
   padding: 8px 12px;
   border: 1px solid rgba(197, 212, 228, 0.88);
   border-radius: var(--radius);
-  background: rgba(255, 255, 255, 0.84);
+  background: rgba(255, 255, 255, 0.96);
   box-shadow: 0 18px 42px rgba(25, 49, 75, 0.11);
-  backdrop-filter: blur(14px);
 }
 
 .hero-workflow span {
@@ -2601,121 +2599,6 @@ textarea {
 .hero-workflow i {
   height: 1px;
   background: linear-gradient(90deg, rgba(11, 99, 182, 0.18), rgba(244, 123, 32, 0.62));
-}
-
-.floating-status {
-  position: absolute;
-  z-index: 3;
-  width: 186px;
-  padding: 14px 15px;
-  border: 1px solid rgba(197, 212, 228, 0.94);
-  border-left: 4px solid var(--fpt-blue);
-  border-radius: var(--radius);
-  background: rgba(255, 255, 255, 0.92);
-  box-shadow: 0 18px 44px rgba(25, 49, 75, 0.13);
-  backdrop-filter: blur(12px);
-}
-
-.campus-card {
-  position: absolute;
-  z-index: 3;
-  left: 15%;
-  bottom: 8%;
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 3px 10px;
-  padding: 15px 17px;
-  border: 1px solid #c7dcef;
-  border-left: 4px solid var(--fpt-green);
-  border-radius: var(--radius);
-  background: rgba(255, 255, 255, 0.92);
-  box-shadow: 0 14px 36px rgba(25, 49, 75, 0.1);
-  backdrop-filter: blur(12px);
-}
-
-.campus-card svg {
-  grid-row: 1 / span 2;
-  align-self: center;
-  color: var(--fpt-green);
-}
-
-.campus-card strong {
-  color: var(--ink);
-  font-size: 0.86rem;
-}
-
-.campus-card span {
-  color: var(--muted);
-  font-size: 0.72rem;
-  font-weight: 700;
-}
-
-.floating-status span {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  color: var(--fpt-blue);
-  font-size: 0.64rem;
-  font-weight: 800;
-  letter-spacing: 0.1em;
-}
-
-.floating-status span i {
-  width: 8px;
-  height: 8px;
-  border-radius: 999px;
-  background: currentColor;
-  box-shadow: 0 0 0 4px rgba(11, 99, 182, 0.11);
-}
-
-.floating-status strong,
-.floating-status small {
-  display: block;
-}
-
-.floating-status strong {
-  margin: 5px 0;
-  color: var(--ink);
-  font: 700 1.35rem var(--font-display);
-}
-
-.floating-status small {
-  color: var(--muted);
-  font-size: 0.7rem;
-  line-height: 1.45;
-}
-
-.floating-status--lost {
-  top: 22%;
-  left: 4%;
-}
-
-.floating-status--found {
-  right: 1%;
-  bottom: 20%;
-  border-left-color: var(--fpt-orange);
-}
-
-.floating-status--found span {
-  color: var(--fpt-orange-dark);
-}
-
-.floating-status--found span i {
-  box-shadow: 0 0 0 4px rgba(244, 123, 32, 0.13);
-}
-
-.floating-status--verified {
-  right: 16%;
-  top: 27%;
-  border-left-color: var(--fpt-green);
-}
-
-.floating-status--verified span {
-  color: #1f7a42;
-}
-
-.floating-status--verified span i {
-  box-shadow: 0 0 0 4px rgba(66, 168, 91, 0.14);
 }
 
 .story-journey {
@@ -3341,6 +3224,7 @@ textarea {
   min-height: 420px;
   overflow: hidden;
   isolation: isolate;
+  contain: paint;
   padding: 58px 36px 36px;
   border: 1px solid rgba(210, 229, 247, 0.2);
   border-radius: var(--radius);
@@ -4388,11 +4272,6 @@ textarea {
     right: 6%;
   }
 
-  .floating-status--verified {
-    right: 10%;
-    top: 32%;
-  }
-
   .input-story,
   .analysis-layout,
   .processing-inner,
@@ -4746,28 +4625,6 @@ textarea {
     object-position: 52% 50%;
   }
 
-  .floating-status {
-    width: 148px;
-    padding: 11px;
-  }
-
-  .campus-card {
-    left: 0;
-    bottom: 0;
-  }
-
-  .floating-status--lost {
-    left: 0;
-  }
-
-  .floating-status--found {
-    right: 0;
-  }
-
-  .floating-status--verified {
-    display: none;
-  }
-
   .story-section {
     width: min(100% - 32px, 620px);
     padding: 72px 0;
@@ -5008,23 +4865,6 @@ textarea {
 
   .scroll-cue {
     display: none;
-  }
-
-  .floating-status {
-    position: relative;
-    display: none;
-  }
-
-  .campus-card {
-    left: 10px;
-    right: 10px;
-    bottom: 12px;
-    width: calc(100% - 20px);
-  }
-
-  .floating-status--lost,
-  .floating-status--found {
-    inset: auto;
   }
 
   .hero-stage {
@@ -6658,9 +6498,14 @@ textarea {
   box-shadow: 0 24px 58px rgba(29, 69, 103, 0.12);
 }
 
+.workflow-image-scanner.is-scanning {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .workflow-image-scanner__visual {
   --scan-travel: 326px;
   position: relative;
+  contain: paint;
   min-height: 360px;
   overflow: hidden;
   display: grid;
@@ -6712,6 +6557,7 @@ textarea {
 .workflow-image-scanner__media > img.is-active {
   opacity: 1;
   transform: scale(1);
+  will-change: opacity, transform;
 }
 
 .workflow-image-scanner__media > span {

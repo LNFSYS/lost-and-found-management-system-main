@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowRight, CalendarCheck, Check, Clock3, Image, LoaderCircle, MapPin, RotateCcw, ScanSearch, ShieldCheck, Sparkles } from "lucide-react";
+import { ArrowDown, ArrowRight, CalendarCheck, Check, Clock3, Image, LoaderCircle, MapPin, MessageCircle, RotateCcw, ScanSearch, ShieldCheck, Sparkles } from "lucide-react";
 import { motion } from "motion/react";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate } from "react-router-dom";
@@ -12,8 +12,8 @@ type ConnectorDirection = "left-right" | "right-left" | "left-center" | "center-
 type WorkflowPhase = "idle" | "analyzing" | "draft-ready" | "searching" | "results" | "no-results";
 
 const storyCopy: Record<StorySide, { label: string; title: string; description: string; item: string; time: string }> = {
-  LOST: { label: "Tôi làm mất đồ", title: "Gửi đi một dấu hiệu", description: "Mô tả điều bạn còn nhớ. Hệ thống sẽ lưu lại và tìm trong các báo nhặt được đang mở.", item: "Ví da màu đen", time: "Khoảng 14:10" },
-  FOUND: { label: "Tôi nhặt được đồ", title: "Trao lại một cơ hội", description: "Ghi nhận món đồ, thời gian và nơi nhặt được để chủ sở hữu có cơ hội tìm thấy.", item: "Ví da màu đen", time: "Khoảng 14:18" }
+  LOST: { label: "Tôi làm mất đồ", title: "Gửi đi một dấu hiệu", description: "Mô tả điều bạn còn nhớ. Hệ thống sẽ lưu lại và tìm trong các báo nhặt được đang mở.", item: "Vật phẩm thất lạc", time: "Thông tin do người dùng nhập" },
+  FOUND: { label: "Tôi nhặt được đồ", title: "Trao lại một cơ hội", description: "Ghi nhận món đồ, thời gian và nơi nhặt được để chủ sở hữu có cơ hội tìm thấy.", item: "Vật phẩm nhặt được", time: "Thông tin do người dùng nhập" }
 };
 
 const connectorPaths: Record<ConnectorDirection, string> = {
@@ -98,7 +98,7 @@ function WorkflowPostImage({ post }: { post: PostSummary }) {
   }, [mediaPath]);
 
   return source
-    ? <img src={source} alt="" loading="lazy" />
+    ? <img src={source} alt="" loading="lazy" decoding="async" />
     : <span className="workflow-result-image__fallback"><Image aria-hidden="true" /></span>;
 }
 
@@ -131,37 +131,26 @@ function ActiveImageAnalysisPanel({
 }) {
   const isReady = phase === "draft-ready" && result;
   const [activeImageIndex, setActiveImageIndex] = useState(0);
-  const [activeStep, setActiveStep] = useState(0);
 
   useEffect(() => {
     setActiveImageIndex(0);
-    setActiveStep(0);
     if (phase !== "analyzing") return;
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     const imageTimer = previewUrls.length > 1
       ? window.setInterval(() => setActiveImageIndex((current) => (current + 1) % previewUrls.length), 1350)
       : null;
-    const stepTimer = window.setInterval(() => setActiveStep((current) => (current + 1) % 4), 900);
     return () => {
       if (imageTimer) window.clearInterval(imageTimer);
-      window.clearInterval(stepTimer);
     };
   }, [phase, previewUrls.length]);
 
-  const analysisSteps = [
-    "Đọc hình dạng, màu sắc và chất liệu",
-    "Đối chiếu hãng, model và dòng chữ",
-    "Nhận diện phụ kiện và dấu hiệu riêng",
-    "Tổng hợp bản nháp từ mọi góc chụp"
-  ];
-
   return <div className="analysis-layout workflow-analysis-layout" aria-busy={!isReady}>
     <div className="story-heading story-heading--left stage-copy-card">
-      <p className="story-index">{isReady ? "Bản nháp đã sẵn sàng" : "Gemini đang hỗ trợ đọc ảnh"}</p>
-      <h2>{isReady ? "Những chi tiết nhìn thấy đã được đưa vào form." : "Ảnh đang được quét theo từng lớp nhận dạng."}</h2>
+      <p className="story-index">{isReady ? "Bản nháp từ ảnh đã sẵn sàng" : "Hệ thống đang phân tích ảnh"}</p>
+      <h2>{isReady ? "Những chi tiết nhìn thấy đã được đưa vào form." : "Ảnh đang được phân tích để tạo bản nháp."}</h2>
       <p>{isReady
         ? "Tên, mô tả và danh mục là gợi ý từ ảnh. Bạn vẫn là người kiểm tra, bổ sung vị trí, thời gian và quyết định đăng."
-        : "Hệ thống chỉ phân tích nội dung nhìn thấy trong ảnh, không suy đoán vị trí, thời gian hay quyền sở hữu."}</p>
+        : "Hệ thống chỉ nhận diện các đặc điểm nhìn thấy trong ảnh. Vị trí, thời gian và quyền sở hữu do người dùng bổ sung và kiểm tra."}</p>
       <div className="workflow-analysis-actions">
         {isReady && <button type="button" onClick={onReviewDraft}>Kiểm tra bản nháp <ArrowRight size={17} /></button>}
         <button type="button" className="is-secondary" onClick={onReset}><RotateCcw size={16} /> Kết thúc phiên</button>
@@ -171,7 +160,7 @@ function ActiveImageAnalysisPanel({
       <div className="workflow-image-scanner__visual">
         <div className="workflow-image-scanner__media">
           {previewUrls.length
-            ? previewUrls.map((url, index) => <img className={index === activeImageIndex ? "is-active" : ""} src={url} alt={`Góc chụp vật phẩm ${index + 1}`} key={url} />)
+            ? previewUrls.map((url, index) => <img className={index === activeImageIndex ? "is-active" : ""} src={url} alt={`Góc chụp vật phẩm ${index + 1}`} loading={index === activeImageIndex ? "eager" : "lazy"} decoding="async" key={url} />)
             : <span><Image /></span>}
         </div>
         {!isReady && <div className="workflow-image-scanner__beam" aria-hidden="true"><i /></div>}
@@ -180,22 +169,21 @@ function ActiveImageAnalysisPanel({
         <span className="workflow-image-scanner__corner is-bottom-left" />
         <span className="workflow-image-scanner__corner is-bottom-right" />
         <strong className="workflow-image-scanner__status">
-          {isReady ? <><Check /> Đã tổng hợp {result.imageCount || previewUrls.length} ảnh</> : <><LoaderCircle /> Đang quét ảnh {activeImageIndex + 1}/{previewUrls.length}</>}
+          {isReady ? <><Check /> Đã phân tích {result.imageCount || previewUrls.length} ảnh</> : <><LoaderCircle /> Đang phân tích {previewUrls.length} ảnh</>}
         </strong>
         {previewUrls.length > 1 && <div className="workflow-image-scanner__filmstrip" aria-hidden="true">
-          {previewUrls.map((url, index) => <span className={index === activeImageIndex ? "is-active" : ""} key={url}><img src={url} alt="" /><i>{index + 1}</i></span>)}
+          {previewUrls.map((url, index) => <span className={index === activeImageIndex ? "is-active" : ""} key={url}><img src={url} alt="" loading="lazy" decoding="async" /><i>{index + 1}</i></span>)}
         </div>}
       </div>
-      <div className="workflow-analysis-readout" aria-live="polite">
-        {isReady ? <>
+      {isReady && <div className="workflow-analysis-readout" aria-live="polite">
+        <>
           <span><small>Tên gợi ý</small><strong>{result.title}</strong></span>
           <span><small>Danh mục</small><strong>{result.suggestedCategory?.name ?? "Cần người dùng chọn"}</strong></span>
-          <span><small>Độ tin cậy hỗ trợ</small><strong>{Math.round(result.confidence * 100)}%</strong></span>
+          <span><small>Đặc điểm nhìn thấy</small><strong>{result.visualAttributes.slice(0, 3).join(", ") || "Chưa nhận diện rõ"}</strong></span>
+          <span><small>Chữ nhìn thấy</small><strong>{result.visibleText.slice(0, 3).join(", ") || "Không nhận diện được"}</strong></span>
           <span><small>Nguyên tắc</small><strong>Người dùng kiểm tra lại</strong></span>
-        </> : analysisSteps.map((step, index) => <span className={index === activeStep ? "is-active" : ""} key={step}>
-          <small>0{index + 1}</small><strong>{step}</strong>
-        </span>)}
-      </div>
+        </>
+      </div>}
     </div>
   </div>;
 }
@@ -221,7 +209,7 @@ function ActiveSearchPanel({
     <div className="processing-copy">
       <p className="story-index">{searching ? "Đang đối chiếu dữ liệu thật" : "Đã hoàn tất lượt quét"}</p>
             <h2>{searching ? `Đang chấm điểm các bài ${oppositeType} có khả năng liên quan.` : suggestions.length ? `Tìm thấy ${suggestions.length} ứng viên vượt ngưỡng lưu.` : "Chưa có ứng viên vượt ngưỡng matching."}</h2>
-      <p>Hệ thống so sánh mô tả, danh mục, vị trí, thời gian, tín hiệu ảnh và OCR. Điểm số chỉ hỗ trợ rà soát; quyền sở hữu vẫn cần bằng chứng và con người xác minh.</p>
+      <p>Hệ thống so sánh mô tả, danh mục, vị trí, thời gian, tín hiệu ảnh và OCR. Điểm số chỉ là gợi ý; sau đó hai bên có thể mở claim và trao đổi riêng để xác minh.</p>
       <div className="processing-stats">
         <span><strong>{createdPost ? "1" : "0"}</strong><small>bài vừa đăng</small></span>
         <span><strong>{oppositeType}</strong><small>loại đang tìm</small></span>
@@ -236,9 +224,11 @@ function ActiveSearchPanel({
         <span>{searching ? "Đang quét báo cáo trong hệ thống" : "Đã hoàn tất lượt quét hiện tại"}</span>
       </div>
       {searching && <div className="workflow-scan-beam" aria-hidden="true"><i /></div>}
-      {(searching ? [0, 1, 2] : suggestions.slice(0, 3)).map((item, index) => typeof item === "number"
-        ? <article className="workflow-scan-placeholder" key={item}><small>{oppositeType} · ĐANG CHẤM ĐIỂM</small><strong>Đối chiếu ứng viên {index + 1}</strong><span>Text · danh mục · vị trí · thời gian · ảnh · OCR</span></article>
-        : <article className={index === 0 ? "is-candidate" : ""} key={item.matchId}>
+      {searching ? <div className="workflow-no-candidates">
+        <LoaderCircle className="is-spinning" />
+        <strong>Đang tải kết quả matching</strong>
+        <span>Ứng viên sẽ hiển thị sau khi API hoàn tất đối chiếu dữ liệu.</span>
+      </div> : suggestions.slice(0, 3).map((item, index) => <article className={index === 0 ? "is-candidate" : ""} key={item.matchId}>
           <small>{item.candidate.type} · {item.candidate.category?.name ?? "Chưa phân loại"}</small>
           <strong>{item.candidate.title}</strong>
           <span>{postLocation(item.candidate)}</span>
@@ -361,7 +351,7 @@ export function HomePage() {
         <div className="hero-copy">
           <p className="story-kicker"><span /> FPTU Lost &amp; Found</p>
           <h1 id="home-title">Đồ thất lạc,<br /><em>có đường về.</em></h1>
-          <p className="hero-lead">Hệ thống giúp kết nối người mất và người nhặt bằng thông tin, hình ảnh và xác minh từ Staff/Admin.</p>
+          <p className="hero-lead">Hệ thống giúp kết nối người mất và người nhặt bằng thông tin, hình ảnh và phòng trao đổi riêng tư.</p>
           <div className="campus-strip" aria-label="Thông tin campus">
             <span><MapPin size={16} /> FPTU Đà Nẵng</span>
             <span><Clock3 size={16} /> 8:00 - 17:30</span>
@@ -372,24 +362,20 @@ export function HomePage() {
             <button className="journey-button journey-button--ghost" onClick={() => chooseStory("FOUND")}>Đăng đồ nhặt được</button>
           </div>
           <div className="hero-stats" aria-label="Thống kê nhanh">
-            <span><strong>28</strong><small>Bài đăng</small></span>
-            <span><strong>12</strong><small>Người dùng</small></span>
-            <span><strong>8</strong><small>Khu vực</small></span>
-            <span><strong>Staff</strong><small>Xác minh</small></span>
+            <span><strong>LOST</strong><small>Báo mất đồ</small></span>
+            <span><strong>FOUND</strong><small>Báo nhặt được</small></span>
+            <span><strong>CLAIM</strong><small>Yêu cầu xác minh</small></span>
+            <span><strong>CHAT</strong><small>Trao đổi riêng</small></span>
           </div>
           <a className="scroll-cue" href="#two-sides"><ArrowDown size={16} /> Cuộn để theo dấu món đồ</a>
         </div>
         <div className="hero-stage">
           <figure className="hero-campus-photo">
-            <img src={heroCampusImage} alt="FPT University Đà Nẵng campus với tòa Alpha và cầu nối màu cam" decoding="async" fetchPriority="high" />
+            <img src={heroCampusImage} alt="FPT University Đà Nẵng campus với tòa Alpha và cầu nối màu cam" decoding="async" />
           </figure>
           <div className="hero-workflow" aria-label="Quy trình xử lý nhanh">
-            <span><ScanSearch size={15} /> Báo tin</span><i /><span><Sparkles size={15} /> Gợi ý trùng khớp</span><i /><span><ShieldCheck size={15} /> Staff xác minh</span>
+            <span><ScanSearch size={15} /> Báo tin</span><i /><span><Sparkles size={15} /> Gợi ý trùng khớp</span><i /><span><MessageCircle size={15} /> Trao đổi riêng</span>
           </div>
-          <div className="campus-card"><ShieldCheck size={17} /><strong>Campus Lost &amp; Found Desk</strong><span>Tòa Alpha · Phòng CTSV</span></div>
-          <div className="floating-status floating-status--lost"><span><i /> LOST</span><strong>14:10</strong><small>Một báo cáo vừa được gửi</small></div>
-          <div className="floating-status floating-status--found"><span><i /> FOUND</span><strong>14:18</strong><small>Một dấu hiệu mới xuất hiện</small></div>
-          <div className="floating-status floating-status--verified"><span><i /> VERIFIED</span><strong>Staff</strong><small>Đang kiểm tra bằng chứng</small></div>
         </div>
       </div>
     </section>
@@ -476,13 +462,10 @@ export function HomePage() {
               onReset={resetWorkflow}
             />
           : <div className="processing-inner">
-          <div className="processing-copy"><p className="story-index">Hệ thống tiếp nhận</p><h2>Phần còn lại để hệ thống tìm kiếm.</h2><p>Thông tin được kiểm tra, phân loại và so sánh với các báo cáo đang mở. Đây là gợi ý matching theo nhiều tín hiệu, không phải kết luận quyền sở hữu.</p><div className="processing-stats"><span><strong>24/7</strong><small>theo dõi báo cáo</small></span><span><strong>6</strong><small>nhóm tín hiệu</small></span><span><strong>1</strong><small>quyết định con người</small></span></div><div className="signal-list"><span><Check /> Mô tả &amp; OCR</span><span><Check /> Danh mục &amp; ảnh</span><span><Check /> Gần thời gian</span><span><Check /> Cùng khu vực</span></div></div>
+          <div className="processing-copy"><p className="story-index">Hệ thống tiếp nhận</p><h2>Matching sẽ hiển thị khi có dữ liệu thật.</h2><p>Thông tin được kiểm tra, phân loại và so sánh với các báo cáo đang mở. Điểm tương đồng chỉ là gợi ý để người dùng xem lại và mở claim khi phù hợp.</p><div className="processing-stats"><span><strong>LOST / FOUND</strong><small>loại bài được đối chiếu</small></span><span><strong>Matching</strong><small>gợi ý theo nhiều tín hiệu</small></span><span><strong>Claim</strong><small>trao đổi riêng sau matching</small></span></div><div className="signal-list"><span><Check /> Mô tả &amp; OCR</span><span><Check /> Danh mục &amp; ảnh</span><span><Check /> Gần thời gian</span><span><Check /> Cùng khu vực</span></div></div>
           <div className="scan-board">
-            <div className="scan-status"><ScanSearch size={14} /><span>Đang quét báo cáo phù hợp</span></div>
-            <motion.div className="scan-line" aria-hidden="true" animate={{ top: ["7%", "91%", "91%", "7%"], opacity: [.25, 1, 1, .25] }} transition={{ duration: 3.2, repeat: Infinity, ease: "easeInOut", times: [0, .46, .54, 1] }}><i /></motion.div>
-            <article><small>FOUND #184</small><strong>Ví da đen</strong><span>Beta · 16:40</span></article>
-            <article className="is-candidate"><small>FOUND #219</small><strong>Ví da màu đen</strong><span>Alpha · 14:18</span><b>Ứng viên phù hợp</b></article>
-            <article><small>FOUND #203</small><strong>Ví màu nâu</strong><span>Alpha · 09:20</span></article>
+            <div className="scan-status"><ScanSearch size={14} /><span>Chờ dữ liệu matching thực tế</span></div>
+            <div className="workflow-no-candidates"><ScanSearch /><strong>Chưa có ứng viên để hiển thị</strong><span>Kết quả sẽ được lấy từ các bài đăng đang mở sau khi người dùng hoàn tất báo mất hoặc báo nhặt.</span></div>
           </div>
         </div>}
         <StoryConnector direction="right-left" dark />
@@ -502,7 +485,7 @@ export function HomePage() {
           <div className="workflow-results-grid">
             {suggestions.map((match) => <WorkflowResultCard key={match.matchId} match={match} />)}
           </div>
-          <div className="match-alert"><ShieldCheck size={18} /><span>Mọi ứng viên cần được người dùng xem lại và staff xác minh trước quy trình claim hoặc bàn giao.</span></div>
+          <div className="match-alert"><MessageCircle size={18} /><span>Mọi ứng viên cần được người dùng xem lại trước khi mở claim và trao đổi riêng.</span></div>
           <button type="button" className="workflow-reset-button workflow-reset-button--light" onClick={resetWorkflow}><RotateCcw size={16} /> Kết thúc phiên và trở về storytelling</button>
         </> : workflowPhase === "no-results" ? <>
           <div className="match-copy workflow-match-copy">
@@ -523,26 +506,25 @@ export function HomePage() {
           <h2>Kết quả sẽ xuất hiện tại đây.</h2>
           <p>Hệ thống đang chấm điểm bài đối ứng theo mô tả, danh mục, vị trí, thời gian, tag ảnh và OCR.</p>
         </div> : <>
-          <div className="match-copy"><p className="story-index">Gợi ý phù hợp</p><h2>Có vẻ hai câu chuyện đang nói về cùng một món đồ.</h2><p>Mức tương đồng chỉ mang tính gợi ý. Hệ thống không tự động giao đồ dù điểm matching cao.</p></div>
-          <div className="match-stage"><article className="match-card match-card--lost"><span>LOST</span><h3>Ví da màu đen</h3><p>Alpha · 14:10</p></article><motion.div className="match-score" initial={{ scale: .72 }} whileInView={{ scale: 1 }} viewport={{ once: true }} transition={{ type: "spring", stiffness: 220 }}><ScanSearch size={24} /><strong>92%</strong><small>tương đồng</small></motion.div><article className="match-card match-card--found"><span>FOUND</span><h3>Ví da màu đen</h3><p>Alpha · 14:18</p></article></div>
-          <div className="match-alert"><ShieldCheck size={18} /><span>Gợi ý này sẽ được đưa vào danh sách cần staff xác minh trước khi liên hệ bàn giao.</span></div>
-          <div className="match-reasons"><span><Check /> Cùng danh mục</span><span><Check /> Cùng tòa Alpha</span><span><Check /> Cách nhau 8 phút</span><span><Check /> Mô tả tương đồng</span></div>
+          <div className="match-copy"><p className="story-index">Gợi ý phù hợp</p><h2>Kết quả matching sẽ xuất hiện sau khi có bài đăng đối ứng.</h2><p>Hệ thống không tự tạo ứng viên hoặc khẳng định quyền sở hữu. Khi có kết quả thật, người dùng có thể xem lại và mở claim để trao đổi riêng.</p></div>
+          <div className="workflow-empty-match"><ScanSearch /><strong>Chưa có kết quả matching</strong><span>Hãy hoàn tất một bài LOST hoặc FOUND để hệ thống bắt đầu đối chiếu.</span></div>
+          <div className="match-alert"><MessageCircle size={18} /><span>Khi có ứng viên phù hợp, claimant và Finder có thể mở phòng trao đổi riêng để xác minh thông tin.</span></div>
         </>}
         <StoryConnector direction="left-center" />
       </StoryStage>
 
       <StoryStage className="story-section human-review story-stage--review" id="human-review">
-        <StageMarker number="06" label="Con người xác minh" align="center" />
-        <div className="review-visual"><div className="review-sheet"><span className="review-status"><ShieldCheck size={17} /> Cần nhân viên xác minh</span><div className="review-handoff"><span>Gợi ý từ hệ thống</span><ArrowDown size={16} /><strong>Nhân viên xác minh</strong></div><h3>Đối chiếu bằng chứng</h3><p>Thông tin riêng và bằng chứng sở hữu chỉ hỗ trợ nhân viên đưa ra quyết định.</p><ul><li><Check /> Đặc điểm riêng của vật phẩm</li><li><Check /> Bằng chứng sở hữu</li><li><Check /> Thông tin chỉ chủ sở hữu biết</li></ul><div className="review-stamp">ĐANG XEM XÉT</div></div></div>
-        <div className="story-heading story-heading--left stage-copy-card"><p className="story-index">Con người xác minh</p><h2>Công nghệ tìm ra khả năng. Con người bảo vệ sự chính xác.</h2><p>Người nhận gửi claim và bằng chứng. Staff/Admin xem xét trước khi xác nhận lịch bàn giao, giúp hạn chế nhận nhầm hoặc mạo danh.</p><div className="stage-benefits"><span><Check size={15} /> Bảo vệ thông tin riêng</span><span><Check size={15} /> Hạn chế nhận nhầm</span><span><Check size={15} /> Có lịch sử xử lý rõ ràng</span></div></div>
+        <StageMarker number="06" label="Trao đổi trực tiếp" align="center" />
+        <div className="review-visual"><div className="review-sheet"><span className="review-status"><MessageCircle size={17} /> PHÒNG TRAO ĐỔI RIÊNG</span><div className="review-handoff"><span>Claim được mở</span><ArrowDown size={16} /><strong>Hai bên nhắn tin trực tiếp</strong></div><h3>Trao đổi và xác minh</h3><p>Claimant và Finder trao đổi trong phòng riêng để làm rõ thông tin vật phẩm và bằng chứng.</p><ul><li><Check /> Chỉ hai bên tham gia phòng chat</li><li><Check /> Nhắn tin trao đổi trực tiếp</li><li><Check /> Chia sẻ evidence riêng tư</li></ul><div className="review-stamp">TRAO ĐỔI RIÊNG</div></div></div>
+        <div className="story-heading story-heading--left stage-copy-card"><p className="story-index">Trao đổi trực tiếp</p><h2>Hai bên xác minh thông tin trong phòng riêng.</h2><p>Sau khi mở claim, người mất và người nhặt có thể nhắn tin trực tiếp, đặt câu hỏi và chia sẻ evidence riêng tư. Bước này không phải Staff xác nhận thay cho hai bên.</p><div className="stage-benefits"><span><Check size={15} /> Phòng chat riêng tư</span><span><Check size={15} /> Trao đổi giữa claimant và Finder</span><span><Check size={15} /> Evidence chỉ participant xem được</span></div></div>
         <StoryConnector direction="center-right" />
       </StoryStage>
 
       <StoryStage className="handover-story story-stage--handover" id="handover">
         <StageMarker number="07" label="Bàn giao" align="right" dark />
         <div className="story-heading"><p className="story-index">Đoạn đường cuối</p><h2>Giờ chỉ còn đưa món đồ về đúng người.</h2></div>
-        <div className="handover-summary"><span><CalendarCheck size={18} /> Lịch hẹn đã xác nhận</span><strong>Thứ 5 · 15:30 · Tòa Alpha</strong></div>
-        <div className="handover-track"><div><span>01</span><strong>Người nhặt</strong><small>Giao nộp món đồ</small></div><motion.i initial={{ scaleX: 0 }} whileInView={{ scaleX: 1 }} viewport={{ once: true }} /><div className="handover-point"><span><CalendarCheck /></span><strong>Điểm bàn giao</strong><small>Thứ 5 · 15:30</small></div><motion.i initial={{ scaleX: 0 }} whileInView={{ scaleX: 1 }} viewport={{ once: true }} /><div><span>03</span><strong>Chủ sở hữu</strong><small>Nhận lại an toàn</small></div></div>
+        <div className="handover-summary"><span><CalendarCheck size={18} /> Bước bàn giao</span><strong>Thực hiện sau khi hai bên thống nhất</strong></div>
+        <div className="handover-track"><div><span>01</span><strong>Người nhặt</strong><small>Giữ và trao đổi thông tin</small></div><motion.i initial={{ scaleX: 0 }} whileInView={{ scaleX: 1 }} viewport={{ once: true }} /><div className="handover-point"><span><CalendarCheck /></span><strong>Điểm bàn giao</strong><small>Hai bên thống nhất sau trao đổi</small></div><motion.i initial={{ scaleX: 0 }} whileInView={{ scaleX: 1 }} viewport={{ once: true }} /><div><span>03</span><strong>Chủ sở hữu</strong><small>Nhận lại an toàn</small></div></div>
         <div className="journey-progress"><span className="is-done">Lost</span><span className="is-done">Found</span><span className="is-done">Matched</span><span className="is-done">Verified</span><span className="is-current">Returned</span></div>
       </StoryStage>
     </div>

@@ -16,7 +16,11 @@ export async function exerciseHttpRuntime(pool: Pool) {
   const [database] = await pool.query<RowDataPacket[]>("SELECT DATABASE() AS name");
   assert.match(database[0].name, /^lnfs_reconcile_[a-f0-9]{32}_test$/);
   const uploadDir = await mkdtemp(path.join(os.tmpdir(), "lnfs-http-test-"));
-  const services = createServices(createPersistence(pool), { ...env, uploadDir });
+  const services = createServices(createPersistence(pool), {
+    ...env,
+    uploadDir,
+    cloudinary: { cloudName: null, apiKey: null, apiSecret: null }
+  });
   const server = createApp({ services, checkReadiness: async () => { await pool.query("SELECT 1"); } }).listen(0, "127.0.0.1");
   await once(server, "listening");
   const baseUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}/api`;

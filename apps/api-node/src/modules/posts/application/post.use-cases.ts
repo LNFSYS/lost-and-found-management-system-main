@@ -3,7 +3,7 @@ import type { PrivateMediaStorage } from "../../../shared/application/media-stor
 import type { TransactionRunner } from "../../../shared/application/transaction.js";
 import { AppError } from "../../../shared/domain/app-error.js";
 import type { AccessTokenPayload } from "../../../shared/domain/auth.js";
-import { mediaContentType, mediaPolicy, validateImageUpload } from "../../../shared/domain/media.js";
+import { mediaPolicy, validateImageUpload } from "../../../shared/domain/media.js";
 import { normalizeVietnameseText as normalizePostText } from "../../../shared/domain/text.js";
 import type { ImageUpload } from "../../../shared/domain/upload.js";
 import type { MatchingRepository, MatchingUseCases } from "../../matching/application/index.js";
@@ -369,10 +369,10 @@ export function createPostUseCases(options: PostDependencies) {
       if (privateMedia && !viewer) throw new AppError("unauthenticated", "Can dang nhap de xem media nay");
       if (privateMedia && !canSeePrivateMedia(viewer, media)) throw new AppError("forbidden", "Ban khong co quyen xem media nay");
 
-      const filePath = await mediaStorage.resolve(media.secureUrl);
+      const resolved = await mediaStorage.resolve(media.secureUrl, media.format ?? "jpg");
       return {
-        filePath,
-        contentType: mediaContentType((media.format ?? "jpg") as "jpg" | "png" | "webp"),
+        body: resolved.body,
+        contentType: resolved.contentType,
         publicId: media.publicId
       };
     },

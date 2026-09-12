@@ -228,11 +228,11 @@ export function createClaimRepository(pool: SqlExecutor) {
       return rows[0] ? mapClaim(rows[0]) : null;
     },
 
-    async findByPair(lostPostId: string, foundPostId: string, claimantId: string, queryable: Queryable = pool) {
+    async findByFoundPostForClaimant(foundPostId: string, claimantId: string, queryable: Queryable = pool) {
       const [rows] = await sqlExecutor(queryable).execute<ClaimRow[]>(
-        `${claimSelect} WHERE c.lost_post_id = ? AND c.post_id = ? AND c.claimant_id = ?
+        `${claimSelect} WHERE c.post_id = ? AND c.claimant_id = ?
        ORDER BY c.created_at DESC LIMIT 1`,
-        [lostPostId, foundPostId, claimantId]
+        [foundPostId, claimantId]
       );
       return rows[0] ? mapClaim(rows[0]) : null;
     },
@@ -405,14 +405,33 @@ export function createClaimRepository(pool: SqlExecutor) {
     },
 
     async createMessage(input: { roomId: string; senderId: string; content: string; clientMessageId?: string; }, queryable: Queryable) {
-      const messageId = id();
-      await sqlExecutor(queryable).execute(
-        `INSERT INTO chat_messages (id, room_id, sender_id, client_message_id, content, message_type)
-       VALUES (?, ?, ?, ?, ?, 'TEXT')
-       ON DUPLICATE KEY UPDATE id = id`,
-        [messageId, input.roomId, input.senderId, input.clientMessageId ?? null, input.content]
+      const executor = sqlExecutor(queryable);
+      const [sequenceRows] = await executor.execute<(RowDataPacket & { sequence: number })[]>(
+        "SELECT next_sequence AS sequence FROM chat_rooms WHERE id = ? LIMIT 1 FOR UPDATE",
+        [input.roomId]
       );
-      const [rows] = await sqlExecutor(queryable).execute<MessageRow[]>(
+      const sequence = sequenceRows[0]?.sequence;
+      if (sequence === undefined) return null;
+      if (input.clientMessageId) {
+        const [existing] = await executor.execute<MessageRow[]>(
+          `${messageSelect} WHERE m.room_id = ? AND m.sender_id = ? AND m.client_message_id = ? LIMIT 1`,
+          [input.roomId, input.senderId, input.clientMessageId]
+        );
+        if (existing[0]) return mapMessage(existing[0]);
+      }
+      const [advanced] = await executor.execute<ResultSetHeader>(
+        "UPDATE chat_rooms SET next_sequence = next_sequence + 1 WHERE id = ?",
+        [input.roomId]
+      );
+      if (advanced.affectedRows !== 1) return null;
+      const messageId = id();
+      await executor.execute(
+        `INSERT INTO chat_messages (id, room_id, sequence, sender_id, client_message_id, content, message_type)
+       VALUES (?, ?, ?, ?, ?, ?, 'TEXT')
+       ON DUPLICATE KEY UPDATE id = id`,
+        [messageId, input.roomId, Number(sequence), input.senderId, input.clientMessageId ?? null, input.content]
+      );
+      const [rows] = await executor.execute<MessageRow[]>(
         `${messageSelect} WHERE m.id = ? OR (m.room_id = ? AND m.sender_id = ? AND m.client_message_id = ?) LIMIT 1`,
         [messageId, input.roomId, input.senderId, input.clientMessageId ?? null]
       );

@@ -11,6 +11,16 @@ export interface MigrationPool { getConnection(): Promise<MigrationConnection>; 
 export interface MigrationFile { version: string; sql: string; raw: string; normalized: string; }
 export interface LedgerRow { version: string; checksum: string; }
 export interface AttemptRow extends LedgerRow { status: string; }
+export type MigrationSchemaVerifier = "claim-conversations" | "realtime-claim-chat" | "notification-type-text";
+export interface MigrationCompatibilityEntry {
+  version: string;
+  checksum: string;
+  verifier: MigrationSchemaVerifier;
+  satisfiesVersions?: readonly string[];
+}
+export interface MigrationCompatibilityMatch extends MigrationCompatibilityEntry {
+  source: "ledger" | "attempt";
+}
 
 export function migrationChecksums(sql: string) {
   const hash = (value: string) => createHash("sha256").update(value).digest("hex");
@@ -40,19 +50,53 @@ export async function readMigrationState(connection: MigrationConnection) {
   return { ledger: ledger as LedgerRow[], attempts: attempts as AttemptRow[] };
 }
 export const recoveryInstruction = "Inspect the database for partially applied DDL and reconcile the schema before a reviewed retry. Do not edit applied SQL or erase attempt history blindly.";
-export function validateMigrationState(files: MigrationFile[], state: Awaited<ReturnType<typeof readMigrationState>>) {
+function matchingCompatibility(row: LedgerRow, compatibility: readonly MigrationCompatibilityEntry[]) {
+  return compatibility.find((entry) => entry.version === row.version && entry.checksum === row.checksum);
+}
+
+export function validateMigrationState(
+  files: MigrationFile[],
+  state: Awaited<ReturnType<typeof readMigrationState>>,
+  compatibility: readonly MigrationCompatibilityEntry[] = []
+) {
+  const matches: MigrationCompatibilityMatch[] = [];
   for (const row of state.ledger) {
     const file = files.find((candidate) => candidate.version === row.version);
-    if (!file) throw new Error(`Unknown applied migration: ${row.version}. Reconcile renamed versions before running any DDL.`);
-    if (!checksumMatches(row.checksum, file)) throw new Error(`Migration checksum mismatch: ${row.version}`);
+    if (file && checksumMatches(row.checksum, file)) continue;
+    const accepted = matchingCompatibility(row, compatibility);
+    if (!accepted) {
+      if (!file) throw new Error(`Unknown applied migration: ${row.version}. Reconcile renamed versions before running any DDL.`);
+      throw new Error(`Migration checksum mismatch: ${row.version}`);
+    }
+    matches.push({ ...accepted, source: "ledger" });
   }
   for (const attempt of state.attempts) {
     const file = files.find((candidate) => candidate.version === attempt.version);
-    if (!file || !checksumMatches(attempt.checksum, file)) throw new Error(`Migration attempt checksum/version mismatch: ${attempt.version}`);
-    if (attempt.status !== "APPLIED" || !state.ledger.some((row) => row.version === attempt.version)) {
+    if (!file || !checksumMatches(attempt.checksum, file)) {
+      const accepted = matchingCompatibility(attempt, compatibility);
+      if (!accepted) throw new Error(`Migration attempt checksum/version mismatch: ${attempt.version}`);
+      matches.push({ ...accepted, source: "attempt" });
+    }
+    const ledger = state.ledger.find((row) => row.version === attempt.version && row.checksum === attempt.checksum);
+    if (attempt.status !== "APPLIED" || !ledger) {
       throw new Error(`Migration ${attempt.version} has an incomplete attempt (${attempt.status}). ${recoveryInstruction}`);
     }
   }
+  return matches.filter((match, index) => matches.findIndex((candidate) =>
+    candidate.version === match.version && candidate.checksum === match.checksum && candidate.verifier === match.verifier
+  ) === index);
+}
+
+export function pendingMigrationFiles(
+  files: MigrationFile[],
+  state: Awaited<ReturnType<typeof readMigrationState>>,
+  compatibilityMatches: readonly MigrationCompatibilityMatch[] = []
+) {
+  const satisfied = new Set(state.ledger.map((row) => row.version));
+  for (const match of compatibilityMatches) {
+    for (const version of match.satisfiesVersions ?? []) satisfied.add(version);
+  }
+  return files.filter((file) => !satisfied.has(file.version));
 }
 export function migrationLockName(database: string) {
   return `lnfs:migrate:${createHash("sha256").update(database).digest("hex").slice(0, 40)}`;
