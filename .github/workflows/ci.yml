@@ -2,7 +2,7 @@ name: LNFS CI
 
 on:
   push:
-    branches: [main, "feature/**", "fix/**"]
+    branches: [main, dev, "feature/**", "fix/**"]
   pull_request:
     branches: [main]
 
