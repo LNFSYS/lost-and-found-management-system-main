@@ -1,6 +1,6 @@
-import { ArrowLeft, ArrowRight, CalendarClock, Files, ImageOff, LockKeyhole, MapPin, Plus, ScanSearch, Search, SlidersHorizontal } from "lucide-react";
+import { ArrowLeft, ArrowRight, CalendarClock, Files, ImageOff, LockKeyhole, MapPin, MessageCircle, Plus, ScanSearch, Search, SlidersHorizontal } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useNetworkStatus } from "../hooks/use-network-status";
 import { useStaleDataNotice } from "../hooks/use-stale-data-notice";
 import { api, type PostCatalog, type PostListFilters, type PostListResponse, type PostSummary } from "../services/api";
@@ -57,6 +57,24 @@ export function PostImage({ post, detail = false }: { post: PostSummary; detail?
 }
 
 export function PostCard({ post }: { post: PostSummary }) {
+  const navigate = useNavigate();
+  const [claiming, setClaiming] = useState(false);
+  const [claimError, setClaimError] = useState("");
+  const canClaim = !post.canEdit && ["OPEN", "MATCHED"].includes(post.status);
+
+  async function claimAndChat() {
+    setClaiming(true);
+    setClaimError("");
+    try {
+      const claim = await api.createClaim({ postId: post.id });
+      navigate(`/claims/${claim.id}`);
+    } catch (reason) {
+      setClaimError(reason instanceof Error ? reason.message : "Không thể mở phòng trao đổi riêng");
+    } finally {
+      setClaiming(false);
+    }
+  }
+
   return <article className="post-card">
     <Link className="post-card__image-link" to={`/posts/${post.id}`} aria-label={`Xem chi tiết ${post.title}`}><PostImage post={post} /></Link>
     <div className="post-card__body">
@@ -71,6 +89,8 @@ export function PostCard({ post }: { post: PostSummary }) {
         <span><strong>{post.matchSummary.suggestionCount} gợi ý</strong><small>{post.matchSummary.topScore === null ? "Chưa có điểm" : `Cao nhất ${Math.round(post.matchSummary.topScore * 100)}%`}</small></span>
         <ArrowRight />
       </Link>}
+      {canClaim && <button className="post-claim-button post-claim-button--card" type="button" disabled={claiming} onClick={() => void claimAndChat()}><MessageCircle /> {claiming ? "Đang mở phòng chat..." : "Nhắn tin với người đăng"}</button>}
+      {claimError && <p className="post-claim-error" role="alert">{claimError}</p>}
       <footer>
         <div className="post-owner"><span>{initials(post.owner.fullName)}</span><strong>{post.owner.fullName}</strong></div>
         <Link className="post-detail-link" to={`/posts/${post.id}`}>Xem chi tiết <ArrowRight /></Link>

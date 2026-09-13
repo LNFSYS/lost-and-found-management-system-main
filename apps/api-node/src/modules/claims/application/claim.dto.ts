@@ -1,4 +1,12 @@
-export type CreateClaimInput = { lostPostId: string; foundPostId: string; description?: string | undefined; approximateLostAt?: Date | undefined; approximateLocation?: string | undefined; requestKey?: string | undefined; };
+export type CreateClaimInput = {
+  postId?: string | undefined;
+  lostPostId?: string | undefined;
+  foundPostId?: string | undefined;
+  description?: string | undefined;
+  approximateLostAt?: Date | undefined;
+  approximateLocation?: string | undefined;
+  requestKey?: string | undefined;
+};
 
 export type ClaimDecisionInput = { decision: "ACCEPT" | "DECLINE" | "REQUEST_MORE_INFO"; note?: string | undefined; };
 

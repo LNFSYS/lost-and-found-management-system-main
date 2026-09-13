@@ -1,16 +1,16 @@
-import { AlertTriangle, ArrowLeft, Check, Clock3, ImagePlus, LockKeyhole, MessageCircle, RefreshCw, Send, ShieldCheck, Upload, UserRound, X } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Clock3, ImagePlus, LockKeyhole, MessageCircle, RefreshCw, Send, ShieldCheck, Upload, UserRound, X } from "lucide-react";
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "../context/auth-context";
 import { api, type ClaimEvidence, type ClaimMessage, type ClaimRecord, type ClaimStatus } from "../services/api";
 
 const statusLabels: Record<ClaimStatus, string> = {
-  PENDING: "Đang chờ Finder phản hồi",
+  PENDING: "Đang chuẩn bị phòng chat",
   CONVERSATION_OPEN: "Đang trao đổi riêng",
   NEED_MORE_INFO: "Cần bổ sung thông tin",
   ACCEPTED: "Đã xác nhận",
   REJECTED: "Đã từ chối",
-  CANCELLED: "Đã rút yêu cầu"
+  CANCELLED: "Đã đóng trao đổi"
 };
 
 function formatDate(value: string | null) {
@@ -30,7 +30,7 @@ function mergeMessages(current: ClaimMessage[], incoming: ClaimMessage[]) {
 }
 
 function claimTitle(claim: ClaimRecord) {
-  return claim.posts.lost?.title ?? "Yêu cầu xác minh vật phẩm";
+  return claim.posts.lost?.title ?? claim.posts.found.title;
 }
 
 function EvidenceImage({ evidence }: { evidence: ClaimEvidence }) {
@@ -50,7 +50,7 @@ function EvidenceImage({ evidence }: { evidence: ClaimEvidence }) {
 }
 
 function ClaimList({ claims, selectedId, onSelect }: { claims: ClaimRecord[]; selectedId?: string; onSelect: (id: string) => void }) {
-  if (!claims.length) return <div className="claim-list-empty"><MessageCircle /><strong>Chưa có yêu cầu xác minh</strong><span>Khi matching gợi ý một cặp phù hợp, bạn có thể mở trao đổi riêng tại đây.</span></div>;
+  if (!claims.length) return <div className="claim-list-empty"><MessageCircle /><strong>Chưa có cuộc trao đổi riêng</strong><span>Chọn “Nhắn tin với người đăng” trên một bài bất kỳ hoặc mở chat từ kết quả matching để bắt đầu.</span></div>;
   return <div className="claim-list">{claims.map((claim) => <button className={`claim-list-item ${selectedId === claim.id ? "active" : ""}`} key={claim.id} onClick={() => onSelect(claim.id)}>
     <span className={`claim-status-dot claim-status-dot--${claim.status.toLowerCase()}`} />
     <span><strong>{claimTitle(claim)}</strong><small>{statusLabels[claim.status]}</small></span>
@@ -82,10 +82,8 @@ export function ClaimsPage() {
   const [loading, setLoading] = useState(true);
   const [roomLoading, setRoomLoading] = useState(false);
   const [sending, setSending] = useState(false);
-  const [decision, setDecision] = useState(false);
   const [withdrawing, setWithdrawing] = useState(false);
   const [messageDraft, setMessageDraft] = useState("");
-  const [decisionNote, setDecisionNote] = useState("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [evidenceDescription, setEvidenceDescription] = useState("");
   const [uploading, setUploading] = useState(false);
@@ -184,7 +182,6 @@ export function ClaimsPage() {
     setEvidence([]);
     updateMessageCursor(null);
     setMessageDraft("");
-    setDecisionNote("");
     setSelectedFile(null);
     setUploadError("");
     pendingMessage.current = null;
@@ -242,20 +239,6 @@ export function ClaimsPage() {
     } finally { setSending(false); }
   }
 
-  async function respond(nextDecision: "ACCEPT" | "DECLINE" | "REQUEST_MORE_INFO") {
-    if (!claimId) return;
-    setDecision(true);
-    setError("");
-    try {
-      const updated = await api.decideClaim(claimId, nextDecision, decisionNote.trim() || undefined);
-      setClaim(updated);
-      setDecisionNote("");
-      await loadClaimRoom(claimId);
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Không thể cập nhật yêu cầu");
-    } finally { setDecision(false); }
-  }
-
   async function withdraw() {
     if (!claimId) return;
     setWithdrawing(true);
@@ -289,24 +272,21 @@ export function ClaimsPage() {
     } finally { setUploading(false); }
   }
 
-  const canDecide = Boolean(claim && user?.id === claim.finderId && claim.finderDecision === "PENDING" && claim.status === "PENDING");
-
   return <main className="claims-page">
     <header className="claims-heading">
-      <div><p className="eyebrow">XÁC MINH PEER-TO-PEER</p><h1>Trao đổi riêng</h1><p>Chỉ claimant và Finder của từng cặp matching mới có thể xem tin nhắn và evidence.</p></div>
+      <div><p className="eyebrow">XÁC MINH PEER-TO-PEER</p><h1>Trao đổi riêng</h1><p>Claimant và chủ bài viết có thể nhắn tin ngay; chỉ hai bên mới xem được tin nhắn và evidence.</p></div>
       <Link className="claims-back" to="/posts"><ArrowLeft /> Quay lại bài đăng</Link>
     </header>
     {error && <div className="claim-alert"><AlertTriangle /> {error}</div>}
-    {loading ? <div className="claim-loading"><RefreshCw /><span>Đang tải các yêu cầu riêng...</span></div> : <section className="claims-layout">
-      <aside className="claims-sidebar"><div className="claims-sidebar__title"><span><MessageCircle /> Yêu cầu của tôi</span><strong>{claims.length}</strong></div><ClaimList claims={claims} selectedId={claimId} onSelect={(id) => navigate(`/claims/${id}`)} />{claimHasMore && <button className="claim-load-older claim-load-claims" type="button" disabled={loadingMoreClaims} onClick={() => void loadMoreClaims()}><RefreshCw className={loadingMoreClaims ? "is-spinning" : ""} /> {loadingMoreClaims ? "Đang tải..." : "Xem thêm yêu cầu"}</button>}</aside>
-      {!claimId ? <section className="claim-welcome"><ShieldCheck /><h2>Chọn một yêu cầu để mở phòng riêng</h2><p>Phòng trao đổi không xuất hiện trong bảng tin công khai và không cho phép người ngoài truy cập.</p></section>
+    {loading ? <div className="claim-loading"><RefreshCw /><span>Đang tải các cuộc trao đổi riêng...</span></div> : <section className="claims-layout">
+      <aside className="claims-sidebar"><div className="claims-sidebar__title"><span><MessageCircle /> Trao đổi của tôi</span><strong>{claims.length}</strong></div><ClaimList claims={claims} selectedId={claimId} onSelect={(id) => navigate(`/claims/${id}`)} />{claimHasMore && <button className="claim-load-older claim-load-claims" type="button" disabled={loadingMoreClaims} onClick={() => void loadMoreClaims()}><RefreshCw className={loadingMoreClaims ? "is-spinning" : ""} /> {loadingMoreClaims ? "Đang tải..." : "Xem thêm trao đổi"}</button>}</aside>
+      {!claimId ? <section className="claim-welcome"><ShieldCheck /><h2>Chọn một cuộc trao đổi để mở phòng riêng</h2><p>Phòng trao đổi không xuất hiện trong bảng tin công khai và không cho phép người ngoài truy cập.</p></section>
         : roomLoading ? <section className="claim-welcome"><RefreshCw className="is-spinning" /><h2>Đang mở phòng riêng...</h2></section>
           : claim ? <section className="claim-room">
-            {claim.claimantId === user?.id && ["PENDING", "CONVERSATION_OPEN", "NEED_MORE_INFO"].includes(claim.status) && <button className="claim-withdraw-button" type="button" disabled={withdrawing} onClick={() => void withdraw()}><X /> {withdrawing ? "Đang rút..." : "Rút yêu cầu"}</button>}
-            <header className="claim-room__header"><div><span className={`claim-status claim-status--${claim.status.toLowerCase()}`}>{statusLabels[claim.status]}</span><h2>{claimTitle(claim)}</h2><p>FOUND: {claim.posts.found.title} · Cập nhật {formatDate(claim.updatedAt)}</p></div><LockKeyhole /></header>
-            <div className="claim-participants"><span><UserRound /> Claimant: <strong>{claim.claimant.fullName}</strong></span><span><UserRound /> Finder: <strong>{claim.finder.fullName}</strong></span></div>
-            {canDecide && <section className="claim-decision"><div><strong>Finder, bạn có muốn mở trao đổi với claimant này?</strong><p>Bạn có thể chấp nhận, yêu cầu thêm thông tin hoặc từ chối. Mỗi claimant có một phòng riêng.</p></div><textarea value={decisionNote} onChange={(event) => setDecisionNote(event.target.value)} maxLength={2000} placeholder="Ghi chú tùy chọn..." /><div className="claim-decision__actions"><button disabled={decision} onClick={() => void respond("ACCEPT")}><Check /> Chấp nhận</button><button disabled={decision} onClick={() => void respond("REQUEST_MORE_INFO")}><MessageCircle /> Yêu cầu thêm thông tin</button><button className="danger" disabled={decision} onClick={() => void respond("DECLINE")}><X /> Từ chối</button></div></section>}
-            {!claim.canSend ? <div className="claim-pending"><Clock3 /><strong>{claim.finderDecision === "DECLINED" ? "Finder đã từ chối yêu cầu này." : "Phòng riêng chưa mở."}</strong><span>{claim.finderDecision === "PENDING" ? "Bạn sẽ có thể nhắn tin và chia sẻ ảnh sau khi Finder chấp nhận." : "Bạn không thể gửi thêm nội dung trong yêu cầu này."}</span></div> : <>
+            {claim.claimantId === user?.id && ["PENDING", "CONVERSATION_OPEN", "NEED_MORE_INFO"].includes(claim.status) && <button className="claim-withdraw-button" type="button" disabled={withdrawing} onClick={() => void withdraw()}><X /> {withdrawing ? "Đang đóng..." : "Đóng trao đổi"}</button>}
+            <header className="claim-room__header"><div><span className={`claim-status claim-status--${claim.status.toLowerCase()}`}>{statusLabels[claim.status]}</span><h2>{claimTitle(claim)}</h2><p>Bài viết: {claim.posts.found.title} · Cập nhật {formatDate(claim.updatedAt)}</p></div><LockKeyhole /></header>
+            <div className="claim-participants"><span><UserRound /> Người liên hệ: <strong>{claim.claimant.fullName}</strong></span><span><UserRound /> Chủ bài đăng: <strong>{claim.finder.fullName}</strong></span></div>
+            {!claim.canSend ? <div className="claim-pending"><Clock3 /><strong>{claim.finderDecision === "DECLINED" ? "Cuộc trao đổi này đã đóng." : "Phòng chat chưa sẵn sàng."}</strong><span>Hãy quay lại bài viết và bấm “Nhắn tin với người đăng” để mở phòng trực tiếp.</span></div> : <>
               <div className="claim-room__body"><div className="claim-messages">{messageCursor && <button className="claim-load-older" type="button" disabled={loadingOlder} onClick={() => void loadOlderMessages()}><RefreshCw className={loadingOlder ? "is-spinning" : ""} /> {loadingOlder ? "Đang tải..." : "Tải tin nhắn cũ hơn"}</button>}{messages.length ? messages.map((message) => <MessageBubble key={message.id} message={message} own={message.sender.id === user?.id} />) : <div className="claim-messages__empty"><MessageCircle /><span>Chưa có tin nhắn. Hãy bắt đầu trao đổi riêng.</span></div>}</div>
                 <form className="claim-message-form" onSubmit={submitMessage}><textarea aria-label="Tin nhắn riêng" value={messageDraft} onChange={(event) => setMessageDraft(event.target.value)} maxLength={5000} placeholder="Nhập câu hỏi hoặc thông tin xác minh..." /><button disabled={sending || !messageDraft.trim()}><Send /> {sending ? "Đang gửi..." : "Gửi"}</button></form>
               </div>

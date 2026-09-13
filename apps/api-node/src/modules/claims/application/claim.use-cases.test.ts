@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { claimRepository, claimService, matchingRepository } from "../../../test/use-case-fixtures.js";
+import { claimRepository, claimService, matchingRepository, notificationRepository } from "../../../test/use-case-fixtures.js";
 
 const claimId = "11111111-1111-4111-8111-111111111111";
 const claimantId = "22222222-2222-4222-8222-222222222222";
@@ -136,5 +136,78 @@ test("creating a claim for an already requested found post reopens the existing 
     claimRepository.findParticipant = originalFindParticipant;
     claimRepository.listParticipants = originalListParticipants;
     matchingRepository.getConfigNumber = originalGetConfigNumber;
+  }
+});
+
+test("direct claim opens a chat room immediately without a LOST post or finder approval", async () => {
+  const foundPostId = "99999999-9999-4999-8999-999999999999";
+  const finderId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+  const roomId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+  const originalFindByRequestKey = claimRepository.findByRequestKey;
+  const originalFindClaimablePostForUpdate = claimRepository.findClaimablePostForUpdate;
+  const originalFindByFoundPostForClaimant = claimRepository.findByFoundPostForClaimant;
+  const originalCreateClaim = claimRepository.createClaim;
+  const originalAddParticipant = claimRepository.addParticipant;
+  const originalFindRoomByClaim = claimRepository.findRoomByClaim;
+  const originalCreateRoom = claimRepository.createRoom;
+  const originalWriteAudit = claimRepository.writeAudit;
+  const originalFindById = claimRepository.findById;
+  const originalFindParticipant = claimRepository.findParticipant;
+  const originalListParticipants = claimRepository.listParticipants;
+  const originalCreateNotification = notificationRepository.create;
+  let created: Parameters<typeof claimRepository.createClaim>[0] | undefined;
+  const participants: Array<Parameters<typeof claimRepository.addParticipant>[0]> = [];
+  let roomCreated = false;
+
+  try {
+    claimRepository.findByRequestKey = async () => null;
+    claimRepository.findClaimablePostForUpdate = async () => ({ id: foundPostId, ownerId: finderId });
+    claimRepository.findByFoundPostForClaimant = async () => null;
+    claimRepository.createClaim = async (input) => { created = input; };
+    claimRepository.addParticipant = async (input) => { participants.push(input); };
+    claimRepository.findRoomByClaim = async () => null;
+    claimRepository.createRoom = async (id) => { roomCreated = true; return { id: roomId, claimId: id }; };
+    claimRepository.writeAudit = async () => undefined;
+    notificationRepository.create = async () => null;
+    claimRepository.findById = async (id) => ({
+      ...sampleClaim(),
+      id,
+      lostPostId: null,
+      foundPostId,
+      finderId,
+      posts: { lost: null, found: { id: foundPostId, title: "Ví nhặt được" } },
+      roomId: roomCreated ? roomId : null
+    });
+    claimRepository.findParticipant = async (id, userId) => ({
+      claimId: id,
+      userId,
+      role: userId === claimantId ? "CLAIMANT" : "FINDER",
+      consentStatus: "ACCEPTED",
+      joinedAt: "2026-09-03T00:00:00.000Z",
+      fullName: userId === claimantId ? "Claimant" : "Finder"
+    });
+    claimRepository.listParticipants = async () => [];
+
+    const result = await claimService.createClaim(claimantId, { postId: foundPostId, requestKey: "direct-claim-key" });
+
+    assert.equal(created?.lostPostId, undefined);
+    assert.equal(created?.foundPostId, foundPostId);
+    assert.equal(roomCreated, true);
+    assert.deepEqual(participants.map((participant) => participant.consentStatus), ["ACCEPTED", "ACCEPTED"]);
+    assert.equal(result.status, "CONVERSATION_OPEN");
+    assert.equal(result.canSend, true);
+  } finally {
+    claimRepository.findByRequestKey = originalFindByRequestKey;
+    claimRepository.findClaimablePostForUpdate = originalFindClaimablePostForUpdate;
+    claimRepository.findByFoundPostForClaimant = originalFindByFoundPostForClaimant;
+    claimRepository.createClaim = originalCreateClaim;
+    claimRepository.addParticipant = originalAddParticipant;
+    claimRepository.findRoomByClaim = originalFindRoomByClaim;
+    claimRepository.createRoom = originalCreateRoom;
+    claimRepository.writeAudit = originalWriteAudit;
+    claimRepository.findById = originalFindById;
+    claimRepository.findParticipant = originalFindParticipant;
+    claimRepository.listParticipants = originalListParticipants;
+    notificationRepository.create = originalCreateNotification;
   }
 });

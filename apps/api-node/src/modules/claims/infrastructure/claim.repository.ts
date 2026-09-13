@@ -93,6 +93,11 @@ interface MatchPairRow extends RowDataPacket {
   score_tier: string;
 }
 
+interface ClaimablePostRow extends RowDataPacket {
+  id: string;
+  owner_id: string;
+}
+
 function iso(value: Date | string | null) {
   if (!value) return null;
   return value instanceof Date ? value.toISOString() : new Date(value).toISOString();
@@ -195,6 +200,19 @@ FROM claim_evidence e INNER JOIN users u ON u.id = e.uploaded_by`;
 export function createClaimRepository(pool: SqlExecutor) {
 
   const claimRepository = {
+    async findClaimablePostForUpdate(postId: string, connection: Queryable) {
+      const [rows] = await sqlExecutor(connection).execute<ClaimablePostRow[]>(
+        `SELECT id, user_id AS owner_id
+       FROM posts
+       WHERE id = ? AND deleted_at IS NULL
+         AND status IN ('OPEN', 'MATCHED')
+       LIMIT 1 FOR UPDATE`,
+        [postId]
+      );
+      const post = rows[0];
+      return post ? { id: post.id, ownerId: post.owner_id } : null;
+    },
+
     async findMatchPairForUpdate(lostPostId: string, foundPostId: string, suggestionThreshold: number, connection: Queryable) {
       const [rows] = await sqlExecutor(connection).execute<MatchPairRow[]>(
         `SELECT lost.id AS lost_post_id, found.id AS found_post_id,
@@ -239,7 +257,7 @@ export function createClaimRepository(pool: SqlExecutor) {
 
     async createClaim(input: {
       id: string;
-      lostPostId: string;
+      lostPostId: string | undefined;
       foundPostId: string;
       claimantId: string;
       requestKey?: string;
@@ -251,8 +269,8 @@ export function createClaimRepository(pool: SqlExecutor) {
         `INSERT INTO claims (
         id, lost_post_id, post_id, claimant_id, request_key, status, finder_decision,
         description, approximate_lost_at, approximate_location
-      ) VALUES (?, ?, ?, ?, ?, 'PENDING', 'PENDING', ?, ?, ?)`,
-        [input.id, input.lostPostId, input.foundPostId, input.claimantId, input.requestKey ?? null,
+      ) VALUES (?, ?, ?, ?, ?, 'CONVERSATION_OPEN', 'ACCEPTED', ?, ?, ?)`,
+        [input.id, input.lostPostId ?? null, input.foundPostId, input.claimantId, input.requestKey ?? null,
         input.description ?? null, input.approximateLostAt ?? null, input.approximateLocation ?? null]
       );
     },
@@ -341,13 +359,17 @@ export function createClaimRepository(pool: SqlExecutor) {
           more_info_request = ?,
           rejection_reason = ?,
           accepted_at = CASE WHEN ? THEN UTC_TIMESTAMP() ELSE accepted_at END,
-          rejected_at = CASE WHEN ? THEN UTC_TIMESTAMP() ELSE rejected_at END,
+          rejected_at = CASE WHEN ? THEN UTC_TIMESTAMP() WHEN ? THEN NULL ELSE rejected_at END,
+          cancelled_at = CASE WHEN ? THEN NULL ELSE cancelled_at END,
           updated_at = UTC_TIMESTAMP()
        WHERE id = ?`,
         [input.status, input.finderDecision,
         input.status === "NEED_MORE_INFO" ? input.note ?? null : null,
         input.status === "REJECTED" ? input.note ?? null : null,
-        input.acceptedAt ? 1 : 0, input.rejectedAt ? 1 : 0, input.claimId]
+        input.acceptedAt ? 1 : 0, input.rejectedAt ? 1 : 0,
+        input.status === "CONVERSATION_OPEN" || input.status === "ACCEPTED" ? 1 : 0,
+        input.status === "CONVERSATION_OPEN" || input.status === "ACCEPTED" ? 1 : 0,
+        input.claimId]
       );
     },
 

@@ -54,6 +54,33 @@ export function createClaimUseCases(options: ClaimDependencies) {
     return claimRepository.createRoom(claimId, queryable);
   }
 
+  async function ensureConversationOpen(claim: StoredClaim, queryable: TransactionContext) {
+    const finderParticipant = await claimRepository.findParticipant(claim.id, claim.finderId, queryable);
+    if (claim.roomId && canUseRoom(claim.status, finderParticipant?.consentStatus)) return claim;
+
+    await claimRepository.updateFinderParticipant(claim.id, claim.finderId, "ACCEPTED", queryable);
+    const nextStatus: ClaimStatus = claim.status === "ACCEPTED" ? "ACCEPTED" : "CONVERSATION_OPEN";
+    if (claim.status !== nextStatus || claim.finderDecision !== "ACCEPTED") {
+      await claimRepository.updateFinderDecision({
+        claimId: claim.id,
+        status: nextStatus,
+        finderDecision: "ACCEPTED",
+        acceptedAt: true
+      }, queryable);
+    }
+    await openRoomIfNeeded(claim.id, queryable);
+    await claimRepository.writeAudit({
+      claimId: claim.id,
+      actorId: claim.claimantId,
+      action: "CONVERSATION_OPENED",
+      fromStatus: claim.status,
+      toStatus: nextStatus
+    }, queryable);
+    const opened = await claimRepository.findById(claim.id, queryable);
+    if (!opened) throw new AppError("internal", "Không thể mở phòng trao đổi riêng");
+    return opened;
+  }
+
   async function details(claimId: string, userId: string) {
     const { claim, participant } = await requireClaimParticipant(claimId, userId);
     return {
@@ -67,32 +94,53 @@ export function createClaimUseCases(options: ClaimDependencies) {
   const claimService = {
     async createClaim(claimantId: string, input: CreateClaimInput) {
       const result = await withTransaction(async (connection) => {
+        const requestedPostId = input.postId ?? input.foundPostId;
+        if (!requestedPostId) throw new AppError("invalid_input", "Cần chọn một bài viết để claim");
+
         if (input.requestKey) {
           const byKey = await claimRepository.findByRequestKey(claimantId, input.requestKey, connection);
           if (byKey) {
-            if (byKey.lostPostId !== input.lostPostId || byKey.foundPostId !== input.foundPostId) {
+            if (byKey.foundPostId !== requestedPostId || (input.lostPostId && byKey.lostPostId !== input.lostPostId)) {
               throw new AppError("conflict", "Idempotency-Key đã được sử dụng cho yêu cầu khác");
             }
-            return { claim: byKey, idempotent: true };
+            return { claim: await ensureConversationOpen(byKey, connection), idempotent: true };
           }
         }
 
-        const suggestionThreshold = await matchingRepository.getConfigNumber("matching.suggestion_threshold", 0.6);
-        const pair = await claimRepository.findMatchPairForUpdate(input.lostPostId, input.foundPostId, suggestionThreshold, connection);
-        if (!pair) throw new AppError("conflict", "Hai bài đăng chưa có matching hợp lệ để tạo yêu cầu");
-        if (pair.claimant_id !== claimantId) throw claimNotFound();
-        if (pair.finder_id === claimantId) throw new AppError("conflict", "Bạn không thể yêu cầu xác minh bài đăng của chính mình");
+        let lostPostId: string | undefined;
+        let foundPostId: string;
+        let finderId: string;
 
-        const existing = await claimRepository.findByFoundPostForClaimant(input.foundPostId, claimantId, connection);
+        if (input.postId) {
+          const post = await claimRepository.findClaimablePostForUpdate(input.postId, connection);
+          if (!post) throw new AppError("conflict", "Bài viết không còn mở để claim");
+          foundPostId = post.id;
+          finderId = post.ownerId;
+        } else {
+          if (!input.lostPostId || !input.foundPostId) {
+            throw new AppError("invalid_input", "Cần đầy đủ cặp bài viết matching");
+          }
+          const suggestionThreshold = await matchingRepository.getConfigNumber("matching.suggestion_threshold", 0.6);
+          const pair = await claimRepository.findMatchPairForUpdate(input.lostPostId, input.foundPostId, suggestionThreshold, connection);
+          if (!pair) throw new AppError("conflict", "Hai bài đăng chưa có matching hợp lệ để tạo claim");
+          if (pair.claimant_id !== claimantId) throw claimNotFound();
+          lostPostId = pair.lost_post_id;
+          foundPostId = pair.found_post_id;
+          finderId = pair.finder_id;
+        }
+
+        if (finderId === claimantId) throw new AppError("conflict", "Bạn không thể claim bài viết của chính mình");
+
+        const existing = await claimRepository.findByFoundPostForClaimant(foundPostId, claimantId, connection);
         if (existing) {
-          return { claim: existing, idempotent: true };
+          return { claim: await ensureConversationOpen(existing, connection), idempotent: true };
         }
 
         const claimId = id();
         await claimRepository.createClaim({
           id: claimId,
-          lostPostId: input.lostPostId,
-          foundPostId: input.foundPostId,
+          lostPostId,
+          foundPostId,
           claimantId,
           requestKey: input.requestKey,
           description: input.description,
@@ -100,19 +148,20 @@ export function createClaimUseCases(options: ClaimDependencies) {
           approximateLocation: input.approximateLocation
         }, connection);
         await claimRepository.addParticipant({ claimId, userId: claimantId, role: "CLAIMANT", consentStatus: "ACCEPTED" }, connection);
-        await claimRepository.addParticipant({ claimId, userId: pair.finder_id, role: "FINDER", consentStatus: "PENDING" }, connection);
-        await claimRepository.writeAudit({ claimId, actorId: claimantId, action: "CLAIM_CREATED", toStatus: "PENDING" }, connection);
+        await claimRepository.addParticipant({ claimId, userId: finderId, role: "FINDER", consentStatus: "ACCEPTED" }, connection);
+        await openRoomIfNeeded(claimId, connection);
+        await claimRepository.writeAudit({ claimId, actorId: claimantId, action: "CLAIM_CREATED", toStatus: "CONVERSATION_OPEN" }, connection);
         await notificationRepository.create({
-          userId: pair.finder_id,
+          userId: finderId,
           type: "CLAIM_REQUEST_RECEIVED",
-          title: "\u0042\u1ea1n v\u1eeba nh\u1eadn \u0111\u01b0\u1ee3c 1 y\u00eau c\u1ea7u trao \u0111\u1ed5i ri\u00eang",
-          body: "M\u1edf m\u1ee5c Trao \u0111\u1ed5i ri\u00eang \u0111\u1ec3 xem v\u00e0 ph\u1ea3n h\u1ed3i y\u00eau c\u1ea7u.",
+          title: "Bạn có một cuộc trao đổi riêng mới",
+          body: "Có người vừa claim bài viết và đã có thể nhắn tin trực tiếp với bạn trong mục Trao đổi riêng.",
           entityType: "CLAIM",
           entityId: claimId,
-          dedupeKey: `claim:${claimId}:request`
+          dedupeKey: `claim:${claimId}:conversation`
         }, connection);
         const claim = await claimRepository.findById(claimId, connection);
-        if (!claim) throw new AppError("internal", "Không thể tạo yêu cầu xác minh");
+        if (!claim) throw new AppError("internal", "Không thể mở trao đổi riêng");
         return { claim, idempotent: false };
       });
 

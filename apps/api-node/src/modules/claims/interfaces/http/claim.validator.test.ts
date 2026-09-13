@@ -5,11 +5,15 @@ import { createClaimSchema, createMessageSchema, listClaimsQuerySchema, listMess
 const lostPostId = "11111111-1111-4111-8111-111111111111";
 const foundPostId = "22222222-2222-4222-8222-222222222222";
 
-test("claim input requires a pair of UUID posts and bounds optional idempotency keys", () => {
+test("claim input accepts either a direct post or a matched pair", () => {
+  const direct = createClaimSchema.parse({ postId: foundPostId });
+  assert.equal(direct.postId, foundPostId);
   const input = createClaimSchema.parse({ lostPostId, foundPostId, requestKey: "claim-2026-09-03-1" });
   assert.equal(input.lostPostId, lostPostId);
   assert.throws(() => createClaimSchema.parse({ lostPostId, foundPostId, requestKey: "<script>" }));
   assert.throws(() => createClaimSchema.parse({ lostPostId: "not-a-uuid", foundPostId }));
+  assert.throws(() => createClaimSchema.parse({ foundPostId }));
+  assert.throws(() => createClaimSchema.parse({ postId: foundPostId, lostPostId, foundPostId }));
 });
 
 test("messages and evidence descriptions reject oversized input", () => {

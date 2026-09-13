@@ -1,6 +1,6 @@
-import { ArrowLeft, ArrowRight, CalendarClock, Clock3, Eye, LockKeyhole, MapPin, PackageCheck, ScanSearch, Tag, UserRound } from "lucide-react";
+import { ArrowLeft, ArrowRight, CalendarClock, Clock3, Eye, LockKeyhole, MapPin, MessageCircle, PackageCheck, ScanSearch, Tag, UserRound } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { useNetworkStatus } from "../hooks/use-network-status";
 import { useStaleDataNotice } from "../hooks/use-stale-data-notice";
 import { PostCard, PostImage } from "./posts-page";
@@ -17,11 +17,14 @@ function formatDate(value: string | null) {
 
 export function PostDetailPage() {
   const { postId = "" } = useParams();
+  const navigate = useNavigate();
   const [post, setPost] = useState<PostSummary | null>(null);
   const [relatedPosts, setRelatedPosts] = useState<PostSummary[]>([]);
   const [relatedLoading, setRelatedLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [claiming, setClaiming] = useState(false);
+  const [claimError, setClaimError] = useState("");
   const { online } = useNetworkStatus();
   const { stale, clearStale } = useStaleDataNotice(useCallback((path) => path.startsWith(`/posts/${postId}`), [postId]));
 
@@ -58,6 +61,20 @@ export function PostDetailPage() {
     return () => { active = false; };
   }, [postId, online, clearStale]);
 
+  async function claimAndChat() {
+    if (!post) return;
+    setClaiming(true);
+    setClaimError("");
+    try {
+      const claim = await api.createClaim({ postId: post.id });
+      navigate(`/claims/${claim.id}`);
+    } catch (reason) {
+      setClaimError(reason instanceof Error ? reason.message : "Không thể mở phòng trao đổi riêng");
+    } finally {
+      setClaiming(false);
+    }
+  }
+
   if (loading) return <section className="post-detail-page"><div className="post-detail-loading"><i /><div><span /><span /><span /></div></div></section>;
   if (error || !post) return <section className="post-detail-page"><div className="posts-state is-error"><PackageCheck /><h1>Không mở được bài đăng</h1><p>{error || "Bài đăng không tồn tại hoặc bạn không có quyền xem."}</p><Link to="/posts"><ArrowLeft /> Quay lại bảng tin</Link></div></section>;
 
@@ -88,6 +105,9 @@ export function PostDetailPage() {
         </dl>
 
         <section className="post-detail-description"><p className="eyebrow">Mô tả nhận dạng</p><h2>Thông tin vật phẩm</h2><p>{post.description ?? "Người đăng giữ riêng các dấu hiệu nhận dạng. Thông tin này chỉ hỗ trợ quá trình xác minh phù hợp."}</p></section>
+
+        {!post.canEdit && ["OPEN", "MATCHED"].includes(post.status) && <div className="post-detail-claim"><button className="post-claim-button post-claim-button--detail" type="button" disabled={claiming} onClick={() => void claimAndChat()}><MessageCircle /> {claiming ? "Đang mở phòng chat..." : "Nhắn tin với người đăng"}</button><p>Không cần tạo bài đăng mới và không cần chờ duyệt trao đổi.</p></div>}
+        {claimError && <p className="post-claim-error" role="alert">{claimError}</p>}
 
         {post.handoverPoint && <section className="post-handover"><span><PackageCheck /></span><div><p className="eyebrow">Điểm bàn giao</p><h2>{post.handoverPoint.name}</h2><p>{post.handoverPoint.address ?? "Địa chỉ đang được cập nhật"}</p></div></section>}
 
