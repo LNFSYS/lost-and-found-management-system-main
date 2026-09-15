@@ -2,7 +2,7 @@
 
 > Nội dung dưới đây tập trung từ mục 3.2 trở đi. Các phần trước 3.2 đã được lược bỏ theo yêu cầu. Phạm vi phân công chỉ tính LNFS Sprint 4.
 
-### 3.2 Authentication & Profile
+## 3.2 Authentication & Profile
 
 | UC | Phạm vi | Status cần giữ | Người viết | Nội dung bắt buộc |
 |---|---|---|---|---|
@@ -11,7 +11,7 @@
 
 S4 evidence liên quan: LNFS-60 (PWA foundation, Jira Done, Khoa), LNFS-177 (security hardening, Jira In Progress, Git Quân). Không gộp PWA vào tên UC; PWA chỉ là kênh thực thi.
 
-### 3.3 Public Board & Post Management
+## 3.3 Public Board & Post Management
 
 | UC | Phạm vi | Status cần giữ | Người viết | Nội dung bắt buộc |
 |---|---|---|---|---|
@@ -19,7 +19,7 @@ S4 evidence liên quan: LNFS-60 (PWA foundation, Jira Done, Khoa), LNFS-177 (sec
 
 S4 evidence liên quan: LNFS-61, Jira Done, Git commit f3d283a của Đạt. PWA install/offline là NFR/channel evidence, không phải UC mới.
 
-### 3.4 Matching & Recommendations
+## 3.4 Matching & Recommendations
 
 | UC | Phạm vi | Status cần giữ | Người viết | Nội dung bắt buộc |
 |---|---|---|---|---|
@@ -28,7 +28,7 @@ S4 evidence liên quan: LNFS-61, Jira Done, Git commit f3d283a của Đạt. PWA
 
 S4 evidence: LNFS-56 Jira Done, Git commits 9127723/dac7c20/489cdc9 của Quân. LNFS-56 có yêu cầu re-check supplied audit; không tự suy diễn mọi UC matching là Done.
 
-### 3.5 Matching Model & AI Operations
+## 3.5 Matching Model & AI Operations
 
 | UC | Phạm vi | Status cần giữ | Người viết | Nội dung bắt buộc |
 |---|---|---|---|---|
@@ -36,7 +36,7 @@ S4 evidence: LNFS-56 Jira Done, Git commits 9127723/dac7c20/489cdc9 của Quân.
 
 S4 evidence: LNFS-57 In Progress, Jira giao Lượng. Rule bắt buộc: Gemini/OCR chỉ hỗ trợ quyết định; hệ thống không tự chuyển ownership.
 
-### 3.6 Claims & Ownership Verification
+## 3.6 Claims & Ownership Verification
 
 | UC | Phạm vi | Status cần giữ | Người viết | Nội dung bắt buộc |
 |---|---|---|---|---|
@@ -46,7 +46,7 @@ S4 evidence: LNFS-57 In Progress, Jira giao Lượng. Rule bắt buộc: Gemini/
 
 S4 evidence: LNFS-52 Done, Jira/Git Khoa; LNFS-53 To Do, Jira Lượng; LNFS-177/182 có security/media/claim fixes của Quân. Không ghi guided verification đã triển khai chỉ vì baseline claim đã Done.
 
-### 3.7 Private Communication, Evidence & Notifications
+## 3.7 Private Communication, Evidence & Notifications
 
 | UC | Phạm vi | Status cần giữ | Người viết | Nội dung bắt buộc |
 |---|---|---|---|---|
@@ -56,7 +56,7 @@ S4 evidence: LNFS-52 Done, Jira/Git Khoa; LNFS-53 To Do, Jira Lượng; LNFS-177
 
 S4 evidence: LNFS-52 Done của Khoa; LNFS-58 To Do giao Đạt. HTTP/polling baseline không được mô tả thành full realtime nếu chưa có evidence.
 
-### 3.8 Handover, Appointment & Direct Return
+## 3.8 Handover, Appointment & Direct Return
 
 | UC | Phạm vi | Status cần giữ | Người viết | Nội dung bắt buộc |
 |---|---|---|---|---|
@@ -68,7 +68,7 @@ S4 evidence: LNFS-52 Done của Khoa; LNFS-58 To Do giao Đạt. HTTP/polling ba
 
 S4 evidence: UC049 từ LNFS-47 Done; LNFS-54 To Do. LNFS-51 feedback/reputation phụ thuộc handover nhưng không có nghĩa appointment đã hoàn thành.
 
-### 3.9 Warehouse Intake, Custody & Transfer
+## 3.9 Warehouse Intake, Custody & Transfer
 
 | UC | Phạm vi | Status cần giữ | Người viết | Nội dung bắt buộc |
 |---|---|---|---|---|
@@ -77,7 +77,7 @@ S4 evidence: UC049 từ LNFS-47 Done; LNFS-54 To Do. LNFS-51 feedback/reputation
 
 S4 evidence: LNFS-55 To Do, Jira giao Lượng. Không lấy task sprint khác làm bằng chứng hoàn thành.
 
-### 3.10 Feedback & Reputation
+## 3.10 Feedback & Reputation
 
 | UC | Phạm vi | Status cần giữ | Người viết | Nội dung bắt buộc |
 |---|---|---|---|---|
@@ -85,7 +85,7 @@ S4 evidence: LNFS-55 To Do, Jira giao Lượng. Không lấy task sprint khác l
 
 S4 evidence: LNFS-51 Done, Git commit c0be32f của Đạt. Description của LNFS-51 ghi dependency với handover; nếu handover chưa Done thì phải nêu dependency.
 
-### 3.11 User & Role Administration
+## 3.11 User & Role Administration
 
 | UC | Phạm vi | Status cần giữ | Người viết | Nội dung bắt buộc |
 |---|---|---|---|---|
@@ -93,7 +93,7 @@ S4 evidence: LNFS-51 Done, Git commit c0be32f của Đạt. Description của LN
 
 Đối chiếu thêm LNFS-177 để viết security/authorization, nhưng không gán toàn bộ implementation security cho UC admin.
 
-### 3.12 Master Data & Location Administration
+## 3.12 Master Data & Location Administration
 
 | UC | Phạm vi | Status cần giữ | Người viết | Nội dung bắt buộc |
 |---|---|---|---|---|
@@ -103,7 +103,7 @@ S4 evidence: LNFS-51 Done, Git commit c0be32f của Đạt. Description của LN
 
 S4 evidence rõ nhất cho UC078–081: LNFS-47 Done, Git commit d91ac91 của Quân. Các UC catalog khác không tự nhận là Sprint 4 completed nếu không có S4 evidence trực tiếp.
 
-### 3.13 Moderation & User Reports
+## 3.13 Moderation & User Reports
 
 | UC | Phạm vi | Status cần giữ | Người viết | Nội dung bắt buộc |
 |---|---|---|---|---|
@@ -113,7 +113,7 @@ S4 evidence rõ nhất cho UC078–081: LNFS-47 Done, Git commit d91ac91 của Q
 
 S4 evidence: LNFS-59 Done, Jira Khoa; Git direct feature commit 51dfb3a của Khoa. PR/merge có thể do Quân nhưng không thay đổi implementation owner.
 
-### 3.14 Dashboard, Statistics & Audit
+## 3.14 Dashboard, Statistics & Audit
 
 | UC | Phạm vi | Status cần giữ | Người viết | Nội dung bắt buộc |
 |---|---|---|---|---|
@@ -123,7 +123,7 @@ S4 evidence: LNFS-59 Done, Jira Khoa; Git direct feature commit 51dfb3a của Kh
 
 Quân là reviewer cuối cho evidence/integration vì LNFS-63 và các QA/security tasks; không đồng nghĩa Quân là người viết tất cả UC audit.
 
-### 3.15 System Configuration
+## 3.15 System Configuration
 
 | UC | Phạm vi | Status cần giữ | Người viết | Nội dung bắt buộc |
 |---|---|---|---|---|
@@ -132,7 +132,7 @@ Quân là reviewer cuối cho evidence/integration vì LNFS-63 và các QA/secur
 
 LNFS-50 là parent historical Done. Runtime evidence dùng LNFS-93 của Đạt và LNFS-94 của Quân.
 
-### 3.16 Warehouse Retention & Disposition
+## 3.16 Warehouse Retention & Disposition
 
 | UC | Phạm vi | Status cần giữ | Người viết | Nội dung bắt buộc |
 |---|---|---|---|---|
