@@ -143,6 +143,17 @@ LNFS-50 là parent historical Done. Runtime evidence dùng LNFS-93 của Đạt 
 
 S4 evidence: LNFS-55 To Do. Không dùng issue ở sprint khác để đánh dấu những UC này đã làm.
 
+## 4. Non-functional Requirements
+
+| Nhóm NFR | Nội dung cần ghi | Người phụ trách | Evidence Sprint 4 |
+|---|---|---|---|
+| Security & privacy | Auth, role/permission, private claim room, private media, notification authorization, no secret leakage | Võ Chiêu Quân | LNFS-177, LNFS-182 |
+| Performance & availability | API response, retry, resilience, migration lock, fallback, CI/release gate | Võ Chiêu Quân | LNFS-177–183 |
+| Accessibility & responsive | Responsive UI, browser/device behavior, PWA installability and offline boundary | Phạm Nguyễn Anh Khoa + Trương Quang Đạt | LNFS-60–62 |
+| PWA Support | Web installability, responsive authentication/board, offline behavior and browser evidence | Trương Quang Đạt | LNFS-60–62 |
+| Native Mobile Support | Ghi là channel/future boundary nếu chưa có implementation trong Sprint 4; không tạo UC nghiệp vụ riêng | Trần Thế Lượng | Không có acceptance riêng trong Sprint 4 |
+| AI/OCR boundary | AI/OCR chỉ hỗ trợ decision; human/business workflow mới quyết định ownership | Trần Thế Lượng | LNFS-57 |
+
 ## 5. Jira Sprint 4 ledger dùng để kiểm tra phân công
 
 | Issue | Trạng thái Jira | Assignee | Ảnh hưởng tới RP3 |
