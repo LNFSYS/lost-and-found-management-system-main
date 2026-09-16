@@ -11,6 +11,7 @@ import { createNotificationUseCases } from "../modules/notifications/application
 import { createImageAnalysisUseCases } from "../modules/posts/application/image-analysis.use-cases.js";
 import { createPostUseCases } from "../modules/posts/application/post.use-cases.js";
 import { createGeminiImageAnalyzer } from "../modules/posts/infrastructure/gemini-image-analyzer.js";
+import { createRealtimeUseCases } from "../modules/realtime/application/realtime.use-cases.js";
 import { createReturnFeedbackUseCases } from "../modules/returns/application/return-feedback.use-cases.js";
 import { createSystemConfigUseCases } from "../modules/system-config/application/system-config.use-cases.js";
 import { createWarehouseUseCases } from "../modules/warehouse/application/warehouse.use-cases.js";
@@ -78,6 +79,7 @@ export function createServices(persistence: Persistence, config: typeof env = en
     claimRepository, matchingRepository, notificationRepository,
     withTransaction: transaction, id, mediaStorage: claimMediaStorage
   });
+  const realtimeService = createRealtimeUseCases({ claimRepository, id });
   const authService = createAuthUseCases({
     authRepository, userRepository, avatarStorage, security,
     policy: config, emailService, withTransaction: transaction, logger: console
@@ -86,7 +88,7 @@ export function createServices(persistence: Persistence, config: typeof env = en
   return {
     notificationService, systemConfigService, adminUserService, adminReportingService,
     adminCatalogService, warehouseService, returnFeedbackService, matchingService,
-    postService, claimService, authService, geminiImageService
+    postService, claimService, realtimeService, authService, geminiImageService
   };
 }
 export type ApplicationServices = ReturnType<typeof createServices>;
