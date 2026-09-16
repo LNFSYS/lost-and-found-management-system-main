@@ -1,5 +1,10 @@
 import type { TransactionContext } from "../../../shared/application/transaction.js";
-export type NotificationType = "CLAIM_REQUEST_RECEIVED" | "CLAIM_ACCEPTED";
+export type NotificationType =
+  | "CLAIM_REQUEST_RECEIVED"
+  | "CLAIM_ACCEPTED"
+  | "CHAT_MESSAGE_RECEIVED"
+  | "APPOINTMENT_UPDATED"
+  | "RETURN_UPDATED";
 
 export interface NotificationRecord {
   id: string;
