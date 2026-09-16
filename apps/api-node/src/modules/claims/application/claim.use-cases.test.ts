@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { claimRepository, claimService, matchingRepository } from "../../../test/use-case-fixtures.js";
+import { claimRepository, claimService, createTestClaimUseCases, matchingRepository, notificationRepository } from "../../../test/use-case-fixtures.js";
 
 const claimId = "11111111-1111-4111-8111-111111111111";
 const claimantId = "22222222-2222-4222-8222-222222222222";
@@ -136,5 +136,83 @@ test("creating a claim for an already requested found post reopens the existing 
     claimRepository.findParticipant = originalFindParticipant;
     claimRepository.listParticipants = originalListParticipants;
     matchingRepository.getConfigNumber = originalGetConfigNumber;
+  }
+});
+
+test("sending a chat message pushes a privacy-safe realtime notification to the counterpart", async () => {
+  const claim = sampleClaim();
+  const room = { id: claim.roomId!, claimId: claim.id, createdAt: claim.createdAt };
+  const realtimeEvents: unknown[] = [];
+  const service = createTestClaimUseCases({
+    realtimeNotifier: {
+      publishNotification(input) {
+        realtimeEvents.push(input);
+        return { delivered: 1 };
+      }
+    }
+  });
+  const originalFindById = claimRepository.findById;
+  const originalFindParticipant = claimRepository.findParticipant;
+  const originalFindRoomByClaim = claimRepository.findRoomByClaim;
+  const originalFindByIdForUpdate = claimRepository.findByIdForUpdate;
+  const originalCreateMessage = claimRepository.createMessage;
+  const originalWriteAudit = claimRepository.writeAudit;
+  const originalCreateNotification = notificationRepository.create;
+
+  try {
+    claimRepository.findById = async () => claim;
+    claimRepository.findParticipant = async (_claimId, userId) => ({
+      claimId,
+      userId,
+      role: userId === claimantId ? "CLAIMANT" : "FINDER",
+      consentStatus: "ACCEPTED",
+      joinedAt: claim.createdAt,
+      fullName: userId === claimantId ? "Claimant" : "Finder"
+    });
+    claimRepository.findRoomByClaim = async () => room;
+    claimRepository.findByIdForUpdate = async () => claim;
+    claimRepository.createMessage = async () => ({
+      id: "99999999-9999-4999-8999-999999999999",
+      roomId: room.id,
+      sender: { id: claimantId, fullName: "Claimant" },
+      clientMessageId: "retry-1",
+      content: "serial private secret text",
+      messageType: "TEXT",
+      isRead: false,
+      readAt: null,
+      createdAt: claim.createdAt
+    });
+    claimRepository.writeAudit = async () => undefined;
+    notificationRepository.create = async (input) => ({
+      id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      type: input.type,
+      title: input.title,
+      body: input.body ?? null,
+      entityType: input.entityType ?? null,
+      entityId: input.entityId ?? null,
+      isRead: false,
+      readAt: null,
+      createdAt: claim.createdAt
+    });
+
+    const message = await service.sendMessage(claimId, claimantId, {
+      content: "serial private secret text",
+      clientMessageId: "retry-1"
+    });
+
+    assert.equal(message.id, "99999999-9999-4999-8999-999999999999");
+    assert.equal(realtimeEvents.length, 1);
+    assert.equal((realtimeEvents[0] as { userId: string; }).userId, claim.finderId);
+    assert.equal((realtimeEvents[0] as { workflow: string; }).workflow, "CHAT");
+    assert.equal((realtimeEvents[0] as { roomId: string; }).roomId, room.id);
+    assert.equal(JSON.stringify(realtimeEvents).includes("serial private secret text"), false);
+  } finally {
+    claimRepository.findById = originalFindById;
+    claimRepository.findParticipant = originalFindParticipant;
+    claimRepository.findRoomByClaim = originalFindRoomByClaim;
+    claimRepository.findByIdForUpdate = originalFindByIdForUpdate;
+    claimRepository.createMessage = originalCreateMessage;
+    claimRepository.writeAudit = originalWriteAudit;
+    notificationRepository.create = originalCreateNotification;
   }
 });

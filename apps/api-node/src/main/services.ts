@@ -75,11 +75,12 @@ export function createServices(persistence: Persistence, config: typeof env = en
     postRepository, matchingRepository, matchingService,
     withTransaction: transaction, id, mediaStorage: postMediaStorage, logger: console
   });
+  const realtimeService = createRealtimeUseCases({ claimRepository, id });
   const claimService = createClaimUseCases({
     claimRepository, matchingRepository, notificationRepository,
+    realtimeNotifier: realtimeService,
     withTransaction: transaction, id, mediaStorage: claimMediaStorage
   });
-  const realtimeService = createRealtimeUseCases({ claimRepository, id });
   const authService = createAuthUseCases({
     authRepository, userRepository, avatarStorage, security,
     policy: config, emailService, withTransaction: transaction, logger: console
