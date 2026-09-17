@@ -31,6 +31,7 @@ import { createMatchingUseCases, type MatchingDependencies } from "../modules/ma
 import { createPostUseCases, type PostDependencies } from "../modules/posts/application/post.use-cases.js";
 import { createClaimUseCases, type ClaimDependencies } from "../modules/claims/application/claim.use-cases.js";
 import { createAuthUseCases, type AuthDependencies } from "../modules/auth/application/auth.use-cases.js";
+import { createRealtimeUseCases } from "../modules/realtime/application/realtime.use-cases.js";
 
 export const adminAuditRepository = unexpectedPort<AdminAuditRepository>("adminAuditRepository");
 export const adminCatalogRepository = unexpectedPort<AdminCatalogRepository>("adminCatalogRepository");
@@ -74,7 +75,8 @@ export function createTestPostUseCases(overrides: Partial<PostDependencies> = {}
 export const postService = createTestPostUseCases();
 export function createTestClaimUseCases(overrides: Partial<ClaimDependencies> = {}) { return createClaimUseCases({ claimRepository: claimRepository, matchingRepository: matchingRepository, notificationRepository: notificationRepository, withTransaction: fakeTransaction, id: randomUUID, mediaStorage: fakeMediaStorage, ...overrides }); }
 export const claimService = createTestClaimUseCases();
+export const realtimeService = createRealtimeUseCases({ claimRepository, id: randomUUID });
 export function createTestAuthUseCases(overrides: Partial<AuthDependencies> = {}) { return createAuthUseCases({ authRepository: authRepository, userRepository: userRepository, avatarStorage: fakeAvatarStorage, security: fakeSecurity, policy: { refreshTokenDays: 30, otpTtlMinutes: 10, otpMaxAttempts: 5 }, emailService: fakeEmail, withTransaction: fakeTransaction, logger: { warn() {} }, ...overrides }); }
 export const authService = createTestAuthUseCases();
 export const geminiImageService = createImageAnalysisUseCases({ postRepository, analyzer: unexpectedPort<ImageAnalyzer>("image analyzer") });
-export const testServices = { notificationService, systemConfigService, adminUserService, adminReportingService, adminCatalogService, warehouseService, returnFeedbackService, matchingService, postService, claimService, authService, geminiImageService };
+export const testServices = { notificationService, systemConfigService, adminUserService, adminReportingService, adminCatalogService, warehouseService, returnFeedbackService, matchingService, postService, claimService, realtimeService, authService, geminiImageService };

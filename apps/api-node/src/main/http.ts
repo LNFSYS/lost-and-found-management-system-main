@@ -12,6 +12,8 @@ import { createNotificationController } from "../modules/notifications/interface
 import { createNotificationRoutes } from "../modules/notifications/interfaces/http/notification.routes.js";
 import { createPostController } from "../modules/posts/interfaces/http/post.controller.js";
 import { createPostRoutes } from "../modules/posts/interfaces/http/post.routes.js";
+import { createRealtimeController } from "../modules/realtime/interfaces/http/realtime.controller.js";
+import { createRealtimeRoutes } from "../modules/realtime/interfaces/http/realtime.routes.js";
 import { createReturnFeedbackController } from "../modules/returns/interfaces/http/return-feedback.controller.js";
 import { createReturnRoutes } from "../modules/returns/interfaces/http/return.routes.js";
 import { createAdminConfigRoutes } from "../modules/system-config/interfaces/http/admin-config.routes.js";
@@ -34,6 +36,7 @@ export function createHttpRoutes(services: ApplicationServices) {
   const claimController = createClaimController({ claimService: services.claimService });
   const notificationController = createNotificationController({ notificationService: services.notificationService });
   const postController = createPostController({ postService: services.postService, geminiImageService: services.geminiImageService });
+  const realtimeController = createRealtimeController({ realtimeService: services.realtimeService });
   const returnFeedbackController = createReturnFeedbackController({ returnFeedbackService: services.returnFeedbackService });
   const systemConfigController = createSystemConfigController({ systemConfigService: services.systemConfigService });
   const warehouseController = createWarehouseController({ warehouseService: services.warehouseService });
@@ -44,6 +47,7 @@ export function createHttpRoutes(services: ApplicationServices) {
     claimRoutes: createClaimRoutes({ claimController, auth }),
     notificationRoutes: createNotificationRoutes({ notificationController, auth }),
     postRoutes: createPostRoutes({ postController, auth }),
+    realtimeRoutes: createRealtimeRoutes({ realtimeController, auth }),
     returnRoutes: createReturnRoutes({ returnFeedbackController, auth }),
     adminConfigRoutes: createAdminConfigRoutes({ systemConfigController, auth }),
     configRoutes: createConfigRoutes({ systemConfigController }),

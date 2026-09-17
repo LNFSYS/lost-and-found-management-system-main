@@ -4,7 +4,7 @@ import { AppError } from "../../../shared/domain/app-error.js";
 import { validateImageUpload } from "../../../shared/domain/media.js";
 import type { ImageUpload } from "../../../shared/domain/upload.js";
 import type { MatchingRepository } from "../../matching/application/index.js";
-import type { NotificationRepository } from "../../notifications/application/index.js";
+import type { NotificationRecord, NotificationRepository } from "../../notifications/application/index.js";
 import { canUseRoom } from "../domain/claim-policy.js";
 import type {
   ClaimDecisionInput,
@@ -16,6 +16,8 @@ import type {
 } from "./claim.dto.js";
 import type { ClaimRepository, ClaimStatus } from "./claim.repository.port.js";
 
+type WorkflowNotificationKind = "CLAIM" | "CHAT" | "APPOINTMENT" | "RETURN";
+
 function claimNotFound() {
   return new AppError("not_found", "Không tìm thấy yêu cầu xác minh");
 }
@@ -24,12 +26,20 @@ export interface ClaimDependencies {
   claimRepository: ClaimRepository;
   matchingRepository: MatchingRepository;
   notificationRepository: NotificationRepository;
+  realtimeNotifier?: {
+    publishNotification(input: {
+      userId: string;
+      notification: NotificationRecord;
+      workflow: WorkflowNotificationKind;
+      roomId?: string | null;
+    }): { delivered: number } | Promise<{ delivered: number; }>;
+  };
   withTransaction: TransactionRunner;
   id: () => string;
   mediaStorage: PrivateMediaStorage;
 }
 export function createClaimUseCases(options: ClaimDependencies) {
-  const { claimRepository, matchingRepository, notificationRepository, withTransaction, id, mediaStorage } = options;
+  const { claimRepository, matchingRepository, notificationRepository, realtimeNotifier, withTransaction, id, mediaStorage } = options;
 
   type StoredClaim = NonNullable<Awaited<ReturnType<typeof claimRepository.findById>>>;
 
@@ -54,31 +64,25 @@ export function createClaimUseCases(options: ClaimDependencies) {
     return claimRepository.createRoom(claimId, queryable);
   }
 
-  async function ensureConversationOpen(claim: StoredClaim, queryable: TransactionContext) {
-    const finderParticipant = await claimRepository.findParticipant(claim.id, claim.finderId, queryable);
-    if (claim.roomId && canUseRoom(claim.status, finderParticipant?.consentStatus)) return claim;
+  function counterpartId(claim: StoredClaim, userId: string) {
+    if (claim.claimantId === userId) return claim.finderId;
+    if (claim.finderId === userId) return claim.claimantId;
+    return null;
+  }
 
-    await claimRepository.updateFinderParticipant(claim.id, claim.finderId, "ACCEPTED", queryable);
-    const nextStatus: ClaimStatus = claim.status === "ACCEPTED" ? "ACCEPTED" : "CONVERSATION_OPEN";
-    if (claim.status !== nextStatus || claim.finderDecision !== "ACCEPTED") {
-      await claimRepository.updateFinderDecision({
-        claimId: claim.id,
-        status: nextStatus,
-        finderDecision: "ACCEPTED",
-        acceptedAt: true
-      }, queryable);
-    }
-    await openRoomIfNeeded(claim.id, queryable);
-    await claimRepository.writeAudit({
-      claimId: claim.id,
-      actorId: claim.claimantId,
-      action: "CONVERSATION_OPENED",
-      fromStatus: claim.status,
-      toStatus: nextStatus
-    }, queryable);
-    const opened = await claimRepository.findById(claim.id, queryable);
-    if (!opened) throw new AppError("internal", "Không thể mở phòng trao đổi riêng");
-    return opened;
+  async function publishWorkflowNotification(input: {
+    userId: string | null;
+    notification: NotificationRecord | null;
+    workflow: WorkflowNotificationKind;
+    roomId?: string | null;
+  }) {
+    if (!input.userId || !input.notification || !realtimeNotifier) return;
+    await realtimeNotifier.publishNotification({
+      userId: input.userId,
+      notification: input.notification,
+      workflow: input.workflow,
+      roomId: input.roomId
+    });
   }
 
   async function details(claimId: string, userId: string) {
@@ -148,11 +152,10 @@ export function createClaimUseCases(options: ClaimDependencies) {
           approximateLocation: input.approximateLocation
         }, connection);
         await claimRepository.addParticipant({ claimId, userId: claimantId, role: "CLAIMANT", consentStatus: "ACCEPTED" }, connection);
-        await claimRepository.addParticipant({ claimId, userId: finderId, role: "FINDER", consentStatus: "ACCEPTED" }, connection);
-        await openRoomIfNeeded(claimId, connection);
-        await claimRepository.writeAudit({ claimId, actorId: claimantId, action: "CLAIM_CREATED", toStatus: "CONVERSATION_OPEN" }, connection);
-        await notificationRepository.create({
-          userId: finderId,
+        await claimRepository.addParticipant({ claimId, userId: pair.finder_id, role: "FINDER", consentStatus: "PENDING" }, connection);
+        await claimRepository.writeAudit({ claimId, actorId: claimantId, action: "CLAIM_CREATED", toStatus: "PENDING" }, connection);
+        const notification = await notificationRepository.create({
+          userId: pair.finder_id,
           type: "CLAIM_REQUEST_RECEIVED",
           title: "Bạn có một cuộc trao đổi riêng mới",
           body: "Có người vừa claim bài viết và đã có thể nhắn tin trực tiếp với bạn trong mục Trao đổi riêng.",
@@ -161,10 +164,15 @@ export function createClaimUseCases(options: ClaimDependencies) {
           dedupeKey: `claim:${claimId}:conversation`
         }, connection);
         const claim = await claimRepository.findById(claimId, connection);
-        if (!claim) throw new AppError("internal", "Không thể mở trao đổi riêng");
-        return { claim, idempotent: false };
+        if (!claim) throw new AppError("internal", "Không thể tạo yêu cầu xác minh");
+        return { claim, idempotent: false, notification, notificationUserId: pair.finder_id };
       });
 
+      await publishWorkflowNotification({
+        userId: "notificationUserId" in result ? (result.notificationUserId ?? null) : null,
+        notification: "notification" in result ? (result.notification ?? null) : null,
+        workflow: "CLAIM"
+      });
       return { ...await details(result.claim.id, claimantId), idempotent: result.idempotent };
     },
 
@@ -187,13 +195,18 @@ export function createClaimUseCases(options: ClaimDependencies) {
 
     async decide(claimId: string, finderId: string, input: ClaimDecisionInput) {
       const result = await withTransaction(async (connection) => {
+        let notification: NotificationRecord | null = null;
+        let notificationUserId: string | null = null;
+        let roomId: string | null = null;
         const claim = await claimRepository.findByIdForUpdate(claimId, connection);
         const participant = claim ? await claimRepository.findParticipant(claimId, finderId, connection) : null;
         if (!claim || !participant || participant.role !== "FINDER" || claim.finderId !== finderId) throw claimNotFound();
 
         if (input.decision === "ACCEPT" || input.decision === "REQUEST_MORE_INFO") {
           const nextStatus: ClaimStatus = input.decision === "ACCEPT" ? "CONVERSATION_OPEN" : "NEED_MORE_INFO";
-          if (claim.finderDecision === "ACCEPTED" && claim.roomId && claim.status === nextStatus) return claim;
+          if (claim.finderDecision === "ACCEPTED" && claim.roomId && claim.status === nextStatus) {
+            return { claim, notification, notificationUserId, roomId: claim.roomId };
+          }
           if (!["PENDING", "NEED_MORE_INFO", "CONVERSATION_OPEN"].includes(claim.status)) {
             throw new AppError("conflict", "Yêu cầu này không còn chờ phản hồi");
           }
@@ -205,7 +218,8 @@ export function createClaimUseCases(options: ClaimDependencies) {
             note: input.note,
             acceptedAt: true
           }, connection);
-          await openRoomIfNeeded(claimId, connection);
+          const room = await openRoomIfNeeded(claimId, connection);
+          roomId = room.id;
           await claimRepository.writeAudit({
             claimId,
             actorId: finderId,
@@ -215,7 +229,7 @@ export function createClaimUseCases(options: ClaimDependencies) {
             metadata: input.note ? { noteProvided: true } : undefined
           }, connection);
           if (input.decision === "ACCEPT") {
-            await notificationRepository.create({
+            notification = await notificationRepository.create({
               userId: claim.claimantId,
               type: "CLAIM_ACCEPTED",
               title: "Y\u00eau c\u1ea7u trao \u0111\u1ed5i ri\u00eang \u0111\u00e3 \u0111\u01b0\u1ee3c x\u00e1c nh\u1eadn",
@@ -224,6 +238,7 @@ export function createClaimUseCases(options: ClaimDependencies) {
               entityId: claimId,
               dedupeKey: `claim:${claimId}:accepted`
             }, connection);
+            notificationUserId = claim.claimantId;
           }
         } else {
           if (claim.status !== "PENDING" || claim.finderDecision !== "PENDING") throw new AppError("conflict", "Yêu cầu này không còn chờ phản hồi");
@@ -231,10 +246,16 @@ export function createClaimUseCases(options: ClaimDependencies) {
           await claimRepository.updateFinderDecision({ claimId, status: "REJECTED", finderDecision: "DECLINED", note: input.note, rejectedAt: true }, connection);
           await claimRepository.writeAudit({ claimId, actorId: finderId, action: "FINDER_DECLINED", fromStatus: claim.status, toStatus: "REJECTED" }, connection);
         }
-        return claimRepository.findById(claimId, connection);
+        return { claim: await claimRepository.findById(claimId, connection), notification, notificationUserId, roomId };
       });
 
-      if (!result) throw new AppError("internal", "Không thể cập nhật yêu cầu xác minh");
+      if (!result.claim) throw new AppError("internal", "Không thể cập nhật yêu cầu xác minh");
+      await publishWorkflowNotification({
+        userId: result.notificationUserId,
+        notification: result.notification,
+        workflow: "CLAIM",
+        roomId: result.roomId
+      });
       return details(claimId, finderId);
     },
 
@@ -268,7 +289,7 @@ export function createClaimUseCases(options: ClaimDependencies) {
 
     async sendMessage(claimId: string, userId: string, input: CreateMessageInput) {
       const room = await this.getRoom(claimId, userId);
-      const message = await withTransaction(async (connection) => {
+      const result = await withTransaction(async (connection) => {
         const lockedClaim = await claimRepository.findByIdForUpdate(claimId, connection);
         const participant = lockedClaim ? await claimRepository.findParticipant(claimId, userId, connection) : null;
         const lockedRoom = lockedClaim ? await claimRepository.findRoomByClaim(claimId, connection) : null;
@@ -276,9 +297,25 @@ export function createClaimUseCases(options: ClaimDependencies) {
         const created = await claimRepository.createMessage({ roomId: room.id, senderId: userId, content: input.content, clientMessageId: input.clientMessageId }, connection);
         if (!created) throw new AppError("internal", "Không thể gửi tin nhắn");
         await claimRepository.writeAudit({ claimId, actorId: userId, action: "MESSAGE_SENT" }, connection);
-        return created;
+        const recipientId = counterpartId(lockedClaim, userId);
+        const notification = recipientId ? await notificationRepository.create({
+          userId: recipientId,
+          type: "CHAT_MESSAGE_RECEIVED",
+          title: "Bạn có tin nhắn mới trong phòng trao đổi riêng",
+          body: "Mở phòng trao đổi riêng để xem nội dung. Thông báo không hiển thị nội dung riêng tư.",
+          entityType: "CLAIM",
+          entityId: claimId,
+          dedupeKey: `claim:${claimId}:message:${created.id}`
+        }, connection) : null;
+        return { message: created, notification, recipientId };
       });
-      return message;
+      await publishWorkflowNotification({
+        userId: result.recipientId,
+        notification: result.notification,
+        workflow: "CHAT",
+        roomId: room.id
+      });
+      return result.message;
     },
 
     async listEvidence(claimId: string, userId: string) {
