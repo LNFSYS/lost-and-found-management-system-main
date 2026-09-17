@@ -630,7 +630,7 @@ export const api = {
     return raw<ClaimListResponse>(`/claims${suffix}`);
   },
   getClaim: (claimId: string, signal?: AbortSignal) => raw<ClaimRecord>(`/claims/${claimId}`, { signal }),
-  createClaim: (payload: { lostPostId: string; foundPostId: string; description?: string; requestKey?: string }) => {
+  createClaim: (payload: ({ postId: string } | { lostPostId: string; foundPostId: string }) & { description?: string; requestKey?: string }) => {
     const requestKey = payload.requestKey ?? crypto.randomUUID();
     return raw<ClaimRecord & { idempotent: boolean }>("/claims", { method: "POST", headers: { "Idempotency-Key": requestKey }, body: JSON.stringify({ ...payload, requestKey: undefined }) });
   },

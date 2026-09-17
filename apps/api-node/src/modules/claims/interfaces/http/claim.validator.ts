@@ -13,12 +13,23 @@ export const listClaimsQuerySchema = z.object({
 });
 
 export const createClaimSchema = z.object({
-  lostPostId: uuid,
-  foundPostId: uuid,
+  postId: uuid.optional(),
+  lostPostId: uuid.optional(),
+  foundPostId: uuid.optional(),
   description: z.string().trim().min(10).max(5000).optional(),
   approximateLostAt: pastDate.optional(),
   approximateLocation: z.string().trim().max(255).optional(),
   requestKey: safeKey.optional()
+}).superRefine((value, context) => {
+  const directClaim = Boolean(value.postId);
+  const matchedClaim = Boolean(value.lostPostId && value.foundPostId);
+  if (directClaim === matchedClaim || (directClaim && (value.lostPostId || value.foundPostId))) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["postId"],
+      message: "Cần postId hoặc đầy đủ cặp lostPostId/foundPostId"
+    });
+  }
 });
 
 export const claimDecisionSchema = z.object({

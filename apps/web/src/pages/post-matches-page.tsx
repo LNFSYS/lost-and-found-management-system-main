@@ -99,7 +99,7 @@ function MatchCandidateCard({ result, rank, weights, onClaim, claiming }: { resu
     </div>
 
     <footer>
-      {onClaim && <button className="match-claim-button" type="button" disabled={claiming} onClick={onClaim}><MessageCircle /> {claiming ? "\u0110ang t\u1ea1o y\u00eau c\u1ea7u..." : "Y\u00eau c\u1ea7u trao \u0111\u1ed5i ri\u00eang"}</button>}
+      {onClaim && <button className="match-claim-button" type="button" disabled={claiming} onClick={onClaim}><MessageCircle /> {claiming ? "\u0110ang m\u1edf ph\u00f2ng chat..." : "Trao \u0111\u1ed5i ri\u00eang ngay"}</button>}
       <span><Database /> Đã lưu · {formatDate(result.calculatedAt)}</span>
       <Link to={`/posts/${result.candidate.id}`}>Xem bài đối ứng <ArrowRight /></Link>
     </footer>
@@ -138,7 +138,7 @@ export function PostMatchesPage() {
     }
   }
 
-  async function requestClaim(result: PostMatchResult) {
+  async function openConversation(result: PostMatchResult) {
     if (!data || data.source.type !== "LOST") return;
     setClaimingMatchId(result.matchId);
     setError("");
@@ -146,7 +146,7 @@ export function PostMatchesPage() {
       const claim = await api.createClaim({ lostPostId: data.source.id, foundPostId: result.candidate.id });
       navigate(`/claims/${claim.id}`);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "KhÃ´ng thá»ƒ táº¡o yÃªu cáº§u trao Ä‘á»•i.");
+      setError(reason instanceof Error ? reason.message : "Không thể mở phòng trao đổi riêng.");
     } finally {
       setClaimingMatchId(null);
     }
@@ -195,7 +195,7 @@ export function PostMatchesPage() {
 
     {error && <div className="match-page-warning"><AlertTriangle /> {error}</div>}
     {data.results.length ? <section className="match-analysis-list" aria-label="Danh sách ứng viên matching">
-      {data.results.map((result, index) => <MatchCandidateCard key={result.matchId} result={result} rank={index + 1} weights={data.weights} onClaim={data.source.type === "LOST" && result.totalScore >= data.thresholds.suggestion ? () => void requestClaim(result) : undefined} claiming={claimingMatchId === result.matchId} />)}
+      {data.results.map((result, index) => <MatchCandidateCard key={result.matchId} result={result} rank={index + 1} weights={data.weights} onClaim={data.source.type === "LOST" && result.totalScore >= data.thresholds.suggestion ? () => void openConversation(result) : undefined} claiming={claimingMatchId === result.matchId} />)}
     </section> : <section className="matches-empty">
       <ScanSearch />
       <p className="eyebrow">Lượt quét đã hoàn tất</p>

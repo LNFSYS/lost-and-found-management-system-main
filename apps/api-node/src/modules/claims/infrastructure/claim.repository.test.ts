@@ -3,6 +3,34 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { claimRepository } from "../../../test/persistence-fixtures.js";
 
+test("direct claims lock an active post and persist an immediately open conversation", async () => {
+  const statements: Array<{ sql: string; values?: unknown[] }> = [];
+  const postId = "11111111-1111-4111-8111-111111111111";
+  const ownerId = "22222222-2222-4222-8222-222222222222";
+  const queryable = {
+    execute: async (sql: string, values?: unknown[]) => {
+      statements.push({ sql: sql.replace(/\s+/g, " ").trim(), values });
+      if (sql.includes("FROM posts")) return [[{ id: postId, owner_id: ownerId }], []];
+      return [{ affectedRows: 1 }, []];
+    }
+  } as unknown as Pick<PoolConnection, "execute">;
+
+  const post = await claimRepository.findClaimablePostForUpdate(postId, queryable as never);
+  await claimRepository.createClaim({
+    id: "33333333-3333-4333-8333-333333333333",
+    lostPostId: undefined,
+    foundPostId: postId,
+    claimantId: "44444444-4444-4444-8444-444444444444"
+  }, queryable as never);
+
+  assert.deepEqual(post, { id: postId, ownerId });
+  assert.doesNotMatch(statements[0].sql, /type = 'FOUND'/);
+  assert.match(statements[0].sql, /status IN \('OPEN', 'MATCHED'\)/);
+  assert.match(statements[0].sql, /FOR UPDATE/);
+  assert.match(statements[1].sql, /'CONVERSATION_OPEN', 'ACCEPTED'/);
+  assert.equal(statements[1].values?.[1], null);
+});
+
 test("chat message persistence uses a server-side idempotency key", async () => {
   const statements: string[] = [];
   const clientMessageId = "11111111-1111-4111-8111-111111111111";

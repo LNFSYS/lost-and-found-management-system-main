@@ -12,6 +12,10 @@ interface MatchPairRow {
 }
 
 export interface ClaimRepository {
+  findClaimablePostForUpdate(postId: string, connection: TransactionContext): Promise<{
+    id: string;
+    ownerId: string;
+  } | null>;
   findMatchPairForUpdate(lostPostId: string, foundPostId: string, suggestionThreshold: number, connection: TransactionContext): Promise<MatchPairRow>;
   findById(claimId: string, queryable?: TransactionContext): Promise<{
     id: string;
@@ -175,7 +179,7 @@ export interface ClaimRepository {
   } | null>;
   createClaim(input: {
     id: string;
-    lostPostId: string;
+    lostPostId: string | undefined;
     foundPostId: string;
     claimantId: string;
     requestKey?: string;
