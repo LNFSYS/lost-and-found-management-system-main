@@ -107,7 +107,7 @@ export function createClaimUseCases(options: ClaimDependencies) {
             if (byKey.foundPostId !== requestedPostId || (input.lostPostId && byKey.lostPostId !== input.lostPostId)) {
               throw new AppError("conflict", "Idempotency-Key đã được sử dụng cho yêu cầu khác");
             }
-            return { claim: await ensureConversationOpen(byKey, connection), idempotent: true };
+            return { claim: byKey, idempotent: true };
           }
         }
 
@@ -137,7 +137,7 @@ export function createClaimUseCases(options: ClaimDependencies) {
 
         const existing = await claimRepository.findByFoundPostForClaimant(foundPostId, claimantId, connection);
         if (existing) {
-          return { claim: await ensureConversationOpen(existing, connection), idempotent: true };
+          return { claim: existing, idempotent: true };
         }
 
         const claimId = id();
@@ -152,10 +152,10 @@ export function createClaimUseCases(options: ClaimDependencies) {
           approximateLocation: input.approximateLocation
         }, connection);
         await claimRepository.addParticipant({ claimId, userId: claimantId, role: "CLAIMANT", consentStatus: "ACCEPTED" }, connection);
-        await claimRepository.addParticipant({ claimId, userId: pair.finder_id, role: "FINDER", consentStatus: "PENDING" }, connection);
+        await claimRepository.addParticipant({ claimId, userId: finderId, role: "FINDER", consentStatus: "PENDING" }, connection);
         await claimRepository.writeAudit({ claimId, actorId: claimantId, action: "CLAIM_CREATED", toStatus: "PENDING" }, connection);
         const notification = await notificationRepository.create({
-          userId: pair.finder_id,
+          userId: finderId,
           type: "CLAIM_REQUEST_RECEIVED",
           title: "Bạn có một cuộc trao đổi riêng mới",
           body: "Có người vừa claim bài viết và đã có thể nhắn tin trực tiếp với bạn trong mục Trao đổi riêng.",
@@ -165,7 +165,7 @@ export function createClaimUseCases(options: ClaimDependencies) {
         }, connection);
         const claim = await claimRepository.findById(claimId, connection);
         if (!claim) throw new AppError("internal", "Không thể tạo yêu cầu xác minh");
-        return { claim, idempotent: false, notification, notificationUserId: pair.finder_id };
+        return { claim, idempotent: false, notification, notificationUserId: finderId };
       });
 
       await publishWorkflowNotification({

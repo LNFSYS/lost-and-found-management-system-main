@@ -139,6 +139,81 @@ test("creating a claim for an already requested found post reopens the existing 
   }
 });
 
+test("direct claims use the post owner as finder instead of a matching-only pair", async () => {
+  const foundPostId = "99999999-9999-4999-8999-999999999999";
+  const finderId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+  const originalFindByRequestKey = claimRepository.findByRequestKey;
+  const originalFindClaimablePostForUpdate = claimRepository.findClaimablePostForUpdate;
+  const originalFindByFoundPostForClaimant = claimRepository.findByFoundPostForClaimant;
+  const originalCreateClaim = claimRepository.createClaim;
+  const originalAddParticipant = claimRepository.addParticipant;
+  const originalFindById = claimRepository.findById;
+  const originalFindParticipant = claimRepository.findParticipant;
+  const originalListParticipants = claimRepository.listParticipants;
+  const originalWriteAudit = claimRepository.writeAudit;
+  const originalCreateNotification = notificationRepository.create;
+  let created: Parameters<typeof claimRepository.createClaim>[0] | undefined;
+  const participants: Array<Parameters<typeof claimRepository.addParticipant>[0]> = [];
+  let notifiedUserId: string | undefined;
+
+  try {
+    claimRepository.findByRequestKey = async () => null;
+    claimRepository.findClaimablePostForUpdate = async () => ({ id: foundPostId, ownerId: finderId });
+    claimRepository.findByFoundPostForClaimant = async () => null;
+    claimRepository.createClaim = async (input) => { created = input; };
+    claimRepository.addParticipant = async (input) => { participants.push(input); };
+    claimRepository.writeAudit = async () => undefined;
+    notificationRepository.create = async (input) => {
+      notifiedUserId = input.userId;
+      return null;
+    };
+    claimRepository.findById = async (id) => ({
+      ...sampleClaim(),
+      id,
+      lostPostId: null,
+      foundPostId,
+      finderId,
+      status: "PENDING",
+      finderDecision: "PENDING",
+      acceptedAt: null,
+      posts: { lost: null, found: { id: foundPostId, title: "Ví nhặt được" } },
+      roomId: null
+    });
+    claimRepository.findParticipant = async (id, userId) => ({
+      claimId: id,
+      userId,
+      role: userId === claimantId ? "CLAIMANT" : "FINDER",
+      consentStatus: userId === claimantId ? "ACCEPTED" : "PENDING",
+      joinedAt: userId === claimantId ? "2026-09-03T00:00:00.000Z" : null,
+      fullName: userId === claimantId ? "Claimant" : "Finder"
+    });
+    claimRepository.listParticipants = async () => [];
+
+    const result = await claimService.createClaim(claimantId, { postId: foundPostId, requestKey: "direct-claim-key" });
+
+    assert.equal(created?.lostPostId, undefined);
+    assert.equal(created?.foundPostId, foundPostId);
+    assert.deepEqual(participants, [
+      { claimId: created?.id, userId: claimantId, role: "CLAIMANT", consentStatus: "ACCEPTED" },
+      { claimId: created?.id, userId: finderId, role: "FINDER", consentStatus: "PENDING" }
+    ]);
+    assert.equal(notifiedUserId, finderId);
+    assert.equal(result.status, "PENDING");
+    assert.equal(result.canSend, false);
+  } finally {
+    claimRepository.findByRequestKey = originalFindByRequestKey;
+    claimRepository.findClaimablePostForUpdate = originalFindClaimablePostForUpdate;
+    claimRepository.findByFoundPostForClaimant = originalFindByFoundPostForClaimant;
+    claimRepository.createClaim = originalCreateClaim;
+    claimRepository.addParticipant = originalAddParticipant;
+    claimRepository.findById = originalFindById;
+    claimRepository.findParticipant = originalFindParticipant;
+    claimRepository.listParticipants = originalListParticipants;
+    claimRepository.writeAudit = originalWriteAudit;
+    notificationRepository.create = originalCreateNotification;
+  }
+});
+
 test("sending a chat message pushes a privacy-safe realtime notification to the counterpart", async () => {
   const claim = sampleClaim();
   const room = { id: claim.roomId!, claimId: claim.id, createdAt: claim.createdAt };
