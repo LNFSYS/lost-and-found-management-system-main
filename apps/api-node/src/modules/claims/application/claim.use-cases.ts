@@ -4,9 +4,7 @@ import { AppError } from "../../../shared/domain/app-error.js";
 import { validateImageUpload } from "../../../shared/domain/media.js";
 import type { ImageUpload } from "../../../shared/domain/upload.js";
 import type { MatchingRepository } from "../../matching/application/index.js";
-import type { NotificationRepository } from "../../notifications/application/index.js";
-import type { NotificationRecord } from "../../notifications/application/notification.repository.port.js";
-import type { WorkflowNotificationKind } from "../../realtime/application/realtime.use-cases.js";
+import type { NotificationRecord, NotificationRepository } from "../../notifications/application/index.js";
 import { canUseRoom } from "../domain/claim-policy.js";
 import type {
   ClaimDecisionInput,
@@ -17,6 +15,8 @@ import type {
   UploadEvidenceInput
 } from "./claim.dto.js";
 import type { ClaimRepository, ClaimStatus } from "./claim.repository.port.js";
+
+type WorkflowNotificationKind = "CLAIM" | "CHAT" | "APPOINTMENT" | "RETURN";
 
 function claimNotFound() {
   return new AppError("not_found", "Không tìm thấy yêu cầu xác minh");

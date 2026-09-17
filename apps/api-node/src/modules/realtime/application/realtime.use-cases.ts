@@ -1,16 +1,21 @@
-import type { Response } from "express";
 import { AppError } from "../../../shared/domain/app-error.js";
-import type { ClaimRepository } from "../../claims/application/claim.repository.port.js";
-import type { NotificationRecord } from "../../notifications/application/notification.repository.port.js";
+import type { ClaimRepository } from "../../claims/application/index.js";
+import type { NotificationRecord } from "../../notifications/application/index.js";
 
 export type WorkflowNotificationKind = "CLAIM" | "CHAT" | "APPOINTMENT" | "RETURN";
+
+interface EventStreamResponse {
+  destroyed: boolean;
+  write(chunk: string): unknown;
+  end(): unknown;
+}
 
 export interface RealtimeConnection {
   id: string;
   userId: string;
   rooms: Set<string>;
   deliveredEventIds: Set<string>;
-  response: Pick<Response, "write" | "end" | "destroyed">;
+  response: EventStreamResponse;
 }
 
 export interface WorkflowNotificationInput {
@@ -53,7 +58,7 @@ export function createRealtimeUseCases({ claimRepository, id }: {
     connections.delete(connectionId);
   }
 
-  function send(response: Pick<Response, "write">, event: string, data: unknown) {
+  function send(response: Pick<EventStreamResponse, "write">, event: string, data: unknown) {
     response.write(`event: ${event}\n`);
     response.write(`data: ${JSON.stringify(data)}\n\n`);
   }
