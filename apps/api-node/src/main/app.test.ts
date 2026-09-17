@@ -7,7 +7,7 @@ import type { AdminUserRecord } from "../modules/admin/application/admin-user.re
 import type { SystemConfigRecord } from "../modules/system-config/application/system-config.repository.port.js";
 import type { Role } from "../shared/domain/auth.js";
 import { env } from "../shared/infrastructure/config/env.js";
-import { adminReportingService, adminUserService, authService, returnFeedbackService, systemConfigService, testServices } from "../test/use-case-fixtures.js";
+import { adminReportingService, adminUserService, authService, claimRepository, returnFeedbackService, systemConfigService, testServices } from "../test/use-case-fixtures.js";
 import { createApp } from "./app.js";
 
 const userId = "11111111-1111-4111-8111-111111111111";
@@ -142,6 +142,60 @@ test("claim, room and private evidence routes require authentication", async () 
     const evidence = await fetch(`${baseUrl}/api/claims/11111111-1111-4111-8111-111111111111/evidence/22222222-2222-4222-8222-222222222222`);
     assert.equal(evidence.status, 401);
   });
+});
+
+async function readSseEvent(response: Response) {
+  const reader = response.body!.getReader();
+  const { value } = await reader.read();
+  reader.releaseLock();
+  return new TextDecoder().decode(value);
+}
+
+test("realtime route authenticates and isolates claim room subscriptions", async () => {
+  const originalValidateAccessSession = authService.validateAccessSession;
+  const originalFindRoomForParticipant = claimRepository.findRoomForParticipant;
+  authService.validateAccessSession = async () => true;
+  claimRepository.findRoomForParticipant = async (roomId, userId) => {
+    return roomId === "77777777-7777-4777-8777-777777777777" && userId === "admin-id"
+      ? { id: "claim-id", roomId: "77777777-7777-4777-8777-777777777777" } as never
+      : null;
+  };
+  try {
+    await withServer(async () => undefined, async (baseUrl) => {
+      const unauthenticated = await fetch(`${baseUrl}/api/realtime`);
+      assert.equal(unauthenticated.status, 401);
+
+      const forbidden = await fetch(`${baseUrl}/api/realtime?roomId=88888888-8888-4888-8888-888888888888`, {
+        headers: jsonHeaders(["USER"])
+      });
+      assert.equal(forbidden.status, 404);
+
+      const firstAbort = new AbortController();
+      const first = await fetch(`${baseUrl}/api/realtime?roomId=77777777-7777-4777-8777-777777777777&roomId=77777777-7777-4777-8777-777777777777`, {
+        headers: jsonHeaders(["USER"]),
+        signal: firstAbort.signal
+      });
+      assert.equal(first.status, 200);
+      assert.match(first.headers.get("content-type") ?? "", /text\/event-stream/);
+      const firstEvent = await readSseEvent(first);
+      assert.match(firstEvent, /event: realtime\.connected/);
+      assert.match(firstEvent, /"rooms":\["77777777-7777-4777-8777-777777777777"\]/);
+      assert.doesNotMatch(firstEvent, /claim-id|secret|content/);
+      firstAbort.abort();
+
+      const secondAbort = new AbortController();
+      const second = await fetch(`${baseUrl}/api/realtime?roomId=77777777-7777-4777-8777-777777777777`, {
+        headers: jsonHeaders(["USER"]),
+        signal: secondAbort.signal
+      });
+      assert.equal(second.status, 200);
+      assert.match(await readSseEvent(second), /event: realtime\.connected/);
+      secondAbort.abort();
+    });
+  } finally {
+    authService.validateAccessSession = originalValidateAccessSession;
+    claimRepository.findRoomForParticipant = originalFindRoomForParticipant;
+  }
 });
 
 test("notification routes require authentication", async () => {
