@@ -7911,6 +7911,7 @@ textarea {
 .review-panel { display: grid; gap: 14px; }
 .review-panel--eligible { border-left: 3px solid #2e8a5a; }
 .review-panel--custody { border-left: 3px solid #d18424; }
+
 .review-progress { display: grid; gap: 8px; padding: 11px; border: 1px solid #d8e2e7; border-radius: 5px; background: #f8fafb; }
 .review-progress strong { color: #425966; font-size: .7rem; }
 .review-progress small { color: #71838e; font-size: .61rem; }
