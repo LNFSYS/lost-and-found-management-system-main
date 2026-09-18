@@ -36,6 +36,12 @@ export type VerificationDecisionInput = {
 
 export type CreateMessageInput = { content: string; clientMessageId?: string | undefined; };
 
+export type CreateDirectMessageInput = {
+  postId: string;
+  content: string;
+  clientMessageId?: string | undefined;
+};
+
 export type ListMessagesQuery = { limit: number; before?: Date | undefined; beforeId?: string | undefined; };
 
 export type UploadEvidenceInput = { description?: string | undefined; };

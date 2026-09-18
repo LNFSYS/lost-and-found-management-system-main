@@ -23,8 +23,6 @@ export function PostDetailPage() {
   const [relatedLoading, setRelatedLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [claiming, setClaiming] = useState(false);
-  const [claimError, setClaimError] = useState("");
   const { online } = useNetworkStatus();
   const { stale, clearStale } = useStaleDataNotice(useCallback((path) => path.startsWith(`/posts/${postId}`), [postId]));
 
@@ -63,16 +61,16 @@ export function PostDetailPage() {
 
   async function claimAndChat() {
     if (!post) return;
-    setClaiming(true);
-    setClaimError("");
     try {
-      const claim = await api.createClaim({ postId: post.id });
-      navigate(`/claims/${claim.id}`);
-    } catch (reason) {
-      setClaimError(reason instanceof Error ? reason.message : "Không thể mở phòng trao đổi riêng");
-    } finally {
-      setClaiming(false);
+      const existing = await api.findConversationByPost(post.id);
+      if (existing) {
+        navigate(`/claims/${existing.id}`);
+        return;
+      }
+    } catch {
+      // Fall back to compose when the conversation lookup is unavailable.
     }
+    navigate(`/claims?composePostId=${encodeURIComponent(post.id)}`);
   }
 
   if (loading) return <section className="post-detail-page"><div className="post-detail-loading"><i /><div><span /><span /><span /></div></div></section>;
@@ -106,8 +104,7 @@ export function PostDetailPage() {
 
         <section className="post-detail-description"><p className="eyebrow">Mô tả nhận dạng</p><h2>Thông tin vật phẩm</h2><p>{post.description ?? "Người đăng giữ riêng các dấu hiệu nhận dạng. Thông tin này chỉ hỗ trợ quá trình xác minh phù hợp."}</p></section>
 
-        {!post.canEdit && ["OPEN", "MATCHED"].includes(post.status) && <div className="post-detail-claim"><button className="post-claim-button post-claim-button--detail" type="button" disabled={claiming} onClick={() => void claimAndChat()}><MessageCircle /> {claiming ? "Đang mở phòng chat..." : "Nhắn tin với người đăng"}</button><p>Không cần tạo bài đăng mới và không cần chờ duyệt trao đổi.</p></div>}
-        {claimError && <p className="post-claim-error" role="alert">{claimError}</p>}
+        {!post.canEdit && ["OPEN", "MATCHED"].includes(post.status) && <div className="post-detail-claim"><button className="post-claim-button post-claim-button--detail" type="button" onClick={claimAndChat}><MessageCircle /> Nhắn tin với người đăng</button><p>Nếu đã từng nhắn, hệ thống sẽ mở lại toàn bộ lịch sử; nếu chưa, cuộc trò chuyện chỉ được lưu sau tin nhắn đầu tiên.</p></div>}
 
         {post.handoverPoint && <section className="post-handover"><span><PackageCheck /></span><div><p className="eyebrow">Điểm bàn giao</p><h2>{post.handoverPoint.name}</h2><p>{post.handoverPoint.address ?? "Địa chỉ đang được cập nhật"}</p></div></section>}
 

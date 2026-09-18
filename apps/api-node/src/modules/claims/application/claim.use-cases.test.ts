@@ -247,6 +247,77 @@ test("direct claims use the post owner as finder instead of a matching-only pair
   }
 });
 
+test("the first direct message creates and persists the conversation atomically", async () => {
+  const foundPostId = "99999999-9999-4999-8999-999999999999";
+  const finderId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+  const roomId = "88888888-8888-4888-8888-888888888888" as `${string}-${string}-${string}-${string}-${string}`;
+  const createdClaim = {
+    ...sampleClaim(), id: claimId, lostPostId: null, foundPostId, finderId,
+    status: "CONVERSATION_OPEN" as const, finderDecision: "ACCEPTED" as const,
+    posts: { lost: null, found: { id: foundPostId, title: "Ví nhặt được" } }, roomId
+  };
+  const originalFindClaimablePostForUpdate = claimRepository.findClaimablePostForUpdate;
+  const originalFindByFoundPostForClaimant = claimRepository.findByFoundPostForClaimant;
+  const originalCreateClaim = claimRepository.createClaim;
+  const originalAddParticipant = claimRepository.addParticipant;
+  const originalCreateRoom = claimRepository.createRoom;
+  const originalFindById = claimRepository.findById;
+  const originalFindParticipant = claimRepository.findParticipant;
+  const originalCreateMessage = claimRepository.createMessage;
+  const originalWriteAudit = claimRepository.writeAudit;
+  const originalListParticipants = claimRepository.listParticipants;
+  const originalFindClaimItemContext = claimRepository.findClaimItemContext;
+  const originalCreateNotification = notificationRepository.create;
+  let persistedContent = "";
+
+  try {
+    claimRepository.findClaimablePostForUpdate = async () => ({ id: foundPostId, ownerId: finderId, type: "LOST" });
+    claimRepository.findByFoundPostForClaimant = async () => null;
+    claimRepository.createClaim = async () => undefined;
+    claimRepository.addParticipant = async () => undefined;
+    claimRepository.createRoom = async (id) => ({ id: roomId, claimId: id });
+    claimRepository.findById = async () => createdClaim;
+    claimRepository.findParticipant = async (_id, userId) => ({
+      claimId, userId, role: userId === claimantId ? "CLAIMANT" : "FINDER", consentStatus: "ACCEPTED",
+      joinedAt: createdClaim.createdAt, fullName: userId === claimantId ? "Claimant" : "Finder"
+    });
+    claimRepository.createMessage = async (input) => {
+      persistedContent = input.content;
+      return {
+        id: "77777777-7777-4777-8777-777777777777", roomId: input.roomId,
+        sender: { id: input.senderId, fullName: "Claimant" }, clientMessageId: input.clientMessageId ?? null,
+        content: input.content, messageType: "TEXT", isRead: false, readAt: null, createdAt: createdClaim.createdAt
+      };
+    };
+    claimRepository.writeAudit = async () => undefined;
+    claimRepository.listParticipants = async () => [];
+    claimRepository.findClaimItemContext = async () => sampleItemContext(foundPostId);
+    notificationRepository.create = async () => null;
+
+    const result = await claimService.createDirectMessage(claimantId, {
+      postId: foundPostId, content: "Tin nhắn đầu tiên", clientMessageId: "first-direct-message"
+    });
+
+    assert.equal(persistedContent, "Tin nhắn đầu tiên");
+    assert.equal(result.message.content, "Tin nhắn đầu tiên");
+    assert.equal(result.claim.id, claimId);
+    assert.equal(result.claim.roomId, roomId);
+  } finally {
+    claimRepository.findClaimablePostForUpdate = originalFindClaimablePostForUpdate;
+    claimRepository.findByFoundPostForClaimant = originalFindByFoundPostForClaimant;
+    claimRepository.createClaim = originalCreateClaim;
+    claimRepository.addParticipant = originalAddParticipant;
+    claimRepository.createRoom = originalCreateRoom;
+    claimRepository.findById = originalFindById;
+    claimRepository.findParticipant = originalFindParticipant;
+    claimRepository.createMessage = originalCreateMessage;
+    claimRepository.writeAudit = originalWriteAudit;
+    claimRepository.listParticipants = originalListParticipants;
+    claimRepository.findClaimItemContext = originalFindClaimItemContext;
+    notificationRepository.create = originalCreateNotification;
+  }
+});
+
 test("sending a chat message pushes a privacy-safe realtime notification to the counterpart", async () => {
   const claim = sampleClaim();
   const room = {

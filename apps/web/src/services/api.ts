@@ -629,6 +629,23 @@ function queryString(filters: object) {
   return value ? `?${value}` : "";
 }
 
+/** A conversation is persisted only after at least one message exists. */
+async function findConversationByPost(postId: string) {
+  let page = 1;
+  do {
+    const result = await raw<ClaimListResponse>(`/claims?page=${page}&pageSize=50`);
+    const match = result.items.find((claim) => {
+      const samePost = claim.item?.postId === postId || claim.posts.found.id === postId || claim.posts.lost?.id === postId;
+      const hasMessage = Boolean(claim.conversation?.lastMessageAt || claim.conversation?.lastMessage);
+      return samePost && hasMessage;
+    });
+    if (match) return match;
+    if (!result.hasMore) return null;
+    page += 1;
+  } while (page <= 100);
+  return null;
+}
+
 async function mediaBlob(path: string, retry = true, errorMessage = "Khong the tai anh"): Promise<Blob> {
   const headers = new Headers();
   if (accessToken) headers.set("authorization", `Bearer ${accessToken}`);
@@ -694,11 +711,14 @@ export const api = {
     const suffix = params.toString() ? `?${params.toString()}` : "";
     return raw<ClaimListResponse>(`/claims${suffix}`);
   },
+  findConversationByPost,
   getClaim: (claimId: string, signal?: AbortSignal) => raw<ClaimRecord>(`/claims/${claimId}`, { signal }),
   createClaim: (payload: ({ postId: string } | { lostPostId: string; foundPostId: string }) & { description?: string; requestKey?: string }) => {
     const requestKey = payload.requestKey ?? crypto.randomUUID();
     return raw<ClaimRecord & { idempotent: boolean }>("/claims", { method: "POST", headers: { "Idempotency-Key": requestKey }, body: JSON.stringify({ ...payload, requestKey: undefined }) });
   },
+  createDirectMessage: (postId: string, content: string, clientMessageId: string = crypto.randomUUID()) =>
+    raw<{ claim: ClaimRecord; message: ClaimMessage }>("/claims/direct-messages", { method: "POST", headers: { "Idempotency-Key": clientMessageId }, body: JSON.stringify({ postId, content }) }),
   decideClaim: (claimId: string, decision: "ACCEPT" | "DECLINE" | "REQUEST_MORE_INFO", note: string, idempotencyKey: string = crypto.randomUUID()) => raw<ClaimRecord>(`/claims/${claimId}/decision`, { method: "POST", headers: { "Idempotency-Key": idempotencyKey }, body: JSON.stringify({ decision, note }) }),
   withdrawClaim: (claimId: string, idempotencyKey: string = crypto.randomUUID()) => raw<ClaimRecord>(`/claims/${claimId}/withdraw`, { method: "POST", headers: { "Idempotency-Key": idempotencyKey } }),
   listClaimRooms: () => raw<ClaimRoomsResponse>("/claims/rooms"),

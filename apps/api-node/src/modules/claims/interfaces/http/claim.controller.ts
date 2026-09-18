@@ -6,6 +6,7 @@ import {
   claimDecisionSchema,
   claimIdParamSchema,
   createClaimSchema,
+  createDirectMessageSchema,
   createMessageSchema,
   evidenceParamSchema,
   listClaimsQuerySchema,
@@ -39,6 +40,14 @@ export function createClaimController({ claimService }: {
       const input = createClaimSchema.parse({ ...request.body, requestKey: idempotencyKey(request) ?? request.body?.requestKey });
       const result = await claimService.createClaim(request.auth!.sub, input);
       response.status(result.idempotent ? 200 : 201).json(result);
+    },
+
+    async createDirectMessage(request: Request, response: Response) {
+      const result = await claimService.createDirectMessage(request.auth!.sub, createDirectMessageSchema.parse({
+        ...request.body,
+        clientMessageId: idempotencyKey(request) ?? request.body?.clientMessageId
+      }));
+      response.status(201).json(result);
     },
 
     async getClaim(request: Request, response: Response) {

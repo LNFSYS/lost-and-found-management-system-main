@@ -140,16 +140,16 @@ export function PostMatchesPage() {
 
   async function openConversation(result: PostMatchResult) {
     if (!data || data.source.type !== "LOST") return;
-    setClaimingMatchId(result.matchId);
-    setError("");
     try {
-      const claim = await api.createClaim({ lostPostId: data.source.id, foundPostId: result.candidate.id });
-      navigate(`/claims/${claim.id}`);
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Không thể mở phòng trao đổi riêng.");
-    } finally {
-      setClaimingMatchId(null);
+      const existing = await api.findConversationByPost(result.candidate.id);
+      if (existing) {
+        navigate(`/claims/${existing.id}`);
+        return;
+      }
+    } catch {
+      // Fall back to compose when the conversation lookup is unavailable.
     }
+    navigate(`/claims?composePostId=${encodeURIComponent(result.candidate.id)}`);
   }
 
   if (loading) return <section className="matches-page"><div className="matches-loading"><ScanSearch /><h1>Đang đọc kết quả matching đã lưu...</h1><span /><span /><span /></div></section>;
