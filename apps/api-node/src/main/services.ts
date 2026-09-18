@@ -80,7 +80,7 @@ export function createServices(persistence: Persistence, config: typeof env = en
     claimRepository, matchingRepository, notificationRepository,
     realtimeNotifier: realtimeService,
     withTransaction: transaction, id, mediaStorage: claimMediaStorage,
-    hashIdempotencyPayload: security.hashToken
+    logger: console, hashIdempotencyPayload: security.hashToken
   });
   const authService = createAuthUseCases({
     authRepository, userRepository, avatarStorage, security,

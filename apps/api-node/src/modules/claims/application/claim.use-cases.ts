@@ -1,3 +1,4 @@
+import type { Logger } from "../../../shared/application/logger.port.js";
 import type { PrivateMediaStorage } from "../../../shared/application/media-storage.port.js";
 import type { TransactionContext, TransactionRunner } from "../../../shared/application/transaction.js";
 import { AppError } from "../../../shared/domain/app-error.js";
@@ -47,12 +48,13 @@ export interface ClaimDependencies {
   withTransaction: TransactionRunner;
   id: () => string;
   mediaStorage: PrivateMediaStorage;
+  logger: Logger;
   hashIdempotencyPayload: (value: string) => string;
 }
 export function createClaimUseCases(options: ClaimDependencies) {
   const {
     claimRepository, matchingRepository, notificationRepository, realtimeNotifier, withTransaction, id, mediaStorage,
-    hashIdempotencyPayload
+    logger, hashIdempotencyPayload
   } = options;
 
   type StoredClaim = NonNullable<Awaited<ReturnType<typeof claimRepository.findById>>>;
@@ -376,7 +378,7 @@ export function createClaimUseCases(options: ClaimDependencies) {
                 ? `ROOM_NOT_AVAILABLE_${claim.status}_${participant.consentStatus}`
                 : null;
       if (denialReason) {
-        console.warn("[claims] verification templates denied", {
+        logger.warn(`[claims] verification templates denied ${JSON.stringify({
           claimId,
           userId: finderId,
           reason: denialReason,
@@ -385,7 +387,7 @@ export function createClaimUseCases(options: ClaimDependencies) {
           claimStatus: claim?.status ?? null,
           participantRole: participant?.role ?? null,
           participantConsent: participant?.consentStatus ?? null
-        });
+        })}`);
         throw claimNotFound();
       }
       const context = await claimRepository.findVerificationContext(claimId);
