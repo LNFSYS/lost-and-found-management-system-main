@@ -64,6 +64,12 @@ export const createMessageSchema = z.object({
   clientMessageId: safeKey.optional()
 });
 
+export const createDirectMessageSchema = z.object({
+  postId: uuid,
+  content: z.string().trim().min(1).max(5000),
+  clientMessageId: safeKey.optional()
+});
+
 export const listMessagesQuerySchema = z.object({
   before: z.coerce.date().optional(),
   beforeId: uuid.optional(),

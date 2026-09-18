@@ -17,6 +17,7 @@ import type {
   AnswerVerificationQuestionInput,
   ClaimDecisionInput,
   CreateClaimInput,
+  CreateDirectMessageInput,
   CreateMessageInput,
   ListClaimsQuery,
   ListMessagesQuery,
@@ -335,6 +336,91 @@ export function createClaimUseCases(options: ClaimDependencies) {
         workflow: "CLAIM"
       });
       return { ...await details(result.claim.id, requesterId), idempotent: result.idempotent };
+    },
+
+    async createDirectMessage(requesterId: string, input: CreateDirectMessageInput) {
+      const result = await withTransaction(async (connection) => {
+        // The post lock serializes first-message attempts. If message creation
+        // fails, the transaction rolls back the claim and room as well.
+        const post = await claimRepository.findClaimablePostForUpdate(input.postId, connection);
+        if (!post) throw new AppError("conflict", "Bài viết không còn mở để nhắn tin");
+
+        // A direct conversation is always between the requester and the post
+        // owner. Keep the requester as claimant for both LOST and FOUND posts
+        // so an existing conversation is scoped to this user/post pair.
+        const claimantId = requesterId;
+        const finderId = post.ownerId;
+        if (claimantId === finderId) throw new AppError("conflict", "Bạn không thể nhắn tin với chính mình");
+
+        const existing = await claimRepository.findByFoundPostForClaimant(post.id, claimantId, connection);
+        let claim: StoredClaim;
+        let roomId: string;
+
+        if (existing) {
+          if (existing.status === "PENDING") {
+            await claimRepository.updateFinderDecision({
+              claimId: existing.id,
+              status: "CONVERSATION_OPEN",
+              finderDecision: "ACCEPTED"
+            }, connection);
+            await claimRepository.updateParticipantConsent(existing.id, existing.claimantId, "ACCEPTED", connection);
+            await claimRepository.updateParticipantConsent(existing.id, existing.finderId, "ACCEPTED", connection);
+          }
+          roomId = (await openRoomIfNeeded(existing.id, connection)).id;
+          const refreshed = await claimRepository.findByIdForUpdate(existing.id, connection);
+          if (!refreshed) throw claimNotFound();
+          claim = refreshed;
+        } else {
+          const claimId = id();
+          await claimRepository.createClaim({
+            id: claimId,
+            lostPostId: undefined,
+            foundPostId: post.id,
+            claimantId,
+            status: "CONVERSATION_OPEN",
+            finderDecision: "ACCEPTED"
+          }, connection);
+          await claimRepository.addParticipant({ claimId, userId: claimantId, role: "CLAIMANT", consentStatus: "ACCEPTED" }, connection);
+          await claimRepository.addParticipant({ claimId, userId: finderId, role: "FINDER", consentStatus: "ACCEPTED" }, connection);
+          roomId = (await claimRepository.createRoom(claimId, connection)).id;
+          await claimRepository.writeAudit({ claimId, actorId: requesterId, action: "CLAIM_CREATED", toStatus: "CONVERSATION_OPEN" }, connection);
+          const createdClaim = await claimRepository.findById(claimId, connection);
+          if (!createdClaim) throw new AppError("internal", "Không thể tạo cuộc trò chuyện");
+          claim = createdClaim;
+        }
+
+        const participant = await claimRepository.findParticipant(claim.id, requesterId, connection);
+        if (!participant || !canUseRoom(claim.status, participant.consentStatus)) throw claimNotFound();
+
+        const message = await claimRepository.createMessage({
+          roomId,
+          senderId: requesterId,
+          content: input.content,
+          clientMessageId: input.clientMessageId
+        }, connection);
+        if (!message) throw new AppError("internal", "Không thể gửi tin nhắn");
+        await claimRepository.writeAudit({ claimId: claim.id, actorId: requesterId, action: "MESSAGE_SENT" }, connection);
+
+        const recipientId = counterpartId(claim, requesterId);
+        const notification = recipientId ? await notificationRepository.create({
+          userId: recipientId,
+          type: "CHAT_MESSAGE_RECEIVED",
+          title: "Bạn có tin nhắn mới trong phòng trao đổi riêng",
+          body: "Mở phòng trao đổi riêng để xem nội dung. Thông báo không hiển thị nội dung riêng tư.",
+          entityType: "CLAIM",
+          entityId: claim.id,
+          dedupeKey: `claim:${claim.id}:message:${message.id}`
+        }, connection) : null;
+        return { claimId: claim.id, message, notification, recipientId, roomId };
+      });
+
+      await publishWorkflowNotification({
+        userId: result.recipientId,
+        notification: result.notification,
+        workflow: "CHAT",
+        roomId: result.roomId
+      });
+      return { claim: await details(result.claimId, requesterId), message: result.message };
     },
 
     async listClaims(userId: string, query: ListClaimsQuery = { page: 1, pageSize: 50 }) {

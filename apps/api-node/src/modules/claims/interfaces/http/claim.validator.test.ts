@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  answerVerificationQuestionSchema, claimDecisionSchema, createClaimSchema, createMessageSchema, listClaimsQuerySchema,
+  answerVerificationQuestionSchema, claimDecisionSchema, createClaimSchema, createDirectMessageSchema, createMessageSchema, listClaimsQuerySchema,
   listMessagesQuerySchema, sendVerificationQuestionSchema, uploadEvidenceSchema, verificationDecisionSchema
 } from "./claim.validator.js";
 
@@ -24,6 +24,13 @@ test("messages and evidence descriptions reject oversized input", () => {
   assert.throws(() => createMessageSchema.parse({ content: "x".repeat(5001) }));
   assert.equal(uploadEvidenceSchema.parse({ description: "Ảnh mặt sau" }).description, "Ảnh mặt sau");
   assert.throws(() => uploadEvidenceSchema.parse({ description: "x".repeat(256) }));
+});
+
+test("the first direct message must include both a post and non-empty content", () => {
+  const message = createDirectMessageSchema.parse({ postId: foundPostId, content: "Xin chào", clientMessageId: "direct-message-1" });
+  assert.equal(message.postId, foundPostId);
+  assert.throws(() => createDirectMessageSchema.parse({ postId: foundPostId, content: " " }));
+  assert.throws(() => createDirectMessageSchema.parse({ content: "Xin chào" }));
 });
 
 test("message pagination requires a composite timestamp and message cursor", () => {

@@ -58,35 +58,20 @@ export function PostImage({ post, detail = false }: { post: PostSummary; detail?
 
 export function PostCard({ post }: { post: PostSummary }) {
   const navigate = useNavigate();
-  const [claiming, setClaiming] = useState(false);
-  const [claimError, setClaimError] = useState("");
   const canClaim = !post.canEdit && ["OPEN", "MATCHED"].includes(post.status);
 
   async function claimAndChat() {
-    setClaiming(true);
-    setClaimError("");
     try {
-      const claim = await api.createClaim({ postId: post.id });
-      navigate(`/claims/${claim.id}`);
-    } catch (reason) {
-      // Nếu claim đã tồn tại (idempotent), vẫn navigate đến claim đó
-      if (reason instanceof Error && reason.message === "Dữ liệu đã tồn tại") {
-        // Tìm claim đã tồn tại và navigate
-        try {
-          const claims = await api.listClaims({ page: 1, pageSize: 50 });
-          const existingClaim = claims.items.find(c => c.posts.found.id === post.id);
-          if (existingClaim) {
-            navigate(`/claims/${existingClaim.id}`);
-            return;
-          }
-        } catch (e) {
-          // Ignore, show original error
-        }
+      const existing = await api.findConversationByPost(post.id);
+      if (existing) {
+        navigate(`/claims/${existing.id}`);
+        return;
       }
-      setClaimError(reason instanceof Error ? reason.message : "Không thể mở phòng trao đổi riêng");
-    } finally {
-      setClaiming(false);
+    } catch {
+      // Fall back to the compose route; the first message will still be
+      // persisted atomically if the lookup was temporarily unavailable.
     }
+    navigate(`/claims?composePostId=${encodeURIComponent(post.id)}`);
   }
 
   return <article className="post-card">
@@ -103,8 +88,7 @@ export function PostCard({ post }: { post: PostSummary }) {
         <span><strong>{post.matchSummary.suggestionCount} gợi ý</strong><small>{post.matchSummary.topScore === null ? "Chưa có điểm" : `Cao nhất ${Math.round(post.matchSummary.topScore * 100)}%`}</small></span>
         <ArrowRight />
       </Link>}
-      {canClaim && <button className="post-claim-button post-claim-button--card" type="button" disabled={claiming} onClick={() => void claimAndChat()}><MessageCircle /> {claiming ? "Đang mở phòng chat..." : "Nhắn tin với người đăng"}</button>}
-      {claimError && <p className="post-claim-error" role="alert">{claimError}</p>}
+      {canClaim && <button className="post-claim-button post-claim-button--card" type="button" onClick={claimAndChat}><MessageCircle /> Nhắn tin với người đăng</button>}
       <footer>
         <div className="post-owner"><span>{initials(post.owner.fullName)}</span><strong>{post.owner.fullName}</strong></div>
         <Link className="post-detail-link" to={`/posts/${post.id}`}>Xem chi tiết <ArrowRight /></Link>

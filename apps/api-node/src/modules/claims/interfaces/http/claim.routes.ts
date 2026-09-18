@@ -62,6 +62,7 @@ export function createClaimRoutes({ claimController, auth }: {
   claimRoutes.get("/rooms", (req, res, next) => claimController.listRooms(req, res).catch(next));
   claimRoutes.get("/", (req, res, next) => claimController.listClaims(req, res).catch(next));
   claimRoutes.post("/", claimCreateLimit, (req, res, next) => claimController.createClaim(req, res).catch(next));
+  claimRoutes.post("/direct-messages", messageLimit, (req, res, next) => claimController.createDirectMessage(req, res).catch(next));
   claimRoutes.get("/:claimId", (req, res, next) => claimController.getClaim(req, res).catch(next));
   claimRoutes.post("/:claimId/decision", verificationWriteLimit, (req, res, next) => claimController.decide(req, res).catch(next));
   claimRoutes.post("/:claimId/withdraw", (req, res, next) => claimController.withdraw(req, res).catch(next));
