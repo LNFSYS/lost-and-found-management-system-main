@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createClaimSchema, createMessageSchema, listClaimsQuerySchema, listMessagesQuerySchema, uploadEvidenceSchema } from "./claim.validator.js";
+import {
+  answerVerificationQuestionSchema, claimDecisionSchema, createClaimSchema, createMessageSchema, listClaimsQuerySchema,
+  listMessagesQuerySchema, sendVerificationQuestionSchema, uploadEvidenceSchema, verificationDecisionSchema
+} from "./claim.validator.js";
 
 const lostPostId = "11111111-1111-4111-8111-111111111111";
 const foundPostId = "22222222-2222-4222-8222-222222222222";
@@ -33,4 +36,18 @@ test("message pagination requires a composite timestamp and message cursor", () 
 test("claim list query bounds page size", () => {
   assert.deepEqual(listClaimsQuerySchema.parse({ page: 2, pageSize: 25 }), { page: 2, pageSize: 25 });
   assert.throws(() => listClaimsQuerySchema.parse({ page: 1, pageSize: 51 }));
+});
+
+test("verification writes require bounded input and an idempotency key", () => {
+  const key = "verification-request-1";
+  assert.equal(claimDecisionSchema.parse({ decision: "ACCEPT", note: "Open private room", idempotencyKey: key }).decision, "ACCEPT");
+  assert.throws(() => claimDecisionSchema.parse({ decision: "ACCEPT", note: "Open private room" }));
+  assert.equal(sendVerificationQuestionSchema.parse({
+    templateId: "phone-device", templateVersion: 1, promptKey: "case-accessory",
+    prompt: "Ốp lưng có đặc điểm riêng nào?", idempotencyKey: key
+  }).templateVersion, 1);
+  assert.throws(() => answerVerificationQuestionSchema.parse({ answer: "x" }));
+  assert.equal(verificationDecisionSchema.parse({
+    decision: "VERIFY_FOR_MEETUP", reason: "Hai câu trả lời phù hợp", idempotencyKey: key
+  }).decision, "VERIFY_FOR_MEETUP");
 });

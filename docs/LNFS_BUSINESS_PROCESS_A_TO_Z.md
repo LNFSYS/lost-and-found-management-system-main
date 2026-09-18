@@ -100,7 +100,7 @@ Matching là gợi ý. Không có auto ownership verification, auto claim accept
 2. Finder chọn guided question theo category hoặc viết câu hỏi an toàn.
 3. Câu hỏi tập trung vào phụ kiện, dấu xước, nội dung màn hình, bốn số cuối serial hoặc chi tiết chỉ chủ sở hữu biết.
 4. Owner trả lời nhưng không xem trước private answer của Finder.
-5. Finder chọn MORE_INFO_REQUIRED, MEETUP_ACCEPTED, DECLINED hoặc ESCALATED.
+5. Finder chọn `NEED_MORE_INFO`, final `ACCEPTED`, `REJECTED`, hoặc custody escalation (`REJECTED` + room escalation metadata).
 6. Claim/evidence chỉ hiển thị cho claimant, post owner và reviewer có quyền.
 
 Staff không xem routine conversation mặc định; chỉ truy cập case đã escalate, có reason, permission, minimum data và audit.
@@ -173,10 +173,11 @@ IN_CUSTODY → OVERDUE → TRANSFERRED/DISPOSED → CLOSED
 ### J4. Verification conversation target
 
 ~~~text
-REQUESTED → CONVERSATION_OPEN → MORE_INFO_REQUIRED
-→ MEETUP_ACCEPTED / DECLINED / ESCALATED
-→ SCHEDULED → COMPLETED / NO_SHOW / CANCELLED
+PENDING → CONVERSATION_OPEN ↔ NEED_MORE_INFO
+→ ACCEPTED / REJECTED
 ~~~
+
+Chỉ claim `ACCEPTED` mới có thể đi tiếp sang appointment `PENDING` theo LNFS-54.
 
 Schema hiện tại có enum/table tương ứng ở migration nhưng nhiều state target chưa có API/runtime. Không sửa migration đã chạy chỉ để làm tài liệu khớp.
 

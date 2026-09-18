@@ -1,4 +1,4 @@
-import type { ClaimRepository, ClaimStatus, ConsentStatus, FinderDecision, ParticipantRole } from "../application/claim.repository.port.js";
+import type { ClaimAuditEventRecord, ClaimRepository, ClaimStatus, ConsentStatus, FinderDecision, ParticipantRole } from "../application/claim.repository.port.js";
 
 export type { ClaimRepository, ClaimStatus, ConsentStatus, FinderDecision, ParticipantRole } from "../application/claim.repository.port.js";
 
@@ -81,6 +81,66 @@ interface EvidenceRow extends RowDataPacket {
 interface RoomRow extends RowDataPacket {
   id: string;
   claim_id: string;
+  escalated_at: Date | string | null;
+  escalated_by: string | null;
+  escalation_reason: string | null;
+  created_at: Date | string;
+}
+
+interface VerificationContextRow extends RowDataPacket {
+  found_post_id: string;
+  category_name: string;
+  parent_category_name: string | null;
+}
+
+interface ClaimItemContextRow extends RowDataPacket {
+  found_post_id: string;
+  title: string;
+  category_name: string | null;
+  visibility_mode: "PUBLIC" | "PRIVATE_DETAILS";
+  area_name: string | null;
+  building_name: string | null;
+  room_text: string | null;
+  custom_location: string | null;
+  handover_point_name: string | null;
+  media_id: string | null;
+}
+
+interface ConversationSummaryRow extends RowDataPacket {
+  claim_id: string;
+  last_message: string | null;
+  last_message_at: Date | string | null;
+  unread_count: number | string;
+  custody_escalated: number;
+}
+
+interface VerificationQuestionRow extends RowDataPacket {
+  id: string;
+  claim_id: string;
+  post_id: string;
+  prompt: string;
+  question_type: "TEXT" | "MASKED_SERIAL" | "MULTIPLE_CHOICE" | "VISUAL_DETAIL";
+  source_signal: string;
+  expected_answer_hash: string;
+  options_json: string | string[] | null;
+  privacy_level: "PRIVATE" | "HIGHLY_PRIVATE";
+  status: "DRAFT" | "APPROVED" | "DISABLED";
+  assigned_at: Date | string;
+  answered_by: string | null;
+  is_match: number | null;
+  attempt_count: number | null;
+  last_attempt_at: Date | string | null;
+  answered_at: Date | string | null;
+}
+
+interface ClaimAuditRow extends RowDataPacket {
+  id: string;
+  claim_id: string;
+  actor_id: string;
+  action: string;
+  from_status: ClaimStatus | null;
+  to_status: ClaimStatus | null;
+  metadata_json: string | Record<string, unknown> | null;
   created_at: Date | string;
 }
 
@@ -96,6 +156,7 @@ interface MatchPairRow extends RowDataPacket {
 interface ClaimablePostRow extends RowDataPacket {
   id: string;
   owner_id: string;
+  type: "LOST" | "FOUND";
 }
 
 function iso(value: Date | string | null) {
@@ -171,9 +232,82 @@ function mapEvidence(row: EvidenceRow) {
   };
 }
 
+function parseJsonObject(value: string | Record<string, unknown> | null) {
+  if (!value) return null;
+  if (typeof value === "object") return value;
+  try {
+    const parsed: unknown = JSON.parse(value);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed as Record<string, unknown> : null;
+  } catch {
+    return null;
+  }
+}
+
+function parseStringArray(value: string | string[] | null) {
+  if (!value) return null;
+  if (Array.isArray(value)) return value.filter((item): item is string => typeof item === "string");
+  try {
+    const parsed: unknown = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === "string") : null;
+  } catch {
+    return null;
+  }
+}
+
+function mapVerificationQuestion(row: VerificationQuestionRow) {
+  return {
+    id: row.id,
+    claimId: row.claim_id,
+    postId: row.post_id,
+    prompt: row.prompt,
+    questionType: row.question_type,
+    sourceSignal: row.source_signal,
+    expectedAnswerHash: row.expected_answer_hash,
+    options: parseStringArray(row.options_json),
+    privacyLevel: row.privacy_level,
+    status: row.status,
+    assignedAt: iso(row.assigned_at)!,
+    answer: row.answered_by && row.answered_at && row.last_attempt_at ? {
+      answeredBy: row.answered_by,
+      isMatch: row.is_match === 1 ? true : (row.is_match === null ? null : false),
+      attemptCount: Number(row.attempt_count ?? 0),
+      lastAttemptAt: iso(row.last_attempt_at)!,
+      answeredAt: iso(row.answered_at)!
+    } : null
+  };
+}
+
+function mapAuditEvent(row: ClaimAuditRow): ClaimAuditEventRecord {
+  return {
+    id: row.id,
+    claimId: row.claim_id,
+    actorId: row.actor_id,
+    action: row.action,
+    fromStatus: row.from_status,
+    toStatus: row.to_status,
+    metadata: parseJsonObject(row.metadata_json),
+    createdAt: iso(row.created_at)!
+  };
+}
+
 const claimSelect = `SELECT
-  c.id, c.lost_post_id, c.post_id AS found_post_id, c.claimant_id,
-  found.user_id AS finder_id, c.status, c.finder_decision, c.description,
+  c.id, c.lost_post_id, c.post_id AS found_post_id,
+  CASE
+    WHEN c.lost_post_id IS NULL AND found.type = 'LOST' THEN found.user_id
+    WHEN c.lost_post_id IS NULL AND found.type = 'FOUND' THEN COALESCE((
+      SELECT cp.user_id FROM claim_participants cp
+      WHERE cp.claim_id = c.id AND cp.user_id <> found.user_id LIMIT 1
+    ), c.claimant_id)
+    ELSE c.claimant_id
+  END AS claimant_id,
+  CASE
+    WHEN c.lost_post_id IS NULL AND found.type = 'LOST' THEN COALESCE((
+      SELECT cp.user_id FROM claim_participants cp
+      WHERE cp.claim_id = c.id AND cp.user_id <> found.user_id LIMIT 1
+    ), c.claimant_id)
+    ELSE found.user_id
+  END AS finder_id,
+  c.status, c.finder_decision, c.description,
   c.approximate_lost_at, c.approximate_location, c.rejection_reason,
   c.more_info_request, c.accepted_at, c.rejected_at, c.cancelled_at,
   c.created_at, c.updated_at,
@@ -182,8 +316,13 @@ const claimSelect = `SELECT
   lost.title AS lost_title, found.title AS found_title, room.id AS room_id
 FROM claims c
 INNER JOIN posts found ON found.id = c.post_id
-INNER JOIN users claimant ON claimant.id = c.claimant_id
-INNER JOIN users finder ON finder.id = found.user_id
+INNER JOIN users claimant ON claimant.id = CASE
+  WHEN c.lost_post_id IS NULL AND found.type = 'LOST' THEN found.user_id
+  WHEN c.lost_post_id IS NULL AND found.type = 'FOUND' THEN COALESCE((SELECT cp.user_id FROM claim_participants cp WHERE cp.claim_id = c.id AND cp.user_id <> found.user_id LIMIT 1), c.claimant_id)
+  ELSE c.claimant_id END
+INNER JOIN users finder ON finder.id = CASE
+  WHEN c.lost_post_id IS NULL AND found.type = 'LOST' THEN COALESCE((SELECT cp.user_id FROM claim_participants cp WHERE cp.claim_id = c.id AND cp.user_id <> found.user_id LIMIT 1), c.claimant_id)
+  ELSE found.user_id END
 LEFT JOIN posts lost ON lost.id = c.lost_post_id
 LEFT JOIN chat_rooms room ON room.claim_id = c.id`;
 
@@ -197,12 +336,24 @@ const evidenceSelect = `SELECT e.id, e.claim_id, e.uploaded_by, e.secure_url, e.
   u.full_name AS uploader_name
 FROM claim_evidence e INNER JOIN users u ON u.id = e.uploaded_by`;
 
+const verificationQuestionSelect = `SELECT
+  q.id, assignment.claim_id, q.post_id, q.prompt, q.question_type, q.source_signal,
+  q.expected_answer_hash, q.options_json, q.privacy_level, q.status, assignment.assigned_at,
+  answer.answered_by, answer.is_match, answer.attempt_count, answer.last_attempt_at, answer.answered_at
+FROM claim_verification_assignments assignment
+INNER JOIN item_verification_questions q ON q.id = assignment.question_id
+LEFT JOIN claim_verification_answers answer
+  ON answer.claim_id = assignment.claim_id AND answer.question_id = assignment.question_id`;
+
+const auditSelect = `SELECT id, claim_id, actor_id, action, from_status, to_status, metadata_json, created_at
+FROM claim_audit_events`;
+
 export function createClaimRepository(pool: SqlExecutor) {
 
   const claimRepository = {
     async findClaimablePostForUpdate(postId: string, connection: Queryable) {
       const [rows] = await sqlExecutor(connection).execute<ClaimablePostRow[]>(
-        `SELECT id, user_id AS owner_id
+        `SELECT id, user_id AS owner_id, type
        FROM posts
        WHERE id = ? AND deleted_at IS NULL
          AND status IN ('OPEN', 'MATCHED')
@@ -210,7 +361,7 @@ export function createClaimRepository(pool: SqlExecutor) {
         [postId]
       );
       const post = rows[0];
-      return post ? { id: post.id, ownerId: post.owner_id } : null;
+      return post ? { id: post.id, ownerId: post.owner_id, type: post.type } : null;
     },
 
     async findMatchPairForUpdate(lostPostId: string, foundPostId: string, suggestionThreshold: number, connection: Queryable) {
@@ -260,6 +411,8 @@ export function createClaimRepository(pool: SqlExecutor) {
       lostPostId: string | undefined;
       foundPostId: string;
       claimantId: string;
+      status: ClaimStatus;
+      finderDecision: FinderDecision;
       requestKey?: string;
       description?: string;
       approximateLostAt?: Date;
@@ -269,8 +422,8 @@ export function createClaimRepository(pool: SqlExecutor) {
         `INSERT INTO claims (
         id, lost_post_id, post_id, claimant_id, request_key, status, finder_decision,
         description, approximate_lost_at, approximate_location
-      ) VALUES (?, ?, ?, ?, ?, 'CONVERSATION_OPEN', 'ACCEPTED', ?, ?, ?)`,
-        [input.id, input.lostPostId ?? null, input.foundPostId, input.claimantId, input.requestKey ?? null,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [input.id, input.lostPostId ?? null, input.foundPostId, input.claimantId, input.requestKey ?? null, input.status, input.finderDecision,
         input.description ?? null, input.approximateLostAt ?? null, input.approximateLocation ?? null]
       );
     },
@@ -283,20 +436,90 @@ export function createClaimRepository(pool: SqlExecutor) {
       );
     },
 
+    async updateParticipantConsent(claimId: string, userId: string, consentStatus: ConsentStatus, queryable: Queryable) {
+      await sqlExecutor(queryable).execute(
+        `UPDATE claim_participants SET consent_status = ?, joined_at = CASE WHEN ? = 'ACCEPTED' THEN COALESCE(joined_at, UTC_TIMESTAMP()) ELSE joined_at END WHERE claim_id = ? AND user_id = ?`,
+        [consentStatus, consentStatus, claimId, userId]
+      );
+    },
+
     async findParticipant(claimId: string, userId: string, queryable: Queryable = pool) {
       const [rows] = await sqlExecutor(queryable).execute<ParticipantRow[]>(
-        `SELECT cp.claim_id, cp.user_id, cp.participant_role, cp.consent_status, cp.joined_at, u.full_name
+        `SELECT cp.claim_id, cp.user_id,
+          CASE WHEN c.lost_post_id IS NULL AND post.type = 'LOST'
+            THEN CASE WHEN cp.user_id = post.user_id THEN 'CLAIMANT' ELSE 'FINDER' END
+            ELSE cp.participant_role END AS participant_role,
+          cp.consent_status, cp.joined_at, u.full_name
        FROM claim_participants cp INNER JOIN users u ON u.id = cp.user_id
+       INNER JOIN claims c ON c.id = cp.claim_id
+       INNER JOIN posts post ON post.id = c.post_id
        WHERE cp.claim_id = ? AND cp.user_id = ? LIMIT 1`,
         [claimId, userId]
       );
       return rows[0] ? mapParticipant(rows[0]) : null;
     },
 
+    async findVerificationContext(claimId: string, queryable: Queryable = pool) {
+      const [rows] = await sqlExecutor(queryable).execute<VerificationContextRow[]>(
+        `SELECT found.id AS found_post_id, category.name_normalized AS category_name,
+          parent.name_normalized AS parent_category_name
+         FROM claims c
+         INNER JOIN posts found ON found.id = c.post_id
+         INNER JOIN item_categories category ON category.id = found.category_id
+         LEFT JOIN item_categories parent ON parent.id = category.parent_id
+         WHERE c.id = ? LIMIT 1`,
+        [claimId]
+      );
+      const row = rows[0];
+      return row ? {
+        foundPostId: row.found_post_id,
+        categoryName: row.category_name,
+        parentCategoryName: row.parent_category_name
+      } : null;
+    },
+
+    async findClaimItemContext(claimId: string, queryable: Queryable = pool) {
+      const [rows] = await sqlExecutor(queryable).execute<ClaimItemContextRow[]>(
+        `SELECT found.id AS found_post_id, found.title, category.name AS category_name,
+          found.visibility_mode, area.name AS area_name, building.name AS building_name,
+          found.room_text, found.custom_location, handover.name AS handover_point_name,
+          (SELECT media.id FROM post_media media
+           WHERE media.post_id = found.id AND media.media_kind = 'ITEM'
+           ORDER BY media.sort_order ASC, media.created_at ASC, media.id ASC LIMIT 1) AS media_id
+         FROM claims c
+         INNER JOIN posts found ON found.id = c.post_id
+         LEFT JOIN item_categories category ON category.id = found.category_id
+         LEFT JOIN campus_areas area ON area.id = found.area_id
+         LEFT JOIN campus_buildings building ON building.id = found.building_id
+         LEFT JOIN handover_points handover ON handover.id = found.handover_point_id
+         WHERE c.id = ? LIMIT 1`,
+        [claimId]
+      );
+      const row = rows[0];
+      return row ? {
+        foundPostId: row.found_post_id,
+        title: row.title,
+        categoryName: row.category_name,
+        visibilityMode: row.visibility_mode,
+        areaName: row.area_name,
+        buildingName: row.building_name,
+        roomText: row.room_text,
+        customLocation: row.custom_location,
+        handoverPointName: row.handover_point_name,
+        mediaId: row.media_id
+      } : null;
+    },
+
     async listParticipants(claimId: string, queryable: Queryable = pool) {
       const [rows] = await sqlExecutor(queryable).execute<ParticipantRow[]>(
-        `SELECT cp.claim_id, cp.user_id, cp.participant_role, cp.consent_status, cp.joined_at, u.full_name
+        `SELECT cp.claim_id, cp.user_id,
+          CASE WHEN c.lost_post_id IS NULL AND post.type = 'LOST'
+            THEN CASE WHEN cp.user_id = post.user_id THEN 'CLAIMANT' ELSE 'FINDER' END
+            ELSE cp.participant_role END AS participant_role,
+          cp.consent_status, cp.joined_at, u.full_name
        FROM claim_participants cp INNER JOIN users u ON u.id = cp.user_id
+       INNER JOIN claims c ON c.id = cp.claim_id
+       INNER JOIN posts post ON post.id = c.post_id
        WHERE cp.claim_id = ? ORDER BY cp.participant_role`,
         [claimId]
       );
@@ -307,8 +530,14 @@ export function createClaimRepository(pool: SqlExecutor) {
       if (!claimIds.length) return new Map<string, ReturnType<typeof mapParticipant>[]>();
       const placeholders = claimIds.map(() => "?").join(", ");
       const [rows] = await pool.execute<ParticipantRow[]>(
-        `SELECT cp.claim_id, cp.user_id, cp.participant_role, cp.consent_status, cp.joined_at, u.full_name
+        `SELECT cp.claim_id, cp.user_id,
+          CASE WHEN c.lost_post_id IS NULL AND post.type = 'LOST'
+            THEN CASE WHEN cp.user_id = post.user_id THEN 'CLAIMANT' ELSE 'FINDER' END
+            ELSE cp.participant_role END AS participant_role,
+          cp.consent_status, cp.joined_at, u.full_name
        FROM claim_participants cp INNER JOIN users u ON u.id = cp.user_id
+       INNER JOIN claims c ON c.id = cp.claim_id
+       INNER JOIN posts post ON post.id = c.post_id
        WHERE cp.claim_id IN (${placeholders}) ORDER BY cp.claim_id, cp.participant_role`,
         claimIds
       );
@@ -318,6 +547,35 @@ export function createClaimRepository(pool: SqlExecutor) {
         participants.set(item.claimId, [...(participants.get(item.claimId) ?? []), item]);
       }
       return participants;
+    },
+
+    async listConversationSummaries(claimIds: string[], userId: string) {
+      if (!claimIds.length) return new Map<string, { lastMessage: string | null; lastMessageAt: string | null; unreadCount: number; custodyEscalated: boolean }>();
+      const placeholders = claimIds.map(() => "?").join(", ");
+      const [rows] = await pool.execute<ConversationSummaryRow[]>(
+        `SELECT c.id AS claim_id,
+          (SELECT message.content FROM chat_rooms room
+           INNER JOIN chat_messages message ON message.room_id = room.id
+           WHERE room.claim_id = c.id AND message.deleted_at IS NULL
+           ORDER BY message.sequence DESC LIMIT 1) AS last_message,
+          (SELECT message.created_at FROM chat_rooms room
+           INNER JOIN chat_messages message ON message.room_id = room.id
+           WHERE room.claim_id = c.id AND message.deleted_at IS NULL
+           ORDER BY message.sequence DESC LIMIT 1) AS last_message_at,
+          (SELECT COUNT(*) FROM chat_rooms room
+           INNER JOIN chat_messages message ON message.room_id = room.id
+           WHERE room.claim_id = c.id AND message.sender_id <> ? AND message.is_read = FALSE
+             AND message.deleted_at IS NULL) AS unread_count,
+          EXISTS(SELECT 1 FROM chat_rooms room WHERE room.claim_id = c.id AND room.escalated_at IS NOT NULL) AS custody_escalated
+         FROM claims c WHERE c.id IN (${placeholders})`,
+        [userId, ...claimIds]
+      );
+      return new Map(rows.map((row) => [row.claim_id, {
+        lastMessage: row.last_message,
+        lastMessageAt: iso(row.last_message_at),
+        unreadCount: Number(row.unread_count),
+        custodyEscalated: row.custody_escalated === 1
+      }]));
     },
 
     async listForUser(userId: string, query: { page: number; pageSize: number; }) {
@@ -358,17 +616,16 @@ export function createClaimRepository(pool: SqlExecutor) {
         `UPDATE claims SET status = ?, finder_decision = ?,
           more_info_request = ?,
           rejection_reason = ?,
-          accepted_at = CASE WHEN ? THEN UTC_TIMESTAMP() ELSE accepted_at END,
+          accepted_at = CASE WHEN ? THEN UTC_TIMESTAMP() WHEN ? THEN NULL ELSE accepted_at END,
           rejected_at = CASE WHEN ? THEN UTC_TIMESTAMP() WHEN ? THEN NULL ELSE rejected_at END,
-          cancelled_at = CASE WHEN ? THEN NULL ELSE cancelled_at END,
+          cancelled_at = NULL,
           updated_at = UTC_TIMESTAMP()
        WHERE id = ?`,
         [input.status, input.finderDecision,
         input.status === "NEED_MORE_INFO" ? input.note ?? null : null,
         input.status === "REJECTED" ? input.note ?? null : null,
-        input.acceptedAt ? 1 : 0, input.rejectedAt ? 1 : 0,
-        input.status === "CONVERSATION_OPEN" || input.status === "ACCEPTED" ? 1 : 0,
-        input.status === "CONVERSATION_OPEN" || input.status === "ACCEPTED" ? 1 : 0,
+        input.acceptedAt ? 1 : 0, input.status !== "ACCEPTED" ? 1 : 0,
+        input.rejectedAt ? 1 : 0, input.status !== "REJECTED" ? 1 : 0,
         input.claimId]
       );
     },
@@ -391,15 +648,115 @@ export function createClaimRepository(pool: SqlExecutor) {
     },
 
     async findRoomByClaim(claimId: string, queryable: Queryable = pool) {
-      const [rows] = await sqlExecutor(queryable).execute<RoomRow[]>("SELECT id, claim_id, created_at FROM chat_rooms WHERE claim_id = ? LIMIT 1", [claimId]);
+      const [rows] = await sqlExecutor(queryable).execute<RoomRow[]>(
+        "SELECT id, claim_id, escalated_at, escalated_by, escalation_reason, created_at FROM chat_rooms WHERE claim_id = ? LIMIT 1",
+        [claimId]
+      );
       const room = rows[0];
-      return room ? { id: room.id, claimId: room.claim_id, createdAt: iso(room.created_at)! } : null;
+      return room ? {
+        id: room.id,
+        claimId: room.claim_id,
+        escalatedAt: iso(room.escalated_at),
+        escalatedBy: room.escalated_by,
+        escalationReason: room.escalation_reason,
+        createdAt: iso(room.created_at)!
+      } : null;
     },
 
     async createRoom(claimId: string, queryable: Queryable) {
       const roomId = id();
       await sqlExecutor(queryable).execute("INSERT INTO chat_rooms (id, claim_id) VALUES (?, ?)", [roomId, claimId]);
       return { id: roomId, claimId };
+    },
+
+    async createVerificationQuestion(input, queryable: Queryable) {
+      await sqlExecutor(queryable).execute(
+        `INSERT INTO item_verification_questions
+          (id, post_id, prompt, question_type, source_signal, expected_answer_hash, weight, privacy_level, status, created_by)
+         VALUES (?, ?, ?, ?, ?, ?, 0.500, ?, 'DRAFT', ?)`,
+        [input.id, input.postId, input.prompt, input.questionType, input.sourceSignal, input.expectedAnswerHash,
+          input.privacyLevel, input.createdBy]
+      );
+    },
+
+    async assignVerificationQuestion(claimId: string, questionId: string, queryable: Queryable) {
+      await sqlExecutor(queryable).execute(
+        "INSERT INTO claim_verification_assignments (claim_id, question_id) VALUES (?, ?)",
+        [claimId, questionId]
+      );
+    },
+
+    async listVerificationQuestions(claimId: string, queryable: Queryable = pool) {
+      const [rows] = await sqlExecutor(queryable).execute<VerificationQuestionRow[]>(
+        `${verificationQuestionSelect} WHERE assignment.claim_id = ? ORDER BY assignment.assigned_at ASC, q.id ASC`,
+        [claimId]
+      );
+      return rows.map(mapVerificationQuestion);
+    },
+
+    async findVerificationQuestion(claimId: string, questionId: string, queryable: Queryable = pool) {
+      const [rows] = await sqlExecutor(queryable).execute<VerificationQuestionRow[]>(
+        `${verificationQuestionSelect} WHERE assignment.claim_id = ? AND q.id = ? LIMIT 1`,
+        [claimId, questionId]
+      );
+      return rows[0] ? mapVerificationQuestion(rows[0]) : null;
+    },
+
+    async saveVerificationAnswer(input, queryable: Queryable) {
+      await sqlExecutor(queryable).execute(
+        `INSERT INTO claim_verification_answers
+          (id, claim_id, question_id, answered_by, is_match, attempt_count, last_attempt_at, answered_at)
+         VALUES (?, ?, ?, ?, ?, 1, UTC_TIMESTAMP(), UTC_TIMESTAMP())
+         ON DUPLICATE KEY UPDATE answered_by = VALUES(answered_by), is_match = VALUES(is_match),
+           attempt_count = attempt_count + 1, last_attempt_at = UTC_TIMESTAMP(), answered_at = UTC_TIMESTAMP()`,
+        [input.id, input.claimId, input.questionId, input.answeredBy, input.isMatch === null ? null : (input.isMatch ? 1 : 0)]
+      );
+    },
+
+    async markRoomEscalated(input, queryable: Queryable) {
+      await sqlExecutor(queryable).execute(
+        `UPDATE chat_rooms SET escalated_at = UTC_TIMESTAMP(), escalated_by = ?, escalation_reason = ?
+         WHERE claim_id = ?`,
+        [input.actorId, input.reason, input.claimId]
+      );
+    },
+
+    async clearRoomEscalation(claimId: string, queryable: Queryable) {
+      await sqlExecutor(queryable).execute(
+        "UPDATE chat_rooms SET escalated_at = NULL, escalated_by = NULL, escalation_reason = NULL WHERE claim_id = ?",
+        [claimId]
+      );
+    },
+
+    async hasActiveAppointment(claimId: string, queryable: Queryable) {
+      const [rows] = await sqlExecutor(queryable).execute<Array<RowDataPacket & { total: number | string }>>(
+        "SELECT COUNT(*) AS total FROM return_appointments WHERE claim_id = ? AND status IN ('PENDING', 'ACCEPTED', 'RESCHEDULED')",
+        [claimId]
+      );
+      return Number(rows[0]?.total ?? 0) > 0;
+    },
+
+    async findAuditByIdempotencyKey(claimId: string, actorId: string, idempotencyKey: string, queryable: Queryable) {
+      const [rows] = await sqlExecutor(queryable).execute<ClaimAuditRow[]>(
+        `${auditSelect} WHERE claim_id = ? AND actor_id = ?
+         AND JSON_UNQUOTE(JSON_EXTRACT(metadata_json, '$.idempotencyKey')) = ?
+         ORDER BY created_at DESC, id DESC LIMIT 1`,
+        [claimId, actorId, idempotencyKey]
+      );
+      return rows[0] ? mapAuditEvent(rows[0]) : null;
+    },
+
+    async listVerificationAuditEvents(claimId: string, queryable: Queryable = pool) {
+      const actions = [
+        "CONVERSATION_OPENED", "QUESTION_SENT", "ANSWER_SUBMITTED", "MORE_INFO_REQUESTED", "VERIFICATION_ACCEPTED",
+        "VERIFICATION_DECLINED", "CUSTODY_ESCALATED", "VERIFICATION_DECISION_CORRECTED"
+      ];
+      const placeholders = actions.map(() => "?").join(", ");
+      const [rows] = await sqlExecutor(queryable).execute<ClaimAuditRow[]>(
+        `${auditSelect} WHERE claim_id = ? AND action IN (${placeholders}) ORDER BY created_at ASC, id ASC`,
+        [claimId, ...actions]
+      );
+      return rows.map(mapAuditEvent);
     },
 
     async listRoomsForUser(userId: string) {
@@ -477,6 +834,16 @@ export function createClaimRepository(pool: SqlExecutor) {
       };
     },
 
+    async markMessagesRead(roomId: string, readerId: string) {
+      const [result] = await pool.execute<ResultSetHeader>(
+        `UPDATE chat_messages SET is_read = TRUE, read_at = COALESCE(read_at, UTC_TIMESTAMP()),
+          delivery_status = 'READ'
+         WHERE room_id = ? AND sender_id <> ? AND is_read = FALSE`,
+        [roomId, readerId]
+      );
+      return result.affectedRows;
+    },
+
     async listEvidence(claimId: string) {
       const [rows] = await pool.execute<EvidenceRow[]>(`${evidenceSelect} WHERE e.claim_id = ? ORDER BY e.created_at ASC, e.id ASC`, [claimId]);
       return rows.map(mapEvidence);
@@ -506,6 +873,7 @@ export function createClaimRepository(pool: SqlExecutor) {
     },
 
     async writeAudit(input: {
+      eventId?: string;
       claimId: string;
       actorId: string;
       action: string;
@@ -516,7 +884,7 @@ export function createClaimRepository(pool: SqlExecutor) {
       await sqlExecutor(queryable).execute(
         `INSERT INTO claim_audit_events (id, claim_id, actor_id, action, from_status, to_status, metadata_json)
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        [id(), input.claimId, input.actorId, input.action, input.fromStatus ?? null, input.toStatus ?? null,
+        [input.eventId ?? id(), input.claimId, input.actorId, input.action, input.fromStatus ?? null, input.toStatus ?? null,
         input.metadata ? JSON.stringify(input.metadata) : null]
       );
     }

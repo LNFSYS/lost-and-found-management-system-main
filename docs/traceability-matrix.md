@@ -22,8 +22,8 @@ Nguồn status là code/test hiện tại. Mỗi dòng liên kết business rule
 | BR-28 | NFR-ARCH-01; FR-JAVA-01 retired | N/A | Implemented | src/main composition; application ports; domain policies; scripts/check-architecture.mjs; Java source/build removed |
 | BR-29, BR-30 | FR-MEDIA-02, NFR-PORT-01 | UC-048, UC-050 | Partial/Planned | Local media/evidence 404 handling có; shared object storage và multi-instance test chưa có |
 | BR-31 | FR-AUDIT-01 | UC-064, UC-065 | Planned | Catalog audit before/after chưa có runtime evidence |
-| BR-33–BR-36 | FR-VERIFY-01, FR-VERIFY-02, FR-CLAIM-01 | UC-003–UC-007, UC-049, UC-052–UC-054, UC-087–UC-092 | Partial | claim.routes.ts, claim.use-cases.ts, claim.repository.ts, claims-page.tsx; participant privacy, pagination, state-lock và idempotency tests; guided questions/review confidence/appointment chưa có |
-| BR-37 | FR-APPT-01, FR-HANDOVER-02 | UC-021–UC-024 | Planned | Chưa có appointment và dual-confirmation runtime |
+| BR-33–BR-36 | FR-VERIFY-01, FR-VERIFY-02, FR-CLAIM-01 | UC-003–UC-007, UC-049, UC-052–UC-054, UC-087–UC-092 | Implemented/Partial | claim routes/use-cases/repository/validators; verification-question-templates.ts; claim-verification-panel.tsx; state/idempotency/privacy/AI-negative unit tests và claims-resilience Playwright. Staff review và OCR evidence vẫn partial/planned |
+| BR-37 | FR-APPT-01, FR-HANDOVER-02 | UC-021–UC-024 | Partial/Planned | Canonical `ACCEPTED` eligibility policy và negative tests có; appointment/dual-confirmation runtime chưa có |
 | BR-38, BR-40, BR-42 | FR-CUSTODY-01, FR-WAREHOUSE-02 | UC-016–UC-020 | Planned/TBD | Disposition/custody guard và policy trường chưa có hoặc chưa được xác nhận |
 | BR-41, BR-43 | FR-CHAT-01, FR-RT-01 | UC-077–UC-083 | Partial/Planned | Private REST text room, participant guard, retry idempotency, cursor history và claim notifications có; Socket.IO, image chat, seen/unread realtime và escalation review chưa có |
 | BR-40 | FR-TRAIN-01 | UC-026–UC-030 | Planned | Chưa có dataset pipeline, evaluation hoặc model artifact |

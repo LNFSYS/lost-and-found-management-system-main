@@ -72,7 +72,7 @@ Luồng nghiệp vụ mục tiêu là:
 
 LOST/FOUND post → matching suggestion → private verification chat → Finder decision → meetup → dual-confirmed direct handover
 
-Phạm vi target còn gồm guided questions, evidence review/confidence, multiple claimant policy end-to-end, realtime chat/notification, appointment, escalation/report, PWA installability và Native Mobile. Claim/private text chat/evidence/claim notification đã có runtime một phần, nhưng chưa phải full return journey.
+Phạm vi target còn gồm automated evidence confidence, multiple claimant reservation policy end-to-end, realtime chat/notification, appointment, escalation/report, PWA installability và Native Mobile. Claim/private text chat/guided verification/evidence/claim notification đã có runtime, nhưng chưa phải full return journey.
 
 ### 4.4 Future/TBD
 
@@ -149,11 +149,11 @@ Module chỉ truy cập module khác qua public application contract. Applicatio
 ### 6.5 Claim, private chat và evidence hiện tại
 
 1. Owner tạo claim từ cặp LOST/FOUND có matching đạt ngưỡng; backend tự suy ra Finder và khóa cặp trong transaction.
-2. Finder có thể accept, request thêm thông tin hoặc decline; decision và withdrawal dùng claim row lock/state guard.
-3. Khi được chấp nhận, hệ thống mở private room cho đúng claimant/Finder; người ngoài nhận phản hồi không tiết lộ claim.
+2. Finder dùng `ACCEPT / OPEN_CONVERSATION`, request thêm thông tin hoặc decline; action mở room không phải ownership verification. Decision và withdrawal dùng claim row lock/state guard/idempotency.
+3. Khi Finder mở conversation, claim chuyển `CONVERSATION_OPEN`; chỉ final human decision `ACCEPTED` mới đủ điều kiện cho appointment.
 4. Tin nhắn text có idempotency key, cursor pagination; Web merge và deduplicate theo message ID, polling không chồng request và hủy khi đổi room.
 5. Evidence chỉ đi qua endpoint được authorization; API không trả raw storage URL. Local filesystem hiện chưa phù hợp multi-instance.
-6. Claim notification hiện là REST/in-app feed với `unreadTotal`; match notification, realtime transport, guided questions, appointment và dual handover chưa có.
+6. Guided questions theo category, hashed answer comparison, Finder confidence/reason, append-only audit và correction đã có trên Web/PWA. Appointment và dual handover chưa có.
 
 ### 6.4 Catalog và warehouse hiện tại
 
@@ -172,9 +172,9 @@ Luồng sau là target end-to-end. Current runtime mới bao phủ đến claim/
 2. Finder tạo FOUND report và tiếp tục giữ vật phẩm; mặc định không chuyển thẳng vào Staff custody.
 3. Matching gợi ý các LOST/FOUND đối ứng và giải thích tín hiệu tương đồng.
 4. Owner gửi verification request cho FOUND phù hợp.
-5. Hệ thống mở conversation riêng đúng cặp Owner–Finder–LOST–FOUND (current partial runtime).
-6. Finder dùng guided questions theo category; Owner trả lời mà không được xem trước private answer/attribute (planned).
-7. Finder chọn MORE_INFO_REQUIRED, MEETUP_ACCEPTED, DECLINED hoặc ESCALATED.
+5. Finder thực hiện `ACCEPT / OPEN_CONVERSATION`; hệ thống mở conversation riêng đúng cặp Owner–Finder–LOST–FOUND và giữ claim ở `CONVERSATION_OPEN`.
+6. Finder dùng guided questions theo category; Owner trả lời qua private answer control mà không xem expected answer.
+7. Finder chọn `NEED_MORE_INFO`, final `ACCEPTED`, `REJECTED`, hoặc custody escalation (`REJECTED` + escalation metadata). Chỉ `ACCEPTED` đủ điều kiện tạo appointment.
 8. Hai bên đề xuất và cùng xác nhận thời gian/địa điểm; appointment chỉ confirmed khi có mutual agreement.
 9. Hai bên gặp trực tiếp; Finder xác nhận HANDED_OVER, Owner xác nhận RECEIVED.
 10. Chỉ khi dual confirmation hợp lệ, hệ thống mới chuyển item sang RETURNED/đóng hồ sơ.

@@ -69,6 +69,20 @@ export function PostCard({ post }: { post: PostSummary }) {
       const claim = await api.createClaim({ postId: post.id });
       navigate(`/claims/${claim.id}`);
     } catch (reason) {
+      // Nếu claim đã tồn tại (idempotent), vẫn navigate đến claim đó
+      if (reason instanceof Error && reason.message === "Dữ liệu đã tồn tại") {
+        // Tìm claim đã tồn tại và navigate
+        try {
+          const claims = await api.listClaims({ page: 1, pageSize: 50 });
+          const existingClaim = claims.items.find(c => c.posts.found.id === post.id);
+          if (existingClaim) {
+            navigate(`/claims/${existingClaim.id}`);
+            return;
+          }
+        } catch (e) {
+          // Ignore, show original error
+        }
+      }
       setClaimError(reason instanceof Error ? reason.message : "Không thể mở phòng trao đổi riêng");
     } finally {
       setClaiming(false);

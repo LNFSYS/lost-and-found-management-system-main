@@ -32,6 +32,21 @@ function sampleClaim() {
   };
 }
 
+function sampleItemContext(foundPostId = sampleClaim().foundPostId) {
+  return {
+    foundPostId,
+    title: "Ví nhặt được",
+    categoryName: "Ví / bóp",
+    visibilityMode: "PUBLIC" as const,
+    areaName: "FPTU Đà Nẵng",
+    buildingName: null,
+    roomText: null,
+    customLocation: null,
+    handoverPointName: null,
+    mediaId: null
+  };
+}
+
 test("claim details deny an outside user without revealing the claim", async () => {
   const originalFindById = claimRepository.findById;
   const originalFindParticipant = claimRepository.findParticipant;
@@ -52,10 +67,12 @@ test("authorized claim details expose participant-safe data only", async () => {
   const originalFindById = claimRepository.findById;
   const originalFindParticipant = claimRepository.findParticipant;
   const originalListParticipants = claimRepository.listParticipants;
+  const originalFindClaimItemContext = claimRepository.findClaimItemContext;
   try {
     claimRepository.findById = async () => sampleClaim();
     claimRepository.findParticipant = async () => ({ claimId, userId: claimantId, role: "CLAIMANT", consentStatus: "ACCEPTED", joinedAt: "2026-09-03T00:00:00.000Z", fullName: "Claimant" });
     claimRepository.listParticipants = async () => [{ claimId, userId: claimantId, role: "CLAIMANT", consentStatus: "ACCEPTED", joinedAt: "2026-09-03T00:00:00.000Z", fullName: "Claimant" }];
+    claimRepository.findClaimItemContext = async () => sampleItemContext();
     const result = await claimService.getClaim(claimId, claimantId);
     assert.equal(result.canSend, true);
     assert.equal(JSON.stringify(result).includes("secure_url"), false);
@@ -64,12 +81,14 @@ test("authorized claim details expose participant-safe data only", async () => {
     claimRepository.findById = originalFindById;
     claimRepository.findParticipant = originalFindParticipant;
     claimRepository.listParticipants = originalListParticipants;
+    claimRepository.findClaimItemContext = originalFindClaimItemContext;
   }
 });
 
 test("claim list batches participant loading and exposes pagination metadata", async () => {
   const originalListForUser = claimRepository.listForUser;
   const originalListParticipantsForClaims = claimRepository.listParticipantsForClaims;
+  const originalListConversationSummaries = claimRepository.listConversationSummaries;
   const participant = { claimId, userId: claimantId, role: "CLAIMANT" as const, consentStatus: "ACCEPTED" as const, joinedAt: "2026-09-03T00:00:00.000Z", fullName: "Claimant" };
   let requestedQuery: unknown;
   let requestedClaimIds: string[] = [];
@@ -81,15 +100,20 @@ test("claim list batches participant loading and exposes pagination metadata", a
     requestedClaimIds = claimIds;
     return new Map([[claimId, [participant]]]);
   };
+  claimRepository.listConversationSummaries = async () => new Map([[claimId, {
+    lastMessage: "Private preview", lastMessageAt: sampleClaim().updatedAt, unreadCount: 1, custodyEscalated: false
+  }]]);
   try {
     const result = await claimService.listClaims(claimantId, { page: 2, pageSize: 1 });
     assert.deepEqual(requestedQuery, { page: 2, pageSize: 1 });
     assert.deepEqual(requestedClaimIds, [claimId]);
     assert.deepEqual(result.items[0].participants, [participant]);
     assert.equal(result.hasMore, false);
+    assert.equal(result.items[0]?.conversation.unreadCount, 1);
   } finally {
     claimRepository.listForUser = originalListForUser;
     claimRepository.listParticipantsForClaims = originalListParticipantsForClaims;
+    claimRepository.listConversationSummaries = originalListConversationSummaries;
   }
 });
 
@@ -101,6 +125,7 @@ test("creating a claim for an already requested found post reopens the existing 
   const originalFindById = claimRepository.findById;
   const originalFindParticipant = claimRepository.findParticipant;
   const originalListParticipants = claimRepository.listParticipants;
+  const originalFindClaimItemContext = claimRepository.findClaimItemContext;
   const originalGetConfigNumber = matchingRepository.getConfigNumber;
   const differentLostPostId = "88888888-8888-4888-8888-888888888888";
 
@@ -119,6 +144,7 @@ test("creating a claim for an already requested found post reopens the existing 
     claimRepository.findById = async () => existing;
     claimRepository.findParticipant = async () => ({ claimId, userId: claimantId, role: "CLAIMANT", consentStatus: "ACCEPTED", joinedAt: existing.createdAt, fullName: "Claimant" });
     claimRepository.listParticipants = async () => [];
+    claimRepository.findClaimItemContext = async () => sampleItemContext(existing.foundPostId);
 
     const result = await claimService.createClaim(claimantId, {
       lostPostId: differentLostPostId,
@@ -135,6 +161,7 @@ test("creating a claim for an already requested found post reopens the existing 
     claimRepository.findById = originalFindById;
     claimRepository.findParticipant = originalFindParticipant;
     claimRepository.listParticipants = originalListParticipants;
+    claimRepository.findClaimItemContext = originalFindClaimItemContext;
     matchingRepository.getConfigNumber = originalGetConfigNumber;
   }
 });
@@ -150,6 +177,8 @@ test("direct claims use the post owner as finder instead of a matching-only pair
   const originalFindById = claimRepository.findById;
   const originalFindParticipant = claimRepository.findParticipant;
   const originalListParticipants = claimRepository.listParticipants;
+  const originalFindClaimItemContext = claimRepository.findClaimItemContext;
+  const originalCreateRoom = claimRepository.createRoom;
   const originalWriteAudit = claimRepository.writeAudit;
   const originalCreateNotification = notificationRepository.create;
   let created: Parameters<typeof claimRepository.createClaim>[0] | undefined;
@@ -158,7 +187,7 @@ test("direct claims use the post owner as finder instead of a matching-only pair
 
   try {
     claimRepository.findByRequestKey = async () => null;
-    claimRepository.findClaimablePostForUpdate = async () => ({ id: foundPostId, ownerId: finderId });
+    claimRepository.findClaimablePostForUpdate = async () => ({ id: foundPostId, ownerId: finderId, type: "FOUND" });
     claimRepository.findByFoundPostForClaimant = async () => null;
     claimRepository.createClaim = async (input) => { created = input; };
     claimRepository.addParticipant = async (input) => { participants.push(input); };
@@ -173,8 +202,8 @@ test("direct claims use the post owner as finder instead of a matching-only pair
       lostPostId: null,
       foundPostId,
       finderId,
-      status: "PENDING",
-      finderDecision: "PENDING",
+      status: "CONVERSATION_OPEN",
+      finderDecision: "ACCEPTED",
       acceptedAt: null,
       posts: { lost: null, found: { id: foundPostId, title: "Ví nhặt được" } },
       roomId: null
@@ -188,6 +217,8 @@ test("direct claims use the post owner as finder instead of a matching-only pair
       fullName: userId === claimantId ? "Claimant" : "Finder"
     });
     claimRepository.listParticipants = async () => [];
+    claimRepository.findClaimItemContext = async () => sampleItemContext(foundPostId);
+    claimRepository.createRoom = async () => ({ id: "88888888-8888-4888-8888-888888888888", claimId });
 
     const result = await claimService.createClaim(claimantId, { postId: foundPostId, requestKey: "direct-claim-key" });
 
@@ -195,11 +226,11 @@ test("direct claims use the post owner as finder instead of a matching-only pair
     assert.equal(created?.foundPostId, foundPostId);
     assert.deepEqual(participants, [
       { claimId: created?.id, userId: claimantId, role: "CLAIMANT", consentStatus: "ACCEPTED" },
-      { claimId: created?.id, userId: finderId, role: "FINDER", consentStatus: "PENDING" }
+      { claimId: created?.id, userId: finderId, role: "FINDER", consentStatus: "ACCEPTED" }
     ]);
     assert.equal(notifiedUserId, finderId);
-    assert.equal(result.status, "PENDING");
-    assert.equal(result.canSend, false);
+    assert.equal(result.status, "CONVERSATION_OPEN");
+    assert.equal(result.canSend, true);
   } finally {
     claimRepository.findByRequestKey = originalFindByRequestKey;
     claimRepository.findClaimablePostForUpdate = originalFindClaimablePostForUpdate;
@@ -209,6 +240,8 @@ test("direct claims use the post owner as finder instead of a matching-only pair
     claimRepository.findById = originalFindById;
     claimRepository.findParticipant = originalFindParticipant;
     claimRepository.listParticipants = originalListParticipants;
+    claimRepository.findClaimItemContext = originalFindClaimItemContext;
+    claimRepository.createRoom = originalCreateRoom;
     claimRepository.writeAudit = originalWriteAudit;
     notificationRepository.create = originalCreateNotification;
   }
@@ -216,7 +249,10 @@ test("direct claims use the post owner as finder instead of a matching-only pair
 
 test("sending a chat message pushes a privacy-safe realtime notification to the counterpart", async () => {
   const claim = sampleClaim();
-  const room = { id: claim.roomId!, claimId: claim.id, createdAt: claim.createdAt };
+  const room = {
+    id: claim.roomId!, claimId: claim.id, escalatedAt: null, escalatedBy: null,
+    escalationReason: null, createdAt: claim.createdAt
+  };
   const realtimeEvents: unknown[] = [];
   const service = createTestClaimUseCases({
     realtimeNotifier: {

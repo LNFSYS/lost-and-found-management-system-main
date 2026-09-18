@@ -103,7 +103,44 @@ export async function exerciseHttpRuntime(pool: Pool) {
     assert.equal(retried.id, claimId);
     await request(`/claims/${claimId}`, 404, tokens.outsider);
     await request(`/claims/${claimId}/messages`, 404, tokens.owner);
-    await request(`/claims/${claimId}/decision`, 200, tokens.finder, "POST", { decision: "ACCEPT" });
+    await request(`/claims/${claimId}/decision`, 200, tokens.finder, "POST", {
+      decision: "ACCEPT", note: "Open the private room for ownership verification"
+    }, { "Idempotency-Key": "http-open-conversation-key" });
+    const openVerification = await (await request(`/claims/${claimId}/verification`, 200, tokens.owner)).json();
+    assert.equal(openVerification.status, "CONVERSATION_OPEN");
+    assert.equal(openVerification.appointmentEligible, false);
+    await request(`/claims/${claimId}/verification`, 404, tokens.outsider);
+    const guided = await (await request(`/claims/${claimId}/verification/templates`, 200, tokens.finder)).json();
+    for (const [index, prompt] of guided.template.prompts.slice(0, guided.template.minimumAnswers).entries()) {
+      const answer = `private-answer-${index}`;
+      const sent = await (await request(`/claims/${claimId}/verification/questions`, 201, tokens.finder, "POST", {
+        templateId: guided.template.id,
+        templateVersion: guided.template.version,
+        promptKey: prompt.key,
+        prompt: prompt.prompt,
+        expectedAnswer: answer
+      }, { "Idempotency-Key": `http-question-${index}` })).json();
+      const question = sent.questions.at(-1);
+      assert.ok(question?.id);
+      assert.doesNotMatch(JSON.stringify(sent), new RegExp(answer));
+      const answered = await (await request(`/claims/${claimId}/verification/questions/${question.id}/answer`, 200, tokens.owner, "POST", {
+        answer
+      }, { "Idempotency-Key": `http-answer-${index}` })).json();
+      assert.equal(JSON.stringify(answered).includes(answer), false);
+      assert.equal(JSON.stringify(answered).includes('"isMatch"'), false);
+    }
+    const finalDecision = {
+      decision: "VERIFY_FOR_MEETUP", reason: "Required private answers match", confidence: "HIGH"
+    };
+    const verified = await (await request(`/claims/${claimId}/verification/decision`, 200, tokens.finder, "POST", finalDecision, {
+      "Idempotency-Key": "http-final-verification-key"
+    })).json();
+    assert.equal(verified.claim.status, "ACCEPTED");
+    assert.equal(verified.verification.appointmentEligible, true);
+    const replayedDecision = await (await request(`/claims/${claimId}/verification/decision`, 200, tokens.finder, "POST", finalDecision, {
+      "Idempotency-Key": "http-final-verification-key"
+    })).json();
+    assert.equal(replayedDecision.claim.status, "ACCEPTED");
     const messageBody = { content: "The card is inside the wallet", clientMessageId: "http-message-key" };
     const first = await (await request(`/claims/${claimId}/messages`, 201, tokens.owner, "POST", messageBody)).json();
     const second = await (await request(`/claims/${claimId}/messages`, 201, tokens.owner, "POST", messageBody)).json();

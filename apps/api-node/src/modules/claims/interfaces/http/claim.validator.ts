@@ -7,6 +7,7 @@ const pastDate = z.coerce.date().refine((value) => value.getTime() <= Date.now()
 export const claimIdParamSchema = z.object({ claimId: uuid });
 export const roomIdParamSchema = z.object({ roomId: uuid });
 export const evidenceParamSchema = z.object({ claimId: uuid, evidenceId: uuid });
+export const verificationQuestionParamSchema = z.object({ claimId: uuid, questionId: uuid });
 export const listClaimsQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(50).default(50)
@@ -34,7 +35,28 @@ export const createClaimSchema = z.object({
 
 export const claimDecisionSchema = z.object({
   decision: z.enum(["ACCEPT", "DECLINE", "REQUEST_MORE_INFO"]),
-  note: z.string().trim().min(3).max(2000).optional()
+  note: z.string().trim().min(3).max(1000),
+  idempotencyKey: safeKey
+});
+
+export const sendVerificationQuestionSchema = z.object({
+  templateId: z.string().trim().min(2).max(60).regex(/^[a-z0-9-]+$/),
+  templateVersion: z.number().int().min(1).max(999),
+  promptKey: z.string().trim().min(2).max(60).regex(/^[a-z0-9-]+$/),
+  prompt: z.string().trim().min(10).max(500),
+  idempotencyKey: safeKey
+});
+
+export const answerVerificationQuestionSchema = z.object({
+  answer: z.string().trim().min(1).max(500),
+  idempotencyKey: safeKey
+});
+
+export const verificationDecisionSchema = z.object({
+  decision: z.enum(["VERIFY_FOR_MEETUP", "REQUEST_MORE_INFO", "DECLINE", "ESCALATE_TO_CUSTODY"]),
+  reason: z.string().trim().min(3).max(1000),
+  correctsEventId: uuid.optional(),
+  idempotencyKey: safeKey
 });
 
 export const createMessageSchema = z.object({
@@ -59,4 +81,7 @@ export const uploadEvidenceSchema = z.object({
   description: z.string().trim().max(255).optional()
 });
 
-export type { ClaimDecisionInput, CreateClaimInput, CreateMessageInput, ListClaimsQuery, ListMessagesQuery, UploadEvidenceInput } from "../../application/claim.dto.js";
+export type {
+  AnswerVerificationQuestionInput, ClaimDecisionInput, CreateClaimInput, CreateMessageInput, ListClaimsQuery,
+  ListMessagesQuery, SendVerificationQuestionInput, UploadEvidenceInput, VerificationDecisionInput
+} from "../../application/claim.dto.js";

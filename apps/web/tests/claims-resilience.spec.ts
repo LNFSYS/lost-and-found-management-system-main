@@ -78,17 +78,99 @@ test("ignores a late claim-room response after switching to another room", async
     return fulfillJson(route, { room: { id: "room-b", claimId: claimB.id, status: claimB.status, participantRole: "CLAIMANT", createdAt: claimB.createdAt }, items: [], hasMore: false, nextCursor: null });
   });
   await page.route("**/api/claims/dddddddd-dddd-4ddd-8ddd-dddddddddddd/evidence", (route) => fulfillJson(route, { items: [] }));
+  await page.route("**/api/claims/dddddddd-dddd-4ddd-8ddd-dddddddddddd/verification", (route) => fulfillJson(route, {
+    claimId: claimB.id,
+    status: claimB.status,
+    appointmentEligible: false,
+    participantRole: "CLAIMANT",
+    roomEscalation: null,
+    policy: { templateId: "wallet-bag", templateVersion: 1, minimumAnswers: 2, answeredCount: 0, readyForDecision: false },
+    questions: [],
+    history: []
+  }));
 
   await page.goto(`/claims/${claimA.id}`);
-  await expect(page.getByRole("button", { name: /Ví B bị mất/ })).toBeVisible();
-  await page.getByRole("button", { name: /Ví B bị mất/ }).click();
+  await expect(page.getByRole("button", { name: /Ví B đã nhặt/ })).toBeVisible();
+  await page.getByRole("button", { name: /Ví B đã nhặt/ }).click();
   await expect(page).toHaveURL(new RegExp(`/claims/${claimB.id}$`));
-  await expect(page.getByRole("heading", { name: "Ví B bị mất" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Ví B đã nhặt" })).toBeVisible();
   await page.waitForTimeout(850);
-  await expect(page.getByRole("heading", { name: "Ví B bị mất" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Ví A bị mất" })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Ví B đã nhặt" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Ví A đã nhặt" })).toHaveCount(0);
 
   await page.getByLabel("Tin nhắn riêng").fill("Thông tin của phòng B");
-  await page.getByRole("button", { name: "Gửi" }).click();
+  await page.getByRole("button", { name: "Gửi tin nhắn" }).click();
   await expect(page.getByText("Thông tin của phòng B")).toBeVisible();
+});
+
+test("Finder makes an explicit appointment-eligible decision in the private room", async ({ page }) => {
+  const finderSession = { ...session, user: { ...session.user, id: "finder-a", fullName: "Finder A" } };
+  const finderClaim = {
+    ...claimA,
+    claimantId: "claimant-a",
+    finderId: "finder-a",
+    appointmentEligible: false,
+    conversationDecision: "OPEN_CONVERSATION"
+  };
+  const answeredVerification = {
+    claimId: finderClaim.id,
+    status: "CONVERSATION_OPEN",
+    appointmentEligible: false,
+    participantRole: "FINDER",
+    roomEscalation: null,
+    policy: { templateId: "wallet-bag", templateVersion: 1, minimumAnswers: 1, answeredCount: 1, matchedCount: 1, readyForDecision: true },
+    questions: [{
+      id: "11111111-1111-4111-8111-111111111111",
+      prompt: "Ví có chất liệu và kiểu khóa như thế nào?",
+      questionType: "VISUAL_DETAIL",
+      privacyLevel: "PRIVATE",
+      status: "DRAFT",
+      assignedAt: "2026-09-18T01:00:00.000Z",
+      template: { templateId: "wallet-bag", templateVersion: 1, promptKey: "material-layout" },
+      answer: { answered: true, attemptCount: 1, answeredAt: "2026-09-18T01:05:00.000Z", isMatch: true }
+    }],
+    history: []
+  };
+  const acceptedClaim = { ...finderClaim, status: "ACCEPTED", appointmentEligible: true };
+  let decisionRequest: { header: string | null; body: Record<string, unknown> } | null = null;
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.route("**/api/auth/refresh", (route) => fulfillJson(route, finderSession));
+  await page.route("**/api/claims?page=1&pageSize=50", (route) => fulfillJson(route, {
+    items: [finderClaim], total: 1, page: 1, pageSize: 50, hasMore: false
+  }));
+  await page.route(`**/api/claims/${finderClaim.id}`, (route) => fulfillJson(route, finderClaim));
+  await page.route(`**/api/claims/${finderClaim.id}/messages*`, (route) => fulfillJson(route, {
+    room: { id: "room-a", claimId: finderClaim.id, status: finderClaim.status, participantRole: "FINDER", createdAt: finderClaim.createdAt },
+    items: [], hasMore: false, nextCursor: null
+  }));
+  await page.route(`**/api/claims/${finderClaim.id}/evidence`, (route) => fulfillJson(route, { items: [] }));
+  await page.route(`**/api/claims/${finderClaim.id}/verification/templates`, (route) => fulfillJson(route, {
+    category: "vi / bop",
+    template: { id: "wallet-bag", version: 1, minimumAnswers: 1, customFollowUpAllowed: true, prompts: [] }
+  }));
+  await page.route(`**/api/claims/${finderClaim.id}/verification`, (route) => fulfillJson(route, answeredVerification));
+  await page.route(`**/api/claims/${finderClaim.id}/verification/decision`, async (route) => {
+    decisionRequest = {
+      header: route.request().headers()["idempotency-key"] ?? null,
+      body: route.request().postDataJSON() as Record<string, unknown>
+    };
+    await fulfillJson(route, {
+      claim: acceptedClaim,
+      verification: { ...answeredVerification, status: "ACCEPTED", appointmentEligible: true }
+    });
+  });
+
+  await page.goto(`/claims/${finderClaim.id}`);
+  await expect(page.getByText("OWNERSHIP REVIEW")).toBeVisible();
+  await expect(page.getByText("1 câu khớp")).toBeVisible();
+  await page.getByRole("button", { name: "Đề xuất gặp mặt" }).click();
+  await page.getByLabel("Lý do / nhận xét").fill("Các câu trả lời riêng phù hợp với vật phẩm");
+  await page.getByRole("button", { name: "Xác nhận quyết định" }).click();
+
+  await expect(page.getByText("Đủ điều kiện đặt lịch")).toBeVisible();
+  expect(decisionRequest).not.toBeNull();
+  expect(decisionRequest!.header).toBeTruthy();
+  expect(decisionRequest!.body.decision).toBe("VERIFY_FOR_MEETUP");
+  expect(decisionRequest!.body).not.toHaveProperty("idempotencyKey");
 });

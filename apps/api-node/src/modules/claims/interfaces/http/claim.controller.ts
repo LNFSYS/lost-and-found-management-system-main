@@ -2,6 +2,7 @@ import type { Request, Response } from "express";
 import { HttpError } from "../../../../shared/interfaces/http/http-error.js";
 import type { ClaimUseCases } from "../../application/claim.use-cases.js";
 import {
+  answerVerificationQuestionSchema,
   claimDecisionSchema,
   claimIdParamSchema,
   createClaimSchema,
@@ -9,6 +10,9 @@ import {
   evidenceParamSchema,
   listClaimsQuerySchema,
   listMessagesQuerySchema,
+  sendVerificationQuestionSchema,
+  verificationDecisionSchema,
+  verificationQuestionParamSchema,
   uploadEvidenceSchema
 } from "./claim.validator.js";
 
@@ -42,11 +46,47 @@ export function createClaimController({ claimService }: {
     },
 
     async decide(request: Request, response: Response) {
-      response.json(await claimService.decide(claimId(request), request.auth!.sub, claimDecisionSchema.parse(request.body)));
+      response.json(await claimService.decide(claimId(request), request.auth!.sub, claimDecisionSchema.parse({
+        ...request.body,
+        idempotencyKey: idempotencyKey(request) ?? request.body?.idempotencyKey
+      })));
+    },
+
+    async getVerificationTemplates(request: Request, response: Response) {
+      response.json(await claimService.getVerificationTemplates(claimId(request), request.auth!.sub));
+    },
+
+    async getVerification(request: Request, response: Response) {
+      response.json(await claimService.getVerification(claimId(request), request.auth!.sub));
+    },
+
+    async sendVerificationQuestion(request: Request, response: Response) {
+      const input = sendVerificationQuestionSchema.parse({
+        ...request.body,
+        idempotencyKey: idempotencyKey(request) ?? request.body?.idempotencyKey
+      });
+      response.status(201).json(await claimService.sendVerificationQuestion(claimId(request), request.auth!.sub, input));
+    },
+
+    async answerVerificationQuestion(request: Request, response: Response) {
+      const params = verificationQuestionParamSchema.parse(request.params);
+      const input = answerVerificationQuestionSchema.parse({
+        ...request.body,
+        idempotencyKey: idempotencyKey(request) ?? request.body?.idempotencyKey
+      });
+      response.json(await claimService.answerVerificationQuestion(params.claimId, params.questionId, request.auth!.sub, input));
+    },
+
+    async decideVerification(request: Request, response: Response) {
+      const input = verificationDecisionSchema.parse({
+        ...request.body,
+        idempotencyKey: idempotencyKey(request) ?? request.body?.idempotencyKey
+      });
+      response.json(await claimService.decideVerification(claimId(request), request.auth!.sub, input));
     },
 
     async withdraw(request: Request, response: Response) {
-      response.json(await claimService.withdraw(claimId(request), request.auth!.sub));
+      response.json(await claimService.withdraw(claimId(request), request.auth!.sub, idempotencyKey(request)));
     },
 
     async getRoom(request: Request, response: Response) {

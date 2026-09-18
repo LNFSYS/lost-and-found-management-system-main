@@ -23,7 +23,7 @@ Current repository là baseline Web + Node.js API. Native Mobile, PWA infrastruc
 - Upload media bài đăng qua local protected media proxy, có kiểm tra loại, kích thước và file signature.
 - Gemini-assisted multi-image analysis tạo bản nháp có thể chỉnh sửa; không tự đăng bài và không tự xác minh quyền sở hữu.
 - Hybrid/rule-based matching với text normalization tiếng Việt, category, location, time, image/OCR tags, tier, score breakdown và explanation.
-- Claim peer-to-peer, participant authorization, private text room, cursor-paginated history, private evidence proxy và in-app claim notifications đã có runtime ở mức hiện tại; appointment, guided verification và realtime transport chưa có.
+- Claim peer-to-peer, participant authorization, private text room, guided ownership questions, explicit Finder decision, cursor-paginated history, private evidence proxy và in-app claim notifications đã có runtime; appointment và realtime transport chưa có.
 - Staff warehouse operations: tiếp nhận, lưu, trả, retention deadline, handover counts và storage log.
 
 Các mục trên là **current implementation baseline**, không đồng nghĩa mọi workflow trong product scope đã hoàn tất end-to-end.
@@ -34,11 +34,11 @@ Luồng nghiệp vụ mục tiêu là:
 
 `LOST/FOUND post → matching suggestion → claim/private verification chat → finder decision → meetup → dual-confirmed direct handover`
 
-Staff custody/warehouse là nhánh hỗ trợ hoặc escalation khi Finder không thể tiếp tục giữ đồ, có dispute, item nhạy cảm/nguy hiểm hoặc policy yêu cầu chuyển vào kho. Claim, private text chat, evidence proxy và claim notification đã có route/UI/test evidence ở mức hiện tại; appointment, guided questions, realtime chat/notification và phần PWA/native mobile nâng cao vẫn chưa hoàn tất.
+Staff custody/warehouse là nhánh hỗ trợ hoặc escalation khi Finder không thể tiếp tục giữ đồ, có dispute, item nhạy cảm/nguy hiểm hoặc policy yêu cầu chuyển vào kho. Claim, private text chat, guided questions, explicit Finder decision, evidence proxy và claim notification đã có route/UI/test evidence; appointment, realtime chat/notification và phần PWA/native mobile nâng cao vẫn chưa hoàn tất.
 
 ## Trạng thái chưa có runtime evidence
 
-- Guided questions, claim evidence review/confidence, appointment/meetup và multiple-claimant policy end-to-end.
+- Automated evidence confidence, appointment/meetup và multiple-claimant reservation policy end-to-end.
 - Meetup proposal/acceptance/reschedule và dual-confirmation direct handover.
 - Socket.IO realtime chat, image message, unread/seen và realtime notification.
 - Overdue disposition, donation/transfer/disposal document flow và dispute escalation.

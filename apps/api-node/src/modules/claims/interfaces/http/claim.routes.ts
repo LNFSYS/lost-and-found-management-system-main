@@ -37,6 +37,13 @@ export function createClaimRoutes({ claimController, auth }: {
     legacyHeaders: false,
     message: { message: "Bạn đã tải lên quá nhiều evidence. Vui lòng thử lại sau." }
   });
+  const verificationWriteLimit = rateLimit({
+    windowMs: 15 * 60_000,
+    limit: 30,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { message: "Bạn đã thực hiện quá nhiều thao tác xác minh. Vui lòng thử lại sau." }
+  });
   function uploadSingleEvidence(request: Request, response: Response, next: NextFunction) {
     evidenceUpload.single("file")(request, response, (error: unknown) => {
       if (error instanceof multer.MulterError) {
@@ -56,8 +63,13 @@ export function createClaimRoutes({ claimController, auth }: {
   claimRoutes.get("/", (req, res, next) => claimController.listClaims(req, res).catch(next));
   claimRoutes.post("/", claimCreateLimit, (req, res, next) => claimController.createClaim(req, res).catch(next));
   claimRoutes.get("/:claimId", (req, res, next) => claimController.getClaim(req, res).catch(next));
-  claimRoutes.post("/:claimId/decision", (req, res, next) => claimController.decide(req, res).catch(next));
+  claimRoutes.post("/:claimId/decision", verificationWriteLimit, (req, res, next) => claimController.decide(req, res).catch(next));
   claimRoutes.post("/:claimId/withdraw", (req, res, next) => claimController.withdraw(req, res).catch(next));
+  claimRoutes.get("/:claimId/verification/templates", (req, res, next) => claimController.getVerificationTemplates(req, res).catch(next));
+  claimRoutes.get("/:claimId/verification", (req, res, next) => claimController.getVerification(req, res).catch(next));
+  claimRoutes.post("/:claimId/verification/questions", verificationWriteLimit, (req, res, next) => claimController.sendVerificationQuestion(req, res).catch(next));
+  claimRoutes.post("/:claimId/verification/questions/:questionId/answer", verificationWriteLimit, (req, res, next) => claimController.answerVerificationQuestion(req, res).catch(next));
+  claimRoutes.post("/:claimId/verification/decision", verificationWriteLimit, (req, res, next) => claimController.decideVerification(req, res).catch(next));
   claimRoutes.get("/:claimId/room", (req, res, next) => claimController.getRoom(req, res).catch(next));
   claimRoutes.post("/:claimId/room", (req, res, next) => claimController.getRoom(req, res).catch(next));
   claimRoutes.get("/:claimId/messages", (req, res, next) => claimController.listMessages(req, res).catch(next));

@@ -1,6 +1,39 @@
 import type { TransactionContext } from "../../../shared/application/transaction.js";
 import type { ClaimStatus, ConsentStatus, FinderDecision, ParticipantRole } from "../domain/claim-policy.js";
+import type { VerificationPrivacyLevel, VerificationQuestionType } from "../domain/verification-question-templates.js";
 export type { ClaimStatus, ConsentStatus, FinderDecision, ParticipantRole } from "../domain/claim-policy.js";
+
+export interface VerificationQuestionRecord {
+  id: string;
+  claimId: string;
+  postId: string;
+  prompt: string;
+  questionType: VerificationQuestionType;
+  sourceSignal: string;
+  expectedAnswerHash: string | null;
+  options: string[] | null;
+  privacyLevel: VerificationPrivacyLevel;
+  status: "DRAFT" | "APPROVED" | "DISABLED";
+  assignedAt: string;
+  answer: {
+    answeredBy: string;
+    isMatch: boolean | null;
+    attemptCount: number;
+    lastAttemptAt: string;
+    answeredAt: string;
+  } | null;
+}
+
+export interface ClaimAuditEventRecord {
+  id: string;
+  claimId: string;
+  actorId: string;
+  action: string;
+  fromStatus: ClaimStatus | null;
+  toStatus: ClaimStatus | null;
+  metadata: Record<string, unknown> | null;
+  createdAt: string;
+}
 
 interface MatchPairRow {
   lost_post_id: string;
@@ -15,6 +48,7 @@ export interface ClaimRepository {
   findClaimablePostForUpdate(postId: string, connection: TransactionContext): Promise<{
     id: string;
     ownerId: string;
+    type: "LOST" | "FOUND";
   } | null>;
   findMatchPairForUpdate(lostPostId: string, foundPostId: string, suggestionThreshold: number, connection: TransactionContext): Promise<MatchPairRow>;
   findById(claimId: string, queryable?: TransactionContext): Promise<{
@@ -182,6 +216,8 @@ export interface ClaimRepository {
     lostPostId: string | undefined;
     foundPostId: string;
     claimantId: string;
+    status: ClaimStatus;
+    finderDecision: FinderDecision;
     requestKey?: string;
     description?: string;
     approximateLostAt?: Date;
@@ -193,6 +229,7 @@ export interface ClaimRepository {
     role: ParticipantRole;
     consentStatus: ConsentStatus;
   }, queryable: TransactionContext): Promise<void>;
+  updateParticipantConsent(claimId: string, userId: string, consentStatus: ConsentStatus, queryable: TransactionContext): Promise<void>;
   findParticipant(claimId: string, userId: string, queryable?: TransactionContext): Promise<{
     claimId: string;
     userId: string;
@@ -200,6 +237,23 @@ export interface ClaimRepository {
     consentStatus: ConsentStatus;
     joinedAt: string | null;
     fullName: string;
+  } | null>;
+  findVerificationContext(claimId: string, queryable?: TransactionContext): Promise<{
+    foundPostId: string;
+    categoryName: string;
+    parentCategoryName: string | null;
+  } | null>;
+  findClaimItemContext(claimId: string, queryable?: TransactionContext): Promise<{
+    foundPostId: string;
+    title: string;
+    categoryName: string | null;
+    visibilityMode: "PUBLIC" | "PRIVATE_DETAILS";
+    areaName: string | null;
+    buildingName: string | null;
+    roomText: string | null;
+    customLocation: string | null;
+    handoverPointName: string | null;
+    mediaId: string | null;
   } | null>;
   listParticipants(claimId: string, queryable?: TransactionContext): Promise<{
     claimId: string;
@@ -217,6 +271,12 @@ export interface ClaimRepository {
     joinedAt: string | null;
     fullName: string;
   }[]>>;
+  listConversationSummaries(claimIds: string[], userId: string): Promise<Map<string, {
+    lastMessage: string | null;
+    lastMessageAt: string | null;
+    unreadCount: number;
+    custodyEscalated: boolean;
+  }>>;
   listForUser(userId: string, query: {
     page: number;
     pageSize: number;
@@ -275,16 +335,49 @@ export interface ClaimRepository {
     rejectedAt?: boolean;
   }, queryable: TransactionContext): Promise<void>;
   updateFinderParticipant(claimId: string, userId: string, status: ConsentStatus, queryable: TransactionContext): Promise<void>;
+  findById(claimId: string, queryable?: TransactionContext): Promise<any | null>;
   withdrawClaim(claimId: string, claimantId: string, queryable: TransactionContext): Promise<boolean>;
   findRoomByClaim(claimId: string, queryable?: TransactionContext): Promise<{
     id: string;
     claimId: string;
+    escalatedAt: string | null;
+    escalatedBy: string | null;
+    escalationReason: string | null;
     createdAt: string;
   } | null>;
   createRoom(claimId: string, queryable: TransactionContext): Promise<{
     id: `${string}-${string}-${string}-${string}-${string}`;
     claimId: string;
   }>;
+  createVerificationQuestion(input: {
+    id: string;
+    postId: string;
+    prompt: string;
+    questionType: VerificationQuestionType;
+    sourceSignal: string;
+    expectedAnswerHash: string | null;
+    privacyLevel: VerificationPrivacyLevel;
+    createdBy: string;
+  }, queryable: TransactionContext): Promise<void>;
+  assignVerificationQuestion(claimId: string, questionId: string, queryable: TransactionContext): Promise<void>;
+  listVerificationQuestions(claimId: string, queryable?: TransactionContext): Promise<VerificationQuestionRecord[]>;
+  findVerificationQuestion(claimId: string, questionId: string, queryable?: TransactionContext): Promise<VerificationQuestionRecord | null>;
+  saveVerificationAnswer(input: {
+    id: string;
+    claimId: string;
+    questionId: string;
+    answeredBy: string;
+    isMatch: boolean | null;
+  }, queryable: TransactionContext): Promise<void>;
+  markRoomEscalated(input: {
+    claimId: string;
+    actorId: string;
+    reason: string;
+  }, queryable: TransactionContext): Promise<void>;
+  clearRoomEscalation(claimId: string, queryable: TransactionContext): Promise<void>;
+  hasActiveAppointment(claimId: string, queryable: TransactionContext): Promise<boolean>;
+  findAuditByIdempotencyKey(claimId: string, actorId: string, idempotencyKey: string, queryable: TransactionContext): Promise<ClaimAuditEventRecord | null>;
+  listVerificationAuditEvents(claimId: string, queryable?: TransactionContext): Promise<ClaimAuditEventRecord[]>;
   listRoomsForUser(userId: string): Promise<{
     id: string;
     lostPostId: string | null;
@@ -409,6 +502,7 @@ export interface ClaimRepository {
       beforeId: string;
     } | null;
   }>;
+  markMessagesRead(roomId: string, readerId: string): Promise<number>;
   listEvidence(claimId: string): Promise<{
     id: string;
     claimId: string;
@@ -450,6 +544,7 @@ export interface ClaimRepository {
     url: string;
   } | null>;
   writeAudit(input: {
+    eventId?: string;
     claimId: string;
     actorId: string;
     action: string;

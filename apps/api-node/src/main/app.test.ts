@@ -141,6 +141,12 @@ test("claim, room and private evidence routes require authentication", async () 
 
     const evidence = await fetch(`${baseUrl}/api/claims/11111111-1111-4111-8111-111111111111/evidence/22222222-2222-4222-8222-222222222222`);
     assert.equal(evidence.status, 401);
+
+    const verification = await fetch(`${baseUrl}/api/claims/11111111-1111-4111-8111-111111111111/verification`);
+    assert.equal(verification.status, 401);
+
+    const decision = await fetch(`${baseUrl}/api/claims/11111111-1111-4111-8111-111111111111/verification/decision`, { method: "POST" });
+    assert.equal(decision.status, 401);
   });
 });
 

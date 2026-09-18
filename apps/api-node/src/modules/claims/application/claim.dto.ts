@@ -8,7 +8,31 @@ export type CreateClaimInput = {
   requestKey?: string | undefined;
 };
 
-export type ClaimDecisionInput = { decision: "ACCEPT" | "DECLINE" | "REQUEST_MORE_INFO"; note?: string | undefined; };
+export type ClaimDecisionInput = {
+  decision: "ACCEPT" | "DECLINE" | "REQUEST_MORE_INFO";
+  note?: string | undefined;
+  idempotencyKey?: string | undefined;
+};
+
+export type SendVerificationQuestionInput = {
+  templateId: string;
+  templateVersion: number;
+  promptKey: string;
+  prompt: string;
+  idempotencyKey: string;
+};
+
+export type AnswerVerificationQuestionInput = {
+  answer: string;
+  idempotencyKey: string;
+};
+
+export type VerificationDecisionInput = {
+  decision: "VERIFY_FOR_MEETUP" | "REQUEST_MORE_INFO" | "DECLINE" | "ESCALATE_TO_CUSTODY";
+  reason: string;
+  correctsEventId?: string | undefined;
+  idempotencyKey: string;
+};
 
 export type CreateMessageInput = { content: string; clientMessageId?: string | undefined; };
 
