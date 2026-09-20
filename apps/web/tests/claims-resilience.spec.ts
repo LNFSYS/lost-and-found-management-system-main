@@ -100,7 +100,7 @@ test("ignores a late claim-room response after switching to another room", async
 
   await page.getByLabel("Tin nhắn riêng").fill("Thông tin của phòng B");
   await page.getByRole("button", { name: "Gửi tin nhắn" }).click();
-  await expect(page.getByText("Thông tin của phòng B")).toBeVisible();
+  await expect(page.locator(".claim-messages .claim-message").getByText("Thông tin của phòng B", { exact: true })).toBeVisible();
 });
 
 test("Finder makes an explicit appointment-eligible decision in the private room", async ({ page }) => {
@@ -163,7 +163,7 @@ test("Finder makes an explicit appointment-eligible decision in the private room
 
   await page.goto(`/claims/${finderClaim.id}`);
   await expect(page.getByText("OWNERSHIP REVIEW")).toBeVisible();
-  await expect(page.getByText("1 câu khớp")).toBeVisible();
+  await expect(page.getByText("Có thể đưa ra quyết định", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Đề xuất gặp mặt" }).click();
   await page.getByLabel("Lý do / nhận xét").fill("Các câu trả lời riêng phù hợp với vật phẩm");
   await page.getByRole("button", { name: "Xác nhận quyết định" }).click();
