@@ -100,7 +100,7 @@ Matching là gợi ý. Không có auto ownership verification, auto claim accept
 2. Finder chọn guided question theo category hoặc viết câu hỏi an toàn.
 3. Câu hỏi tập trung vào phụ kiện, dấu xước, nội dung màn hình, bốn số cuối serial hoặc chi tiết chỉ chủ sở hữu biết.
 4. Owner trả lời nhưng không xem trước private answer của Finder.
-5. Finder chọn MORE_INFO_REQUIRED, MEETUP_ACCEPTED, DECLINED hoặc ESCALATED.
+5. Finder chọn `NEED_MORE_INFO`, final `ACCEPTED`, `REJECTED`, hoặc custody escalation (`REJECTED` + room escalation metadata).
 6. Claim/evidence chỉ hiển thị cho claimant, post owner và reviewer có quyền.
 
 Staff không xem routine conversation mặc định; chỉ truy cập case đã escalate, có reason, permission, minimum data và audit.
@@ -173,10 +173,11 @@ IN_CUSTODY → OVERDUE → TRANSFERRED/DISPOSED → CLOSED
 ### J4. Verification conversation target
 
 ~~~text
-REQUESTED → CONVERSATION_OPEN → MORE_INFO_REQUIRED
-→ MEETUP_ACCEPTED / DECLINED / ESCALATED
-→ SCHEDULED → COMPLETED / NO_SHOW / CANCELLED
+PENDING → CONVERSATION_OPEN ↔ NEED_MORE_INFO
+→ ACCEPTED / REJECTED
 ~~~
+
+Chỉ claim `ACCEPTED` mới có thể đi tiếp sang appointment `PENDING` theo LNFS-54.
 
 Schema hiện tại có enum/table tương ứng ở migration nhưng nhiều state target chưa có API/runtime. Không sửa migration đã chạy chỉ để làm tài liệu khớp.
 
@@ -260,7 +261,7 @@ PWA không phải native app. Mobile browser responsive không phải bằng ch�
 
 ## P. Architecture và service ownership
 
-Node.js là core API, migration owner và write owner của current implementation. Java chỉ health skeleton. Web/PWA/native mobile là các client dùng chung API và rules. Mọi domain mới phải có một owner ghi duy nhất trong deployment.
+Node.js + TypeScript là backend, migration owner và write owner duy nhất. Backend là Clean Architecture modular monolith; Java đã được gỡ ngày 09/09/2026. Web/PWA/native mobile dùng chung API và rules. Mọi domain mới tuân theo dependency rules trong `CLEAN_ARCHITECTURE.md`.
 
 ## Q. TBD cần quyết định
 
@@ -279,7 +280,7 @@ Node.js là core API, migration owner và write owner của current implementati
 - Web routes: home, profile, posts, my-posts, post detail, matches, claims, staff và admin.
 - Tests: Node unit/service/repository/validator; guarded DB integration; Web Playwright tests và typecheck. Latest local evidence: API 137 pass/1 skip, Playwright 23/23 pass.
 - Migrations: 001 đến 046, checksum runner; 046 là corrective migration chưa áp dụng lên Aiven/shared DB.
-- Java: Spring Boot Actuator health skeleton.
+- Backend: Node.js-only, composition root inject adapter vào application port; không có Java runtime.
 - Không có native mobile project.
 - Có PWA manifest/service worker; installability/device evidence còn pending.
 - Không có Jira connector trong workspace.

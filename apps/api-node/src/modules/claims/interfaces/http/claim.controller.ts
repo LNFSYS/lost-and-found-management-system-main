@@ -1,0 +1,137 @@
+import type { Request, Response } from "express";
+import { HttpError } from "../../../../shared/interfaces/http/http-error.js";
+import type { ClaimUseCases } from "../../application/claim.use-cases.js";
+import {
+  answerVerificationQuestionSchema,
+  claimDecisionSchema,
+  claimIdParamSchema,
+  createClaimSchema,
+  createDirectMessageSchema,
+  createMessageSchema,
+  evidenceParamSchema,
+  listClaimsQuerySchema,
+  listMessagesQuerySchema,
+  sendVerificationQuestionSchema,
+  verificationDecisionSchema,
+  verificationQuestionParamSchema,
+  uploadEvidenceSchema
+} from "./claim.validator.js";
+
+export function createClaimController({ claimService }: {
+  claimService: ClaimUseCases;
+}) {
+  function claimId(request: Request) {
+    return claimIdParamSchema.parse(request.params).claimId;
+  }
+  function idempotencyKey(request: Request) {
+    const value = request.header("Idempotency-Key")?.trim();
+    return value || undefined;
+  }
+  const claimController = {
+    async listClaims(request: Request, response: Response) {
+      response.json(await claimService.listClaims(request.auth!.sub, listClaimsQuerySchema.parse(request.query)));
+    },
+
+    async listRooms(request: Request, response: Response) {
+      response.json(await claimService.listRooms(request.auth!.sub));
+    },
+
+    async createClaim(request: Request, response: Response) {
+      const input = createClaimSchema.parse({ ...request.body, requestKey: idempotencyKey(request) ?? request.body?.requestKey });
+      const result = await claimService.createClaim(request.auth!.sub, input);
+      response.status(result.idempotent ? 200 : 201).json(result);
+    },
+
+    async createDirectMessage(request: Request, response: Response) {
+      const result = await claimService.createDirectMessage(request.auth!.sub, createDirectMessageSchema.parse({
+        ...request.body,
+        clientMessageId: idempotencyKey(request) ?? request.body?.clientMessageId
+      }));
+      response.status(201).json(result);
+    },
+
+    async getClaim(request: Request, response: Response) {
+      response.json(await claimService.getClaim(claimId(request), request.auth!.sub));
+    },
+
+    async decide(request: Request, response: Response) {
+      response.json(await claimService.decide(claimId(request), request.auth!.sub, claimDecisionSchema.parse({
+        ...request.body,
+        idempotencyKey: idempotencyKey(request) ?? request.body?.idempotencyKey
+      })));
+    },
+
+    async getVerificationTemplates(request: Request, response: Response) {
+      response.json(await claimService.getVerificationTemplates(claimId(request), request.auth!.sub));
+    },
+
+    async getVerification(request: Request, response: Response) {
+      response.json(await claimService.getVerification(claimId(request), request.auth!.sub));
+    },
+
+    async sendVerificationQuestion(request: Request, response: Response) {
+      const input = sendVerificationQuestionSchema.parse({
+        ...request.body,
+        idempotencyKey: idempotencyKey(request) ?? request.body?.idempotencyKey
+      });
+      response.status(201).json(await claimService.sendVerificationQuestion(claimId(request), request.auth!.sub, input));
+    },
+
+    async answerVerificationQuestion(request: Request, response: Response) {
+      const params = verificationQuestionParamSchema.parse(request.params);
+      const input = answerVerificationQuestionSchema.parse({
+        ...request.body,
+        idempotencyKey: idempotencyKey(request) ?? request.body?.idempotencyKey
+      });
+      response.json(await claimService.answerVerificationQuestion(params.claimId, params.questionId, request.auth!.sub, input));
+    },
+
+    async decideVerification(request: Request, response: Response) {
+      const input = verificationDecisionSchema.parse({
+        ...request.body,
+        idempotencyKey: idempotencyKey(request) ?? request.body?.idempotencyKey
+      });
+      response.json(await claimService.decideVerification(claimId(request), request.auth!.sub, input));
+    },
+
+    async withdraw(request: Request, response: Response) {
+      response.json(await claimService.withdraw(claimId(request), request.auth!.sub, idempotencyKey(request)));
+    },
+
+    async getRoom(request: Request, response: Response) {
+      response.json(await claimService.getRoom(claimId(request), request.auth!.sub));
+    },
+
+    async listMessages(request: Request, response: Response) {
+      response.json(await claimService.listMessages(claimId(request), request.auth!.sub, listMessagesQuerySchema.parse(request.query)));
+    },
+
+    async sendMessage(request: Request, response: Response) {
+      const message = await claimService.sendMessage(claimId(request), request.auth!.sub, createMessageSchema.parse({
+        ...request.body,
+        clientMessageId: request.header("Idempotency-Key")?.trim() || request.body?.clientMessageId
+      }));
+      response.status(201).json(message);
+    },
+
+    async listEvidence(request: Request, response: Response) {
+      response.json(await claimService.listEvidence(claimId(request), request.auth!.sub));
+    },
+
+    async uploadEvidence(request: Request, response: Response) {
+      if (!request.file) throw new HttpError(400, "Cần gửi ảnh evidence với field name là file");
+      const result = await claimService.uploadEvidence(claimId(request), request.auth!.sub, uploadEvidenceSchema.parse(request.body), request.file);
+      response.status(201).json(result);
+    },
+
+    async getEvidence(request: Request, response: Response) {
+      const params = evidenceParamSchema.parse(request.params);
+      const evidence = await claimService.getEvidenceFile(params.claimId, params.evidenceId, request.auth!.sub);
+      response.setHeader("Cache-Control", "private, no-store");
+      response.setHeader("X-Content-Type-Options", "nosniff");
+      response.type(evidence.contentType).send(evidence.body);
+    }
+  };
+  return claimController;
+}
+export type ClaimController = ReturnType<typeof createClaimController>;

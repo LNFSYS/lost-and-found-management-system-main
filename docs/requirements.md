@@ -54,10 +54,10 @@ Requirements target bao phủ Web Application, PWA và Native Mobile. Status bê
 
 | ID | Requirement | UC | Priority | Status |
 | --- | --- | --- | --- | --- |
-| FR-VERIFY-01 | Owner gửi verification request cho FOUND; Finder giữ item và quyết định qua conversation riêng. | UC-003, UC-052 | P0 | Implemented current claim request/decision scope; meetup/return chưa có |
-| FR-VERIFY-02 | Finder dùng guided questions; Owner trả lời mà không xem trước private answer/attribute; hỗ trợ thêm thông tin, accept, decline hoặc escalate. | UC-003–UC-007, UC-089–UC-092 | P0 | Partial: request-more-info/accept/decline có; guided questions và review confidence chưa có |
+| FR-VERIFY-01 | Owner gửi verification request cho FOUND; Finder giữ item và quyết định qua conversation riêng. | UC-003, UC-052 | P0 | Implemented: claim bắt đầu `PENDING`; `ACCEPT / OPEN_CONVERSATION` chỉ mở room và chuyển `CONVERSATION_OPEN`, chưa xác minh ownership |
+| FR-VERIFY-02 | Finder dùng guided questions; Owner trả lời mà không xem trước private answer/attribute; hỗ trợ thêm thông tin, accept, decline hoặc escalate. | UC-003–UC-007, UC-089–UC-092 | P0 | Implemented Web/PWA runtime: template theo category, private hashed answer comparison, explicit Finder decision, correction audit, idempotency và participant isolation; manual privacy QA còn pending |
 | FR-CLAIM-01 | User tạo claim không trùng; evidence private được upload và chỉ actor có quyền mới xem. | UC-049, UC-052–UC-054 | P0 | Implemented current API/UI scope; claim evidence còn local filesystem, chưa deploy-safe multi-instance |
-| FR-APPT-01 | Chỉ accepted verification mới tạo appointment; hai bên đề xuất, accept, reschedule/cancel và complete. | UC-021–UC-024 | P1 | Planned |
+| FR-APPT-01 | Chỉ accepted verification mới tạo appointment; hai bên đề xuất, accept, reschedule/cancel và complete. | UC-021–UC-024 | P1 | Eligibility policy implemented: chỉ claim `ACCEPTED` đủ điều kiện; appointment runtime vẫn Planned theo LNFS-54 |
 | FR-HANDOVER-02 | Direct return cần Finder xác nhận HANDED_OVER và Owner xác nhận RECEIVED; chỉ dual confirmation mới thành RETURNED. | UC-021–UC-024 | P0 | Planned |
 | FR-FEEDBACK-01 | Participant chỉ gửi một feedback sau completed return có dual confirmation hoặc custody outcome được ủy quyền; feedback tạo reputation event idempotent theo appointment và profile activity chỉ trả dữ liệu an toàn. | UC-025, UC-039 | P1 | Implemented runtime; dữ liệu thật vẫn phụ thuộc LNFS-54 tạo completed return |
 | FR-CHAT-01 | Conversation gắn đúng Owner–Finder–LOST–FOUND, hỗ trợ text/image, room isolation, retry, seen/unread và report/block. | UC-077–UC-083 | P1 | Partial: private REST text room, isolation, retry idempotency và pagination có; image/seen/report/block chưa có |
@@ -82,22 +82,23 @@ Requirements target bao phủ Web Application, PWA và Native Mobile. Status bê
 | FR-PWA-01 | Web responsive có manifest, installability, service worker, application shell, safe offline/error fallback, retry và mobile-browser camera/gallery. Transaction chỉ thành công sau server confirmation. | UC-093–UC-100 | P1 | Partial: manifest/service worker/offline shell đã có; device matrix và manual installability evidence còn thiếu |
 | FR-MOBILE-01 | Native Mobile dùng chung API/auth/authorization/privacy/state rules, có auth, LOST/FOUND, matching, chat/image, meetup/handover và notification. | UC-M01–UC-M12 | P1 | Planned — project chưa được tạo |
 | FR-MOBILE-02 | Native Mobile có navigation, session refresh, upload, permission, device test và release build. | UC-M01–UC-M12 | P1 | Planned — công nghệ TBD |
-| FR-JAVA-01 | Java Spring Boot cung cấp health endpoint nhưng chưa sở hữu flow nghiệp vụ. | N/A | P2 | Implemented skeleton |
+| FR-JAVA-01 | Java health skeleton cũ; giữ ID để truy vết lịch sử. | N/A | Retired | Ngừng sử dụng và đã gỡ ngày 09/09/2026; Node.js là backend duy nhất |
 
 ## 3. Non-functional requirements
 
 | ID | Requirement | Priority | Status/evidence |
 | --- | --- | --- | --- |
+| NFR-ARCH-01 | Node.js-only modular monolith; dependency hướng vào core; port thuộc application/domain; module contract công khai; không có circular dependency. | P0 | `scripts/check-architecture.mjs`, `src/main`, `src/modules`, `src/shared`; xem `CLEAN_ARCHITECTURE.md` |
 | NFR-SEC-01 | Password/OTP/refresh token được hash/protect; secret không xuất hiện trong source/log. | P0 | Implemented trong auth tests; production secret rotation vẫn là vận hành |
 | NFR-SEC-02 | Protected route trả 401/403 đúng; backend authorization là nguồn quyết định. | P0 | Implemented cho current routes |
 | NFR-SEC-03 | Auth, Gemini và matching rerun có rate limit phù hợp. | P0 | Implemented cho current module |
 | NFR-VALID-01 | Payload/query/params/upload được validate tại backend và merged update state được kiểm tra. | P0 | Implemented cho current post/catalog module |
 | NFR-PRIV-01 | Private post/media/match signal/evidence không lộ cho actor sai quyền. | P0 | Implemented authorization/proxy trong current API; shared local storage là deployment risk |
-| NFR-DATA-01 | Migration tuần tự, checksum-protected; migration đã chạy không sửa. | P0 | Implemented trong migration runner/tests |
+| NFR-DATA-01 | Migration tuần tự, checksum-protected; migration đã chạy không sửa. | P0 | Preflight toàn bộ ledger, named lock, alias reconciliation dry-run và real MySQL fresh/upgrade/partial-failure tests có; rollout Aiven còn pending |
 | NFR-DATA-02 | Shared Aiven/dev DB không dùng cho destructive test; integration test dùng database local riêng. | P0 | Process rule |
 | NFR-PERF-01 | Board có pagination; matching có candidate limit/window và rerun rate limit. | P0 | Implemented ở tested baseline; chưa load test |
 | NFR-PORT-01 | Media tồn tại sau restart/deploy và đọc được từ mọi instance. | P0 | Avatar dùng Cloudinary; media bài đăng vẫn local storage nên requirement tổng thể chưa đạt |
-| NFR-TEST-01 | API/Web build pass và logic quan trọng có unit/browser/integration evidence. | P0 | Partial: API/Web unit/browser pass; DB integration thật và full claim journey chưa chạy |
+| NFR-TEST-01 | API/Web build pass và logic quan trọng có unit/browser/integration evidence. | P0 | Partial: API/Web/browser pass; 07/09 đã chạy isolated MySQL fresh/upgrade/concurrency. Full claim-to-return journey và CI remote vẫn chưa xác minh |
 | NFR-CI-01 | Pull request tự chạy test/build với MySQL isolated. | P1 | Implemented workflow config; CI run chưa được quan sát từ checkout này |
 | NFR-OBS-01 | Có health/readiness, structured request log và graceful shutdown. | P1 | Partial: health/readiness có; cần verify phần còn lại |
 | NFR-AUDIT-01 | Admin và sensitive transitions có audit trail đủ actor/action/before-after/time. | P1 | Partial |

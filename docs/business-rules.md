@@ -45,8 +45,8 @@ Cập nhật: **06/09/2026**
 | BR-24 | Match lưu score thành phần, tier, matcher version và explanation; xem/re-run phải qua authorization/rate limit. | UC-071, UC-072, UC-075, UC-076 | Enforced |
 | BR-25 | Match của PRIVATE_DETAILS không lộ raw tokens/OCR/location cho actor không có quyền. | UC-054, UC-076 | Enforced trong serializer |
 | BR-26 | Public API chỉ trả handover point active. Admin không hard-delete point có appointment PENDING/ACCEPTED/RESCHEDULED hoặc reference vận hành; phải inactive. | UC-008–UC-010, UC-055–UC-057 | Enforced |
-| BR-27 | Migration đã chạy không được sửa; checksum mismatch phải dừng migration. | N/A | Enforced |
-| BR-28 | Node.js là write owner duy nhất; Java không ghi business state khi chưa có ownership và integration evidence. | N/A | Enforced theo kiến trúc |
+| BR-27 | Migration đã chạy không được sửa; toàn bộ lịch sử phải qua preflight trước DDL; runner và reconciliation dùng chung database lock. Alias chỉ được đối soát khi checksum/schema/backfill khớp và có phê duyệt. | N/A | Enforced trong runner và isolated MySQL tests 07/09; shared Aiven chưa reconcile |
+| BR-28 | Node.js + TypeScript là backend, business-write và migration owner duy nhất; module phụ thuộc core qua public application contract. Java đã ngừng sử dụng. | N/A | Enforced: composition root, injected ports và architecture check |
 | BR-44 | Moderation phải suy ra target từ report hoặc quan hệ backend hợp lệ; không nhận target ID tùy ý từ client. BAN_USER không được tự khóa admin hoặc khóa Admin active cuối cùng. | UC-066 | Enforced |
 | BR-45 | Avatar được lưu bằng Cloudinary authenticated storage; database chỉ lưu metadata ổn định, không dùng local absolute path làm nguồn chính. | UC-038 | Enforced |
 | BR-46 | Dashboard tách metrics theo khoảng thời gian khỏi current snapshot; UI và export phải giữ nhãn scope tương ứng. | UC-067, UC-084 | Enforced |
@@ -60,10 +60,10 @@ Cập nhật: **06/09/2026**
 | BR-31 | Admin catalog write cần audit actor, action, before/after và timestamp. | UC-064, UC-065 | Planned |
 | BR-32 | Staff page chỉ công bố hoàn thành khi có operational flow và backend role evidence. | UC-062 | Enforced cho warehouse operations hiện tại |
 | BR-33 | Claim chỉ áp dụng FOUND; Owner không claim bài của mình và một user không tạo duplicate claim. | UC-052, UC-053 | Enforced current claim API; full multi-claimant policy còn cần xác nhận |
-| BR-34 | Claim state transition phải transaction/lock; một FOUND không có hai accepted claims. | UC-003–UC-007 | Partial: claim row/active-pair lock có; constraint một FOUND duy nhất và appointment chưa có |
-| BR-35 | Evidence chỉ hiển thị cho claimant, post owner và reviewer có quyền; private answer không trả trước cho claimant. | UC-049, UC-054, UC-087–UC-092 | Partial: participant-scoped private evidence/proxy có; guided private answer/reviewer flow chưa có |
-| BR-36 | Evidence confidence chỉ hỗ trợ review; không phải xác minh 100% và không thay thế human verification. | UC-089, UC-090, UC-092 | Planned |
-| BR-37 | Appointment chỉ tạo sau accepted verification; một claim chỉ có một active appointment. | UC-021–UC-024 | Planned |
+| BR-34 | Claim state transition phải transaction/lock; một FOUND không có hai accepted claims. | UC-003–UC-007 | Enforced cho guided verification: row lock, current-state guard, idempotency audit và unique accepted claim; appointment runtime chưa có |
+| BR-35 | Evidence chỉ hiển thị cho claimant, post owner và reviewer có quyền; private answer không trả trước cho claimant. | UC-049, UC-054, UC-087–UC-092 | Enforced cho participant-scoped evidence và guided answers: expected answer chỉ lưu hash, raw claimant answer không lưu, match result không trả cho claimant |
+| BR-36 | Evidence confidence chỉ hỗ trợ review; không phải xác minh 100% và không thay thế human verification. | UC-089, UC-090, UC-092 | Enforced cho explicit Finder review; confidence/match chỉ hỗ trợ và không tự chuyển claim sang `ACCEPTED` |
+| BR-37 | Appointment chỉ tạo sau accepted verification; một claim chỉ có một active appointment. | UC-021–UC-024 | Eligibility guard enforced: chỉ claim `ACCEPTED`; appointment lifecycle vẫn Planned |
 | BR-37A | Feedback sau trả đồ chỉ mở khi return COMPLETED có dual confirmation hoặc custody outcome được ủy quyền; mỗi participant gửi một lần và không tự cộng reputation cho chính mình. | UC-025, UC-039 | Enforced cho feedback runtime; phụ thuộc LNFS-54 để tạo completed return thật |
 | BR-38 | Disposition kho bị chặn nếu còn claim, appointment, dispute hoặc legal hold pending; overdue không tự động thanh lý. | UC-016–UC-020 | Planned |
 | BR-39 | Warehouse receive/store/return chỉ Staff/Admin; mỗi transition phải ghi actor, action, from/to, note và timestamp. | UC-011–UC-015, UC-059–UC-061 | Enforced |
@@ -84,10 +84,12 @@ REPORTED → HELD_BY_FINDER → CHATTING → RESERVED → MEETUP_SCHEDULED
 Verification conversation:
 
 ~~~text
-REQUESTED → CONVERSATION_OPEN → MORE_INFO_REQUIRED
-→ MEETUP_ACCEPTED / DECLINED / ESCALATED
-→ SCHEDULED → COMPLETED / NO_SHOW / CANCELLED
+PENDING → CONVERSATION_OPEN ↔ NEED_MORE_INFO
+→ ACCEPTED / REJECTED
 ~~~
+
+Custody escalation dùng `REJECTED` kèm `chat_rooms.escalated_at/by/reason` và audit `CUSTODY_ESCALATED`.
+Chỉ `ACCEPTED` là appointment-eligible; `CONVERSATION_OPEN` không phải ownership verification.
 
 Quy tắc bắt buộc:
 

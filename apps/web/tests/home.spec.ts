@@ -39,8 +39,10 @@ test("renders the protected storytelling home with a campus hero image", async (
     return image.complete && image.naturalWidth > 400 && image.naturalHeight > 250;
   })).toBe(true);
   await expect(page.locator(".hero-campus-photo")).toBeVisible();
-  await expect(page.locator(".floating-status--lost")).toBeVisible();
-  await expect(page.locator(".floating-status--found")).toBeVisible();
+  await expect(page.locator(".floating-status")).toHaveCount(0);
+  await expect(page.locator(".campus-card")).toHaveCount(0);
+  await expect(page.locator(".hero-workflow")).toBeVisible();
+  await expect(page.locator(".hero-workflow span")).toHaveCount(3);
   await page.screenshot({ path: "../../test-results/home/home-desktop-top.png" });
 
   for (const stageId of ["#two-sides", "#quick-story", "#system-analysis", "#matching-search"]) {
@@ -48,12 +50,8 @@ test("renders the protected storytelling home with a campus hero image", async (
     await page.waitForTimeout(180);
   }
 
-  const scanLine = page.locator(".scan-line");
-  await expect(scanLine).toBeVisible();
-  const scanTopBefore = await scanLine.evaluate((element) => getComputedStyle(element).top);
-  await page.waitForTimeout(650);
-  const scanTopAfter = await scanLine.evaluate((element) => getComputedStyle(element).top);
-  expect(scanTopAfter).not.toBe(scanTopBefore);
+  await expect(page.locator(".scan-line")).toHaveCount(0);
+  await expect(page.locator(".scan-board .workflow-no-candidates")).toBeVisible();
   await expect(page.getByText("Chuẩn hóa thông tin")).toBeVisible();
 
   for (const stageId of ["#potential-match", "#human-review", "#handover"]) {
@@ -62,7 +60,8 @@ test("renders the protected storytelling home with a campus hero image", async (
   }
 
   await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(800);
-  await expect(page.getByText("Cần nhân viên xác minh")).toBeVisible();
+  await expect(page.locator("#human-review .review-status")).toBeVisible();
+  await expect(page.locator("#human-review .review-sheet")).toContainText("PHÒNG TRAO ĐỔI RIÊNG");
   await page.screenshot({ path: "../../test-results/home/home-desktop.png", fullPage: true });
 });
 

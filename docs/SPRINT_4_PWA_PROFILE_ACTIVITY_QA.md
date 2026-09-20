@@ -1,5 +1,8 @@
 # Sprint 4 PWA/Profile/Activity QA
 
+> Historical architecture notice (2026-09-09): Java source/runtime/build has been retired and removed. Backend paths below describe the earlier layout. Current Node.js-only architecture and source mapping: [Clean Architecture](CLEAN_ARCHITECTURE.md). Product/ticket findings and prior verification results remain historical evidence.
+
+
 Cập nhật implementation: **03/09/2026**. Automated API/Web checks đã pass; live Cloudinary smoke test upload/signed delivery/cleanup đã pass bằng test asset và không để lại asset. Các mục UI/device manual bên dưới chỉ được đánh dấu hoàn thành khi có screenshot hoặc log đính kèm. Avatar runtime dùng Cloudinary authenticated delivery.
 
 ## Scope

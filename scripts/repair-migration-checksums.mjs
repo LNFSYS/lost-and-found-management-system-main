@@ -6,6 +6,11 @@ import { fileURLToPath } from "node:url";
 import dotenv from "dotenv";
 import mysql from "mysql2/promise";
 
+if (process.argv.includes("--apply")) {
+  console.error("Bulk checksum rewriting is disabled. Diagnose schema drift; use migrate:reconcile-claim only for the verified claim alias.");
+  process.exit(1);
+}
+
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 for (const envPath of [
@@ -75,7 +80,6 @@ function poolOptions() {
   };
 }
 
-const apply = process.argv.includes("--apply");
 const options = poolOptions();
 const pool = mysql.createPool(options);
 
@@ -89,28 +93,26 @@ try {
     })
     .map((row) => ({ version: row.version, oldChecksum: row.checksum, newChecksum: checksums.get(row.version).raw }));
 
-  if (!mismatches.length) {
+  const unknown = rows.filter((row) => !checksums.has(row.version));
+  if (unknown.length) {
+    console.error(`Unknown migration versions: ${unknown.map((row) => row.version).join(", ")}. Reconcile before migrating.`);
+    process.exitCode = 1;
+  }
+  if (!mismatches.length && !unknown.length) {
     console.log("Migration checksums already match the current files.");
     process.exitCode = 0;
-  } else if (!apply) {
+  } else if (mismatches.length) {
     console.log(`Found ${mismatches.length} checksum mismatch(es) in ${options.host}:${options.port}/${options.database}.`);
-    console.log("Dry run only. Review the rows below, then run npm.cmd run migrate:repair-checksums if this is your local/dev DB.");
+    console.log("Read-only diagnosis. Compare schema and Git history; do not overwrite recorded checksums.");
     for (const item of mismatches) {
       console.log(`${item.version}`);
       console.log(`  db:   ${item.oldChecksum}`);
       console.log(`  file: ${item.newChecksum}`);
     }
     process.exitCode = 1;
-  } else {
-    console.log(`Repairing ${mismatches.length} checksum mismatch(es) in ${options.host}:${options.port}/${options.database}.`);
-    for (const item of mismatches) {
-      await pool.execute("UPDATE schema_migrations SET checksum = ? WHERE version = ?", [item.newChecksum, item.version]);
-      console.log(`Updated ${item.version}`);
-    }
-    console.log("Checksum metadata repaired. Run npm.cmd run migrate next.");
   }
 } catch (error) {
-  console.error("Migration checksum repair failed", error instanceof Error ? error.message : "unknown error");
+  console.error("Migration checksum diagnosis failed", typeof error?.code === "string" ? error.code : "unknown error");
   process.exitCode = 1;
 } finally {
   await pool.end();

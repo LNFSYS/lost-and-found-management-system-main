@@ -4,13 +4,15 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "tsx watch src/server.ts",
-    "start": "node dist/server.js",
+    "dev": "tsx watch src/main/server.ts",
+    "start": "node dist/main/server.js",
     "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\"",
     "build": "npm run clean && tsc -p tsconfig.json",
     "test": "tsx --import ./src/test/setup-env.ts --test src/**/*.test.ts",
-    "test:db-integration": "tsx --import ./src/test/setup-env.ts --test src/integration/database.integration.test.ts",
-    "migrate": "tsx src/migrations/run-migrations.ts"
+    "test:db-integration": "tsx --import ./src/test/setup-env.ts --test src/integration/*.integration.test.ts",
+    "migrate": "tsx src/migrations/run-migrations.ts",
+    "migrate:preflight": "tsx src/migrations/run-migration-preflight.ts",
+    "migrate:reconcile-claim": "tsx src/migrations/run-reconciliation.ts"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

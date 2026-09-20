@@ -1,0 +1,284 @@
+<?xml version="1.0" encoding="utf-8"?>
+<mxfile host="app.diagrams.net" modified="2026-09-09T09:00:00.000Z" agent="Codex" version="26.0.16" type="device">
+  <diagram id="lnfs-system-architecture" name="System Architecture Diagram">
+    <mxGraphModel dx="1600" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="900" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="sa-title" value="LNFS System Architecture Diagram" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=28;fontStyle=1;fontColor=#0B2545;" vertex="1" parent="1">
+          <mxGeometry x="50" y="25" width="1000" height="42" as="geometry" />
+        </mxCell>
+        <mxCell id="sa-subtitle" value="Node.js-only Clean Architecture modular monolith | React Web/PWA | MySQL | One backend write owner" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=13;fontColor=#52657A;" vertex="1" parent="1">
+          <mxGeometry x="52" y="68" width="1050" height="28" as="geometry" />
+        </mxCell>
+        <mxCell id="sa-actors" value="ACTORS" style="swimlane;html=1;startSize=40;horizontal=1;rounded=0;strokeWidth=2;strokeColor=#B9C7D8;fillColor=#F7F9FC;fontStyle=1;fontColor=#0B2545;" vertex="1" parent="1">
+          <mxGeometry x="50" y="125" width="190" height="620" as="geometry" />
+        </mxCell>
+        <mxCell id="sa-guest" value="&lt;b&gt;Guest&lt;/b&gt;&lt;br&gt;&lt;font color=&quot;#52657A&quot;&gt;Public board and configuration&lt;/font&gt;" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;strokeColor=#8AA9C8;fillColor=#EAF4FF;fontColor=#0B2545;align=left;spacingLeft=14;" vertex="1" parent="sa-actors">
+          <mxGeometry x="20" y="70" width="150" height="82" as="geometry" />
+        </mxCell>
+        <mxCell id="sa-user" value="&lt;b&gt;User&lt;/b&gt;&lt;br&gt;&lt;font color=&quot;#52657A&quot;&gt;Lost / Found / Match / Claim&lt;/font&gt;" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;strokeColor=#8AA9C8;fillColor=#EAF4FF;fontColor=#0B2545;align=left;spacingLeft=14;" vertex="1" parent="sa-actors">
+          <mxGeometry x="20" y="180" width="150" height="82" as="geometry" />
+        </mxCell>
+        <mxCell id="sa-staff" value="&lt;b&gt;Staff&lt;/b&gt;&lt;br&gt;&lt;font color=&quot;#52657A&quot;&gt;Custody and warehouse operations&lt;/font&gt;" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;strokeColor=#87B889;fillColor=#EEF8EF;fontColor=#0B2545;align=left;spacingLeft=14;" vertex="1" parent="sa-actors">
+          <mxGeometry x="20" y="290" width="150" height="82" as="geometry" />
+        </mxCell>
+        <mxCell id="sa-admin" value="&lt;b&gt;Admin&lt;/b&gt;&lt;br&gt;&lt;font color=&quot;#52657A&quot;&gt;Users, catalog, config and reports&lt;/font&gt;" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;strokeColor=#F1A778;fillColor=#FFF4EC;fontColor=#0B2545;align=left;spacingLeft=14;" vertex="1" parent="sa-actors">
+          <mxGeometry x="20" y="400" width="150" height="82" as="geometry" />
+        </mxCell>
+        <mxCell id="sa-client" value="CLIENT BOUNDARY | apps/web" style="swimlane;html=1;startSize=42;horizontal=1;rounded=0;strokeWidth=2;strokeColor=#2E79BD;fillColor=#F5FAFF;fontStyle=1;fontColor=#005BAB;" vertex="1" parent="1">
+          <mxGeometry x="290" y="125" width="350" height="620" as="geometry" />
+        </mxCell>
+        <mxCell id="sa-react" value="&lt;b&gt;React + TypeScript + Vite&lt;/b&gt;&lt;br&gt;&lt;font color=&quot;#52657A&quot;&gt;Responsive browser UI and installable PWA shell&lt;/font&gt;" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;strokeColor=#2E79BD;fillColor=#EAF4FF;fontColor=#0B2545;" vertex="1" parent="sa-client">
+          <mxGeometry x="25" y="65" width="300" height="75" as="geometry" />
+        </mxCell>
+        <mxCell id="sa-router" value="&lt;b&gt;Routes and App Shell&lt;/b&gt;&lt;br&gt;/home · /posts · /my-posts · /claims&lt;br&gt;/profile · /staff · /admin" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;strokeColor=#8AA9C8;fillColor=#FFFFFF;fontColor=#0B2545;align=left;spacingLeft=14;" vertex="1" parent="sa-client">
+          <mxGeometry x="25" y="165" width="300" height="105" as="geometry" />
+        </mxCell>
+        <mxCell id="sa-authguard" value="&lt;b&gt;Auth Context + Route Guard&lt;/b&gt;&lt;br&gt;&lt;font color=&quot;#52657A&quot;&gt;Access token, refresh cookie, USER / STUDENT / LECTURER / STAFF / ADMIN&lt;/font&gt;" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;strokeColor=#55A944;fillColor=#EEF8EF;fontColor=#0B2545;align=left;spacingLeft=14;" vertex="1" parent="sa-client">
+          <mxGeometry x="25" y="295" width="300" height="92" as="geometry" />
+        </mxCell>
+        <mxCell id="sa-features" value="&lt;b&gt;Feature Screens&lt;/b&gt;&lt;br&gt;&lt;font color=&quot;#52657A&quot;&gt;Auth · Story post form · Board · Matching&lt;br&gt;Private claim room · Notifications · Operations&lt;/font&gt;" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;strokeColor=#F36F21;fillColor=#FFF4EC;fontColor=#0B2545;align=left;spacingLeft=14;" vertex="1" parent="sa-client">
+          <mxGeometry x="25" y="412" width="300" height="92" as="geometry" />
+        </mxCell>
+        <mxCell id="sa-pwa" value="&lt;b&gt;PWA Runtime&lt;/b&gt;&lt;br&gt;&lt;font color=&quot;#52657A&quot;&gt;Manifest · service worker · offline shell · network state&lt;/font&gt;" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;strokeColor=#8AA9C8;fillColor=#FFFFFF;fontColor=#0B2545;align=left;spacingLeft=14;" vertex="1" parent="sa-client">
+          <mxGeometry x="25" y="529" width="300" height="66" as="geometry" />
+        </mxCell>
+        <mxCell id="sa-api" value="BACKEND | apps/api-node | main composition root" style="swimlane;html=1;startSize=42;horizontal=1;rounded=0;strokeWidth=3;strokeColor=#F36F21;fillColor=#FFFAF6;fontStyle=1;fontColor=#B84B08;" vertex="1" parent="1">
+          <mxGeometry x="700" y="105" width="520" height="660" as="geometry" />
+        </mxCell>
+        <mxCell id="sa-http" value="&lt;b&gt;interfaces/http -&gt; application -&gt; domain&lt;/b&gt;&lt;br&gt;Express, validation, auth and HTTP mapping at the edge&lt;br&gt;Use-case factories receive application-owned ports" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;strokeColor=#F36F21;fillColor=#FFF0E5;fontColor=#0B2545;" vertex="1" parent="sa-api">
+          <mxGeometry x="25" y="65" width="470" height="72" as="geometry" />
+        </mxCell>
+        <mxCell id="sa-domain-a" value="&lt;b&gt;Identity and Content&lt;/b&gt;&lt;br&gt;&lt;font color=&quot;#52657A&quot;&gt;Auth · profile · posts · media&lt;br&gt;catalog · handover points&lt;/font&gt;" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;strokeColor=#2E79BD;fillColor=#EAF4FF;fontColor=#0B2545;" vertex="1" parent="sa-api">
+          <mxGeometry x="25" y="165" width="222" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="sa-domain-b" value="&lt;b&gt;Recovery Workflow&lt;/b&gt;&lt;br&gt;&lt;font color=&quot;#52657A&quot;&gt;Hybrid matching · claims&lt;br&gt;private room/evidence · notifications&lt;/font&gt;" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;strokeColor=#55A944;fillColor=#EEF8EF;fontColor=#0B2545;" vertex="1" parent="sa-api">
+          <mxGeometry x="273" y="165" width="222" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="sa-domain-c" value="&lt;b&gt;Operations&lt;/b&gt;&lt;br&gt;&lt;font color=&quot;#52657A&quot;&gt;Warehouse · admin users/config&lt;br&gt;moderation/reporting · return feedback&lt;/font&gt;" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;strokeColor=#8AA9C8;fillColor=#FFFFFF;fontColor=#0B2545;" vertex="1" parent="sa-api">
+          <mxGeometry x="25" y="290" width="222" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="sa-domain-d" value="&lt;b&gt;AI Decision Support&lt;/b&gt;&lt;br&gt;&lt;font color=&quot;#52657A&quot;&gt;Gemini-assisted editable draft&lt;br&gt;Explainable rule-v2 matching&lt;/font&gt;" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;strokeColor=#C39A2E;fillColor=#FFF9E8;fontColor=#0B2545;" vertex="1" parent="sa-api">
+          <mxGeometry x="273" y="290" width="222" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="sa-dataaccess" value="&lt;b&gt;Injected infrastructure adapters&lt;/b&gt;&lt;br&gt;MySQL repositories + opaque transaction context&lt;br&gt;Same connection, locks, rollback and private media storage" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;strokeColor=#7E8FA3;fillColor=#F2F5F8;fontColor=#0B2545;" vertex="1" parent="sa-api">
+          <mxGeometry x="25" y="420" width="470" height="78" as="geometry" />
+        </mxCell>
+        <mxCell id="sa-migrations" value="&lt;b&gt;Node.js migration owner&lt;/b&gt;&lt;br&gt;Unchanged SQL IDs/content/checksums&lt;br&gt;Ledger, attempt log and named lock" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;strokeColor=#7E8FA3;fillColor=#F2F5F8;fontColor=#0B2545;" vertex="1" parent="sa-api">
+          <mxGeometry x="25" y="525" width="470" height="68" as="geometry" />
+        </mxCell>
+        <mxCell id="sa-resources" value="DATA AND PROVIDERS" style="swimlane;html=1;startSize=40;horizontal=1;rounded=0;strokeWidth=2;strokeColor=#B9C7D8;fillColor=#F7F9FC;fontStyle=1;fontColor=#0B2545;" vertex="1" parent="1">
+          <mxGeometry x="1280" y="125" width="270" height="620" as="geometry" />
+        </mxCell>
+        <mxCell id="sa-mysql" value="&lt;b&gt;Aiven MySQL 8&lt;/b&gt;&lt;br&gt;&lt;font color=&quot;#52657A&quot;&gt;TLS · transactional business data&lt;/font&gt;" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;strokeColor=#2E79BD;fillColor=#EAF4FF;fontColor=#0B2545;" vertex="1" parent="sa-resources">
+          <mxGeometry x="25" y="65" width="220" height="85" as="geometry" />
+        </mxCell>
+        <mxCell id="sa-gmail" value="&lt;b&gt;Gmail SMTP&lt;/b&gt;&lt;br&gt;&lt;font color=&quot;#52657A&quot;&gt;OTP and password reset email&lt;/font&gt;" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;strokeColor=#7E8FA3;fillColor=#FFFFFF;fontColor=#0B2545;" vertex="1" parent="sa-resources">
+          <mxGeometry x="25" y="180" width="220" height="72" as="geometry" />
+        </mxCell>
+        <mxCell id="sa-gemini" value="&lt;b&gt;Gemini API&lt;/b&gt;&lt;br&gt;&lt;font color=&quot;#52657A&quot;&gt;Optional image/OCR assistance&lt;/font&gt;" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;strokeColor=#C39A2E;fillColor=#FFF9E8;fontColor=#0B2545;" vertex="1" parent="sa-resources">
+          <mxGeometry x="25" y="278" width="220" height="72" as="geometry" />
+        </mxCell>
+        <mxCell id="sa-cloudinary" value="&lt;b&gt;Cloudinary&lt;/b&gt;&lt;br&gt;&lt;font color=&quot;#52657A&quot;&gt;Profile avatar storage&lt;/font&gt;" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;strokeColor=#55A944;fillColor=#EEF8EF;fontColor=#0B2545;" vertex="1" parent="sa-resources">
+          <mxGeometry x="25" y="376" width="220" height="72" as="geometry" />
+        </mxCell>
+        <mxCell id="sa-localstorage" value="&lt;b&gt;Protected Local Files&lt;/b&gt;&lt;br&gt;&lt;font color=&quot;#8A4B20&quot;&gt;Post and claim evidence&lt;br&gt;Current deployment limitation&lt;/font&gt;" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;strokeColor=#F36F21;dashed=1;fillColor=#FFF4EC;fontColor=#0B2545;" vertex="1" parent="sa-resources">
+          <mxGeometry x="25" y="474" width="220" height="88" as="geometry" />
+        </mxCell>
+        <mxCell id="sa-edge-actor-client" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2;strokeColor=#2E79BD;fontColor=#52657A;" edge="1" parent="1" source="sa-actors" target="sa-client">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="sa-edge-client-api" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=3;strokeColor=#F36F21;fontColor=#0B2545;labelBackgroundColor=#FFFFFF;" edge="1" parent="1" source="sa-client" target="sa-api">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="sa-edge-api-data" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2;strokeColor=#55A944;fontColor=#52657A;labelBackgroundColor=#FFFFFF;" edge="1" parent="1" source="sa-api" target="sa-resources">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="sa-decision" value="&lt;b&gt;Architecture decision&lt;/b&gt; · Node.js owns every API, business write and migration. Java/Spring Boot is removed from the target architecture. AI/OCR remains decision support; human verification is required." style="rounded=1;arcSize=6;whiteSpace=wrap;html=1;strokeColor=#55A944;fillColor=#EEF8EF;fontColor=#0B2545;align=left;spacingLeft=16;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="50" y="790" width="1500" height="62" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+  <diagram id="lnfs-fe-packages" name="FE Package Diagram">
+    <mxGraphModel dx="1600" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="900" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="fe-title" value="LNFS Frontend Package Diagram" style="text;html=1;strokeColor=none;fillColor=none;align=left;fontSize=28;fontStyle=1;fontColor=#0B2545;" vertex="1" parent="1">
+          <mxGeometry x="50" y="25" width="1000" height="42" as="geometry" />
+        </mxCell>
+        <mxCell id="fe-subtitle" value="apps/web/src | React 18 + TypeScript + React Router + Vite/PWA" style="text;html=1;strokeColor=none;fillColor=none;align=left;fontSize=13;fontColor=#52657A;" vertex="1" parent="1">
+          <mxGeometry x="52" y="68" width="900" height="28" as="geometry" />
+        </mxCell>
+        <mxCell id="fe-root" value="apps/web/src" style="swimlane;html=1;startSize=42;horizontal=1;rounded=0;strokeWidth=3;strokeColor=#005BAB;fillColor=#F8FBFF;fontStyle=1;fontColor=#005BAB;" vertex="1" parent="1">
+          <mxGeometry x="50" y="110" width="1320" height="700" as="geometry" />
+        </mxCell>
+        <mxCell id="fe-main" value="&lt;b&gt;main.tsx&lt;/b&gt;&lt;br&gt;&lt;font color=&quot;#52657A&quot;&gt;Application entry&lt;br&gt;BrowserRouter + route tree&lt;br&gt;AuthProvider + lazy HomePage&lt;/font&gt;" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;strokeWidth=2;strokeColor=#F36F21;fillColor=#FFF4EC;fontColor=#0B2545;align=left;spacingLeft=14;" vertex="1" parent="fe-root">
+          <mxGeometry x="35" y="65" width="245" height="115" as="geometry" />
+        </mxCell>
+        <mxCell id="fe-pages" value="&lt;b&gt;pages/&lt;/b&gt;&lt;br&gt;&lt;br&gt;&lt;b&gt;Public/Auth&lt;/b&gt;&lt;br&gt;login · register · forgot/reset password&lt;br&gt;&lt;br&gt;&lt;b&gt;User&lt;/b&gt;&lt;br&gt;home · posts · my posts · post detail&lt;br&gt;post matches · claims · profile&lt;br&gt;&lt;br&gt;&lt;b&gt;Operations&lt;/b&gt;&lt;br&gt;staff · admin" style="rounded=1;arcSize=6;whiteSpace=wrap;html=1;strokeColor=#2E79BD;fillColor=#EAF4FF;fontColor=#0B2545;align=left;verticalAlign=top;spacingTop=14;spacingLeft=14;fontSize=12;" vertex="1" parent="fe-root">
+          <mxGeometry x="35" y="225" width="300" height="300" as="geometry" />
+        </mxCell>
+        <mxCell id="fe-components" value="&lt;b&gt;components/&lt;/b&gt;&lt;br&gt;&lt;br&gt;AppLayout&lt;br&gt;RouteGuard&lt;br&gt;NotificationCenter&lt;br&gt;StoryPostForm&lt;br&gt;&lt;br&gt;&lt;font color=&quot;#52657A&quot;&gt;Shared navigation, authorization boundary and reusable feature UI&lt;/font&gt;" style="rounded=1;arcSize=6;whiteSpace=wrap;html=1;strokeColor=#55A944;fillColor=#EEF8EF;fontColor=#0B2545;align=left;verticalAlign=top;spacingTop=14;spacingLeft=14;" vertex="1" parent="fe-root">
+          <mxGeometry x="390" y="225" width="255" height="200" as="geometry" />
+        </mxCell>
+        <mxCell id="fe-context" value="&lt;b&gt;context/&lt;/b&gt;&lt;br&gt;auth-context.tsx&lt;br&gt;&lt;font color=&quot;#52657A&quot;&gt;Session bootstrap, refresh, user state and logout&lt;/font&gt;" style="rounded=1;arcSize=6;whiteSpace=wrap;html=1;strokeColor=#55A944;fillColor=#EEF8EF;fontColor=#0B2545;align=left;spacingLeft=14;" vertex="1" parent="fe-root">
+          <mxGeometry x="390" y="65" width="255" height="115" as="geometry" />
+        </mxCell>
+        <mxCell id="fe-service" value="&lt;b&gt;services/&lt;/b&gt;&lt;br&gt;api.ts&lt;br&gt;&lt;font color=&quot;#52657A&quot;&gt;Typed REST contracts, credentials, refresh retry and feature API calls&lt;/font&gt;" style="rounded=1;arcSize=6;whiteSpace=wrap;html=1;strokeColor=#F36F21;fillColor=#FFF4EC;fontColor=#0B2545;align=left;spacingLeft=14;" vertex="1" parent="fe-root">
+          <mxGeometry x="720" y="65" width="270" height="125" as="geometry" />
+        </mxCell>
+        <mxCell id="fe-hooks" value="&lt;b&gt;hooks/&lt;/b&gt;&lt;br&gt;use-network-status&lt;br&gt;use-stale-data-notice&lt;br&gt;&lt;font color=&quot;#52657A&quot;&gt;Network awareness and stale-content feedback&lt;/font&gt;" style="rounded=1;arcSize=6;whiteSpace=wrap;html=1;strokeColor=#8AA9C8;fillColor=#FFFFFF;fontColor=#0B2545;align=left;spacingLeft=14;" vertex="1" parent="fe-root">
+          <mxGeometry x="720" y="235" width="270" height="135" as="geometry" />
+        </mxCell>
+        <mxCell id="fe-pwa" value="&lt;b&gt;pwa.ts + public PWA assets&lt;/b&gt;&lt;br&gt;&lt;font color=&quot;#52657A&quot;&gt;Service-worker registration&lt;br&gt;manifest · offline shell · icons&lt;/font&gt;" style="rounded=1;arcSize=6;whiteSpace=wrap;html=1;strokeColor=#C39A2E;fillColor=#FFF9E8;fontColor=#0B2545;align=left;spacingLeft=14;" vertex="1" parent="fe-root">
+          <mxGeometry x="1060" y="65" width="225" height="125" as="geometry" />
+        </mxCell>
+        <mxCell id="fe-style" value="&lt;b&gt;styles.css + assets/&lt;/b&gt;&lt;br&gt;&lt;font color=&quot;#52657A&quot;&gt;Responsive visual system and image assets&lt;/font&gt;" style="rounded=1;arcSize=6;whiteSpace=wrap;html=1;strokeColor=#8AA9C8;fillColor=#FFFFFF;fontColor=#0B2545;align=left;spacingLeft=14;" vertex="1" parent="fe-root">
+          <mxGeometry x="1060" y="235" width="225" height="105" as="geometry" />
+        </mxCell>
+        <mxCell id="fe-browser" value="&lt;b&gt;Browser Platform&lt;/b&gt;&lt;br&gt;&lt;font color=&quot;#52657A&quot;&gt;DOM · Fetch · Storage · Service Worker · Network events&lt;/font&gt;" style="rounded=1;arcSize=6;whiteSpace=wrap;html=1;strokeColor=#7E8FA3;fillColor=#F2F5F8;fontColor=#0B2545;" vertex="1" parent="fe-root">
+          <mxGeometry x="720" y="445" width="565" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="fe-contract-note" value="&lt;b&gt;Dependency rule&lt;/b&gt;&lt;br&gt;Pages and shared components consume typed API functions. Auth state is centralized in AuthContext. Role protection is enforced in RouteGuard and must still be enforced by the backend." style="rounded=1;arcSize=6;whiteSpace=wrap;html=1;strokeColor=#B9C7D8;fillColor=#F7F9FC;fontColor=#0B2545;align=left;spacingLeft=14;" vertex="1" parent="fe-root">
+          <mxGeometry x="390" y="565" width="895" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="fe-api-external" value="&lt;b&gt;Node.js REST API&lt;/b&gt;&lt;br&gt;http://host/api/*" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;strokeWidth=3;strokeColor=#F36F21;fillColor=#FFF0E5;fontColor=#0B2545;" vertex="1" parent="1">
+          <mxGeometry x="1410" y="285" width="145" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="fe-e-main-pages" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#2E79BD;" edge="1" parent="1" source="fe-main" target="fe-pages">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="fe-e-main-components" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#2E79BD;exitX=0.7;exitY=1;entryX=0.3;entryY=0;" edge="1" parent="1" source="fe-main" target="fe-components">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="257" y="315" />
+              <mxPoint x="516" y="315" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="fe-e-main-context" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#2E79BD;" edge="1" parent="1" source="fe-main" target="fe-context">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="fe-e-main-pwa" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#C39A2E;exitX=0.5;exitY=0;entryX=0.5;entryY=0;" edge="1" parent="1" source="fe-main" target="fe-pwa">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="207" y="160" />
+              <mxPoint x="1222" y="160" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="fe-e-pages-components" value="uses" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=open;endFill=0;strokeColor=#55A944;fontColor=#52657A;exitX=1;exitY=0.3;entryX=0;entryY=0.45;" edge="1" parent="1" source="fe-pages" target="fe-components">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="fe-e-pages-service" value="calls" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=open;endFill=0;strokeColor=#F36F21;fontColor=#52657A;exitX=0.5;exitY=1;entryX=0.5;entryY=1;" edge="1" parent="1" source="fe-pages" target="fe-service">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="235" y="650" />
+              <mxPoint x="720" y="650" />
+              <mxPoint x="720" y="315" />
+              <mxPoint x="905" y="315" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="fe-e-pages-hooks" value="uses" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=open;endFill=0;strokeColor=#8AA9C8;fontColor=#52657A;exitX=1;exitY=0.75;entryX=0;entryY=0.5;" edge="1" parent="1" source="fe-pages" target="fe-hooks">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="710" y="560" />
+              <mxPoint x="710" y="412" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="fe-e-context-service" value="auth API" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=open;endFill=0;strokeColor=#F36F21;fontColor=#52657A;" edge="1" parent="1" source="fe-context" target="fe-service">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="fe-e-components-context" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=open;endFill=0;strokeColor=#55A944;" edge="1" parent="1" source="fe-components" target="fe-context">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="fe-e-hooks-browser" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=open;endFill=0;strokeColor=#7E8FA3;" edge="1" parent="1" source="fe-hooks" target="fe-browser">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="fe-e-pwa-browser" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=open;endFill=0;strokeColor=#C39A2E;exitX=1;exitY=0.8;entryX=0.95;entryY=0;" edge="1" parent="1" source="fe-pwa" target="fe-browser">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1350" y="275" />
+              <mxPoint x="1350" y="535" />
+              <mxPoint x="1307" y="535" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="fe-e-service-api" value="HTTPS REST/JSON" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeWidth=3;strokeColor=#F36F21;fontColor=#0B2545;labelBackgroundColor=#FFFFFF;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="fe-service" target="fe-api-external">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1075" y="237" />
+              <mxPoint x="1075" y="315" />
+              <mxPoint x="1385" y="315" />
+              <mxPoint x="1385" y="335" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+  <diagram id="lnfs-be-packages" name="BE Package Diagram">
+    <mxGraphModel fold="1" pageWidth="1800" dx="1800" tooltips="1" guides="1" connect="1" grid="1" shadow="0" math="0" pageHeight="1250" dy="1250" gridSize="10" pageScale="1" page="1" arrows="1">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell vertex="1" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontColor=#17324D;fontSize=30;fontStyle=1;" id="be-title" value="LNFS Backend Package Diagram">
+          <mxGeometry y="30" width="1620" as="geometry" height="50" x="60" />
+        </mxCell>
+        <mxCell vertex="1" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontColor=#17324D;fontSize=16;" id="be-subtitle" value="Clean Architecture modular monolith | apps/api-node/src | No Java backend | No business or API changes">
+          <mxGeometry y="85" width="1620" as="geometry" height="30" x="60" />
+        </mxCell>
+        <mxCell vertex="1" parent="1" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacing=20;fontSize=15;fontColor=#17324D;strokeWidth=2;strokeColor=#ED773B;fillColor=#FFF3EC;" id="be-main" value="&lt;b&gt;main/ - Composition root&lt;/b&gt;&lt;br&gt;&lt;br&gt;server / app / http: lifecycle, Express and route assembly &amp;nbsp;&amp;nbsp; | &amp;nbsp;&amp;nbsp; database / persistence: one pool and repository factories&lt;br&gt;services / runtime: inject repository, transaction, media, email, AI, security and logger adapters into use cases">
+          <mxGeometry y="140" width="1620" as="geometry" height="125" x="60" />
+        </mxCell>
+        <mxCell vertex="1" parent="1" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacing=20;fontSize=15;fontColor=#17324D;strokeWidth=2;strokeColor=#7C99B4;fillColor=#F5F8FB;" id="be-modules" value="&lt;b&gt;modules/&lt;/b&gt;&lt;br&gt;&lt;br&gt;auth&lt;br&gt;posts&lt;br&gt;matching&lt;br&gt;claims&lt;br&gt;notifications&lt;br&gt;warehouse&lt;br&gt;returns&lt;br&gt;admin&lt;br&gt;system-config&lt;br&gt;&lt;br&gt;&lt;b&gt;Public cross-module contracts&lt;/b&gt;&lt;br&gt;application/index.ts&lt;br&gt;&lt;br&gt;Only the contracts needed by other modules are exported.&lt;br&gt;&lt;br&gt;No deep import into another module's implementation.">
+          <mxGeometry y="305" width="275" as="geometry" height="790" x="60" />
+        </mxCell>
+        <mxCell vertex="1" parent="1" style="swimlane;html=1;startSize=35;fontSize=15;fontStyle=1;strokeColor=#B8C8D8;fillColor=#FFFFFF;rounded=0;" id="be-feature" value="PER FEATURE MODULE - dependency direction points inward">
+          <mxGeometry y="305" width="1310" as="geometry" height="395" x="370" />
+        </mxCell>
+        <mxCell vertex="1" parent="1" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacing=20;fontSize=15;fontColor=#17324D;strokeWidth=2;strokeColor=#2E79BD;fillColor=#EAF4FF;" id="be-interfaces" value="&lt;b&gt;interfaces/http/&lt;/b&gt;&lt;br&gt;&lt;br&gt;Express router factories&lt;br&gt;Controllers&lt;br&gt;Zod request validation&lt;br&gt;Upload/rate limits&lt;br&gt;&lt;br&gt;Parse, call, map response">
+          <mxGeometry y="390" width="270" as="geometry" height="235" x="395" />
+        </mxCell>
+        <mxCell vertex="1" parent="1" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacing=20;fontSize=15;fontColor=#17324D;strokeWidth=2;strokeColor=#55A944;fillColor=#EEF8EF;" id="be-application" value="&lt;b&gt;application/&lt;/b&gt;&lt;br&gt;&lt;br&gt;create*UseCases(dependencies)&lt;br&gt;Plain TypeScript input/output DTOs&lt;br&gt;Repository and provider ports&lt;br&gt;&lt;br&gt;Authorization and workflow orchestration&lt;br&gt;TransactionRunner + opaque context&lt;br&gt;Public application/index.ts contracts">
+          <mxGeometry y="365" width="420" as="geometry" height="290" x="770" />
+        </mxCell>
+        <mxCell vertex="1" parent="1" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacing=20;fontSize=15;fontColor=#17324D;strokeWidth=2;strokeColor=#BA922A;fillColor=#FFF9E8;" id="be-domain" value="&lt;b&gt;domain/&lt;/b&gt;&lt;br&gt;&lt;br&gt;Matching score and explanations&lt;br&gt;Post state/access rules&lt;br&gt;Claim room consent&lt;br&gt;Warehouse retention/transitions&lt;br&gt;Auth session and media rules">
+          <mxGeometry y="390" width="345" as="geometry" height="235" x="1310" />
+        </mxCell>
+        <mxCell vertex="1" parent="1" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacing=20;fontSize=15;fontColor=#17324D;strokeWidth=2;strokeColor=#7C99B4;fillColor=#F0F4F8;" id="be-infrastructure" value="&lt;b&gt;infrastructure/&lt;/b&gt;&lt;br&gt;&lt;br&gt;MySQL repository implementations&lt;br&gt;SMTP, Gemini, Cloudinary adapters&lt;br&gt;Filesystem + SQL transaction adapter&lt;br&gt;&lt;br&gt;Implements application-owned ports">
+          <mxGeometry y="790" width="420" as="geometry" height="175" x="770" />
+        </mxCell>
+        <mxCell vertex="1" parent="1" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacing=20;fontSize=15;fontColor=#17324D;strokeWidth=2;strokeColor=#7C99B4;fillColor=#F5F8FB;" id="be-shared" value="&lt;b&gt;shared/&lt;/b&gt;&lt;br&gt;&lt;br&gt;domain: auth vocabulary, errors, media/text&lt;br&gt;application: transaction, media, logger ports&lt;br&gt;infrastructure: config, SQL, files, security&lt;br&gt;interfaces/http: auth, cookies, error mapping&lt;br&gt;&lt;br&gt;No shared -&gt; business module dependency">
+          <mxGeometry y="765" width="370" as="geometry" height="240" x="1310" />
+        </mxCell>
+        <mxCell vertex="1" parent="1" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacing=20;fontSize=15;fontColor=#17324D;strokeWidth=2;strokeColor=#BA922A;fillColor=#FFF9E8;" id="be-migrations" value="&lt;b&gt;migrations/&lt;/b&gt;&lt;br&gt;&lt;br&gt;Existing numbered SQL&lt;br&gt;Checksum ledger + attempt log&lt;br&gt;Named migration lock&lt;br&gt;&lt;br&gt;Node-only schema owner&lt;br&gt;SQL files unchanged">
+          <mxGeometry y="790" width="270" as="geometry" height="205" x="395" />
+        </mxCell>
+        <mxCell vertex="1" parent="1" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacing=20;fontSize=15;fontColor=#17324D;strokeWidth=2;spacing=12;strokeColor=#ED773B;fillColor=#FFF3EC;" id="be-resources" value="&lt;b&gt;Runtime resources&lt;/b&gt;&lt;br&gt;MySQL / SMTP / Gemini / Cloudinary&lt;br&gt;Protected local media files">
+          <mxGeometry y="1035" width="420" as="geometry" height="75" x="770" />
+        </mxCell>
+        <mxCell vertex="1" parent="1" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacing=20;fontSize=15;fontColor=#17324D;strokeWidth=2;spacing=14;fontSize=14;strokeColor=#55A944;fillColor=#EEF8EF;" id="be-rules" value="&lt;b&gt;Enforced rules:&lt;/b&gt; core has no Express, mysql2, SDK, environment or direct console dependency. No circular dependencies, including types.&lt;br&gt;&lt;b&gt;Verification:&lt;/b&gt; npm run check:architecture; fake-port unit tests; isolated MySQL/HTTP regression; unchanged frontend browser tests.&lt;br&gt;Solid arrows: source dependency. Dashed arrows: composition or runtime I/O. No new product features are implemented by this refactor.">
+          <mxGeometry y="1140" width="1620" as="geometry" height="80" x="60" />
+        </mxCell>
+        <mxCell id="be-http-app" source="be-interfaces" value="invokes" edge="1" parent="1" target="be-application" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=0;endArrow=block;endFill=1;strokeWidth=2;fontSize=13;fontColor=#334155;labelBackgroundColor=#FFFFFF;strokeColor=#2E79BD;exitX=1;exitY=0.5;entryX=0;entryY=0.5;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="be-app-domain" source="be-application" value="uses rules" edge="1" parent="1" target="be-domain" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=0;endArrow=block;endFill=1;strokeWidth=2;fontSize=13;fontColor=#334155;labelBackgroundColor=#FFFFFF;strokeColor=#55A944;exitX=1;exitY=0.5;entryX=0;entryY=0.5;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="be-infra-app" source="be-infrastructure" value="implements ports" edge="1" parent="1" target="be-application" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=0;endArrow=block;endFill=1;strokeWidth=2;fontSize=13;fontColor=#334155;labelBackgroundColor=#FFFFFF;strokeColor=#7C99B4;exitX=0.5;exitY=0;entryX=0.5;entryY=1;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="be-infra-resource" source="be-infrastructure" value="runtime I/O" edge="1" parent="1" target="be-resources" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=0;endArrow=block;endFill=1;strokeWidth=2;fontSize=13;fontColor=#334155;labelBackgroundColor=#FFFFFF;dashed=1;strokeColor=#ED773B;exitX=0.5;exitY=1;entryX=0.5;entryY=0;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

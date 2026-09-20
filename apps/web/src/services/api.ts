@@ -403,6 +403,8 @@ export interface ClaimRecord {
   finderId: string;
   status: ClaimStatus;
   finderDecision: FinderDecision;
+  conversationDecision: "PENDING" | "OPEN_CONVERSATION" | "DECLINED";
+  appointmentEligible: boolean;
   description: string | null;
   approximateLostAt: string | null;
   approximateLocation: string | null;
@@ -420,6 +422,19 @@ export interface ClaimRecord {
   participants?: ClaimParticipant[];
   room?: { id: string } | null;
   canSend?: boolean;
+  item?: {
+    postId: string;
+    title: string;
+    categoryName: string | null;
+    locationLabel: string | null;
+    imageUrl: string | null;
+  } | null;
+  conversation?: {
+    lastMessage: string | null;
+    lastMessageAt: string | null;
+    unreadCount: number;
+    custodyEscalated?: boolean;
+  };
 }
 export interface ClaimListResponse { items: ClaimRecord[]; total: number; page: number; pageSize: number; hasMore: boolean; }
 export interface ClaimRoomSummary { id: string; claimId: string; status: ClaimStatus; finder: ClaimRecord["finder"]; claimant: ClaimRecord["claimant"]; posts: ClaimRecord["posts"]; updatedAt: string; }
@@ -453,6 +468,56 @@ export interface ClaimEvidence {
   url: string;
 }
 export interface ClaimEvidenceResponse { items: ClaimEvidence[]; }
+export interface VerificationTemplatePrompt {
+  key: string;
+  prompt: string;
+  questionType: "TEXT" | "MASKED_SERIAL" | "MULTIPLE_CHOICE" | "VISUAL_DETAIL";
+  privacyLevel: "PRIVATE" | "HIGHLY_PRIVATE";
+}
+export interface VerificationTemplatesResponse {
+  category: string;
+  template: {
+    id: string;
+    version: number;
+    minimumAnswers: number;
+    prompts: VerificationTemplatePrompt[];
+    customFollowUpAllowed: boolean;
+  };
+}
+export interface ClaimVerificationState {
+  claimId: string;
+  status: ClaimStatus;
+  appointmentEligible: boolean;
+  participantRole: "CLAIMANT" | "FINDER";
+  roomEscalation: { escalatedAt: string; escalatedBy: string | null; reason: string | null } | null;
+  policy: {
+    templateId: string;
+    templateVersion: number;
+    minimumAnswers: number;
+    answeredCount: number;
+    matchedCount?: number;
+    readyForDecision: boolean;
+  };
+  questions: Array<{
+    id: string;
+    prompt: string;
+    questionType: VerificationTemplatePrompt["questionType"];
+    privacyLevel: VerificationTemplatePrompt["privacyLevel"];
+    status: "DRAFT" | "APPROVED" | "DISABLED";
+    assignedAt: string;
+    template: { templateId: string; templateVersion: number; promptKey: string } | null;
+    answer: { answered: true; attemptCount: number; answeredAt: string; isMatch?: boolean } | null;
+  }>;
+  history: Array<{
+    id: string;
+    actorId: string;
+    action: string;
+    fromStatus: ClaimStatus | null;
+    toStatus: ClaimStatus | null;
+    metadata: Record<string, unknown> | null;
+    createdAt: string;
+  }>;
+}
 export type NotificationType = "CLAIM_REQUEST_RECEIVED" | "CLAIM_ACCEPTED";
 export interface AppNotification {
   id: string;
@@ -564,6 +629,23 @@ function queryString(filters: object) {
   return value ? `?${value}` : "";
 }
 
+/** A conversation is persisted only after at least one message exists. */
+async function findConversationByPost(postId: string) {
+  let page = 1;
+  do {
+    const result = await raw<ClaimListResponse>(`/claims?page=${page}&pageSize=50`);
+    const match = result.items.find((claim) => {
+      const samePost = claim.item?.postId === postId || claim.posts.found.id === postId || claim.posts.lost?.id === postId;
+      const hasMessage = Boolean(claim.conversation?.lastMessageAt || claim.conversation?.lastMessage);
+      return samePost && hasMessage;
+    });
+    if (match) return match;
+    if (!result.hasMore) return null;
+    page += 1;
+  } while (page <= 100);
+  return null;
+}
+
 async function mediaBlob(path: string, retry = true, errorMessage = "Khong the tai anh"): Promise<Blob> {
   const headers = new Headers();
   if (accessToken) headers.set("authorization", `Bearer ${accessToken}`);
@@ -629,13 +711,16 @@ export const api = {
     const suffix = params.toString() ? `?${params.toString()}` : "";
     return raw<ClaimListResponse>(`/claims${suffix}`);
   },
+  findConversationByPost,
   getClaim: (claimId: string, signal?: AbortSignal) => raw<ClaimRecord>(`/claims/${claimId}`, { signal }),
-  createClaim: (payload: { lostPostId: string; foundPostId: string; description?: string; requestKey?: string }) => {
+  createClaim: (payload: ({ postId: string } | { lostPostId: string; foundPostId: string }) & { description?: string; requestKey?: string }) => {
     const requestKey = payload.requestKey ?? crypto.randomUUID();
     return raw<ClaimRecord & { idempotent: boolean }>("/claims", { method: "POST", headers: { "Idempotency-Key": requestKey }, body: JSON.stringify({ ...payload, requestKey: undefined }) });
   },
-  decideClaim: (claimId: string, decision: "ACCEPT" | "DECLINE" | "REQUEST_MORE_INFO", note?: string) => raw<ClaimRecord>(`/claims/${claimId}/decision`, { method: "POST", body: JSON.stringify({ decision, note }) }),
-  withdrawClaim: (claimId: string) => raw<ClaimRecord>(`/claims/${claimId}/withdraw`, { method: "POST" }),
+  createDirectMessage: (postId: string, content: string, clientMessageId: string = crypto.randomUUID()) =>
+    raw<{ claim: ClaimRecord; message: ClaimMessage }>("/claims/direct-messages", { method: "POST", headers: { "Idempotency-Key": clientMessageId }, body: JSON.stringify({ postId, content }) }),
+  decideClaim: (claimId: string, decision: "ACCEPT" | "DECLINE" | "REQUEST_MORE_INFO", note: string, idempotencyKey: string = crypto.randomUUID()) => raw<ClaimRecord>(`/claims/${claimId}/decision`, { method: "POST", headers: { "Idempotency-Key": idempotencyKey }, body: JSON.stringify({ decision, note }) }),
+  withdrawClaim: (claimId: string, idempotencyKey: string = crypto.randomUUID()) => raw<ClaimRecord>(`/claims/${claimId}/withdraw`, { method: "POST", headers: { "Idempotency-Key": idempotencyKey } }),
   listClaimRooms: () => raw<ClaimRoomsResponse>("/claims/rooms"),
   getClaimRoom: (claimId: string) => raw<{ id: string; claimId: string; status: ClaimStatus; participantRole: "CLAIMANT" | "FINDER"; createdAt: string }>(`/claims/${claimId}/room`),
   listClaimMessages: (claimId: string, query?: { before?: string; beforeId?: string; limit?: number }, signal?: AbortSignal) => {
@@ -655,6 +740,28 @@ export const api = {
     return raw<ClaimEvidence>(`/claims/${claimId}/evidence`, { method: "POST", body: form });
   },
   getClaimEvidenceMedia: (path: string) => mediaBlob(path),
+  getClaimVerificationTemplates: (claimId: string, signal?: AbortSignal) => raw<VerificationTemplatesResponse>(`/claims/${claimId}/verification/templates`, { signal }),
+  getClaimVerification: (claimId: string, signal?: AbortSignal) => raw<ClaimVerificationState>(`/claims/${claimId}/verification`, { signal }),
+  sendClaimVerificationQuestion: (claimId: string, payload: {
+    templateId: string;
+    templateVersion: number;
+    promptKey: string;
+    prompt: string;
+    idempotencyKey: string;
+  }) => raw<ClaimVerificationState>(`/claims/${claimId}/verification/questions`, {
+    method: "POST", headers: { "Idempotency-Key": payload.idempotencyKey }, body: JSON.stringify({ ...payload, idempotencyKey: undefined })
+  }),
+  answerClaimVerificationQuestion: (claimId: string, questionId: string, answer: string, idempotencyKey: string) => raw<ClaimVerificationState>(`/claims/${claimId}/verification/questions/${questionId}/answer`, {
+    method: "POST", headers: { "Idempotency-Key": idempotencyKey }, body: JSON.stringify({ answer })
+  }),
+  decideClaimVerification: (claimId: string, payload: {
+    decision: "VERIFY_FOR_MEETUP" | "REQUEST_MORE_INFO" | "DECLINE" | "ESCALATE_TO_CUSTODY";
+    reason: string;
+    correctsEventId?: string;
+    idempotencyKey: string;
+  }) => raw<{ claim: ClaimRecord; verification: ClaimVerificationState; message: ClaimMessage | null }>(`/claims/${claimId}/verification/decision`, {
+    method: "POST", headers: { "Idempotency-Key": payload.idempotencyKey }, body: JSON.stringify({ ...payload, idempotencyKey: undefined })
+  }),
   listNotifications: (limit = 20) => raw<NotificationListResponse>(`/notifications?limit=${Math.min(50, Math.max(1, Math.trunc(limit)))}`),
   markNotificationRead: (notificationId: string) => raw<{ read: boolean }>(`/notifications/${notificationId}/read`, { method: "POST" }),
   markAllNotificationsRead: () => raw<{ read: boolean; count: number }>("/notifications/read-all", { method: "POST" }),

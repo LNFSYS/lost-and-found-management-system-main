@@ -11,8 +11,6 @@ test-results/
 *.tsbuildinfo
 *.iml
 .idea/
-target/
-*.jar
 certs/*.pem
 certs/*.crt
 certs/*.key

@@ -1,6 +1,6 @@
-import { ArrowLeft, ArrowRight, CalendarClock, Files, ImageOff, LockKeyhole, MapPin, Plus, ScanSearch, Search, SlidersHorizontal } from "lucide-react";
+import { ArrowLeft, ArrowRight, CalendarClock, Files, ImageOff, LockKeyhole, MapPin, MessageCircle, Plus, ScanSearch, Search, SlidersHorizontal } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useNetworkStatus } from "../hooks/use-network-status";
 import { useStaleDataNotice } from "../hooks/use-stale-data-notice";
 import { api, type PostCatalog, type PostListFilters, type PostListResponse, type PostSummary } from "../services/api";
@@ -57,6 +57,23 @@ export function PostImage({ post, detail = false }: { post: PostSummary; detail?
 }
 
 export function PostCard({ post }: { post: PostSummary }) {
+  const navigate = useNavigate();
+  const canClaim = !post.canEdit && ["OPEN", "MATCHED"].includes(post.status);
+
+  async function claimAndChat() {
+    try {
+      const existing = await api.findConversationByPost(post.id);
+      if (existing) {
+        navigate(`/claims/${existing.id}`);
+        return;
+      }
+    } catch {
+      // Fall back to the compose route; the first message will still be
+      // persisted atomically if the lookup was temporarily unavailable.
+    }
+    navigate(`/claims?composePostId=${encodeURIComponent(post.id)}`);
+  }
+
   return <article className="post-card">
     <Link className="post-card__image-link" to={`/posts/${post.id}`} aria-label={`Xem chi tiết ${post.title}`}><PostImage post={post} /></Link>
     <div className="post-card__body">
@@ -71,6 +88,7 @@ export function PostCard({ post }: { post: PostSummary }) {
         <span><strong>{post.matchSummary.suggestionCount} gợi ý</strong><small>{post.matchSummary.topScore === null ? "Chưa có điểm" : `Cao nhất ${Math.round(post.matchSummary.topScore * 100)}%`}</small></span>
         <ArrowRight />
       </Link>}
+      {canClaim && <button className="post-claim-button post-claim-button--card" type="button" onClick={claimAndChat}><MessageCircle /> Nhắn tin với người đăng</button>}
       <footer>
         <div className="post-owner"><span>{initials(post.owner.fullName)}</span><strong>{post.owner.fullName}</strong></div>
         <Link className="post-detail-link" to={`/posts/${post.id}`}>Xem chi tiết <ArrowRight /></Link>

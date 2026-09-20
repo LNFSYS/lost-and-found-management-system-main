@@ -1,6 +1,6 @@
 # Tài liệu FPTU Lost & Found System
 
-Cập nhật: **06/09/2026**
+Cập nhật kiến trúc: **09/09/2026**
 
 ## 1. Mục đích
 
@@ -44,10 +44,14 @@ Không đánh dấu Done chỉ vì có migration, schema, ticket, mockup, skelet
 | [business-rules.md](business-rules.md) | Luật đang enforce, partial hoặc planned |
 | [traceability-matrix.md](traceability-matrix.md) | Mapping BR → FR/NFR → UC → evidence |
 | [use-case-checklist.md](use-case-checklist.md) | 100 UC duy nhất, actor, điều kiện, status và evidence |
-| [node-java-service-boundary.md](node-java-service-boundary.md) | Ownership Node.js/Java và one-writer rule |
+| [CLEAN_ARCHITECTURE.md](CLEAN_ARCHITECTURE.md) | Node.js-only Clean Architecture, module contracts, transaction và verification |
+| [CLEAN_ARCHITECTURE_FILE_MAP.md](CLEAN_ARCHITECTURE_FILE_MAP.md) | Mapping source trước/sau refactor |
+| [LNFS_NODE_ONLY_ARCHITECTURE.drawio](LNFS_NODE_ONLY_ARCHITECTURE.drawio) | System Architecture, FE Package, BE Package |
+| [node-java-service-boundary.md](node-java-service-boundary.md) | Lịch sử kiến trúc Java, đã ngừng sử dụng |
 | [DOCUMENTATION_UPDATE_REPORT.md](DOCUMENTATION_UPDATE_REPORT.md) | Biên bản đối chiếu code và cập nhật tài liệu gần nhất |
 | [SPRINT_4_IMPLEMENTATION_AUDIT.md](SPRINT_4_IMPLEMENTATION_AUDIT.md) | Audit 17 Jira ticket Sprint 4 từ snapshot offline |
 | [LNFS_AUDIT_FIX_REPORT_2026-09-06.md](LNFS_AUDIT_FIX_REPORT_2026-09-06.md) | Audit và remediation B01–B08, R01–R06 ngày 06/09/2026 |
+| [AIVEN_SCHEMA_RECONCILIATION_2026-09-07.md](AIVEN_SCHEMA_RECONCILIATION_2026-09-07.md) | Audit Aiven read-only, alias reconciliation, real MySQL upgrade/concurrency tests và runbook chờ phê duyệt |
 
 ## 5. Snapshot implementation ngày 06/09/2026
 
@@ -69,15 +73,19 @@ Không đánh dấu Done chỉ vì có migration, schema, ticket, mockup, skelet
 - Warehouse overdue/disposition và claim/chat/appointment workflow đầy đủ.
 - PWA device matrix/installability QA và shared object storage cho media bài đăng/evidence.
 - Native Mobile Application.
-- Shared object storage và Java business endpoints.
+- Shared object storage. Java business endpoints không còn trong kiến trúc hiện hành.
 
 ## 6. Evidence đã kiểm tra
+
+Evidence riêng cho refactor kiến trúc ngày 09/09: **156 API/unit/integration tests pass, 0 skip**, dependency check/typecheck/build pass, browser E2E **23/23**. Xem [Clean Architecture verification](CLEAN_ARCHITECTURE_VERIFICATION.md). Đây không phải xác nhận hoàn thành thêm tính năng hoặc ticket của nhóm.
+
+Các số liệu 06/09 bên dưới là snapshot lịch sử. Evidence mới ngày 07/09: **152 API/unit/integration tests pass, 0 skip**, Web typecheck pass; real MySQL migration/feedback/chat checks và shared Aiven read-only được mô tả trong báo cáo reconciliation. Không nâng status các workflow planned từ schema test.
 
 - API unit/service/repository/validator tests: **137 pass, 1 skip an toàn** cho DB integration chưa có MySQL local `_test`.
 - `npm --workspace @lnfs/api-node run test`: pass, API **137 pass, 1 skip**.
 - `npm --workspace @lnfs/web run lint`: pass, TypeScript check.
 - `npm run build`: pass cho API và Web production build.
-- `npm run build:java`: chưa chạy được vì Maven không có trong `PATH`.
+- Java build thuộc snapshot lịch sử; đã gỡ ngày 09/09/2026.
 - `npm --workspace @lnfs/web run e2e:home`: **PASS 23/23**, gồm auth resilience, post creation, matching view, claim-room stale response, mobile layout, Staff warehouse và Admin handover/map.
 - `.github/workflows/ci.yml`: có job verify với MySQL service riêng và job browser Playwright; workflow chưa được chạy từ checkout này.
 - `apps/api-node/src/migrations/046_feedback_idempotency_legacy_cleanup.sql`: forward corrective migration; chưa áp dụng lên Aiven/shared DB.
@@ -93,6 +101,6 @@ Không tìm thấy Report 1, Report 2, Report 3/SRS, Report 4/Design, Report 5/I
 1. Mọi status phải trỏ tới route/service/UI/test path có thật.
 2. Peer-to-peer là luồng chính trong tài liệu mục tiêu; Staff custody/warehouse là optional hoặc escalation.
 3. Gemini/OCR và matching chỉ là decision support; không gọi custom-trained AI khi chưa có model artifact/evaluation.
-4. Java chỉ là health skeleton cho tới khi có API contract, JWT compatibility, integration test và một write owner rõ ràng.
+4. Node.js + TypeScript là backend duy nhất. Không khôi phục Java hoặc tạo backend ghi song song; tuân thủ Clean Architecture và public application contract.
 5. Native Mobile được giữ trong scope mục tiêu nhưng không ghi implemented khi chưa có project.
 6. Sau thay đổi lớn phải cập nhật ngày audit, report và traceability.
