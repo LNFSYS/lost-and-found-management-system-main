@@ -1,5 +1,6 @@
 import type { PrivateMediaStorage } from "../../../shared/application/media-storage.port.js";
 import type { TransactionContext, TransactionRunner } from "../../../shared/application/transaction.js";
+import type { Logger } from "../../../shared/application/logger.port.js";
 import { AppError } from "../../../shared/domain/app-error.js";
 import { validateImageUpload } from "../../../shared/domain/media.js";
 import type { ImageUpload } from "../../../shared/domain/upload.js";
@@ -49,11 +50,12 @@ export interface ClaimDependencies {
   id: () => string;
   mediaStorage: PrivateMediaStorage;
   hashIdempotencyPayload: (value: string) => string;
+  logger: Logger;
 }
 export function createClaimUseCases(options: ClaimDependencies) {
   const {
     claimRepository, matchingRepository, notificationRepository, realtimeNotifier, withTransaction, id, mediaStorage,
-    hashIdempotencyPayload
+    hashIdempotencyPayload, logger
   } = options;
 
   type StoredClaim = NonNullable<Awaited<ReturnType<typeof claimRepository.findById>>>;
@@ -462,16 +464,7 @@ export function createClaimUseCases(options: ClaimDependencies) {
                 ? `ROOM_NOT_AVAILABLE_${claim.status}_${participant.consentStatus}`
                 : null;
       if (denialReason) {
-        console.warn("[claims] verification templates denied", {
-          claimId,
-          userId: finderId,
-          reason: denialReason,
-          claimFinderId: claim?.finderId ?? null,
-          claimClaimantId: claim?.claimantId ?? null,
-          claimStatus: claim?.status ?? null,
-          participantRole: participant?.role ?? null,
-          participantConsent: participant?.consentStatus ?? null
-        });
+        logger.warn(`[claims] verification templates denied for ${finderId}: ${denialReason}`);
         throw claimNotFound();
       }
       const context = await claimRepository.findVerificationContext(claimId);
