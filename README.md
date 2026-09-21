@@ -96,7 +96,7 @@ Trước khi migrate DB đã dùng nhánh claim cũ, chạy `npm run migrate:rec
 Nếu kết quả là `READY`, DB còn tên `040_peer_claim_conversations.sql` trong khi source dùng `045`; không chạy lại DDL đó.
 Công cụ chỉ đối soát alias này sau khi kiểm tra checksum, columns/defaults, generated expression, indexes, foreign keys và participant backfill.
 Apply cần backup/restore rehearsal, maintenance window, phê duyệt của DB owner và xác nhận endpoint/database cụ thể.
-Quy trình, SQL và trạng thái Aiven nằm trong [báo cáo reconciliation 07/09](docs/AIVEN_SCHEMA_RECONCILIATION_2026-09-07.md).
+Quy trình, SQL và trạng thái Aiven nằm trong [báo cáo reconciliation 07/09](docs/archive/AIVEN_SCHEMA_RECONCILIATION_2026-09-07.md).
 
 Runner kiểm tra toàn bộ ledger trước DDL, dùng một connection giữ named lock theo database cho cả phiên migration.
 DDL MySQL không rollback toàn bộ được; attempt lỗi phải điều tra schema trước khi retry.
@@ -139,10 +139,11 @@ Metadata media nằm trong MySQL nhưng file hiện được lưu trên `UPLOAD_
 - [Requirements](docs/requirements.md)
 - [Business rules](docs/business-rules.md)
 - [Traceability matrix](docs/traceability-matrix.md)
-- [Use-case checklist](docs/use-case-checklist.md)
+- [Use-case catalogue](docs/uc.md)
+- [Notification email rules](docs/notification-email-rules.md)
 - [Clean Architecture](docs/CLEAN_ARCHITECTURE.md)
 - [Node/Java boundary lịch sử, đã ngừng sử dụng](docs/node-java-service-boundary.md)
-- [Documentation update report](docs/DOCUMENTATION_UPDATE_REPORT.md)
+- [Historical reports](docs/archive/)
 
 ## Cách trình bày trung thực
 

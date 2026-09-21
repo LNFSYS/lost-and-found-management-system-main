@@ -1,6 +1,6 @@
 # Luật nghiệp vụ LNFS
 
-Cập nhật: **06/09/2026**
+Cập nhật: **21/09/2026**
 
 ## 1. Quy ước
 
@@ -72,7 +72,20 @@ Cập nhật: **06/09/2026**
 | BR-42 | Retention/disposition policy theo loại vật phẩm cần đơn vị vận hành xác nhận; không tự coi thời hạn kỹ thuật là policy chính thức. | UC-016–UC-020 | TBD |
 | BR-43 | Staff chỉ xem routine conversation khi có escalation, lý do truy cập, quyền phù hợp, dữ liệu tối thiểu và audit. | UC-077–UC-083 | Planned |
 
-## 5. Luồng peer-to-peer mục tiêu
+## 5. Notification delivery
+
+| ID | Luật | UC | Status |
+| --- | --- | --- | --- |
+| BR-47 | Chỉ event nghiệp vụ đã commit mới được tạo notification; in-app là bản ghi chính thức, email/PWA là delivery channel và không được tự đổi business state. | UC-097, UC-123–UC-125, UC-147, UC-150 | Partial: in-app claim notification có; event delivery tổng quát chưa có |
+| BR-48 | User được cấu hình kênh và tần suất cho notification optional; email bảo mật bắt buộc cho account flow không được tắt bằng preference chung. | UC-168 | Planned |
+| BR-49 | Email tin nhắn mới phải chờ 5–10 phút, kiểm tra unread ngay trước khi gửi và coalesce nhiều message cùng room. | UC-124, UC-168 | Planned |
+| BR-50 | Email không chứa message body, private evidence, verification answer, OCR/raw AI output, contact riêng, vị trí chính xác, storage URL hoặc secret. | UC-097, UC-123–UC-125, UC-147, UC-150, UC-168 | Planned |
+| BR-51 | Delivery phải có transactional outbox, idempotency key, bounded retry/backoff và observability; provider failure không rollback nghiệp vụ đã commit. | UC-097, UC-123–UC-125, UC-147, UC-150 | Planned |
+| BR-52 | Chỉ gửi tới email đã xác minh; deep link luôn yêu cầu authorization và unsubscribe chỉ được tắt nhóm email optional tương ứng. | UC-168 | Planned |
+
+Chi tiết event, priority, privacy, retry và negative test nằm trong [notification-email-rules.md](notification-email-rules.md).
+
+## 6. Luồng peer-to-peer mục tiêu
 
 FOUND item đi theo luồng:
 
@@ -101,10 +114,10 @@ Quy tắc bắt buộc:
 6. Dispute/no-show không tự kết luận gian lận; có thể escalate.
 7. Nếu chuyển Staff, phải có TRANSFER_REQUESTED và intake confirmation trước IN_CUSTODY.
 
-## 6. Sensitive item và privacy
+## 7. Sensitive item và privacy
 
 Thẻ sinh viên, giấy tờ, thẻ ngân hàng, CCCD/hộ chiếu, điện thoại/laptop, chìa khóa, tiền, thuốc và vật nguy hiểm cần policy riêng. Chỗ chưa được trường xác nhận phải ghi TBD. Không công khai bí mật dùng để xác minh, không yêu cầu password/OTP, và không đưa raw private storage URL cho actor không có quyền.
 
-## 7. Nguyên tắc status
+## 8. Nguyên tắc status
 
 Một rule chỉ được chuyển từ Planned/Partial sang Enforced khi có runtime implementation, validation/authorization, test hoặc evidence tái lập được và traceability đã cập nhật.

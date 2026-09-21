@@ -217,7 +217,7 @@ Schema hiện tại có post status OPEN/MATCHED/RESOLVED/CLOSED/EXPIRED/HIDDEN,
 
 Migrations SQL nằm tại apps/api-node/src/migrations, được chạy theo thứ tự và kiểm tra checksum. Repository hiện có migration `001`–`046`; `046_feedback_idempotency_legacy_cleanup.sql` là forward corrective migration cho legacy feedback index và chưa được áp dụng lên Aiven/shared DB. Schema cho auth, posts, catalog, matching, claims, appointments, chat, notifications, warehouse, AI feedback và map/catalog không thay thế runtime evidence.
 
-Đối chiếu trực tiếp ngày 07/09/2026: Aiven có 49 bảng, tất cả có nguồn gốc trong migration; 39/43 file SQL khớp ledger, 043–046 chưa được ghi nhận. Bản 040_peer_claim_conversations đã chạy có checksum khớp 045 hiện tại. Schema feedback thiếu cột của 043; không được chạy lại 045 nguyên trạng. Đã thêm preflight toàn bộ lịch sử, migration lock và công cụ reconciliation dry-run; shared DB chưa thay đổi. Không xóa các bảng planned/legacy chỉ vì trống. Xem [báo cáo và runbook](AIVEN_SCHEMA_RECONCILIATION_2026-09-07.md).
+Đối chiếu trực tiếp ngày 07/09/2026: Aiven có 49 bảng, tất cả có nguồn gốc trong migration; 39/43 file SQL khớp ledger, 043–046 chưa được ghi nhận. Bản 040_peer_claim_conversations đã chạy có checksum khớp 045 hiện tại. Schema feedback thiếu cột của 043; không được chạy lại 045 nguyên trạng. Đã thêm preflight toàn bộ lịch sử, migration lock và công cụ reconciliation dry-run; shared DB chưa thay đổi. Không xóa các bảng planned/legacy chỉ vì trống. Xem [báo cáo và runbook](archive/AIVEN_SCHEMA_RECONCILIATION_2026-09-07.md).
 
 Khi dùng Aiven/shared MySQL:
 
@@ -257,5 +257,6 @@ Không ghi sprint date, assignee hoặc Jira status nếu chưa được kiểm 
 - Requirements: requirements.md
 - Business rules: business-rules.md
 - Traceability matrix: traceability-matrix.md
-- Use-case checklist: use-case-checklist.md
+- Use-case catalogue: uc.md
+- Notification email rules: notification-email-rules.md
 - Clean Architecture: CLEAN_ARCHITECTURE.md; Node/Java boundary cũ chỉ giữ làm lịch sử.

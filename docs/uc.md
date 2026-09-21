@@ -1,11 +1,11 @@
 # 3. Business Use Case Catalogue - FPTU Lost & Found System (LNFS)
 
-This catalogue is based on the complete Git history across all local and remote references as of 15 September 2026 and on the runtime source currently integrated into `dev`. `Implemented` requires active runtime evidence on `dev`; schema or migration-only evidence is not sufficient. `Partial` means part of the actor goal exists, while `Planned` means no complete runtime flow is available.
+This catalogue was updated on 21 September 2026 from the runtime source currently integrated into `dev` and the audited Git evidence recorded below. `Implemented` requires active runtime evidence on `dev`; schema or migration-only evidence is not sufficient. `Partial` means part of the actor goal exists, while `Planned` means no complete runtime flow is available.
 
 - **Implemented:** 92 use cases
 - **Partial:** 4 use cases
-- **Planned:** 70 use cases
-- **Total:** 166 business use cases
+- **Planned:** 72 use cases
+- **Total:** 168 business use cases
 
 `Claimant` means the owner of the LOST post. `Finder` means the owner of the matched FOUND post. PWA, mobile browser, and a future native application are delivery channels, not business use cases, and are therefore excluded from this catalogue.
 
@@ -22,15 +22,15 @@ The history contains 73 commits across all references after normalizing author i
 
 ### Remaining Work Allocation
 
-Completed UC work above is not reassigned. The 74 Partial/Planned UCs are divided by cohesive workflow, with Quan and Luong receiving slightly more items as requested.
+Completed UC work above is not reassigned. The 76 Partial/Planned UCs are divided by cohesive workflow, with UC-167 assigned to Quan for the cross-module journey projection and UC-168 assigned to Khoa for notification delivery preferences.
 
 | Assignee | Remaining UC IDs | Count | Main responsibility |
 | --- | --- | ---: | --- |
 | Luong | UC-106 to UC-118; UC-126 to UC-133 | 21 | Port guided verification into Clean Architecture, complete multiple-claimant handling, and implement appointment negotiation. |
-| Quan | UC-097 to UC-105; UC-134 to UC-140; UC-163 to UC-166 | 20 | Matching feedback/model operations, direct-handover completion, and audit/moderation visibility. |
-| Khoa | UC-093 to UC-096; UC-119 to UC-125; UC-141 to UC-146 | 17 | User-report lifecycle, realtime/private communication extensions, and Staff custody transfer/intake. |
+| Quan | UC-097 to UC-105; UC-134 to UC-140; UC-163 to UC-167 | 21 | Matching feedback/model operations, direct-handover completion, audit/moderation visibility, and the end-to-end item journey projection. |
+| Khoa | UC-093 to UC-096; UC-119 to UC-125; UC-141 to UC-146; UC-168 | 18 | User-report lifecycle, realtime/private communication extensions, Staff custody transfer/intake, and notification delivery preferences. |
 | Dat | UC-147 to UC-162 | 16 | Custody notifications, overdue handling, legal holds, disposition orders, evidence, and donation campaigns. |
-| **Total** | **UC-093 to UC-166** | **74** | **All currently Partial or Planned business UCs are assigned once.** |
+| **Total** | **UC-093 to UC-168** | **76** | **All currently Partial or Planned business UCs are assigned once.** |
 
 ### 3.2 Authentication & Authorization
 
@@ -332,3 +332,27 @@ Completed UC work above is not reassigned. The 74 Partial/Planned UCs are divide
 | UC-160 | Update a donation campaign | Admin | Update the campaign information while preserving its change history. | Planned |
 | UC-161 | Assign or remove campaign items | Staff, Admin | Add eligible custody items to or remove unprocessed items from a donation campaign. | Planned |
 | UC-162 | Complete a donation campaign | Admin | Close the campaign after required approvals and evidence are recorded for all processed items. | Planned |
+
+### 3.17 End-to-End Item Journey
+
+**Commit evidence:** Existing post, matching, claim, chat, appointment-schema, warehouse, return-feedback, and audit records provide partial source events. No integrated API or Web/PWA view currently projects those records into one participant-safe journey from post creation through return feedback.
+
+**Relationship to existing use cases:** UC-167 is a read-only projection and does not replace the state-changing use cases that produce its events. Matching-quality feedback remains UC-098 to UC-100, while post-return participant feedback remains UC-058 to UC-060. Appointment, no-show, direct handover, and custody outcomes remain owned by UC-126 to UC-147.
+
+**State progression rules:** A terminal claim, appointment attempt, transfer request, or handover attempt is never moved backward to an earlier status. Retrying creates a new linked attempt while preserving the prior event. A cancellation, no-show, failed handover, or conflicting confirmation must not mark the item returned. The current custodian is derived from authoritative events: the Finder retains the item until confirmed Staff intake or completed direct handover; Staff holds it after intake; return feedback is available only after an authorized completed-return outcome. The timeline must redact private messages, verification answers, evidence, contact data, and unrelated claims.
+
+| ID | Use Case | Actors | Use Case Description | Status |
+| --- | --- | --- | --- | --- |
+| UC-167 | View end-to-end item journey | LOST Post Owner, Finder | View a chronological, privacy-safe timeline showing post publication, matching progress, claim and conversation activity, verification outcome, appointment attempts, cancellation or no-show outcomes, the current item custodian and location class, Staff intake and custody duration, completed return, and post-return feedback eligibility without rewriting prior events. | Planned |
+
+### 3.18 Notification Delivery Preferences
+
+**Remaining work:** UC-168 is assigned to Khoa.
+
+**Relationship to existing use cases:** UC-168 controls how an authenticated user receives events; it does not create duplicate use cases for each channel. Match, claim, message, appointment, handover, custody, overdue, return, and feedback events remain owned by UC-097, UC-123 to UC-125, UC-134, UC-147, UC-150, and UC-058 to UC-060. In-app notifications remain the canonical user-visible record; PWA push and email are delivery channels.
+
+**Delivery rules:** Security messages required for account access cannot be disabled. For other categories, the user may choose immediate delivery, delayed email only while the related notification remains unread, digest delivery, quiet hours, or opt out of the optional channel. Changing a preference affects future delivery attempts only and does not delete notification or audit history. Email content must be privacy-safe and direct the recipient to an authenticated application view instead of embedding private evidence, message text, verification answers, contact details, or precise item locations.
+
+| ID | Use Case | Actors | Use Case Description | Status |
+| --- | --- | --- | --- | --- |
+| UC-168 | Manage notification delivery preferences | Authenticated User | Configure optional in-app, PWA push, immediate email, delayed-unread email, digest, and quiet-hour preferences by event category while mandatory security delivery remains enabled. | Planned |

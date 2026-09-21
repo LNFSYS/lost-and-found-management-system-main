@@ -1,6 +1,6 @@
 # Yêu cầu hệ thống LNFS
 
-Cập nhật: **06/09/2026**
+Cập nhật: **21/09/2026**
 
 ## 1. Quy ước status
 
@@ -84,6 +84,15 @@ Requirements target bao phủ Web Application, PWA và Native Mobile. Status bê
 | FR-MOBILE-02 | Native Mobile có navigation, session refresh, upload, permission, device test và release build. | UC-M01–UC-M12 | P1 | Planned — công nghệ TBD |
 | FR-JAVA-01 | Java health skeleton cũ; giữ ID để truy vết lịch sử. | N/A | Retired | Ngừng sử dụng và đã gỡ ngày 09/09/2026; Node.js là backend duy nhất |
 
+### 2.7 Notification delivery
+
+| ID | Requirement | UC | Priority | Status |
+| --- | --- | --- | --- | --- |
+| FR-NOTIFY-01 | Business event đã commit tạo notification in-app làm bản ghi chính thức; PWA push và email chỉ là delivery channel, không tự thay đổi business state. | UC-097, UC-123–UC-125, UC-147, UC-150 | P0 | Partial: in-app claim notification có; orchestration email/PWA theo event chưa có |
+| FR-NOTIFY-02 | New-message email chỉ gửi sau 5–10 phút nếu notification vẫn unread, phải gộp nhiều message cùng room và hủy delivery chưa gửi khi user đã đọc. | UC-124 | P1 | Planned |
+| FR-NOTIFY-03 | Authenticated User cấu hình kênh và tần suất theo nhóm sự kiện, gồm immediate, delayed-unread, digest và quiet hours; security email bắt buộc không được tắt. | UC-168 | P1 | Planned |
+| FR-NOTIFY-04 | Email phải privacy-safe, không chứa message body, evidence, verification answer, OCR/raw AI output, contact riêng, vị trí chính xác, storage URL hoặc secret; deep link luôn kiểm tra lại authorization. | UC-097, UC-123–UC-125, UC-147, UC-150, UC-168 | P0 | Planned |
+
 ## 3. Non-functional requirements
 
 | ID | Requirement | Priority | Status/evidence |
@@ -105,10 +114,12 @@ Requirements target bao phủ Web Application, PWA và Native Mobile. Status bê
 | NFR-AI-01 | AI/OCR/matching chỉ hỗ trợ quyết định; human verification bắt buộc trước trả đồ. | P0 | Implemented cho current AI/matching module; verification flow planned |
 | NFR-PWA-01 | Cached/offline UI không lộ private data và không báo transaction trước server confirmation. | P0 | Implemented trong service worker/cache policy; cần manual device evidence |
 | NFR-MOBILE-01 | Native Mobile parity phải dùng shared contract và có device/release evidence. | P1 | Planned |
+| NFR-MAIL-01 | Notification delivery dùng transactional outbox, idempotency key, bounded retry/backoff, coalescing và observability; provider failure không rollback nghiệp vụ. | P0 | Planned |
+| NFR-MAIL-02 | Chỉ gửi tới email đã xác minh; template/version, unsubscribe scope, provider log và deep link phải bảo vệ privacy, secret và authorization. | P0 | Planned |
 
 ## 4. Acceptance và traceability
 
-Mỗi requirement Implemented/Verified phải có route/service/UI/test path tồn tại. Requirement Planned/Partial phải ghi gap rõ ràng trong [traceability matrix](traceability-matrix.md), [use-case checklist](use-case-checklist.md) và [business rules](business-rules.md). Không dùng migration hoặc UI mockup thay cho runtime evidence.
+Mỗi requirement Implemented/Verified phải có route/service/UI/test path tồn tại. Requirement Planned/Partial phải ghi gap rõ ràng trong [traceability matrix](traceability-matrix.md), [use-case catalogue](uc.md) và [business rules](business-rules.md). Quy tắc delivery email chi tiết nằm trong [notification-email-rules.md](notification-email-rules.md). Không dùng migration hoặc UI mockup thay cho runtime evidence.
 
 ## 5. Quyết định cần xác nhận
 

@@ -1,6 +1,6 @@
 # Tài liệu FPTU Lost & Found System
 
-Cập nhật kiến trúc: **09/09/2026**
+Cập nhật tài liệu: **21/09/2026**
 
 ## 1. Mục đích
 
@@ -43,15 +43,23 @@ Không đánh dấu Done chỉ vì có migration, schema, ticket, mockup, skelet
 | [requirements.md](requirements.md) | Functional/non-functional requirements và status |
 | [business-rules.md](business-rules.md) | Luật đang enforce, partial hoặc planned |
 | [traceability-matrix.md](traceability-matrix.md) | Mapping BR → FR/NFR → UC → evidence |
-| [use-case-checklist.md](use-case-checklist.md) | 100 UC duy nhất, actor, điều kiện, status và evidence |
+| [uc.md](uc.md) | Catalogue 168 business UC, actor, mô tả, status và ownership phần việc còn lại |
+| [notification-email-rules.md](notification-email-rules.md) | Event matrix, preference, privacy, retry và chống gửi email trùng |
 | [CLEAN_ARCHITECTURE.md](CLEAN_ARCHITECTURE.md) | Node.js-only Clean Architecture, module contracts, transaction và verification |
 | [CLEAN_ARCHITECTURE_FILE_MAP.md](CLEAN_ARCHITECTURE_FILE_MAP.md) | Mapping source trước/sau refactor |
 | [LNFS_NODE_ONLY_ARCHITECTURE.drawio](LNFS_NODE_ONLY_ARCHITECTURE.drawio) | System Architecture, FE Package, BE Package |
 | [node-java-service-boundary.md](node-java-service-boundary.md) | Lịch sử kiến trúc Java, đã ngừng sử dụng |
-| [DOCUMENTATION_UPDATE_REPORT.md](DOCUMENTATION_UPDATE_REPORT.md) | Biên bản đối chiếu code và cập nhật tài liệu gần nhất |
-| [SPRINT_4_IMPLEMENTATION_AUDIT.md](SPRINT_4_IMPLEMENTATION_AUDIT.md) | Audit 17 Jira ticket Sprint 4 từ snapshot offline |
-| [LNFS_AUDIT_FIX_REPORT_2026-09-06.md](LNFS_AUDIT_FIX_REPORT_2026-09-06.md) | Audit và remediation B01–B08, R01–R06 ngày 06/09/2026 |
-| [AIVEN_SCHEMA_RECONCILIATION_2026-09-07.md](AIVEN_SCHEMA_RECONCILIATION_2026-09-07.md) | Audit Aiven read-only, alias reconciliation, real MySQL upgrade/concurrency tests và runbook chờ phê duyệt |
+
+### Báo cáo lịch sử
+
+Các snapshot theo ngày đã được chuyển vào [`archive/`](archive/) để root `docs/` chỉ giữ tài liệu đang dùng. Chúng là evidence lịch sử, không phải nguồn status hiện tại:
+
+- [Documentation update 01/09](archive/DOCUMENTATION_UPDATE_REPORT.md)
+- [Admin user/config implementation 02/09](archive/ADMIN_USER_CONFIG_IMPLEMENTATION_REPORT_2026-09-02.md)
+- [Audit fix report 06/09](archive/LNFS_AUDIT_FIX_REPORT_2026-09-06.md)
+- [Aiven reconciliation 07/09](archive/AIVEN_SCHEMA_RECONCILIATION_2026-09-07.md)
+- [Sprint 4 implementation audit](archive/SPRINT_4_IMPLEMENTATION_AUDIT.md)
+- [Sprint 4 PWA/profile QA](archive/SPRINT_4_PWA_PROFILE_ACTIVITY_QA.md)
 
 ## 5. Snapshot implementation ngày 06/09/2026
 
@@ -90,7 +98,7 @@ Các số liệu 06/09 bên dưới là snapshot lịch sử. Evidence mới ng�
 - `.github/workflows/ci.yml`: có job verify với MySQL service riêng và job browser Playwright; workflow chưa được chạy từ checkout này.
 - `apps/api-node/src/migrations/046_feedback_idempotency_legacy_cleanup.sql`: forward corrective migration; chưa áp dụng lên Aiven/shared DB.
 - Không chạy migration hoặc test destructive trên Aiven/shared DB.
-- Repository có 100 UC duy nhất từ `UC-001` đến `UC-100`.
+- Catalogue hiện có 168 business UC từ `UC-001` đến `UC-168`; channel target cũ cho Native Mobile chưa được tính vào catalogue cho tới khi có ID mapping được duyệt.
 
 ## 7. Tài liệu bên ngoài còn thiếu
 
