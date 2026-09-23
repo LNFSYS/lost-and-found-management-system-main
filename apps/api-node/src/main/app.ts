@@ -17,7 +17,7 @@ interface AppDependencies {
 
 export function createApp({ services = defaultServices, checkReadiness = async () => { await pool.query("SELECT 1"); } }: AppDependencies = {}) {
   const app = express();
-  const { adminRoutes, handoverRoutes, authRoutes, claimRoutes, notificationRoutes, postRoutes, realtimeRoutes, returnRoutes, adminConfigRoutes, configRoutes, staffRoutes } = createHttpRoutes(services);
+  const { adminRoutes, handoverRoutes, authRoutes, claimRoutes, notificationRoutes, postRoutes, realtimeRoutes, returnRoutes, reportRoutes, adminConfigRoutes, configRoutes, staffRoutes } = createHttpRoutes(services);
   const allowedOrigins = parseAllowedOrigins(env.frontendUrl);
   app.disable("x-powered-by");
   app.use(helmet());
@@ -41,6 +41,7 @@ export function createApp({ services = defaultServices, checkReadiness = async (
   app.use("/api/auth", authRoutes);
   app.use("/api/posts", postRoutes);
   app.use("/api/returns", returnRoutes);
+  app.use("/api/reports", reportRoutes);
   app.use("/api/claims", claimRoutes);
   app.use("/api/notifications", notificationRoutes);
   app.use("/api/realtime", realtimeRoutes);
