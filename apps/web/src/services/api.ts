@@ -125,14 +125,16 @@ export interface PublicConfigResponse {
   items: Array<{ key: string; value: unknown; valueType: ConfigValueType; description: string | null }>;
   values: Record<string, unknown>;
 }
-export type AdminReportEntityType = "POST" | "USER" | "CLAIM" | "CHAT";
-export type AdminReportStatus = "PENDING" | "REVIEWED" | "DISMISSED";
+export type AdminReportEntityType = "POST" | "USER" | "CLAIM" | "CHAT" | "HANDOVER";
+export type AdminReportStatus = "PENDING" | "REVIEWED" | "DISMISSED" | "WITHDRAWN";
 export type ModerationActionType = "WARN_USER" | "HIDE_POST" | "DELETE_POST" | "BAN_USER" | "UNBAN_USER" | "DISMISS_REPORT";
 export interface AdminModerationReport {
   id: string;
   reporter: { id: string; fullName: string; email: string };
   entityType: AdminReportEntityType;
   entityId: string;
+  sourceType: "POST" | "USER" | "CLAIM" | "MESSAGE" | "HANDOVER" | null;
+  sourceId: string | null;
   reason: string;
   details: string | null;
   status: AdminReportStatus;
@@ -141,12 +143,33 @@ export interface AdminModerationReport {
   createdAt: string;
   entity: { type: AdminReportEntityType; title: string | null; status: string | null; ownerName: string | null; referenceId: string | null };
 }
+export interface AdminModerationReportDetail extends AdminModerationReport {
+  auditHistory: Array<{ id: string; actorId: string; actorName: string; action: string; note: string | null; createdAt: string }>;
+}
 export interface AdminReportFilters { q?: string; status?: AdminReportStatus | ""; entityType?: AdminReportEntityType | ""; page?: number; pageSize?: number; }
 export interface AdminReportListResponse { total: number; page: number; pageSize: number; items: AdminModerationReport[]; }
 export interface ReviewAdminReportPayload {
   actionType: ModerationActionType;
   reason: string;
 }
+export type ReportSourceType = "POST" | "CLAIM" | "MESSAGE" | "HANDOVER";
+export type UserReportStatus = "PENDING" | "REVIEWED" | "DISMISSED" | "WITHDRAWN";
+export interface UserReport {
+  id: string;
+  entityType: "POST" | "CLAIM" | "CHAT" | "HANDOVER";
+  entityId: string;
+  sourceType: ReportSourceType;
+  sourceId: string;
+  reason: string;
+  details: string | null;
+  status: UserReportStatus;
+  resolution: string | null;
+  reviewedAt: string | null;
+  withdrawnAt: string | null;
+  createdAt: string;
+  target: { title: string; status: string };
+}
+export interface UserReportListResponse { total: number; page: number; pageSize: number; items: UserReport[] }
 export interface AdminDashboardKpis {
   filters: { from: string; to: string; days: number; granularity: "day" };
   scope: { role: "ADMIN"; privateEvidenceIncluded: false };
@@ -792,7 +815,12 @@ export const api = {
   changeAdminUserStatus: (id: string, status: AdminUserStatus, reason?: string) => raw<AdminUser>(`/admin/users/${id}/status`, { method: "PATCH", body: JSON.stringify({ status, reason }) }),
   deleteAdminUser: (id: string) => raw<void>(`/admin/users/${id}`, { method: "DELETE" }),
   listAdminReports: (filters: AdminReportFilters = {}) => raw<AdminReportListResponse>(`/admin/reports${queryString(filters)}`),
+  getAdminReport: (id: string) => raw<AdminModerationReportDetail>(`/admin/reports/${id}`),
   reviewAdminReport: (id: string, payload: ReviewAdminReportPayload) => raw<AdminModerationReport>(`/admin/reports/${id}/review`, { method: "PATCH", body: JSON.stringify(payload) }),
+  submitReport: (payload: { targetType: ReportSourceType; targetId: string; reason: string; details?: string; idempotencyKey: string }) => raw<UserReport>("/reports", { method: "POST", body: JSON.stringify(payload) }),
+  listMyReports: (filters: { status?: UserReportStatus | ""; page?: number; pageSize?: number } = {}) => raw<UserReportListResponse>(`/reports/mine${queryString(filters)}`),
+  getMyReport: (id: string) => raw<UserReport>(`/reports/mine/${id}`),
+  withdrawMyReport: (id: string) => raw<UserReport>(`/reports/mine/${id}/withdraw`, { method: "POST" }),
   getAdminDashboardKpis: (filters: AdminKpiFilters = {}) => raw<AdminDashboardKpis>(`/admin/dashboard/kpis${queryString(filters)}`),
   exportAdminStatistics: (payload: AdminStatisticsExportPayload) => raw<AdminStatisticsExportResponse>("/admin/statistics/export", { method: "POST", body: JSON.stringify(payload) }),
   listSystemConfigs: (filters: SystemConfigFilters = {}) => raw<SystemConfigListResponse>(`/admin/configs${queryString(filters)}`),

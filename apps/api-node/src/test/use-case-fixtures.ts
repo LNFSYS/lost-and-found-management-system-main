@@ -17,6 +17,8 @@ import type { MatchingRepository } from "../modules/matching/application/matchin
 import type { NotificationRepository } from "../modules/notifications/application/notification.repository.port.js";
 import type { PostRepository } from "../modules/posts/application/post.repository.port.js";
 import type { ReturnFeedbackRepository } from "../modules/returns/application/return-feedback.repository.port.js";
+import type { ReportRepository } from "../modules/reports/application/report.repository.port.js";
+import { createReportUseCases, type ReportDependencies } from "../modules/reports/application/report.use-cases.js";
 import type { SystemConfigRepository } from "../modules/system-config/application/system-config.repository.port.js";
 import type { UserRepository } from "../modules/auth/application/user.repository.port.js";
 import type { WarehouseRepository } from "../modules/warehouse/application/warehouse.repository.port.js";
@@ -43,6 +45,7 @@ export const matchingRepository = unexpectedPort<MatchingRepository>("matchingRe
 export const notificationRepository = unexpectedPort<NotificationRepository>("notificationRepository");
 export const postRepository = unexpectedPort<PostRepository>("postRepository");
 export const returnFeedbackRepository = unexpectedPort<ReturnFeedbackRepository>("returnFeedbackRepository");
+export const reportRepository = unexpectedPort<ReportRepository>("reportRepository");
 export const systemConfigRepository = unexpectedPort<SystemConfigRepository>("systemConfigRepository");
 export const userRepository = unexpectedPort<UserRepository>("userRepository");
 export const warehouseRepository = unexpectedPort<WarehouseRepository>("warehouseRepository");
@@ -69,6 +72,8 @@ export function createTestWarehouseUseCases(overrides: Partial<WarehouseDependen
 export const warehouseService = createTestWarehouseUseCases();
 export function createTestReturnFeedbackUseCases(overrides: Partial<ReturnFeedbackDependencies> = {}) { return createReturnFeedbackUseCases({ repository: returnFeedbackRepository, adminAuditRepository: adminAuditRepository, runInTransaction: fakeTransaction, id: randomUUID, ...overrides }); }
 export const returnFeedbackService = createTestReturnFeedbackUseCases();
+export function createTestReportUseCases(overrides: Partial<ReportDependencies> = {}) { return createReportUseCases({ repository: reportRepository, transaction: fakeTransaction, id: randomUUID, hashPayload: fakeSecurity.hashToken, ...overrides }); }
+export const reportService = createTestReportUseCases();
 export function createTestMatchingUseCases(overrides: Partial<MatchingDependencies> = {}) { return createMatchingUseCases({ matchingRepository: matchingRepository, postRepository: postRepository, ...overrides }); }
 export const matchingService = createTestMatchingUseCases();
 export function createTestPostUseCases(overrides: Partial<PostDependencies> = {}) { return createPostUseCases({ postRepository: postRepository, matchingRepository: matchingRepository, matchingService: matchingService, withTransaction: fakeTransaction, id: randomUUID, mediaStorage: fakeMediaStorage, logger: { warn() {} }, ...overrides }); }
@@ -79,4 +84,4 @@ export const realtimeService = createRealtimeUseCases({ claimRepository, id: ran
 export function createTestAuthUseCases(overrides: Partial<AuthDependencies> = {}) { return createAuthUseCases({ authRepository: authRepository, userRepository: userRepository, avatarStorage: fakeAvatarStorage, security: fakeSecurity, policy: { refreshTokenDays: 30, otpTtlMinutes: 10, otpMaxAttempts: 5 }, emailService: fakeEmail, withTransaction: fakeTransaction, logger: { warn() {} }, ...overrides }); }
 export const authService = createTestAuthUseCases();
 export const geminiImageService = createImageAnalysisUseCases({ postRepository, analyzer: unexpectedPort<ImageAnalyzer>("image analyzer") });
-export const testServices = { notificationService, systemConfigService, adminUserService, adminReportingService, adminCatalogService, warehouseService, returnFeedbackService, matchingService, postService, claimService, realtimeService, authService, geminiImageService };
+export const testServices = { notificationService, systemConfigService, adminUserService, adminReportingService, adminCatalogService, warehouseService, returnFeedbackService, reportService, matchingService, postService, claimService, realtimeService, authService, geminiImageService };

@@ -1,6 +1,6 @@
-import { AlertTriangle, Clock3, FileCheck2, Image, LockKeyhole, MessageCircle, Plus, RefreshCw, Search, Send, ShieldCheck, X } from "lucide-react";
+import { AlertTriangle, Clock3, FileCheck2, FileWarning, Image, LockKeyhole, MessageCircle, Plus, RefreshCw, Search, Send, ShieldCheck, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
-import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { ClaimEvidencePanel } from "../components/claim-evidence-panel";
 import { ClaimItemPanel } from "../components/claim-item-panel";
 import { ClaimVerificationPanel } from "../components/claim-verification-panel";
@@ -80,6 +80,7 @@ function MessageBubble({ message, own, user, onReplyQuestion }: { message: Claim
     <p>{message.content}</p>
     <time dateTime={message.createdAt}>{formatTime(message.createdAt)}</time>
     {shouldShowReply && onReplyQuestion && <button type="button" className="claim-reply-question" onClick={() => onReplyQuestion(message.content ?? "")}><MessageCircle /> Trả lời câu hỏi</button>}
+    {!own && <Link className="claim-report-link" to={`/reports?targetType=MESSAGE&targetId=${message.id}`} title="Báo cáo tin nhắn"><FileWarning /> Báo cáo</Link>}
   </div>;
 }
 
@@ -545,7 +546,7 @@ export function ClaimsPage() {
             <section className="claim-chat">
               <header className="claim-chat-header">
                 <div><strong>{counterpartName(claim, user?.id)}</strong><span><i /> {claim.canSend ? "Đang hoạt động" : statusLabels[claim.status]}</span><small>{claimTitle(claim)}</small></div>
-                {claim.claimantId === user?.id && ["PENDING", "CONVERSATION_OPEN", "NEED_MORE_INFO"].includes(claim.status) && <button type="button" className="claim-close-button" disabled={withdrawing} onClick={() => void withdraw()} title="Đóng claim"><X /></button>}
+                <div className="claim-header-actions"><Link to={`/reports?targetType=CLAIM&targetId=${claim.id}`} title="Báo cáo claim"><FileWarning /></Link>{claim.claimantId === user?.id && ["PENDING", "CONVERSATION_OPEN", "NEED_MORE_INFO"].includes(claim.status) && <button type="button" className="claim-close-button" disabled={withdrawing} onClick={() => void withdraw()} title="Đóng claim"><X /></button>}</div>
               </header>
 
               {!claim.canSend ? claim.finderId === user?.id && claim.status === "PENDING" ? <section className="claim-open-decision">

@@ -32,6 +32,7 @@ export function createAdminRoutes({ adminCatalogController, adminReportingContro
   adminRoutes.use(requireAuth, requireAnyRole("ADMIN"));
   adminRoutes.get("/catalog", (req, res, next) => adminCatalogController.getCatalog(req, res).catch(next));
   adminRoutes.get("/reports", (req, res, next) => adminReportingController.listReports(req, res).catch(next));
+  adminRoutes.get("/reports/:id", (req, res, next) => adminReportingController.getReportDetail(req, res).catch(next));
   adminRoutes.patch("/reports/:id/review", (req, res, next) => adminReportingController.reviewReport(req, res).catch(next));
   adminRoutes.get("/dashboard/kpis", (req, res, next) => adminReportingController.getDashboardKpis(req, res).catch(next));
   adminRoutes.post("/statistics/export", (req, res, next) => adminReportingController.exportStatistics(req, res).catch(next));

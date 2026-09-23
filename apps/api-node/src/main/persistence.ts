@@ -10,6 +10,7 @@ import { createMatchingRepository } from "../modules/matching/infrastructure/mat
 import { createNotificationRepository } from "../modules/notifications/infrastructure/notification.repository.js";
 import { createPostRepository } from "../modules/posts/infrastructure/post.repository.js";
 import { createReturnFeedbackRepository } from "../modules/returns/infrastructure/return-feedback.repository.js";
+import { createReportRepository } from "../modules/reports/infrastructure/report.repository.js";
 import { createSystemConfigRepository } from "../modules/system-config/infrastructure/system-config.repository.js";
 import { createWarehouseRepository } from "../modules/warehouse/infrastructure/warehouse.repository.js";
 import { runInTransaction } from "../shared/infrastructure/config/db.js";
@@ -31,6 +32,7 @@ export function createPersistence(database: Pool) {
     notificationRepository: createNotificationRepository(database),
     postRepository: createPostRepository(database),
     returnFeedbackRepository: createReturnFeedbackRepository(database),
+    reportRepository: createReportRepository(database),
     systemConfigRepository: createSystemConfigRepository(database),
     userRepository: createUserRepository(database),
     warehouseRepository: createWarehouseRepository(database),

@@ -271,6 +271,12 @@ export function createAdminReportingUseCases(options: AdminReportingDependencies
       return repository.listReports(filters);
     },
 
+    async getReportDetail(reportId: string) {
+      const report = await repository.findReportById(reportId);
+      if (!report) throw new AppError("not_found", "Không tìm thấy report");
+      return { ...report, auditHistory: await repository.listReportAuditHistory(reportId) };
+    },
+
     async reviewReport(actorId: string, reportId: string, input: ReviewModerationReportInput) {
       return transaction(async (connection) => {
         const report = await repository.lockReport(reportId, connection);

@@ -13,6 +13,7 @@ import { createPostUseCases } from "../modules/posts/application/post.use-cases.
 import { createGeminiImageAnalyzer } from "../modules/posts/infrastructure/gemini-image-analyzer.js";
 import { createRealtimeUseCases } from "../modules/realtime/application/realtime.use-cases.js";
 import { createReturnFeedbackUseCases } from "../modules/returns/application/return-feedback.use-cases.js";
+import { createReportUseCases } from "../modules/reports/application/report.use-cases.js";
 import { createSystemConfigUseCases } from "../modules/system-config/application/system-config.use-cases.js";
 import { createWarehouseUseCases } from "../modules/warehouse/application/warehouse.use-cases.js";
 import { env } from "../shared/infrastructure/config/env.js";
@@ -25,7 +26,7 @@ export function createServices(persistence: Persistence, config: typeof env = en
   const {
     transaction, adminAuditRepository, adminCatalogRepository, adminReportingRepository,
     adminUserRepository, authRepository, claimRepository, matchingRepository,
-    notificationRepository, postRepository, returnFeedbackRepository,
+    notificationRepository, postRepository, returnFeedbackRepository, reportRepository,
     systemConfigRepository, userRepository, warehouseRepository
   } = persistence;
   const security = createAuthSecurity(config);
@@ -70,6 +71,9 @@ export function createServices(persistence: Persistence, config: typeof env = en
   const returnFeedbackService = createReturnFeedbackUseCases({
     repository: returnFeedbackRepository, adminAuditRepository, runInTransaction: transaction, id
   });
+  const reportService = createReportUseCases({
+    repository: reportRepository, transaction, id, hashPayload: security.hashToken
+  });
   const matchingService = createMatchingUseCases({ matchingRepository, postRepository });
   const postService = createPostUseCases({
     postRepository, matchingRepository, matchingService,
@@ -90,7 +94,7 @@ export function createServices(persistence: Persistence, config: typeof env = en
   return {
     notificationService, systemConfigService, adminUserService, adminReportingService,
     adminCatalogService, warehouseService, returnFeedbackService, matchingService,
-    postService, claimService, realtimeService, authService, geminiImageService
+    postService, claimService, realtimeService, reportService, authService, geminiImageService
   };
 }
 export type ApplicationServices = ReturnType<typeof createServices>;

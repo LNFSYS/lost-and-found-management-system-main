@@ -3,8 +3,8 @@ import { z } from "zod";
 const uuid = z.string().uuid();
 const dateOnly = z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/, "Ngay phai co dinh dang YYYY-MM-DD");
 
-export const reportEntityTypeSchema = z.enum(["POST", "USER", "CLAIM", "CHAT"]);
-export const reportStatusSchema = z.enum(["PENDING", "REVIEWED", "DISMISSED"]);
+export const reportEntityTypeSchema = z.enum(["POST", "USER", "CLAIM", "CHAT", "HANDOVER"]);
+export const reportStatusSchema = z.enum(["PENDING", "REVIEWED", "DISMISSED", "WITHDRAWN"]);
 export const moderationActionTypeSchema = z.enum([
   "WARN_USER",
   "HIDE_POST",
