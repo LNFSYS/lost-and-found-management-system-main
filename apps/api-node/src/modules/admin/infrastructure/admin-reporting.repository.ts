@@ -8,8 +8,8 @@ import type {
   ReportEntityType,
   ReportStatus
 } from "../application/admin-reporting.dto.js";
-import type { DailyTrendRow, DashboardBreakdown, LockedReportRecord, ModerationReportRecord, ModerationTargetRecord, ModerationTargetType, ReportEntitySummary, ReportingWindow } from "../application/admin-reporting.repository.port.js";
-export type { AdminReportingRepository, DailyTrendRow, DashboardBreakdown, DashboardSnapshot, DashboardTotals, LockedReportRecord, ModerationReportRecord, ModerationTargetRecord, ModerationTargetType, ReportEntitySummary, ReportingWindow, StatusCount } from "../application/admin-reporting.repository.port.js";
+import type { DailyTrendRow, DashboardBreakdown, LockedReportRecord, ModerationReportRecord, ModerationTargetRecord, ModerationTargetType, ReportAuditHistoryEntry, ReportEntitySummary, ReportingWindow } from "../application/admin-reporting.repository.port.js";
+export type { AdminReportingRepository, DailyTrendRow, DashboardBreakdown, DashboardSnapshot, DashboardTotals, LockedReportRecord, ModerationReportRecord, ModerationTargetRecord, ModerationTargetType, ReportAuditHistoryEntry, ReportEntitySummary, ReportingWindow, StatusCount } from "../application/admin-reporting.repository.port.js";
 
 type SqlValue = string | number | Date | null;
 type Queryable = Pick<PoolConnection, "execute"> | TransactionContext;
@@ -46,6 +46,8 @@ interface ReportRow extends RowDataPacket {
   reporter_email: string;
   entity_type: ReportEntityType;
   entity_id: string;
+  source_type: "POST" | "USER" | "CLAIM" | "MESSAGE" | "HANDOVER" | null;
+  source_id: string | null;
   reason: string;
   details: string | null;
   status: ReportStatus;
@@ -64,6 +66,8 @@ interface ReportRow extends RowDataPacket {
   chat_claim_status: string | null;
   chat_post_title: string | null;
   chat_post_owner_name: string | null;
+  handover_status: string | null;
+  handover_post_title: string | null;
 }
 
 interface LockedReportRow extends RowDataPacket {
@@ -105,6 +109,15 @@ interface StatusCountRow extends RowDataPacket {
   total: number | string;
 }
 
+interface ReportAuditRow extends RowDataPacket {
+  id: string;
+  actor_id: string;
+  actor_name: string;
+  action: string;
+  note: string | null;
+  created_at: Date | string;
+}
+
 function toIso(value: Date | string | null) {
   if (!value) return null;
   return value instanceof Date ? value.toISOString() : new Date(value).toISOString();
@@ -117,12 +130,13 @@ function dayKey(value: Date | string) {
 
 const reportSelect = `SELECT
   r.id, r.reporter_id, reporter.full_name AS reporter_name, reporter.email AS reporter_email,
-  r.entity_type, r.entity_id, r.reason, r.details, r.status, r.reviewed_by,
+  r.entity_type, r.entity_id, r.source_type, r.source_id, r.reason, r.details, r.status, r.reviewed_by,
   reviewer.full_name AS reviewer_name, r.reviewed_at, r.created_at,
   p.title AS post_title, p.status AS post_status, post_owner.full_name AS post_owner_name,
   target_user.full_name AS target_user_name, target_user.status AS target_user_status,
   c.status AS claim_status, claim_post.title AS claim_post_title, claim_owner.full_name AS claim_post_owner_name,
-  chat_claim.status AS chat_claim_status, chat_post.title AS chat_post_title, chat_owner.full_name AS chat_post_owner_name
+  chat_claim.status AS chat_claim_status, chat_post.title AS chat_post_title, chat_owner.full_name AS chat_post_owner_name,
+  handover.status AS handover_status, handover_post.title AS handover_post_title
 FROM reports r
 INNER JOIN users reporter ON reporter.id = r.reporter_id
 LEFT JOIN users reviewer ON reviewer.id = r.reviewed_by
@@ -135,7 +149,9 @@ LEFT JOIN users claim_owner ON claim_owner.id = claim_post.user_id
 LEFT JOIN chat_rooms chat_room ON r.entity_type = 'CHAT' AND chat_room.id = r.entity_id
 LEFT JOIN claims chat_claim ON chat_claim.id = chat_room.claim_id
 LEFT JOIN posts chat_post ON chat_post.id = chat_claim.post_id
-LEFT JOIN users chat_owner ON chat_owner.id = chat_post.user_id`;
+LEFT JOIN users chat_owner ON chat_owner.id = chat_post.user_id
+LEFT JOIN return_appointments handover ON r.entity_type = 'HANDOVER' AND handover.id = r.entity_id
+LEFT JOIN posts handover_post ON handover_post.id = handover.post_id`;
 
 function mapReport(row: ReportRow): ModerationReportRecord {
   const entity: ReportEntitySummary = row.entity_type === "POST"
@@ -144,13 +160,17 @@ function mapReport(row: ReportRow): ModerationReportRecord {
       ? { type: row.entity_type, title: row.target_user_name, status: row.target_user_status, ownerName: null, referenceId: row.entity_id }
       : row.entity_type === "CLAIM"
         ? { type: row.entity_type, title: row.claim_post_title, status: row.claim_status, ownerName: row.claim_post_owner_name, referenceId: row.entity_id }
-        : { type: row.entity_type, title: row.chat_post_title, status: row.chat_claim_status, ownerName: row.chat_post_owner_name, referenceId: row.entity_id };
+        : row.entity_type === "CHAT"
+          ? { type: row.entity_type, title: row.chat_post_title, status: row.chat_claim_status, ownerName: row.chat_post_owner_name, referenceId: row.entity_id }
+          : { type: row.entity_type, title: row.handover_post_title, status: row.handover_status, ownerName: null, referenceId: row.entity_id };
 
   return {
     id: row.id,
     reporter: { id: row.reporter_id, fullName: row.reporter_name, email: row.reporter_email },
     entityType: row.entity_type,
     entityId: row.entity_id,
+    sourceType: row.source_type,
+    sourceId: row.source_id,
     reason: row.reason,
     details: row.details,
     status: row.status,
@@ -224,6 +244,22 @@ export function createAdminReportingRepository(database: SqlExecutor) {
     async findReportById(reportId: string, connection: Queryable = database) {
       const [rows] = await sqlExecutor(connection).execute<ReportRow[]>(`${reportSelect} WHERE r.id = ? LIMIT 1`, [reportId]);
       return rows[0] ? mapReport(rows[0]) : null;
+    },
+
+    async listReportAuditHistory(reportId: string) {
+      const [rows] = await sqlExecutor(database).execute<ReportAuditRow[]>(
+        `SELECT event.id, event.actor_id, actor.full_name actor_name, event.action, NULL note, event.created_at
+         FROM report_audit_events event INNER JOIN users actor ON actor.id = event.actor_id WHERE event.report_id = ?
+         UNION ALL
+         SELECT action.id, action.admin_id, actor.full_name, action.action_type, action.note, action.created_at
+         FROM moderation_actions action INNER JOIN users actor ON actor.id = action.admin_id WHERE action.report_id = ?
+         ORDER BY created_at ASC`,
+        [reportId, reportId]
+      );
+      return rows.map((row): ReportAuditHistoryEntry => ({
+        id: row.id, actorId: row.actor_id, actorName: row.actor_name, action: row.action,
+        note: row.note, createdAt: toIso(row.created_at)!
+      }));
     },
 
     async lockReport(reportId: string, connection: Queryable) {

@@ -28,6 +28,8 @@ export interface ModerationReportRecord {
   };
   entityType: ReportEntityType;
   entityId: string;
+  sourceType: "POST" | "USER" | "CLAIM" | "MESSAGE" | "HANDOVER" | null;
+  sourceId: string | null;
   reason: string;
   details: string | null;
   status: ReportStatus;
@@ -38,6 +40,15 @@ export interface ModerationReportRecord {
   reviewedAt: string | null;
   createdAt: string;
   entity: ReportEntitySummary;
+}
+
+export interface ReportAuditHistoryEntry {
+  id: string;
+  actorId: string;
+  actorName: string;
+  action: string;
+  note: string | null;
+  createdAt: string;
 }
 
 export interface LockedReportRecord {
@@ -100,6 +111,7 @@ export interface AdminReportingRepository {
     items: ModerationReportRecord[];
   }>;
   findReportById(reportId: string, connection?: TransactionContext): Promise<ModerationReportRecord | null>;
+  listReportAuditHistory(reportId: string): Promise<ReportAuditHistoryEntry[]>;
   lockReport(reportId: string, connection: TransactionContext): Promise<LockedReportRecord | null>;
   setReportStatus(reportId: string, status: ReportStatus, reviewerId: string, connection: TransactionContext): Promise<boolean>;
   createModerationAction(input: {

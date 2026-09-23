@@ -14,6 +14,8 @@ function makeReport(overrides: Partial<ModerationReportRecord> = {}): Moderation
     reporter: overrides.reporter ?? { id: "reporter-id", fullName: "Reporter", email: "reporter@example.com" },
     entityType: overrides.entityType ?? "POST",
     entityId: overrides.entityId ?? "post-id",
+    sourceType: overrides.sourceType ?? "POST",
+    sourceId: overrides.sourceId ?? "post-id",
     reason: overrides.reason ?? "Spam",
     details: overrides.details ?? "DROP TABLE reports; <script>alert(1)</script>",
     status: overrides.status ?? "PENDING",
@@ -74,6 +76,7 @@ function fakeRepository(seedReports: ModerationReportRecord[] = [], options: { a
       const report = reports.get(reportId);
       return report ? { ...report } : null;
     },
+    async listReportAuditHistory() { return []; },
     async lockReport(reportId) {
       const report = reports.get(reportId);
       return report ? locked(report) : null;
@@ -176,6 +179,18 @@ test("review report applies moderation action and records actor/reason without r
   assert.match(JSON.stringify(auditRecords[0]), /post-id/);
   assert.equal(JSON.stringify(auditRecords).includes("DROP TABLE"), false);
   assert.equal(JSON.stringify(auditRecords).includes("<script>"), false);
+});
+
+test("admin report detail returns permitted context and audit history", async () => {
+  const state = fakeRepository([makeReport()]);
+  state.repository.listReportAuditHistory = async () => [{
+    id: "event-id", actorId: "reporter-id", actorName: "Reporter", action: "SUBMITTED", note: null,
+    createdAt: "2026-09-02T00:00:00.000Z"
+  }];
+  const detail = await serviceFor(state.repository).getReportDetail("report-id");
+  assert.equal(detail.entity.title, "Lost card");
+  assert.equal(detail.auditHistory[0]?.action, "SUBMITTED");
+  assert.equal(JSON.stringify(detail).includes("passwordHash"), false);
 });
 
 test("review report rejects concurrent moderation of an already handled report", async () => {
