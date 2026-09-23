@@ -265,19 +265,19 @@ Completed UC work above is not reassigned. The 76 Partial/Planned UCs are divide
 
 ### 3.13 Moderation & User Reports
 
-**Commit evidence:** Khoa implemented the admin report list/review baseline in `51dfb3a`; Quan hardened target derivation and admin safety in `924233b` and `35491a9`. The user-side report lifecycle is still absent.
+**Runtime evidence:** Admin list/review từ LNFS-59 được giữ nguyên. PAR-01 bổ sung API và PWA cho submit/list/detail/withdraw, server-side target derivation cho post/claim/message/handover, idempotency, privacy-safe context và Admin detail/audit history. Bằng chứng kiểm thử nằm tại `report.use-cases.test.ts`, `report.validator.test.ts`, `app.test.ts` và `reports-page.spec.ts`.
 
-**Remaining work:** UC-093 to UC-096 are assigned to Khoa; UC-165 is assigned to Quan.
+**Verified scope:** UC-093 đến UC-096 và UC-165 có runtime code cùng automated test; manual provider/database rehearsal vẫn thuộc release checklist.
 
 | ID | Use Case | Actors | Use Case Description | Status |
 | --- | --- | --- | --- | --- |
 | UC-082 | View user reports | Admin | List and filter submitted moderation reports and their current review state. | Implemented |
 | UC-083 | Review report and apply moderation | Admin | Review a report, apply the supported action to its derived target, and record the moderation audit trail. | Implemented |
-| UC-093 | Submit a user report | Authenticated User | Report a suspicious post, claim, message, or handover issue with a reason and supporting description. | Planned |
-| UC-094 | View my submitted reports | Authenticated User | View reports submitted by the current user and their processing status. | Planned |
-| UC-095 | View my report detail | Authenticated User | View the reason, evidence, status, and resolution of one submitted report. | Planned |
-| UC-096 | Withdraw a pending report | Authenticated User | Withdraw a report that has not yet been reviewed by an administrator. | Planned |
-| UC-165 | View moderation report detail | Admin | View report content, related entity, evidence, reporter context, resolution, and audit history. | Planned |
+| UC-093 | Submit a user report | Authenticated User | Report a suspicious post, claim, message, or handover issue with a reason and supporting description. | Implemented |
+| UC-094 | View my submitted reports | Authenticated User | View reports submitted by the current user and their processing status. | Implemented |
+| UC-095 | View my report detail | Authenticated User | View the reason, evidence, status, and resolution of one submitted report. | Implemented |
+| UC-096 | Withdraw a pending report | Authenticated User | Withdraw a report that has not yet been reviewed by an administrator. | Implemented |
+| UC-165 | View moderation report detail | Admin | View report content, related entity, evidence, reporter context, resolution, and audit history. | Implemented |
 
 ### 3.14 Dashboard, Statistics & Audit
 

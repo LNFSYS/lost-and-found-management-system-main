@@ -7,7 +7,7 @@ import type { AdminUserRecord } from "../modules/admin/application/admin-user.re
 import type { SystemConfigRecord } from "../modules/system-config/application/system-config.repository.port.js";
 import type { Role } from "../shared/domain/auth.js";
 import { env } from "../shared/infrastructure/config/env.js";
-import { adminReportingService, adminUserService, authService, claimRepository, returnFeedbackService, systemConfigService, testServices } from "../test/use-case-fixtures.js";
+import { adminReportingService, adminUserService, authService, claimRepository, reportService, returnFeedbackService, systemConfigService, testServices } from "../test/use-case-fixtures.js";
 import { createApp } from "./app.js";
 
 const userId = "11111111-1111-4111-8111-111111111111";
@@ -57,6 +57,8 @@ function makeReport() {
     reporter: { id: "reporter-id", fullName: "Reporter", email: "reporter@example.com" },
     entityType: "POST" as const,
     entityId: "post-id",
+    sourceType: "POST" as const,
+    sourceId: "post-id",
     reason: "Spam",
     details: "Report text only",
     status: "PENDING" as const,
@@ -214,6 +216,43 @@ test("notification routes require authentication", async () => {
   });
 });
 
+test("user report routes require auth and preserve owner-scoped lifecycle contracts", async () => {
+  const originalValidate = authService.validateAccessSession;
+  const originalSubmit = reportService.submit;
+  const originalList = reportService.listMine;
+  const originalGet = reportService.getMine;
+  const originalWithdraw = reportService.withdraw;
+  const record = {
+    id: reportId, entityType: "POST" as const, entityId: "post-id", sourceType: "POST" as const, sourceId: "post-id",
+    reason: "Spam", details: null, status: "PENDING" as const, resolution: null, reviewedAt: null, withdrawnAt: null,
+    createdAt: "2026-09-22T00:00:00.000Z", target: { title: "Lost card", status: "OPEN" }
+  };
+  let scopedUser = "";
+  authService.validateAccessSession = async () => true;
+  reportService.submit = async (userId) => { scopedUser = userId; return record; };
+  reportService.listMine = async (userId, query) => { scopedUser = userId; return { total: 1, page: query.page, pageSize: query.pageSize, items: [record] }; };
+  reportService.getMine = async (userId) => { scopedUser = userId; return record; };
+  reportService.withdraw = async (userId) => { scopedUser = userId; return { ...record, status: "WITHDRAWN" as const }; };
+  try {
+    await withServer(async () => undefined, async (baseUrl) => {
+      assert.equal((await fetch(`${baseUrl}/api/reports/mine`)).status, 401);
+      const created = await fetch(`${baseUrl}/api/reports`, { method: "POST", headers: jsonHeaders(["USER"]), body: JSON.stringify({ targetType: "POST", targetId: userId, reason: "Spam", idempotencyKey: "retry-key-123" }) });
+      assert.equal(created.status, 201);
+      assert.equal(scopedUser, "admin-id");
+      assert.equal((await fetch(`${baseUrl}/api/reports/mine?page=1&pageSize=10`, { headers: jsonHeaders(["USER"]) })).status, 200);
+      assert.equal((await fetch(`${baseUrl}/api/reports/mine/${reportId}`, { headers: jsonHeaders(["USER"]) })).status, 200);
+      const withdrawn = await fetch(`${baseUrl}/api/reports/mine/${reportId}/withdraw`, { method: "POST", headers: jsonHeaders(["USER"]) });
+      assert.equal((await withdrawn.json()).status, "WITHDRAWN");
+    });
+  } finally {
+    authService.validateAccessSession = originalValidate;
+    reportService.submit = originalSubmit;
+    reportService.listMine = originalList;
+    reportService.getMine = originalGet;
+    reportService.withdraw = originalWithdraw;
+  }
+});
+
 test("public config route exposes safe config without authentication", async () => {
   const original = systemConfigService.listPublicConfigs;
   systemConfigService.listPublicConfigs = async () => ({ items: [], values: { "post.max_images": 5 } });
@@ -239,6 +278,7 @@ test("admin HTTP routes enforce roles and expose user/config CRUD contracts", as
   const originalConfigHistory = systemConfigService.listHistory;
   const originalConfigDelete = systemConfigService.deleteConfig;
   const originalReportsList = adminReportingService.listReports;
+  const originalReportDetail = adminReportingService.getReportDetail;
   const originalReportReview = adminReportingService.reviewReport;
   const originalDashboardKpis = adminReportingService.getDashboardKpis;
   const originalStatisticsExport = adminReportingService.exportStatistics;
@@ -260,6 +300,7 @@ test("admin HTTP routes enforce roles and expose user/config CRUD contracts", as
   systemConfigService.listHistory = async () => ({ items: [] });
   systemConfigService.deleteConfig = async () => undefined;
   adminReportingService.listReports = async (filters) => ({ total: 1, page: filters.page, pageSize: filters.pageSize, items: [makeReport()] });
+  adminReportingService.getReportDetail = async () => ({ ...makeReport(), auditHistory: [] });
   adminReportingService.reviewReport = async (_actorId, _reportId, input) => {
     lastReviewInput = input;
     return { ...makeReport(), status: input.actionType === "DISMISS_REPORT" ? "DISMISSED" as const : "REVIEWED" as const };
@@ -289,6 +330,8 @@ test("admin HTTP routes enforce roles and expose user/config CRUD contracts", as
 
       const staffReportResponse = await fetch(`${baseUrl}/api/admin/reports`, { headers: jsonHeaders(["USER", "STAFF"]) });
       assert.equal(staffReportResponse.status, 403);
+      const staffReportDetailResponse = await fetch(`${baseUrl}/api/admin/reports/${reportId}`, { headers: jsonHeaders(["USER", "STAFF"]) });
+      assert.equal(staffReportDetailResponse.status, 403);
 
       const usersResponse = await fetch(`${baseUrl}/api/admin/users?page=1&pageSize=20`, { headers: jsonHeaders() });
       assert.equal(usersResponse.status, 200);
@@ -349,6 +392,9 @@ test("admin HTTP routes enforce roles and expose user/config CRUD contracts", as
       const reportsResponse = await fetch(`${baseUrl}/api/admin/reports?status=PENDING&page=1&pageSize=20`, { headers: jsonHeaders() });
       assert.equal(reportsResponse.status, 200);
       assert.equal((await reportsResponse.json()).items[0].id, reportId);
+      const reportDetailResponse = await fetch(`${baseUrl}/api/admin/reports/${reportId}`, { headers: jsonHeaders() });
+      assert.equal(reportDetailResponse.status, 200);
+      assert.deepEqual((await reportDetailResponse.json()).auditHistory, []);
 
       const reviewResponse = await fetch(`${baseUrl}/api/admin/reports/${reportId}/review`, {
         method: "PATCH",
@@ -384,6 +430,7 @@ test("admin HTTP routes enforce roles and expose user/config CRUD contracts", as
     systemConfigService.listHistory = originalConfigHistory;
     systemConfigService.deleteConfig = originalConfigDelete;
     adminReportingService.listReports = originalReportsList;
+    adminReportingService.getReportDetail = originalReportDetail;
     adminReportingService.reviewReport = originalReportReview;
     adminReportingService.getDashboardKpis = originalDashboardKpis;
     adminReportingService.exportStatistics = originalStatisticsExport;
