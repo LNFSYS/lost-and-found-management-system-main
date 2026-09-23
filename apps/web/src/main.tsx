@@ -15,6 +15,7 @@ import { PostDetailPage } from "./pages/post-detail-page";
 import { PostMatchesPage } from "./pages/post-matches-page";
 import { registerServiceWorker } from "./pwa";
 import { ClaimsPage } from "./pages/claims-page";
+import { ReportsPage } from "./pages/reports-page";
 import "./styles.css";
 
 registerServiceWorker();
@@ -43,6 +44,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
               <Route path="/posts/:postId" element={<PostDetailPage />} />
               <Route path="/claims" element={<ClaimsPage />} />
               <Route path="/claims/:claimId" element={<ClaimsPage />} />
+              <Route path="/reports" element={<ReportsPage />} />
               <Route element={<RouteGuard roles={["STAFF", "ADMIN"]} />}>
                 <Route path="/staff" element={<StaffPage />} />
               </Route>

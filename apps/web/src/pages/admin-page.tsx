@@ -26,7 +26,7 @@ import {
   UsersRound,
   X
 } from "lucide-react";
-import { api, type AdminAccessRole, type AdminArea, type AdminBuilding, type AdminCatalog, type AdminCategory, type AdminDashboardKpis, type AdminHandoverPoint, type AdminHandoverPointPayload, type AdminModerationReport, type AdminReportEntityType, type AdminReportStatus, type AdminUser, type AdminUserStatus, type ConfigHistoryEntry, type ConfigValueType, type ModerationActionType, type SystemConfig } from "../services/api";
+import { api, type AdminAccessRole, type AdminArea, type AdminBuilding, type AdminCatalog, type AdminCategory, type AdminDashboardKpis, type AdminHandoverPoint, type AdminHandoverPointPayload, type AdminModerationReport, type AdminModerationReportDetail, type AdminReportEntityType, type AdminReportStatus, type AdminUser, type AdminUserStatus, type ConfigHistoryEntry, type ConfigValueType, type ModerationActionType, type SystemConfig } from "../services/api";
 
 type AdminTab = "operations" | "users" | "configs" | "categories" | "locations" | "handover";
 type PendingAction = "" | "load" | "users" | "user" | "user-toggle" | "configs" | "config" | "config-history" | "reports" | "review" | "kpis" | "export" | "category" | "area" | "building" | "handover" | "toggle" | "delete";
@@ -52,8 +52,8 @@ const emptyConfigForm = { configKey: "", configValue: "", valueType: "STRING" as
 const emptyConfigFilters = { q: "", valueType: "" as ConfigValueType | "", isPublic: "" as boolean | "", page: 1, pageSize: 10 };
 const emptyReportFilters = { q: "", status: "PENDING" as AdminReportStatus | "", entityType: "" as AdminReportEntityType | "", page: 1, pageSize: 10 };
 const emptyReviewForm = { actionType: "DISMISS_REPORT" as ModerationActionType, reason: "" };
-const reportEntityLabels: Record<AdminReportEntityType, string> = { POST: "Bài đăng", USER: "Người dùng", CLAIM: "Claim", CHAT: "Chat" };
-const reportStatusLabels: Record<AdminReportStatus, string> = { PENDING: "Chờ xử lý", REVIEWED: "Đã xử lý", DISMISSED: "Đã bỏ qua" };
+const reportEntityLabels: Record<AdminReportEntityType, string> = { POST: "Bài đăng", USER: "Người dùng", CLAIM: "Claim", CHAT: "Chat", HANDOVER: "Bàn giao" };
+const reportStatusLabels: Record<AdminReportStatus, string> = { PENDING: "Chờ xử lý", REVIEWED: "Đã xử lý", DISMISSED: "Đã bỏ qua", WITHDRAWN: "Đã rút" };
 const moderationActionLabels: Record<ModerationActionType, string> = {
   DISMISS_REPORT: "Bỏ qua report",
   WARN_USER: "Cảnh báo user",
@@ -177,7 +177,7 @@ export function AdminPage() {
   const [configHistory, setConfigHistory] = useState<ConfigHistoryEntry[]>([]);
   const [historyConfig, setHistoryConfig] = useState<SystemConfig | null>(null);
   const [reportFilters, setReportFilters] = useState(emptyReportFilters);
-  const [selectedReport, setSelectedReport] = useState<AdminModerationReport | null>(null);
+  const [selectedReport, setSelectedReport] = useState<AdminModerationReportDetail | null>(null);
   const [reviewForm, setReviewForm] = useState(emptyReviewForm);
   const [kpiFilters, setKpiFilters] = useState(emptyKpiFilters);
   const [exportFormat, setExportFormat] = useState<"CSV" | "JSON">("CSV");
@@ -500,12 +500,13 @@ export function AdminPage() {
     void loadKpis(kpiFilters);
   }
 
-  function selectReport(report: AdminModerationReport) {
-    setSelectedReport(report);
-    setReviewForm({
-      actionType: "DISMISS_REPORT",
-      reason: ""
-    });
+  async function selectReport(report: AdminModerationReport) {
+    setPendingAction("reports"); setError("");
+    try {
+      setSelectedReport(await api.getAdminReport(report.id));
+      setReviewForm({ actionType: "DISMISS_REPORT", reason: "" });
+    } catch (reason) { setError(messageOf(reason, "Không thể tải chi tiết report")); }
+    finally { setPendingAction(""); }
   }
 
   function changeReviewAction(actionType: ModerationActionType) {
@@ -821,6 +822,7 @@ export function AdminPage() {
             <option value="PENDING">Chờ xử lý</option>
             <option value="REVIEWED">Đã xử lý</option>
             <option value="DISMISSED">Đã bỏ qua</option>
+            <option value="WITHDRAWN">Đã rút</option>
           </select></label>
           <label className="input-field"><span>Loại</span><select value={reportFilters.entityType} onChange={(event) => setReportFilters({ ...reportFilters, entityType: event.target.value as AdminReportEntityType | "" })}>
             <option value="">Tất cả</option>
@@ -828,6 +830,7 @@ export function AdminPage() {
             <option value="USER">Người dùng</option>
             <option value="CLAIM">Claim</option>
             <option value="CHAT">Chat</option>
+            <option value="HANDOVER">Bàn giao</option>
           </select></label>
           <button className="secondary-button" disabled={pendingAction === "reports"}><Filter size={17} /> Lọc</button>
         </form>
@@ -849,7 +852,7 @@ export function AdminPage() {
                 </td>
                 <td><ReportStatusBadge status={report.status} /></td>
                 <td>{new Date(report.createdAt).toLocaleString("vi-VN")}</td>
-                <td><button type="button" className="secondary-button" onClick={() => selectReport(report)} disabled={report.status !== "PENDING"}><ShieldCheck size={17} /> Review</button></td>
+                <td><button type="button" className="secondary-button" onClick={() => void selectReport(report)}><Eye size={17} /> Chi tiết</button></td>
               </tr>)}
               {!reports.length && <tr><td colSpan={5} className="admin-empty-cell">Không có report phù hợp</td></tr>}
             </tbody>
@@ -867,12 +870,15 @@ export function AdminPage() {
           <span><ShieldCheck size={18} /></span>
           <div><p className="eyebrow">ACTION</p><h2>Xác nhận moderation</h2></div>
         </div>
-        {selectedReport ? <form className="admin-form" onSubmit={submitReview}>
+        {selectedReport ? <div className="admin-form">
           <div className="admin-selected-report">
             <strong>{reportEntityLabels[selectedReport.entityType]} / {selectedReport.reason}</strong>
             <span>{selectedReport.entity.title || selectedReport.entityId}</span>
+            <small>{selectedReport.details || "Không có mô tả hỗ trợ"}</small>
+            {selectedReport.sourceId && <small>Tham chiếu {selectedReport.sourceType}: {selectedReport.sourceId}</small>}
           </div>
-          <label className="input-field"><span>Hành động</span><select value={reviewForm.actionType} onChange={(event) => changeReviewAction(event.target.value as ModerationActionType)}>
+          <div className="admin-selected-report"><strong>Lịch sử xử lý</strong>{selectedReport.auditHistory.map((entry) => <span key={entry.id}>{entry.actorName}: {entry.action}{entry.note ? ` · ${entry.note}` : ""} · {new Date(entry.createdAt).toLocaleString("vi-VN")}</span>)}{!selectedReport.auditHistory.length && <small>Chưa có sự kiện audit.</small>}</div>
+          {selectedReport.status === "PENDING" && <form className="admin-form" onSubmit={submitReview}><label className="input-field"><span>Hành động</span><select value={reviewForm.actionType} onChange={(event) => changeReviewAction(event.target.value as ModerationActionType)}>
             {(selectedReport ? moderationActionsForReport(selectedReport) : ["DISMISS_REPORT"] as ModerationActionType[]).map((action) => <option key={action} value={action}>{moderationActionLabels[action]}</option>)}
           </select></label>
           {(reviewNeedsPost || reviewNeedsUser) && <div className="admin-selected-report"><strong>Đối tượng được suy ra từ report</strong><span>{selectedReport.entity.title || selectedReport.entityId}</span><small>{selectedReport.entity.ownerName ? `Chủ bài đăng: ${selectedReport.entity.ownerName}` : `ID: ${selectedReport.entityId}`}</small></div>}
@@ -880,8 +886,8 @@ export function AdminPage() {
           <div className="admin-form-actions">
             <button type="button" className="secondary-button" onClick={() => setSelectedReport(null)}><X size={17} /> Hủy</button>
             <button className="primary-button" disabled={pendingAction === "review"}><ShieldCheck size={17} /> Ghi nhận</button>
-          </div>
-        </form> : <div className="admin-empty admin-empty--compact"><ShieldCheck size={28} /><strong>Chưa chọn report</strong></div>}
+          </div></form>}
+        </div> : <div className="admin-empty admin-empty--compact"><ShieldCheck size={28} /><strong>Chưa chọn report</strong></div>}
       </aside>
     </div>}
 

@@ -1,4 +1,4 @@
-import { Files, FileUser, Home, LayoutDashboard, LogOut, MessageCircle, ShieldCheck, UserRound } from "lucide-react";
+import { FileWarning, Files, FileUser, Home, LayoutDashboard, LogOut, MessageCircle, ShieldCheck, UserRound } from "lucide-react";
 import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "../context/auth-context";
 import { useNetworkStatus } from "../hooks/use-network-status";
@@ -21,6 +21,7 @@ export function AppLayout() {
         {isAdmin && <NavLink to="/admin"><LayoutDashboard size={18} /> Quản trị</NavLink>}
         {user?.roles.some((role) => role === "STAFF" || role === "ADMIN") && <NavLink to="/staff"><ShieldCheck size={18} /> Khu vực nội bộ</NavLink>}
         <NavLink to="/claims"><MessageCircle size={18} /> Trao đổi riêng</NavLink>
+        <NavLink to="/reports"><FileWarning size={18} /> Báo cáo</NavLink>
       </nav>
       <div className="topbar-actions"><NotificationCenter /><button className="icon-text-button" onClick={() => { void logout().catch(() => undefined); }}><LogOut size={18} /> Đăng xuất</button></div>
     </header>

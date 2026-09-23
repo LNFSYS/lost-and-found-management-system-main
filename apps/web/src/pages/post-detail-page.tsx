@@ -1,4 +1,4 @@
-import { ArrowLeft, ArrowRight, CalendarClock, Clock3, Eye, LockKeyhole, MapPin, MessageCircle, PackageCheck, ScanSearch, Tag, UserRound } from "lucide-react";
+import { ArrowLeft, ArrowRight, CalendarClock, Clock3, Eye, FileWarning, LockKeyhole, MapPin, MessageCircle, PackageCheck, ScanSearch, Tag, UserRound } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useNetworkStatus } from "../hooks/use-network-status";
@@ -80,7 +80,7 @@ export function PostDetailPage() {
   return <main className="post-detail-page">
     <div className="post-detail-topline">
       <Link className="post-detail-back" to="/posts"><ArrowLeft /> Quay lại bài đăng</Link>
-      {post.canEdit && <Link className="post-detail-matches" to={`/posts/${post.id}/matches`}><ScanSearch /> Xem phân tích matching</Link>}
+      <div className="post-detail-actions">{post.canEdit && <Link className="post-detail-matches" to={`/posts/${post.id}/matches`}><ScanSearch /> Xem phân tích matching</Link>}{!post.canEdit && <Link className="post-detail-matches" to={`/reports?targetType=POST&targetId=${post.id}`}><FileWarning /> Báo cáo bài đăng</Link>}</div>
     </div>
     {(!online || stale) && <div className="pwa-data-state" role="status">
       <strong>{online ? "Đang hiển thị dữ liệu lưu tạm" : "Bạn đang offline"}</strong>
