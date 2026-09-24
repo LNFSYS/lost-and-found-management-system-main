@@ -5,7 +5,7 @@ import { AppError } from "../../../shared/domain/app-error.js";
 import { validateImageUpload } from "../../../shared/domain/media.js";
 import type { ImageUpload } from "../../../shared/domain/upload.js";
 import type { MatchingRepository } from "../../matching/application/index.js";
-import type { NotificationRecord, NotificationRepository } from "../../notifications/application/index.js";
+import type { NotificationEmailQueue, NotificationRecord, NotificationRepository } from "../../notifications/application/index.js";
 import { canSubmitVerificationDecision, canUseRoom, isAppointmentEligible } from "../domain/claim-policy.js";
 import {
   findVerificationPrompt,
@@ -38,6 +38,7 @@ export interface ClaimDependencies {
   claimRepository: ClaimRepository;
   matchingRepository: MatchingRepository;
   notificationRepository: NotificationRepository;
+  notificationEmailQueue?: NotificationEmailQueue;
   realtimeNotifier?: {
     publishNotification(input: {
       userId: string;
@@ -54,7 +55,7 @@ export interface ClaimDependencies {
 }
 export function createClaimUseCases(options: ClaimDependencies) {
   const {
-    claimRepository, matchingRepository, notificationRepository, realtimeNotifier, withTransaction, id, mediaStorage,
+    claimRepository, matchingRepository, notificationRepository, notificationEmailQueue, realtimeNotifier, withTransaction, id, mediaStorage,
     hashIdempotencyPayload, logger
   } = options;
 
@@ -145,6 +146,22 @@ export function createClaimUseCases(options: ClaimDependencies) {
       workflow: input.workflow,
       roomId: input.roomId
     });
+  }
+
+  async function queueOptionalEmail(input: {
+    notification: NotificationRecord | null;
+    recipientUserId: string | null;
+    eventType: "CHAT" | "CLAIM";
+    roomId?: string | null;
+    queryable: TransactionContext;
+  }) {
+    if (!notificationEmailQueue || !input.notification || !input.recipientUserId) return;
+    await notificationEmailQueue.enqueue({
+      notification: input.notification,
+      recipientUserId: input.recipientUserId,
+      eventType: input.eventType,
+      roomId: input.roomId
+    }, input.queryable);
   }
 
   async function details(claimId: string, userId: string) {
@@ -327,9 +344,13 @@ export function createClaimUseCases(options: ClaimDependencies) {
           entityId: claimId,
           dedupeKey: `claim:${claimId}:conversation`
         }, connection);
+        const notificationUserId = claimClaimantId === requesterId ? finderId : claimClaimantId;
+        await queueOptionalEmail({
+          notification, recipientUserId: notificationUserId, eventType: "CLAIM", queryable: connection
+        });
         const claim = await claimRepository.findById(claimId, connection);
         if (!claim) throw new AppError("internal", "Không thể tạo yêu cầu xác minh");
-        return { claim, idempotent: false, notification, notificationUserId: claimClaimantId === requesterId ? finderId : claimClaimantId };
+        return { claim, idempotent: false, notification, notificationUserId };
       });
 
       await publishWorkflowNotification({
@@ -413,6 +434,9 @@ export function createClaimUseCases(options: ClaimDependencies) {
           entityId: claim.id,
           dedupeKey: `claim:${claim.id}:message:${message.id}`
         }, connection) : null;
+        await queueOptionalEmail({
+          notification, recipientUserId: recipientId, eventType: "CHAT", roomId, queryable: connection
+        });
         return { claimId: claim.id, message, notification, recipientId, roomId };
       });
 
@@ -792,6 +816,9 @@ export function createClaimUseCases(options: ClaimDependencies) {
               dedupeKey: `claim:${claimId}:accepted`
             }, connection);
             notificationUserId = claim.claimantId;
+            await queueOptionalEmail({
+              notification, recipientUserId: notificationUserId, eventType: "CLAIM", roomId, queryable: connection
+            });
           }
         } else {
           await claimRepository.updateFinderParticipant(claimId, finderId, "DECLINED", connection);
@@ -872,6 +899,7 @@ export function createClaimUseCases(options: ClaimDependencies) {
     async listMessages(claimId: string, userId: string, query: ListMessagesQuery) {
       const room = await this.getRoom(claimId, userId);
       await claimRepository.markMessagesRead(room.id, userId);
+      await notificationEmailQueue?.cancelForRoom(userId, room.id);
       return { room, ...(await claimRepository.listMessages(room.id, query)) };
     },
 
@@ -919,6 +947,9 @@ export function createClaimUseCases(options: ClaimDependencies) {
           entityId: claimId,
           dedupeKey: `claim:${claimId}:message:${created.id}`
         }, connection) : null;
+        await queueOptionalEmail({
+          notification, recipientUserId: recipientId, eventType: "CHAT", roomId: room.id, queryable: connection
+        });
         return { message: created, notification, recipientId };
       });
       await publishWorkflowNotification({

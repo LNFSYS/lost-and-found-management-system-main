@@ -81,3 +81,10 @@ Node.js là owner duy nhất của notification event, preference, outbox và de
 | Business rules | Requirements | Use cases |
 | --- | --- | --- |
 | BR-47–BR-52 | FR-NOTIFY-01–FR-NOTIFY-04, NFR-MAIL-01–NFR-MAIL-02 | UC-097, UC-123–UC-125, UC-147, UC-150, UC-168 và các UC nguồn trong ma trận sự kiện |
+## Runtime implementation (Story notification email)
+
+The Node.js notification module now owns optional email preferences and a MySQL-backed transactional outbox (`052_notification_email_delivery.sql`). Chat and claim transactions enqueue only a notification identifier and recipient/entity metadata; private message and evidence content is never stored in the outbox. `GET/PUT /api/notifications/preferences` are authenticated and scoped to the token subject.
+
+The API process runs the bounded worker when `NOTIFICATION_EMAIL_WORKER_ENABLED=true`; a standalone worker entrypoint is also available. The worker re-checks account status, verified email, entity access, preference, quiet hours, and unread state immediately before SMTP delivery. It coalesces pending chat rows for a room, uses stable idempotency message identifiers, redacted error codes, and bounded retry. OTP and password-reset delivery remains owned by Auth and is not routed through this optional queue.
+
+Runtime evidence still required: applying migration 052 to the target database, SMTP provider acceptance with a real App Password, and end-to-end worker execution against an isolated MySQL instance. UC-168 therefore remains Partial until those checks are attached.

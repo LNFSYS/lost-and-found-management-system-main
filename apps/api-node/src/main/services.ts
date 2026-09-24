@@ -8,6 +8,9 @@ import { createEmailDelivery } from "../modules/auth/infrastructure/email.servic
 import { createClaimUseCases } from "../modules/claims/application/claim.use-cases.js";
 import { createMatchingUseCases } from "../modules/matching/application/matching.use-cases.js";
 import { createNotificationUseCases } from "../modules/notifications/application/notification.use-cases.js";
+import { createNotificationEmailQueue } from "../modules/notifications/application/notification-email.queue.js";
+import { createNotificationEmailWorker } from "../modules/notifications/application/notification-email.worker.js";
+import { createSmtpNotificationEmailDelivery } from "../modules/notifications/infrastructure/notification-email.smtp.js";
 import { createImageAnalysisUseCases } from "../modules/posts/application/image-analysis.use-cases.js";
 import { createPostUseCases } from "../modules/posts/application/post.use-cases.js";
 import { createGeminiImageAnalyzer } from "../modules/posts/infrastructure/gemini-image-analyzer.js";
@@ -26,7 +29,7 @@ export function createServices(persistence: Persistence, config: typeof env = en
   const {
     transaction, adminAuditRepository, adminCatalogRepository, adminReportingRepository,
     adminUserRepository, authRepository, claimRepository, matchingRepository,
-    notificationRepository, postRepository, returnFeedbackRepository, reportRepository,
+    notificationRepository, notificationEmailRepository, postRepository, returnFeedbackRepository, reportRepository,
     systemConfigRepository, userRepository, warehouseRepository
   } = persistence;
   const security = createAuthSecurity(config);
@@ -54,7 +57,16 @@ export function createServices(persistence: Persistence, config: typeof env = en
     namespace: "claim-evidence",
     fallback: claimLocalMediaStorage
   });
-  const notificationService = createNotificationUseCases({ notificationRepository });
+  const notificationEmailQueue = createNotificationEmailQueue({
+    repository: notificationEmailRepository, id, chatDelayMinutes: config.notificationEmail.chatDelayMinutes,
+    digestDelayMinutes: config.notificationEmail.digestDelayMinutes
+  });
+  const notificationEmailWorker = createNotificationEmailWorker({
+    repository: notificationEmailRepository,
+    emailDelivery: createSmtpNotificationEmailDelivery({ smtp: config.smtp }),
+    id, frontendUrl: config.frontendUrl, logger: console
+  });
+  const notificationService = createNotificationUseCases({ notificationRepository, notificationEmailRepository, notificationEmailQueue });
   const systemConfigService = createSystemConfigUseCases({
     repository: systemConfigRepository, auditRepository: adminAuditRepository, transaction, idFactory: id
   });
@@ -81,7 +93,7 @@ export function createServices(persistence: Persistence, config: typeof env = en
   });
   const realtimeService = createRealtimeUseCases({ claimRepository, id });
   const claimService = createClaimUseCases({
-    claimRepository, matchingRepository, notificationRepository,
+    claimRepository, matchingRepository, notificationRepository, notificationEmailQueue,
     realtimeNotifier: realtimeService,
     withTransaction: transaction, id, mediaStorage: claimMediaStorage,
     hashIdempotencyPayload: security.hashToken, logger: console
@@ -92,7 +104,7 @@ export function createServices(persistence: Persistence, config: typeof env = en
   });
   const geminiImageService = createImageAnalysisUseCases({ postRepository, analyzer: createGeminiImageAnalyzer(config.gemini) });
   return {
-    notificationService, systemConfigService, adminUserService, adminReportingService,
+    notificationService, notificationEmailWorker, systemConfigService, adminUserService, adminReportingService,
     adminCatalogService, warehouseService, returnFeedbackService, matchingService,
     postService, claimService, realtimeService, reportService, authService, geminiImageService
   };

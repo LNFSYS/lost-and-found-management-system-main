@@ -84,4 +84,9 @@ export const realtimeService = createRealtimeUseCases({ claimRepository, id: ran
 export function createTestAuthUseCases(overrides: Partial<AuthDependencies> = {}) { return createAuthUseCases({ authRepository: authRepository, userRepository: userRepository, avatarStorage: fakeAvatarStorage, security: fakeSecurity, policy: { refreshTokenDays: 30, otpTtlMinutes: 10, otpMaxAttempts: 5 }, emailService: fakeEmail, withTransaction: fakeTransaction, logger: { warn() {} }, ...overrides }); }
 export const authService = createTestAuthUseCases();
 export const geminiImageService = createImageAnalysisUseCases({ postRepository, analyzer: unexpectedPort<ImageAnalyzer>("image analyzer") });
-export const testServices = { notificationService, systemConfigService, adminUserService, adminReportingService, adminCatalogService, warehouseService, returnFeedbackService, reportService, matchingService, postService, claimService, realtimeService, authService, geminiImageService };
+export const testServices = {
+  notificationService,
+  notificationEmailWorker: { runOnce: async () => ({ sent: 0, skipped: 0, deferred: 0, failed: 0 }) },
+  systemConfigService, adminUserService, adminReportingService, adminCatalogService, warehouseService, returnFeedbackService,
+  reportService, matchingService, postService, claimService, realtimeService, authService, geminiImageService
+};

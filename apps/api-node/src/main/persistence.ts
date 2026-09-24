@@ -8,6 +8,7 @@ import { createUserRepository } from "../modules/auth/infrastructure/user.reposi
 import { createClaimRepository } from "../modules/claims/infrastructure/claim.repository.js";
 import { createMatchingRepository } from "../modules/matching/infrastructure/matching.repository.js";
 import { createNotificationRepository } from "../modules/notifications/infrastructure/notification.repository.js";
+import { createNotificationEmailRepository } from "../modules/notifications/infrastructure/notification-email.repository.js";
 import { createPostRepository } from "../modules/posts/infrastructure/post.repository.js";
 import { createReturnFeedbackRepository } from "../modules/returns/infrastructure/return-feedback.repository.js";
 import { createReportRepository } from "../modules/reports/infrastructure/report.repository.js";
@@ -30,6 +31,7 @@ export function createPersistence(database: Pool) {
     claimRepository: createClaimRepository(database),
     matchingRepository: createMatchingRepository(database, sqlTransaction),
     notificationRepository: createNotificationRepository(database),
+    notificationEmailRepository: createNotificationEmailRepository(database),
     postRepository: createPostRepository(database),
     returnFeedbackRepository: createReturnFeedbackRepository(database),
     reportRepository: createReportRepository(database),

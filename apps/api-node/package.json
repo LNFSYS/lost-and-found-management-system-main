@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/main/server.ts",
+    "worker:notification-email": "tsx src/main/notification-email-worker.ts",
     "start": "node dist/main/server.js",
     "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\"",
     "build": "npm run clean && tsc -p tsconfig.json",
@@ -12,6 +13,7 @@
     "test:db-integration": "tsx --import ./src/test/setup-env.ts --test src/integration/*.integration.test.ts",
     "migrate": "tsx src/migrations/run-migrations.ts",
     "migrate:preflight": "tsx src/migrations/run-migration-preflight.ts",
+    "migrate:repair-claim-participants": "tsx src/migrations/repair-claim-participants.ts",
     "migrate:reconcile-claim": "tsx src/migrations/run-reconciliation.ts"
   },
   "dependencies": {

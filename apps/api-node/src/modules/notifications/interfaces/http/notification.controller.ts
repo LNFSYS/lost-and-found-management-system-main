@@ -1,6 +1,6 @@
 import type { Request, Response } from "express";
 import type { NotificationUseCases } from "../../application/notification.use-cases.js";
-import { listNotificationsQuerySchema, notificationIdParamSchema } from "./notification.validator.js";
+import { listNotificationsQuerySchema, notificationIdParamSchema, updateNotificationEmailPreferencesSchema } from "./notification.validator.js";
 
 export function createNotificationController({ notificationService }: {
   notificationService: NotificationUseCases;
@@ -18,6 +18,17 @@ export function createNotificationController({ notificationService }: {
 
     async markAllRead(request: Request, response: Response) {
       response.json(await notificationService.markAllRead(request.auth!.sub));
+    },
+
+    async getEmailPreferences(request: Request, response: Response) {
+      response.json(await notificationService.getEmailPreferences(request.auth!.sub));
+    },
+
+    async updateEmailPreferences(request: Request, response: Response) {
+      response.json(await notificationService.updateEmailPreferences(
+        request.auth!.sub,
+        updateNotificationEmailPreferencesSchema.parse(request.body)
+      ));
     }
   };
   return notificationController;
