@@ -72,3 +72,4 @@ UC-M01–UC-M12 là nhóm mobile target lịch sử, chưa thuộc catalogue 168
 - Peer-to-peer flow là target main flow; Staff custody là optional/escalation.
 - Native Mobile không được ghi implemented khi repository chưa có project.
 - Jira/sprint/assignee chưa xác minh vì không có connector trong workspace.
+| BR-47–BR-52 | FR-NOTIFY-01–04, NFR-MAIL-01–02 | UC-097, UC-123–UC-125, UC-168 | Partial / implementation present | Migration 052, authenticated preferences, Node transactional enqueue, read-before-send cancellation, generic SMTP adapter and bounded worker are implemented. Runtime database/provider evidence and isolated end-to-end worker tests remain to be attached. |

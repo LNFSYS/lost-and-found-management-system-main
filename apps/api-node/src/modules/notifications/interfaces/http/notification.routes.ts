@@ -14,6 +14,8 @@ export function createNotificationRoutes({ notificationController, auth }: {
     response.setHeader("Vary", "Authorization");
     next();
   });
+  notificationRoutes.get("/preferences", (request, response, next) => notificationController.getEmailPreferences(request, response).catch(next));
+  notificationRoutes.put("/preferences", (request, response, next) => notificationController.updateEmailPreferences(request, response).catch(next));
   notificationRoutes.get("/", (request, response, next) => notificationController.list(request, response).catch(next));
   notificationRoutes.post("/read-all", (request, response, next) => notificationController.markAllRead(request, response).catch(next));
   notificationRoutes.post("/:notificationId/read", (request, response, next) => notificationController.markRead(request, response).catch(next));

@@ -39,6 +39,12 @@ function bool(name: string, fallback: boolean): boolean {
   return parseBooleanEnv(process.env[name], fallback, name);
 }
 
+function boundedNumber(name: string, fallback: number, minimum: number, maximum: number): number {
+  const value = number(name, fallback);
+  if (value < minimum || value > maximum) throw new Error(`${name} must be between ${minimum} and ${maximum}`);
+  return value;
+}
+
 export const env = {
   nodeEnv: process.env.NODE_ENV ?? "development",
   port: number("API_PORT", 3001),
@@ -69,6 +75,12 @@ export const env = {
     user: required("SMTP_USER"),
     pass: required("SMTP_PASS"),
     from: required("SMTP_FROM")
+  },
+  notificationEmail: {
+    chatDelayMinutes: boundedNumber("NOTIFICATION_EMAIL_CHAT_DELAY_MINUTES", 7, 5, 10),
+    digestDelayMinutes: boundedNumber("NOTIFICATION_EMAIL_DIGEST_DELAY_MINUTES", 60, 15, 1_440),
+    workerPollSeconds: boundedNumber("NOTIFICATION_EMAIL_WORKER_POLL_SECONDS", 30, 5, 300),
+    workerEnabled: bool("NOTIFICATION_EMAIL_WORKER_ENABLED", true)
   },
   gemini: {
     apiKey: process.env.GEMINI_API_KEY?.trim() || null,

@@ -128,3 +128,6 @@ Mỗi requirement Implemented/Verified phải có route/service/UI/test path t�
 - Cloudinary đã dùng cho avatar; shared object storage cho media bài đăng và deployment platform vẫn cần xác nhận.
 - Quyền Staff khi xem case escalation.
 - Jira sprint dates, assignee, ticket history.
+## Story notification email — current evidence
+
+Implemented in Node.js/Web: authenticated preference API and responsive Web/PWA screen, migration 052 outbox/preferences, transactional enqueue from claim/chat notifications, read-before-send cancellation, privacy-safe SMTP adapter, retry/backoff worker and idempotency key. API and Web builds pass. Remaining Partial evidence is database migration execution, provider delivery, isolated worker integration, and reviewed PR/Jira links.

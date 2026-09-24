@@ -109,6 +109,6 @@ export async function verifyClaimConversationSchema(connection: MigrationConnect
   // Migration 045 also backfills participants. Missing rows are not a completed migration.
   const [missing] = await connection.query(`SELECT COUNT(*) AS total FROM claims c JOIN posts p ON p.id=c.post_id
     WHERE NOT EXISTS (SELECT 1 FROM claim_participants cp WHERE cp.claim_id=c.id AND cp.user_id=c.claimant_id AND cp.participant_role='CLAIMANT')
-       OR NOT EXISTS (SELECT 1 FROM claim_participants cp WHERE cp.claim_id=c.id AND cp.user_id=p.user_id AND cp.participant_role='FINDER')`);
+       OR (p.user_id <> c.claimant_id AND NOT EXISTS (SELECT 1 FROM claim_participants cp WHERE cp.claim_id=c.id AND cp.user_id=p.user_id AND cp.participant_role='FINDER'))`);
   if (Number((missing as { total: number }[])[0]?.total) !== 0) throw new Error("Claim migration participant backfill is incomplete");
 }

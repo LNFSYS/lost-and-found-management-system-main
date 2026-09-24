@@ -347,7 +347,7 @@ Completed UC work above is not reassigned. The 76 Partial/Planned UCs are divide
 
 ### 3.18 Notification Delivery Preferences
 
-**Remaining work:** UC-168 is assigned to Khoa.
+**Remaining work:** UC-168 is assigned to Khoa. Runtime implementation is now present in the Node.js API and Web/PWA preference screen; migration/provider/worker evidence remains open, so this UC stays Partial.
 
 **Relationship to existing use cases:** UC-168 controls how an authenticated user receives events; it does not create duplicate use cases for each channel. Match, claim, message, appointment, handover, custody, overdue, return, and feedback events remain owned by UC-097, UC-123 to UC-125, UC-134, UC-147, UC-150, and UC-058 to UC-060. In-app notifications remain the canonical user-visible record; PWA push and email are delivery channels.
 
@@ -355,4 +355,4 @@ Completed UC work above is not reassigned. The 76 Partial/Planned UCs are divide
 
 | ID | Use Case | Actors | Use Case Description | Status |
 | --- | --- | --- | --- | --- |
-| UC-168 | Manage notification delivery preferences | Authenticated User | Configure optional in-app, PWA push, immediate email, delayed-unread email, digest, and quiet-hour preferences by event category while mandatory security delivery remains enabled. | Planned |
+| UC-168 | Manage notification delivery preferences | Authenticated User | Configure optional in-app, PWA push, immediate email, delayed-unread email, digest, and quiet-hour preferences by event category while mandatory security delivery remains enabled. | Partial |

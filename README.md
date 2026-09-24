@@ -92,6 +92,14 @@ Không tắt TLS verification để né lỗi certificate. Khi dùng database ch
 
 ### Migration reconciliation
 
+Với database cũ có claim được tạo trước khi participant được backfill đầy đủ, chạy lệnh idempotent sau một lần trước khi migrate:
+
+```bash
+npm run migrate:repair-claim-participants
+```
+
+Lệnh chỉ bổ sung participant còn thiếu, không xóa hoặc cập nhật claim hiện có. Trường hợp self-claim (người nhận và người đăng là cùng tài khoản) được xem là hợp lệ theo khóa `(claim_id, user_id)`.
+
 Trước khi migrate DB đã dùng nhánh claim cũ, chạy `npm run migrate:reconcile-claim` (mặc định **read-only dry-run**).
 Nếu kết quả là `READY`, DB còn tên `040_peer_claim_conversations.sql` trong khi source dùng `045`; không chạy lại DDL đó.
 Công cụ chỉ đối soát alias này sau khi kiểm tra checksum, columns/defaults, generated expression, indexes, foreign keys và participant backfill.

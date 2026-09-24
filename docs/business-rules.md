@@ -121,3 +121,6 @@ Thẻ sinh viên, giấy tờ, thẻ ngân hàng, CCCD/hộ chiếu, điện tho
 ## 8. Nguyên tắc status
 
 Một rule chỉ được chuyển từ Planned/Partial sang Enforced khi có runtime implementation, validation/authorization, test hoặc evidence tái lập được và traceability đã cập nhật.
+## Notification email enforcement
+
+Optional claim/chat email is never the source of truth: the committed in-app notification remains canonical. Only verified, active users with current entity access can receive a generic authenticated-link email. A read notification or opened room cancels pending optional delivery. Security OTP and password-reset email are mandatory and bypass optional preference settings. SMTP failure is isolated to outbox state and cannot roll back a committed claim, message, or notification.

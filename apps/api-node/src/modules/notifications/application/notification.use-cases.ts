@@ -1,4 +1,6 @@
 import { AppError } from "../../../shared/domain/app-error.js";
+import type { NotificationEmailQueue } from "./notification-email.queue.js";
+import type { NotificationEmailPreferences, NotificationEmailRepository } from "./notification-email.repository.port.js";
 import type { NotificationRecord, NotificationRepository } from "./notification.repository.port.js";
 
 function safeLimit(value: number | undefined) {
@@ -7,9 +9,16 @@ function safeLimit(value: number | undefined) {
 
 export interface NotificationDependencies {
   notificationRepository: NotificationRepository;
+  notificationEmailRepository?: NotificationEmailRepository;
+  notificationEmailQueue?: NotificationEmailQueue;
 }
 export function createNotificationUseCases(options: NotificationDependencies) {
-  const { notificationRepository } = options;
+  const { notificationRepository, notificationEmailRepository, notificationEmailQueue } = options;
+
+  function emailPreferencesRepository() {
+    if (!notificationEmailRepository) throw new AppError("unavailable", "Notification email preferences are unavailable");
+    return notificationEmailRepository;
+  }
 
   const notificationService = {
     async list(userId: string, limit?: number): Promise<{ items: NotificationRecord[]; unreadTotal: number; }> {
@@ -24,11 +33,22 @@ export function createNotificationUseCases(options: NotificationDependencies) {
       if (!await notificationRepository.markRead(userId, notificationId)) {
         throw new AppError("not_found", "Thông báo không tồn tại");
       }
+      await notificationEmailQueue?.cancelForNotification(userId, notificationId);
       return { read: true };
     },
 
     async markAllRead(userId: string) {
-      return { read: true, count: await notificationRepository.markAllRead(userId) };
+      const count = await notificationRepository.markAllRead(userId);
+      await notificationEmailQueue?.cancelForUser(userId);
+      return { read: true, count };
+    },
+
+    async getEmailPreferences(userId: string) {
+      return { preferences: await emailPreferencesRepository().getPreferences(userId) };
+    },
+
+    async updateEmailPreferences(userId: string, input: Omit<NotificationEmailPreferences, "userId" | "updatedAt">) {
+      return { preferences: await emailPreferencesRepository().updatePreferences(userId, input) };
     }
   };
   return notificationService;

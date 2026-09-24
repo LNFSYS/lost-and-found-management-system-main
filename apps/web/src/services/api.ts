@@ -11,6 +11,16 @@ export interface CurrentUser {
   createdAt: string;
   updatedAt: string;
 }
+export type NotificationEmailMode = "IMMEDIATE" | "DELAYED_UNREAD" | "DIGEST" | "DISABLED";
+export interface NotificationEmailPreferences {
+  userId: string;
+  chatMode: NotificationEmailMode;
+  claimMode: NotificationEmailMode;
+  quietHoursStart: string | null;
+  quietHoursEnd: string | null;
+  timezone: string;
+  updatedAt: string;
+}
 export interface ProfileActivitySummary {
   ownerId: string;
   counts: {
@@ -788,6 +798,8 @@ export const api = {
   listNotifications: (limit = 20) => raw<NotificationListResponse>(`/notifications?limit=${Math.min(50, Math.max(1, Math.trunc(limit)))}`),
   markNotificationRead: (notificationId: string) => raw<{ read: boolean }>(`/notifications/${notificationId}/read`, { method: "POST" }),
   markAllNotificationsRead: () => raw<{ read: boolean; count: number }>("/notifications/read-all", { method: "POST" }),
+  getNotificationEmailPreferences: () => raw<{ preferences: NotificationEmailPreferences }>("/notifications/preferences").then((result) => result.preferences),
+  updateNotificationEmailPreferences: (payload: Omit<NotificationEmailPreferences, "userId" | "updatedAt">) => raw<{ preferences: NotificationEmailPreferences }>("/notifications/preferences", { method: "PUT", body: JSON.stringify(payload) }).then((result) => result.preferences),
   getAdminCatalog: () => raw<AdminCatalog>("/admin/catalog"),
   createAdminCategory: (payload: Required<Pick<AdminCategoryPayload, "name">> & AdminCategoryPayload) => raw<AdminCategory>("/admin/categories", { method: "POST", body: JSON.stringify(payload) }),
   updateAdminCategory: (id: string, payload: AdminCategoryPayload) => raw<AdminCategory>(`/admin/categories/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
