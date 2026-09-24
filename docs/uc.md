@@ -3,8 +3,8 @@
 This catalogue was updated on 21 September 2026 from the runtime source currently integrated into `dev` and the audited Git evidence recorded below. `Implemented` requires active runtime evidence on `dev`; schema or migration-only evidence is not sufficient. `Partial` means part of the actor goal exists, while `Planned` means no complete runtime flow is available.
 
 - **Implemented:** 92 use cases
-- **Partial:** 4 use cases
-- **Planned:** 72 use cases
+- **Partial:** 5 use cases
+- **Planned:** 71 use cases
 - **Total:** 168 business use cases
 
 `Claimant` means the owner of the LOST post. `Finder` means the owner of the matched FOUND post. PWA, mobile browser, and a future native application are delivery channels, not business use cases, and are therefore excluded from this catalogue.
@@ -347,7 +347,7 @@ Completed UC work above is not reassigned. The 76 Partial/Planned UCs are divide
 
 ### 3.18 Notification Delivery Preferences
 
-**Remaining work:** UC-168 is assigned to Khoa. Runtime implementation is now present in the Node.js API and Web/PWA preference screen; migration/provider/worker evidence remains open, so this UC stays Partial.
+**Remaining work:** UC-168 is assigned to Khoa. Runtime implementation is present in the Node.js API and Web/PWA preference screen, including transactional outbox, claim status coverage, category-safe digesting, privacy-safe HTML/text links, and bounded worker behavior. It stays Partial because full producer/provider evidence and SMTP exactly-once capability are not yet available.
 
 **Relationship to existing use cases:** UC-168 controls how an authenticated user receives events; it does not create duplicate use cases for each channel. Match, claim, message, appointment, handover, custody, overdue, return, and feedback events remain owned by UC-097, UC-123 to UC-125, UC-134, UC-147, UC-150, and UC-058 to UC-060. In-app notifications remain the canonical user-visible record; PWA push and email are delivery channels.
 

@@ -265,6 +265,41 @@ h3 {
   gap: 8px;
 }
 
+.otp-field {
+  display: grid;
+  gap: 8px;
+}
+
+.otp-field > span {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ink-soft);
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+
+.otp-field__input {
+  min-height: 58px;
+  color: var(--fpt-blue);
+  font-size: 1.45rem;
+  font-weight: 850;
+  letter-spacing: 0.48em;
+  text-align: center;
+  background: linear-gradient(135deg, #f8fcff, #fff);
+}
+
+.otp-field__input::placeholder {
+  color: #b7c9d4;
+  letter-spacing: 0.35em;
+}
+
+.otp-field small {
+  color: var(--muted);
+  font-size: 0.72rem;
+  line-height: 1.45;
+}
+
 input,
 select,
 textarea {
@@ -8040,6 +8075,18 @@ textarea {
 @media (max-width: 700px) { .reports-page { padding: 18px 14px; } .reports-layout { grid-template-columns: 1fr; } .reports-detail { grid-column: auto; } .reports-heading h1 { font-size: 26px; } .reports-toolbar { align-items: stretch; flex-direction: column; } }
 
 /* Optional notification-email preferences */
+.notifications-page { max-width: 920px; margin: 0 auto; padding: 32px 24px 48px; }
+.notifications-page__heading { display: flex; align-items: center; gap: 14px; padding-bottom: 20px; border-bottom: 1px solid #dbe5ea; color: var(--fpt-blue); }
+.notifications-page__heading > div { flex: 1; }
+.notifications-page__heading h1 { margin: 3px 0 5px; color: #243d4a; font-size: 1.7rem; }
+.notifications-page__heading p:last-child { margin: 0; color: #657b88; font-size: .82rem; }
+.notifications-page__list { display: grid; gap: 10px; margin-top: 22px; }
+.notifications-page__item { display: flex; align-items: flex-start; gap: 12px; width: 100%; padding: 16px; border: 1px solid #d6e2e8; border-radius: 8px; background: #fff; color: #345164; text-align: left; cursor: pointer; }
+.notifications-page__item.unread { border-color: var(--fpt-blue); background: #f0f8fc; }
+.notifications-page__icon { display: grid; place-items: center; color: var(--fpt-blue); }
+.notifications-page__item strong, .notifications-page__item small, .notifications-page__item time { display: block; }
+.notifications-page__item small { margin-top: 4px; color: #657b88; }
+.notifications-page__item time { margin-top: 6px; color: #8799a3; font-size: .72rem; }
 .notification-preferences-page { max-width: 920px; margin: 0 auto; padding: 32px 24px 48px; }
 .notification-preferences-heading { display: flex; gap: 15px; align-items: flex-start; padding-bottom: 22px; border-bottom: 1px solid #dbe5ea; }
 .notification-preferences-heading > svg { width: 38px; height: 38px; color: var(--fpt-blue); flex: 0 0 auto; }
@@ -8066,6 +8113,11 @@ textarea {
   border-radius: 50%;
   box-shadow: none;
   accent-color: var(--fpt-blue);
+}
+
+.otp-send-button,
+.otp-resend-button {
+  flex: 0 0 auto;
 }
 .notification-mode-grid strong { color: #294657; font-size: .75rem; }
 .notification-mode-grid small { color: #71838e; font-size: .65rem; line-height: 1.4; }

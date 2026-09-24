@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { notificationRepository, notificationService } from "../../../test/use-case-fixtures.js";
+import { createNotificationUseCases } from "./notification.use-cases.js";
+import type { NotificationEmailRepository } from "./notification-email.repository.port.js";
 
 test("notification list clamps polling limits and returns a database-backed unread total", async () => {
   const original = notificationRepository.listForUser;
@@ -31,4 +33,19 @@ test("notification read is scoped to the authenticated user", async () => {
   } finally {
     notificationRepository.markRead = original;
   }
+});
+
+test("email preference updates are scoped to the authenticated subject", async () => {
+  let updatedUserId = "";
+  const emailRepository = {
+    updatePreferences: async (userId: string, input: Parameters<NotificationEmailRepository["updatePreferences"]>[1]) => {
+      updatedUserId = userId;
+      return { userId, ...input, updatedAt: new Date().toISOString() };
+    }
+  } as Pick<NotificationEmailRepository, "updatePreferences"> as NotificationEmailRepository;
+  const service = createNotificationUseCases({ notificationRepository, notificationEmailRepository: emailRepository });
+  await service.updateEmailPreferences("user-a", {
+    chatMode: "IMMEDIATE", claimMode: "DISABLED", quietHoursStart: null, quietHoursEnd: null, timezone: "UTC"
+  });
+  assert.equal(updatedUserId, "user-a");
 });

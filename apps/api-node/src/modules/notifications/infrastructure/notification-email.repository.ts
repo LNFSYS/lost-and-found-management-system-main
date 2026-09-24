@@ -170,8 +170,9 @@ export function createNotificationEmailRepository(pool: SqlExecutor) {
         await pool.execute(
           `UPDATE notification_email_outbox SET status = 'PROCESSING', lease_token = ?,
             lease_expires_at = DATE_ADD(UTC_TIMESTAMP(), INTERVAL ? SECOND), attempt_count = attempt_count + 1
-           WHERE recipient_user_id = ? AND delivery_mode = 'DIGEST' AND status = 'PENDING' AND due_at <= UTC_TIMESTAMP()`,
-          [input.leaseToken, input.leaseSeconds, item.recipientUserId]
+           WHERE recipient_user_id = ? AND event_type = ? AND delivery_mode = 'DIGEST'
+             AND status = 'PENDING' AND due_at <= UTC_TIMESTAMP()`,
+          [input.leaseToken, input.leaseSeconds, item.recipientUserId, item.eventType]
         );
       } else if (item.eventType === "CHAT" && item.roomId) {
         await pool.execute(
@@ -215,11 +216,12 @@ export function createNotificationEmailRepository(pool: SqlExecutor) {
       );
     },
 
-    async cancelLease(leaseToken: string) {
+    async cancelLease(leaseToken: string, errorCode?: string) {
       await pool.execute(
         `UPDATE notification_email_outbox SET status = 'CANCELLED', cancelled_at = COALESCE(cancelled_at, UTC_TIMESTAMP()),
-          lease_token = NULL, lease_expires_at = NULL WHERE status = 'PROCESSING' AND lease_token = ?`,
-        [leaseToken]
+          last_error_code = COALESCE(?, last_error_code), lease_token = NULL, lease_expires_at = NULL
+         WHERE status = 'PROCESSING' AND lease_token = ?`,
+        [errorCode ?? null, leaseToken]
       );
     },
 

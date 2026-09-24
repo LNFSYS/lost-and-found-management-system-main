@@ -40,7 +40,7 @@ Nguồn status là code/test hiện tại. Mỗi dòng liên kết business rule
 | BR-31, BR-43 | FR-ADMIN-02 | UC-066, UC-067, UC-084 | Implemented/Verified current scope | admin-reporting.service/repository, admin-page.tsx, moderation/KPI/export tests; moderation target được suy ra từ report và KPI snapshot tách khỏi metrics theo kỳ |
 | BR-31, BR-44 | FR-ADMIN-02 | UC-093–UC-096, UC-165 | Implemented/Verified | User report API/PWA, server-derived accessible targets, idempotent submit/withdraw, Admin detail và privacy-safe audit history; unit/API/Playwright coverage |
 | BR-07, BR-41 | FR-AUTH-04 | UC-038, UC-039 | Implemented/Verified current scope | Cloudinary avatar adapter, live authenticated upload/signed delivery/cleanup smoke test, profile activity API/UI và avatar cleanup tests; full UI/device QA còn cần chạy |
-| BR-47–BR-52 | FR-NOTIFY-01–04, NFR-MAIL-01–02 | UC-097, UC-123–UC-125, UC-147, UC-150, UC-168 | Partial/Planned | In-app claim notification là baseline hiện có. Transactional outbox, preference, delayed-unread email, coalescing, privacy-safe templates và delivery tests chưa có; xem [notification-email-rules.md](notification-email-rules.md). |
+| BR-47–BR-52 | FR-NOTIFY-01–04, NFR-MAIL-01–02 | UC-097, UC-123–UC-125, UC-147, UC-150, UC-168 | Partial | Migration 052, authenticated preferences, claim/chat transactional enqueue, claim status notifications, delayed-unread/read cancellation, category-safe coalescing, privacy-safe HTML/text, eligibility checks và worker tests đã có. Remaining: full producer matrix, isolated runtime/provider evidence, and exactly-once provider capability. Xem [notification-email-rules.md](notification-email-rules.md). |
 
 ## 3. Channel evidence
 
@@ -59,8 +59,8 @@ Nguồn status là code/test hiện tại. Mỗi dòng liên kết business rule
 Catalogue [uc.md](uc.md) giữ 168 ID business UC:
 
 - 92 Implemented có runtime evidence.
-- 4 Partial mới đáp ứng một phần actor goal.
-- 72 Planned chưa có complete runtime flow.
+- 5 Partial mới đáp ứng một phần actor goal, gồm UC-168.
+- 71 Planned chưa có complete runtime flow.
 
 UC-M01–UC-M12 là nhóm mobile target lịch sử, chưa thuộc catalogue 168 business UC cho tới khi team phê duyệt ID mapping. Khi đưa Native Mobile vào SRS, cần tạo mapping chính thức, không tự trùng ID.
 
@@ -72,4 +72,3 @@ UC-M01–UC-M12 là nhóm mobile target lịch sử, chưa thuộc catalogue 168
 - Peer-to-peer flow là target main flow; Staff custody là optional/escalation.
 - Native Mobile không được ghi implemented khi repository chưa có project.
 - Jira/sprint/assignee chưa xác minh vì không có connector trong workspace.
-| BR-47–BR-52 | FR-NOTIFY-01–04, NFR-MAIL-01–02 | UC-097, UC-123–UC-125, UC-168 | Partial / implementation present | Migration 052, authenticated preferences, Node transactional enqueue, read-before-send cancellation, generic SMTP adapter and bounded worker are implemented. Runtime database/provider evidence and isolated end-to-end worker tests remain to be attached. |

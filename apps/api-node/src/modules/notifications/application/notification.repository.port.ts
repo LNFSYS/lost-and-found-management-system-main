@@ -2,6 +2,9 @@ import type { TransactionContext } from "../../../shared/application/transaction
 export type NotificationType =
   | "CLAIM_REQUEST_RECEIVED"
   | "CLAIM_ACCEPTED"
+  | "CLAIM_MORE_INFO_REQUESTED"
+  | "CLAIM_REJECTED"
+  | "CLAIM_WITHDRAWN"
   | "CHAT_MESSAGE_RECEIVED"
   | "APPOINTMENT_UPDATED"
   | "RETURN_UPDATED";

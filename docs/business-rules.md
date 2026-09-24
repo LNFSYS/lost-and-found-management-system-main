@@ -76,12 +76,12 @@ Cập nhật: **21/09/2026**
 
 | ID | Luật | UC | Status |
 | --- | --- | --- | --- |
-| BR-47 | Chỉ event nghiệp vụ đã commit mới được tạo notification; in-app là bản ghi chính thức, email/PWA là delivery channel và không được tự đổi business state. | UC-097, UC-123–UC-125, UC-147, UC-150 | Partial: in-app claim notification có; event delivery tổng quát chưa có |
-| BR-48 | User được cấu hình kênh và tần suất cho notification optional; email bảo mật bắt buộc cho account flow không được tắt bằng preference chung. | UC-168 | Planned |
-| BR-49 | Email tin nhắn mới phải chờ 5–10 phút, kiểm tra unread ngay trước khi gửi và coalesce nhiều message cùng room. | UC-124, UC-168 | Planned |
-| BR-50 | Email không chứa message body, private evidence, verification answer, OCR/raw AI output, contact riêng, vị trí chính xác, storage URL hoặc secret. | UC-097, UC-123–UC-125, UC-147, UC-150, UC-168 | Planned |
-| BR-51 | Delivery phải có transactional outbox, idempotency key, bounded retry/backoff và observability; provider failure không rollback nghiệp vụ đã commit. | UC-097, UC-123–UC-125, UC-147, UC-150 | Planned |
-| BR-52 | Chỉ gửi tới email đã xác minh; deep link luôn yêu cầu authorization và unsubscribe chỉ được tắt nhóm email optional tương ứng. | UC-168 | Planned |
+| BR-47 | Chỉ event nghiệp vụ đã commit mới được tạo notification; in-app là bản ghi chính thức, email/PWA là delivery channel và không được tự đổi business state. | UC-097, UC-123–UC-125, UC-147, UC-150 | Partial: claim/chat notification và enqueue email cùng transaction; các producer khác chưa hoàn tất |
+| BR-48 | User được cấu hình kênh và tần suất cho notification optional; email bảo mật bắt buộc cho account flow không được tắt bằng preference chung. | UC-168 | Partial: preference được scope theo authenticated subject cho claim/chat; OTP/reset password vẫn độc lập và bắt buộc |
+| BR-49 | Email tin nhắn mới phải chờ 5–10 phút, kiểm tra unread ngay trước khi gửi và coalesce nhiều message cùng room. | UC-124, UC-168 | Enforced trong worker hiện tại: unread/read cancellation, cùng-room coalescing và digest tách category; cần isolated runtime evidence |
+| BR-50 | Email không chứa message body, private evidence, verification answer, OCR/raw AI output, contact riêng, vị trí chính xác, storage URL hoặc secret. | UC-097, UC-123–UC-125, UC-147, UC-150, UC-168 | Enforced cho template hiện tại: HTML/text chỉ metadata và deep link, không render nội dung riêng tư |
+| BR-51 | Delivery phải có transactional outbox, idempotency key, bounded retry/backoff và observability; provider failure không rollback nghiệp vụ đã commit. | UC-097, UC-123–UC-125, UC-147, UC-150 | Partial: known failures retry; SMTP timeout ở trạng thái UNKNOWN bị quarantine/cancel để tránh gửi trùng, vì provider hiện chưa có exactly-once |
+| BR-52 | Chỉ gửi tới email đã xác minh; deep link luôn yêu cầu authorization và unsubscribe chỉ được tắt nhóm email optional tương ứng. | UC-168 | Enforced cho worker scope: verified/active/access checks và authenticated deep link; full category/provider evidence còn mở |
 
 Chi tiết event, priority, privacy, retry và negative test nằm trong [notification-email-rules.md](notification-email-rules.md).
 
@@ -123,4 +123,4 @@ Thẻ sinh viên, giấy tờ, thẻ ngân hàng, CCCD/hộ chiếu, điện tho
 Một rule chỉ được chuyển từ Planned/Partial sang Enforced khi có runtime implementation, validation/authorization, test hoặc evidence tái lập được và traceability đã cập nhật.
 ## Notification email enforcement
 
-Optional claim/chat email is never the source of truth: the committed in-app notification remains canonical. Only verified, active users with current entity access can receive a generic authenticated-link email. A read notification or opened room cancels pending optional delivery. Security OTP and password-reset email are mandatory and bypass optional preference settings. SMTP failure is isolated to outbox state and cannot roll back a committed claim, message, or notification.
+Optional claim/chat email is never the source of truth: the committed in-app notification remains canonical. Only verified, active users with current entity access can receive a generic authenticated-link email. A read notification or opened room cancels pending optional delivery. Security OTP and password-reset email are mandatory and bypass optional preference settings. SMTP failure is isolated to outbox state and cannot roll back a committed claim, message, or notification. Known delivery failures use bounded retry; an uncertain provider timeout is quarantined/cancelled rather than retried because the current SMTP provider cannot guarantee exactly-once delivery.

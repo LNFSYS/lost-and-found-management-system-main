@@ -1,12 +1,26 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createTestClaimUseCases } from "../../../test/use-case-fixtures.js";
+import { createTestClaimUseCases, notificationRepository } from "../../../test/use-case-fixtures.js";
 import type { ClaimAuditEventRecord, ClaimRepository, ClaimStatus, FinderDecision, VerificationQuestionRecord } from "./claim.repository.port.js";
 
 const claimId = "11111111-1111-4111-8111-111111111111";
 const claimantId = "22222222-2222-4222-8222-222222222222";
 const finderId = "33333333-3333-4333-8333-333333333333";
 const roomId = "44444444-4444-4444-8444-444444444444";
+
+// Verification decisions now persist an in-app notification in the same transaction.
+// Keep this focused harness self-contained while individual notification tests assert the payload.
+notificationRepository.create = async (input) => ({
+  id: "99999999-9999-4999-8999-999999999999",
+  type: input.type,
+  title: input.title,
+  body: input.body ?? null,
+  entityType: input.entityType ?? null,
+  entityId: input.entityId ?? null,
+  isRead: false,
+  readAt: null,
+  createdAt: "2026-09-18T01:00:00.000Z"
+});
 
 function claim(status: ClaimStatus, finderDecision: FinderDecision = "ACCEPTED") {
   return {

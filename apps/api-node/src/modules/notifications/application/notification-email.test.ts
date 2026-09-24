@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createNotificationEmailQueue } from "./notification-email.queue.js";
+import { NotificationEmailDeliveryError } from "./notification-email.port.js";
 import { createNotificationEmailWorker, quietHoursEnd } from "./notification-email.worker.js";
 import type { NotificationEmailRepository } from "./notification-email.repository.port.js";
 import type { NotificationRecord } from "./notification.repository.port.js";
@@ -106,12 +107,124 @@ test("worker sends one generic email for eligible unread delivery and never incl
   assert.match(sent?.html ?? "", /TIN NHẮN MỚI/);
   assert.match(sent?.html ?? "", /TRUY CẬP TRANG WEB/);
   assert.match(sent?.html ?? "", /href="https:\/\/lnfs\.example\/claims\//);
-  assert.doesNotMatch(sent?.text ?? "", /https:\/\/lnfs\.example\/claims\//);
+  assert.match(sent?.text ?? "", /TRUY CẬP TRANG WEB: https:\/\/lnfs\.example\/claims\//);
   assert.doesNotMatch(sent?.text ?? "", /Do not put this private body/);
+  assert.doesNotMatch(sent?.html ?? "", /Do not put this private body/);
+  assert.doesNotMatch(`${sent?.text ?? ""}\n${sent?.html ?? ""}`, /evidence|verification answer|phone number|location/i);
 });
 
 test("quiet hours calculate a future retry time in the user's timezone", () => {
   const end = quietHoursEnd({ ...preferences, quietHoursStart: "22:00", quietHoursEnd: "07:00" }, new Date("2026-09-23T17:30:00.000Z"));
   assert.ok(end);
   assert.equal(end?.toISOString(), "2026-09-24T00:00:00.000Z");
+});
+
+test("digest with multiple entities links to the authenticated notification summary", async () => {
+  const first = { id: "a", notificationId: "a", recipientUserId: "user-a", eventType: "CLAIM" as const, entityType: "CLAIM", entityId: "claim-a", roomId: null, deliveryMode: "DIGEST" as const, idempotencyKey: "digest-a", attemptCount: 1 };
+  const second = { ...first, id: "b", notificationId: "b", entityId: "claim-b", idempotencyKey: "digest-b" };
+  let sent: { text: string; html: string } | undefined;
+  let claimed = false;
+  const worker = createNotificationEmailWorker({
+    repository: repository({
+      claimDue: async () => { if (claimed) return []; claimed = true; return [first]; },
+      listLease: async () => [
+        { ...first, email: "verified@example.com", emailVerified: true, accountActive: true, notificationUnread: true, entityAccessible: true },
+        { ...second, email: "verified@example.com", emailVerified: true, accountActive: true, notificationUnread: true, entityAccessible: true }
+      ]
+    }),
+    emailDelivery: { send: async (input) => { sent = { text: input.text, html: input.html }; return {}; } },
+    id: () => "digest-token",
+    frontendUrl: "https://lnfs.example",
+    logger: { warn: () => undefined }
+  });
+  await worker.runOnce();
+  assert.match(sent?.html ?? "", /href="https:\/\/lnfs\.example\/notifications"/);
+  assert.match(sent?.text ?? "", /https:\/\/lnfs\.example\/notifications/);
+});
+
+test("read delayed notification is cancelled before delivery", async () => {
+  let sent = false;
+  let cancelled = false;
+  const worker = createNotificationEmailWorker({
+    repository: repository({
+      claimDue: async () => [{
+        ...notification,
+        id: "read-outbox",
+        notificationId: notification.id,
+        recipientUserId: "user-a",
+        eventType: "CHAT",
+        entityType: "CLAIM",
+        entityId: notification.entityId,
+        roomId: "room-a",
+        deliveryMode: "DELAYED_UNREAD",
+        idempotencyKey: "read-key",
+        attemptCount: 1
+      }],
+      listLease: async () => [{
+        id: "read-outbox",
+        notificationId: notification.id,
+        recipientUserId: "user-a",
+        eventType: "CHAT",
+        entityType: "CLAIM",
+        entityId: notification.entityId,
+        roomId: "room-a",
+        deliveryMode: "DELAYED_UNREAD",
+        idempotencyKey: "read-key",
+        attemptCount: 1,
+        email: "verified@example.com",
+        emailVerified: true,
+        accountActive: true,
+        notificationUnread: false,
+        entityAccessible: true
+      }],
+      cancelLease: async () => { cancelled = true; }
+    }),
+    emailDelivery: { send: async () => { sent = true; return {}; } },
+    id: () => "read-token",
+    frontendUrl: "https://lnfs.example",
+    logger: { warn: () => undefined }
+  });
+  await worker.runOnce();
+  assert.equal(sent, false);
+  assert.equal(cancelled, true);
+});
+
+test("worker cancels optional delivery when email or account eligibility is no longer valid", async () => {
+  let sent = false;
+  let cancelled = false;
+  const worker = createNotificationEmailWorker({
+    repository: repository({
+      claimDue: async () => [{ id: "ineligible-outbox", notificationId: notification.id, recipientUserId: "user-a", eventType: "CLAIM", entityType: "CLAIM", entityId: notification.entityId, roomId: null, deliveryMode: "IMMEDIATE", idempotencyKey: "ineligible-key", attemptCount: 1 }],
+      listLease: async () => [{ id: "ineligible-outbox", notificationId: notification.id, recipientUserId: "user-a", eventType: "CLAIM", entityType: "CLAIM", entityId: notification.entityId, roomId: null, deliveryMode: "IMMEDIATE", idempotencyKey: "ineligible-key", attemptCount: 1, email: "unverified@example.com", emailVerified: false, accountActive: true, notificationUnread: true, entityAccessible: true }],
+      cancelLease: async () => { cancelled = true; }
+    }),
+    emailDelivery: { send: async () => { sent = true; return {}; } },
+    id: () => "ineligible-token",
+    frontendUrl: "https://lnfs.example",
+    logger: { warn: () => undefined }
+  });
+  await worker.runOnce();
+  assert.equal(sent, false);
+  assert.equal(cancelled, true);
+});
+
+test("uncertain SMTP timeout is closed without retry to avoid duplicate delivery", async () => {
+  let cancelledWith: string | undefined;
+  let retryReleased = false;
+  let claimed = false;
+  const worker = createNotificationEmailWorker({
+    repository: repository({
+      claimDue: async () => { if (claimed) return []; claimed = true; return [{ ...notification, id: "timeout-outbox", notificationId: notification.id, recipientUserId: "user-a", eventType: "CHAT", entityType: "CLAIM", entityId: notification.entityId, roomId: "room-a", deliveryMode: "IMMEDIATE", idempotencyKey: "timeout-key", attemptCount: 1 }]; },
+      listLease: async () => [{ id: "timeout-outbox", notificationId: notification.id, recipientUserId: "user-a", eventType: "CHAT", entityType: "CLAIM", entityId: notification.entityId, roomId: "room-a", deliveryMode: "IMMEDIATE", idempotencyKey: "timeout-key", attemptCount: 1, email: "verified@example.com", emailVerified: true, accountActive: true, notificationUnread: false, entityAccessible: true }],
+      cancelLease: async (_token, errorCode) => { cancelledWith = errorCode; },
+      releaseLeaseForRetry: async () => { retryReleased = true; }
+    }),
+    emailDelivery: { send: async () => { throw new NotificationEmailDeliveryError("provider timeout", "UNKNOWN", "ETIMEDOUT"); } },
+    id: () => "timeout-token",
+    frontendUrl: "https://lnfs.example",
+    logger: { warn: () => undefined }
+  });
+  await worker.runOnce();
+  assert.equal(cancelledWith, "ETIMEDOUT");
+  assert.equal(retryReleased, false);
 });

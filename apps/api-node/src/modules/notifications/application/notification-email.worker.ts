@@ -1,5 +1,5 @@
 import type { Logger } from "../../../shared/application/logger.port.js";
-import type { NotificationEmailDelivery } from "./notification-email.port.js";
+import { NotificationEmailDeliveryError, type NotificationEmailDelivery } from "./notification-email.port.js";
 import type { NotificationEmailEvent, NotificationEmailPreferences, NotificationEmailRepository } from "./notification-email.repository.port.js";
 
 function localMinutes(now: Date, timezone: string) {
@@ -26,6 +26,9 @@ export function quietHoursEnd(preferences: NotificationEmailPreferences, now: Da
 }
 
 function safeErrorCode(error: unknown) {
+  if (error instanceof NotificationEmailDeliveryError && error.providerCode) {
+    return error.providerCode.replace(/[^A-Z0-9_]/gi, "_").slice(0, 80) || "SMTP_SEND_FAILED";
+  }
   const code = typeof (error as { code?: unknown })?.code === "string" ? (error as { code: string; }).code : "SMTP_SEND_FAILED";
   return code.replace(/[^A-Z0-9_]/gi, "_").slice(0, 80) || "SMTP_SEND_FAILED";
 }
@@ -53,13 +56,19 @@ function eventCopy(eventType: NotificationEmailEvent, count: number) {
   }
 }
 
-function genericContent(count: number, entityId: string | null, frontendUrl: string, eventType: NotificationEmailEvent) {
-  const deepLink = entityId ? new URL(`/claims/${entityId}`, frontendUrl).toString() : new URL("/home", frontendUrl).toString();
+function genericContent(count: number, entityId: string | null, frontendUrl: string, eventType: NotificationEmailEvent, summaryLink = false) {
+  // Only claim/chat rows have a guaranteed participant-scoped detail route. Other
+  // categories use the authenticated notification center instead of guessing a
+  // claim URL from an appointment/custody/feedback entity id.
+  const useSummaryLink = summaryLink || !["CHAT", "CLAIM"].includes(eventType);
+  const deepLink = useSummaryLink
+    ? new URL("/notifications", frontendUrl).toString()
+    : entityId ? new URL(`/claims/${entityId}`, frontendUrl).toString() : new URL("/home", frontendUrl).toString();
   const copy = eventCopy(eventType, count);
   const safeDeepLink = escapeHtml(deepLink);
   return {
     subject: `${copy.badge[0] + copy.badge.slice(1).toLowerCase()} | FPTU Lost & Found`,
-    text: `${copy.title} trên FPTU Lost & Found. Mở email HTML và bấm "TRUY CẬP TRANG WEB" để xem thông tin.\n\nEmail này không chứa nội dung trao đổi riêng hoặc thông tin nhạy cảm.`,
+    text: `${copy.title} trên FPTU Lost & Found. TRUY CẬP TRANG WEB: ${deepLink}\n\nEmail này không chứa nội dung trao đổi riêng hoặc thông tin nhạy cảm.`,
     html: `<!doctype html>
 <html lang="vi">
   <head><meta name="x-apple-disable-message-reformatting"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
@@ -132,7 +141,9 @@ export function createNotificationEmailWorker(options: {
       await options.repository.cancelLease(leaseToken);
       return { sent: 0, skipped: leased.length };
     }
-    const content = genericContent(eligible.length, eligible[0]!.entityId, options.frontendUrl, item.eventType);
+    const distinctEntities = new Set(eligible.map((entry) => entry.entityId).filter(Boolean)).size;
+    const content = genericContent(eligible.length, eligible[0]!.entityId, options.frontendUrl, item.eventType,
+      item.deliveryMode === "DIGEST" && distinctEntities > 1);
     try {
       await options.emailDelivery.send({
         to: eligible[0]!.email,
@@ -145,7 +156,12 @@ export function createNotificationEmailWorker(options: {
     } catch (error) {
       const attempt = Math.max(...leased.map((entry) => entry.attemptCount));
       const errorCode = safeErrorCode(error);
-      if (attempt >= maxAttempts) await options.repository.cancelLease(leaseToken);
+      if (error instanceof NotificationEmailDeliveryError && error.deliveryState === "UNKNOWN") {
+        // A transport timeout can happen after the SMTP server accepted DATA. Retrying
+        // would create a duplicate, so the outbox is closed and observed for review.
+        await options.repository.cancelLease(leaseToken, errorCode);
+        options.logger.warn(JSON.stringify({ event: "notification_email_delivery_uncertain", eventType: item.eventType, attempt, errorCode, deliveryCount: leased.length }));
+      } else if (attempt >= maxAttempts) await options.repository.cancelLease(leaseToken, errorCode);
       else {
         const delayMinutes = Math.min(60, 2 ** Math.max(0, attempt - 1));
         await options.repository.releaseLeaseForRetry({ leaseToken, dueAt: new Date(now().getTime() + delayMinutes * 60_000), errorCode });
