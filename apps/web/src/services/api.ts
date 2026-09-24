@@ -551,7 +551,7 @@ export interface ClaimVerificationState {
     createdAt: string;
   }>;
 }
-export type NotificationType = "CLAIM_REQUEST_RECEIVED" | "CLAIM_ACCEPTED";
+export type NotificationType = "CLAIM_REQUEST_RECEIVED" | "CLAIM_ACCEPTED" | "CLAIM_MORE_INFO_REQUESTED" | "CLAIM_REJECTED" | "CLAIM_WITHDRAWN";
 export interface AppNotification {
   id: string;
   type: NotificationType;

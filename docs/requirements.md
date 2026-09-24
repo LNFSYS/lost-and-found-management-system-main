@@ -88,10 +88,10 @@ Requirements target bao phủ Web Application, PWA và Native Mobile. Status bê
 
 | ID | Requirement | UC | Priority | Status |
 | --- | --- | --- | --- | --- |
-| FR-NOTIFY-01 | Business event đã commit tạo notification in-app làm bản ghi chính thức; PWA push và email chỉ là delivery channel, không tự thay đổi business state. | UC-097, UC-123–UC-125, UC-147, UC-150 | P0 | Partial: in-app claim notification có; orchestration email/PWA theo event chưa có |
-| FR-NOTIFY-02 | New-message email chỉ gửi sau 5–10 phút nếu notification vẫn unread, phải gộp nhiều message cùng room và hủy delivery chưa gửi khi user đã đọc. | UC-124 | P1 | Planned |
-| FR-NOTIFY-03 | Authenticated User cấu hình kênh và tần suất theo nhóm sự kiện, gồm immediate, delayed-unread, digest và quiet hours; security email bắt buộc không được tắt. | UC-168 | P1 | Planned |
-| FR-NOTIFY-04 | Email phải privacy-safe, không chứa message body, evidence, verification answer, OCR/raw AI output, contact riêng, vị trí chính xác, storage URL hoặc secret; deep link luôn kiểm tra lại authorization. | UC-097, UC-123–UC-125, UC-147, UC-150, UC-168 | P0 | Planned |
+| FR-NOTIFY-01 | Business event đã commit tạo notification in-app làm bản ghi chính thức; PWA push và email chỉ là delivery channel, không tự thay đổi business state. | UC-097, UC-123–UC-125, UC-147, UC-150 | P0 | Partial: claim/chat đã tạo in-app notification và transactional email outbox trong cùng workflow; các producer/PWA khác vẫn mở |
+| FR-NOTIFY-02 | New-message email chỉ gửi sau 5–10 phút nếu notification vẫn unread, phải gộp nhiều message cùng room và hủy delivery chưa gửi khi user đã đọc. | UC-124 | P1 | Partial: delayed-unread, read-before-send cancellation và coalescing cùng room đã có; cần runtime evidence worker cô lập |
+| FR-NOTIFY-03 | Authenticated User cấu hình kênh và tần suất theo nhóm sự kiện, gồm immediate, delayed-unread, digest và quiet hours; security email bắt buộc không được tắt. | UC-168 | P1 | Partial: Web/PWA preference cho claim/chat và security-email bypass đã có; các nhóm event/PWA push còn lại chưa đầy đủ |
+| FR-NOTIFY-04 | Email phải privacy-safe, không chứa message body, evidence, verification answer, OCR/raw AI output, contact riêng, vị trí chính xác, storage URL hoặc secret; deep link luôn kiểm tra lại authorization. | UC-097, UC-123–UC-125, UC-147, UC-150, UC-168 | P0 | Partial: template HTML/text chỉ có metadata và authenticated deep link, worker kiểm tra verified/active/access; provider/runtime evidence còn mở |
 
 ## 3. Non-functional requirements
 
@@ -114,8 +114,8 @@ Requirements target bao phủ Web Application, PWA và Native Mobile. Status bê
 | NFR-AI-01 | AI/OCR/matching chỉ hỗ trợ quyết định; human verification bắt buộc trước trả đồ. | P0 | Implemented cho current AI/matching module; verification flow planned |
 | NFR-PWA-01 | Cached/offline UI không lộ private data và không báo transaction trước server confirmation. | P0 | Implemented trong service worker/cache policy; cần manual device evidence |
 | NFR-MOBILE-01 | Native Mobile parity phải dùng shared contract và có device/release evidence. | P1 | Planned |
-| NFR-MAIL-01 | Notification delivery dùng transactional outbox, idempotency key, bounded retry/backoff, coalescing và observability; provider failure không rollback nghiệp vụ. | P0 | Planned |
-| NFR-MAIL-02 | Chỉ gửi tới email đã xác minh; template/version, unsubscribe scope, provider log và deep link phải bảo vệ privacy, secret và authorization. | P0 | Planned |
+| NFR-MAIL-01 | Notification delivery dùng transactional outbox, idempotency key, bounded retry/backoff, coalescing và observability; provider failure không rollback nghiệp vụ. | P0 | Partial: outbox, bounded retry, category-safe coalescing và observability có; SMTP không cung cấp exactly-once, timeout không xác định được bị quarantine để tránh retry trùng |
+| NFR-MAIL-02 | Chỉ gửi tới email đã xác minh; template/version, unsubscribe scope, provider log và deep link phải bảo vệ privacy, secret và authorization. | P0 | Partial: eligibility/privacy/authenticated-link checks có; bằng chứng provider thật và full event matrix còn mở |
 
 ## 4. Acceptance và traceability
 
@@ -130,4 +130,4 @@ Mỗi requirement Implemented/Verified phải có route/service/UI/test path t�
 - Jira sprint dates, assignee, ticket history.
 ## Story notification email — current evidence
 
-Implemented in Node.js/Web: authenticated preference API and responsive Web/PWA screen, migration 052 outbox/preferences, transactional enqueue from claim/chat notifications, read-before-send cancellation, privacy-safe SMTP adapter, retry/backoff worker and idempotency key. API and Web builds pass. Remaining Partial evidence is database migration execution, provider delivery, isolated worker integration, and reviewed PR/Jira links.
+Implemented in Node.js/Web: authenticated preference API and responsive Web/PWA screen, migration 052 outbox/preferences, transactional enqueue from claim/chat and claim-status notifications, read-before-send cancellation, category-safe digesting, privacy-safe SMTP adapter, retry/backoff worker and authenticated HTML/text deep links. API and Web builds pass; migration 052 is applied to the target database. Remaining Partial evidence is real-provider delivery, isolated worker integration, full producer matrix, and a provider/adapter idempotency contract; stable Message-ID alone is not exactly-once evidence.

@@ -9,6 +9,7 @@ import { AdminPage } from "./pages/admin-page";
 import { LoginPage } from "./pages/login-page";
 import { ProfilePage } from "./pages/profile-page";
 import { NotificationPreferencesPage } from "./pages/notification-preferences-page";
+import { NotificationsPage } from "./pages/notifications-page";
 import { RegisterPage } from "./pages/register-page";
 import { StaffPage } from "./pages/staff-page";
 import { PostsPage } from "./pages/posts-page";
@@ -40,6 +41,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
               <Route path="/home" element={<Suspense fallback={<main className="center-state">Đang mở hành trình...</main>}><HomePage /></Suspense>} />
               <Route path="/profile" element={<ProfilePage />} />
               <Route path="/notification-preferences" element={<NotificationPreferencesPage />} />
+              <Route path="/notifications" element={<NotificationsPage />} />
               <Route path="/posts" element={<PostsPage />} />
               <Route path="/my-posts" element={<PostsPage initialTab="mine" />} />
               <Route path="/posts/:postId/matches" element={<PostMatchesPage />} />

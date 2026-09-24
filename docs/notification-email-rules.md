@@ -62,7 +62,7 @@ Node.js là owner duy nhất của notification event, preference, outbox và de
 - Worker phải kiểm tra authorization, preference và unread condition ngay trước khi gửi delayed email.
 - Tin nhắn chat trong cùng room được coalesce thành một email trong cửa sổ chờ; mở room hoặc mark-read sẽ hủy email chưa gửi.
 - Retry dùng bounded exponential backoff với jitter; permanent failure dừng retry và được quan sát qua structured log/metric.
-- Provider timeout hoặc duplicate callback không được tạo email trùng hay thay đổi business state.
+- Stable `Message-ID`/idempotency headers are correlation values, not proof of provider deduplication. Known SMTP failures are retried with bounded backoff; when transport times out after the provider may have accepted the message, the outbox item is marked uncertain/quarantined and is not retried, avoiding a second send at the cost of possible non-delivery. Exactly-once requires a provider/adapter idempotency contract that the current SMTP transport does not expose.
 - Template phải versioned; payload outbox lưu dữ liệu tối thiểu và không lưu private message/evidence để tiện render email.
 
 ## 8. Acceptance và negative tests
@@ -85,6 +85,6 @@ Node.js là owner duy nhất của notification event, preference, outbox và de
 
 The Node.js notification module now owns optional email preferences and a MySQL-backed transactional outbox (`052_notification_email_delivery.sql`). Chat and claim transactions enqueue only a notification identifier and recipient/entity metadata; private message and evidence content is never stored in the outbox. `GET/PUT /api/notifications/preferences` are authenticated and scoped to the token subject.
 
-The API process runs the bounded worker when `NOTIFICATION_EMAIL_WORKER_ENABLED=true`; a standalone worker entrypoint is also available. The worker re-checks account status, verified email, entity access, preference, quiet hours, and unread state immediately before SMTP delivery. It coalesces pending chat rows for a room, uses stable idempotency message identifiers, redacted error codes, and bounded retry. OTP and password-reset delivery remains owned by Auth and is not routed through this optional queue.
+The API process runs the bounded worker when `NOTIFICATION_EMAIL_WORKER_ENABLED=true`; a standalone worker entrypoint is also available. The worker re-checks account status, verified email, entity access, preference, quiet hours, and unread state immediately before SMTP delivery. It coalesces pending chat rows for a room, keeps digest categories separate, includes an authenticated deep link in both HTML and text, uses stable correlation identifiers, redacted error codes, and bounded retry. OTP and password-reset delivery remains owned by Auth and is not routed through this optional queue.
 
-Runtime evidence still required: applying migration 052 to the target database, SMTP provider acceptance with a real App Password, and end-to-end worker execution against an isolated MySQL instance. UC-168 therefore remains Partial until those checks are attached.
+Migration 052 is applied to the target database and API/unit build evidence is present. Remaining evidence is a real-provider acceptance run, isolated end-to-end worker execution, and confirmation of provider/adapter idempotency behavior. Because the current SMTP transport cannot guarantee exactly-once delivery, UC-168 remains Partial until the limitation is accepted by the PO or a deduplicating provider adapter is supplied.

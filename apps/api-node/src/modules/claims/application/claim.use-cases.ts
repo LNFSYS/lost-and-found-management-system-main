@@ -664,6 +664,9 @@ export function createClaimUseCases(options: ClaimDependencies) {
       });
 
       let decisionMessage: Awaited<ReturnType<typeof claimRepository.createMessage>> = null;
+      let decisionNotification: NotificationRecord | null = null;
+      let decisionNotificationUserId: string | null = null;
+      let decisionRoomId: string | null = null;
       await withTransaction(async (connection) => {
         const claim = await claimRepository.findByIdForUpdate(claimId, connection);
         const participant = claim ? await claimRepository.findParticipant(claimId, finderId, connection) : null;
@@ -716,6 +719,34 @@ export function createClaimUseCases(options: ClaimDependencies) {
           await claimRepository.clearRoomEscalation(claimId, connection);
         }
 
+        const notificationType = nextStatus === "ACCEPTED"
+          ? "CLAIM_ACCEPTED" as const
+          : nextStatus === "NEED_MORE_INFO"
+            ? "CLAIM_MORE_INFO_REQUESTED" as const
+            : "CLAIM_REJECTED" as const;
+        decisionNotification = await notificationRepository.create({
+          userId: claim.claimantId,
+          type: notificationType,
+          title: notificationType === "CLAIM_ACCEPTED"
+            ? "Yêu cầu trao đổi riêng đã được xác nhận"
+            : notificationType === "CLAIM_MORE_INFO_REQUESTED"
+              ? "Yêu cầu trao đổi cần thêm thông tin"
+              : "Yêu cầu trao đổi đã được cập nhật",
+          body: "Đăng nhập để xem trạng thái mới trong khu vực Trao đổi riêng.",
+          entityType: "CLAIM",
+          entityId: claimId,
+          dedupeKey: `claim:${claimId}:status:${nextStatus}:${input.idempotencyKey}`
+        }, connection);
+        decisionNotificationUserId = claim.claimantId;
+        decisionRoomId = room?.id ?? null;
+        await queueOptionalEmail({
+          notification: decisionNotification,
+          recipientUserId: decisionNotificationUserId,
+          eventType: "CLAIM",
+          roomId: decisionRoomId,
+          queryable: connection
+        });
+
         const action = isCorrection
           ? "VERIFICATION_DECISION_CORRECTED"
           : input.decision === "VERIFY_FOR_MEETUP" ? "VERIFICATION_ACCEPTED"
@@ -751,6 +782,12 @@ export function createClaimUseCases(options: ClaimDependencies) {
             clientMessageId: `verification-decision-${input.idempotencyKey}`
           }, connection);
         }
+      });
+      await publishWorkflowNotification({
+        userId: decisionNotificationUserId,
+        notification: decisionNotification,
+        workflow: "CLAIM",
+        roomId: decisionRoomId
       });
       return {
         claim: await details(claimId, finderId),
@@ -805,21 +842,19 @@ export function createClaimUseCases(options: ClaimDependencies) {
               requestFingerprint: fingerprint
             }
           }, connection);
-          if (input.decision === "ACCEPT") {
-            notification = await notificationRepository.create({
+          notification = await notificationRepository.create({
               userId: claim.claimantId,
-              type: "CLAIM_ACCEPTED",
-              title: "Y\u00eau c\u1ea7u trao \u0111\u1ed5i ri\u00eang \u0111\u00e3 \u0111\u01b0\u1ee3c x\u00e1c nh\u1eadn",
-              body: "Finder \u0111\u00e3 x\u00e1c nh\u1eadn. Ph\u00f2ng trao \u0111\u1ed5i ri\u00eang \u0111\u00e3 m\u1edf \u0111\u1ec3 hai b\u00ean nh\u1eafn tin v\u00e0 chia s\u1ebb evidence.",
+              type: input.decision === "ACCEPT" ? "CLAIM_ACCEPTED" : "CLAIM_MORE_INFO_REQUESTED",
+              title: input.decision === "ACCEPT" ? "Y\u00eau c\u1ea7u trao \u0111\u1ed5i ri\u00eang \u0111\u00e3 \u0111\u01b0\u1ee3c x\u00e1c nh\u1eadn" : "Y\u00eau c\u1ea7u trao \u0111\u1ed5i c\u1ea7n th\u00eam th\u00f4ng tin",
+              body: "\u0110\u0103ng nh\u1eadp \u0111\u1ec3 xem tr\u1ea1ng th\u00e1i m\u1edbi trong khu v\u1ef1c Trao \u0111\u1ed5i ri\u00eang.",
               entityType: "CLAIM",
               entityId: claimId,
-              dedupeKey: `claim:${claimId}:accepted`
-            }, connection);
-            notificationUserId = claim.claimantId;
-            await queueOptionalEmail({
-              notification, recipientUserId: notificationUserId, eventType: "CLAIM", roomId, queryable: connection
-            });
-          }
+              dedupeKey: "claim:" + claimId + ":" + (input.decision === "ACCEPT" ? "accepted" : "more-info") + ":" + input.idempotencyKey
+          }, connection);
+          notificationUserId = claim.claimantId;
+          await queueOptionalEmail({
+            notification, recipientUserId: notificationUserId, eventType: "CLAIM", roomId, queryable: connection
+          });
         } else {
           await claimRepository.updateFinderParticipant(claimId, finderId, "DECLINED", connection);
           await claimRepository.updateFinderDecision({ claimId, status: "REJECTED", finderDecision: "DECLINED", note: input.note, rejectedAt: true }, connection);
@@ -835,6 +870,19 @@ export function createClaimUseCases(options: ClaimDependencies) {
               requestFingerprint: fingerprint
             }
           }, connection);
+          notification = await notificationRepository.create({
+            userId: claim.claimantId,
+            type: "CLAIM_REJECTED",
+            title: "Y\u00eau c\u1ea7u trao \u0111\u1ed5i \u0111\u00e3 b\u1ecb t\u1eeb ch\u1ed1i",
+            body: "\u0110\u0103ng nh\u1eadp \u0111\u1ec3 xem tr\u1ea1ng th\u00e1i m\u1edbi trong khu v\u1ef1c Trao \u0111\u1ed5i ri\u00eang.",
+            entityType: "CLAIM",
+            entityId: claimId,
+            dedupeKey: "claim:" + claimId + ":rejected:" + input.idempotencyKey
+          }, connection);
+          notificationUserId = claim.claimantId;
+          await queueOptionalEmail({
+            notification, recipientUserId: notificationUserId, eventType: "CLAIM", queryable: connection
+          });
         }
         return { claim: await claimRepository.findById(claimId, connection), notification, notificationUserId, roomId };
       });
@@ -852,6 +900,9 @@ export function createClaimUseCases(options: ClaimDependencies) {
     async withdraw(claimId: string, claimantId: string, idempotencyKey?: string) {
       if (!idempotencyKey) throw new AppError("invalid_input", "Thiếu Idempotency-Key khi rút claim");
       const fingerprint = requestFingerprint({ operation: "WITHDRAW_CLAIM" });
+      let notification: NotificationRecord | null = null;
+      let notificationUserId: string | null = null;
+      let roomId: string | null = null;
       await withTransaction(async (connection) => {
         const claim = await claimRepository.findByIdForUpdate(claimId, connection);
         if (!claim || claim.claimantId !== claimantId) throw claimNotFound();
@@ -867,7 +918,22 @@ export function createClaimUseCases(options: ClaimDependencies) {
           toStatus: "CANCELLED",
           metadata: { idempotencyKey, requestFingerprint: fingerprint, reason: "Claimant withdrew the claim" }
         }, connection);
+        notification = await notificationRepository.create({
+          userId: claim.finderId,
+          type: "CLAIM_WITHDRAWN",
+          title: "Claimant đã rút yêu cầu trao đổi",
+          body: "Đăng nhập để xem trạng thái mới trong khu vực Trao đổi riêng.",
+          entityType: "CLAIM",
+          entityId: claimId,
+          dedupeKey: "claim:" + claimId + ":withdrawn:" + idempotencyKey
+        }, connection);
+        notificationUserId = claim.finderId;
+        roomId = claim.roomId;
+        await queueOptionalEmail({
+          notification, recipientUserId: notificationUserId, eventType: "CLAIM", roomId, queryable: connection
+        });
       });
+      await publishWorkflowNotification({ userId: notificationUserId, notification, workflow: "CLAIM", roomId });
       return details(claimId, claimantId);
     },
 
