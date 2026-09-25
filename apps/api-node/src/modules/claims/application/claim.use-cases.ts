@@ -6,6 +6,7 @@ import { validateImageUpload } from "../../../shared/domain/media.js";
 import type { ImageUpload } from "../../../shared/domain/upload.js";
 import type { MatchingRepository } from "../../matching/application/index.js";
 import type { NotificationEmailQueue, NotificationRecord, NotificationRepository } from "../../notifications/application/index.js";
+import type { CustodyRepository } from "../../warehouse/application/index.js";
 import { canSubmitVerificationDecision, canUseRoom, isAppointmentEligible } from "../domain/claim-policy.js";
 import {
   findVerificationPrompt,
@@ -52,11 +53,12 @@ export interface ClaimDependencies {
   mediaStorage: PrivateMediaStorage;
   hashIdempotencyPayload: (value: string) => string;
   logger: Logger;
+  custodyRepository?: CustodyRepository;
 }
 export function createClaimUseCases(options: ClaimDependencies) {
   const {
     claimRepository, matchingRepository, notificationRepository, notificationEmailQueue, realtimeNotifier, withTransaction, id, mediaStorage,
-    hashIdempotencyPayload, logger
+    hashIdempotencyPayload, logger, custodyRepository
   } = options;
 
   type StoredClaim = NonNullable<Awaited<ReturnType<typeof claimRepository.findById>>>;
@@ -701,20 +703,59 @@ export function createClaimUseCases(options: ClaimDependencies) {
 
         const nextStatus: ClaimStatus = input.decision === "VERIFY_FOR_MEETUP"
           ? "ACCEPTED"
-          : input.decision === "REQUEST_MORE_INFO"
+          : input.decision === "REQUEST_MORE_INFO" || input.decision === "ESCALATE_TO_CUSTODY"
             ? "NEED_MORE_INFO"
             : "REJECTED";
-        const finderDecision = input.decision === "DECLINE" ? "DECLINED" : "ACCEPTED";
+        const finderDecision = input.decision === "DECLINE" ? "DECLINED" : input.decision === "ESCALATE_TO_CUSTODY" ? "PENDING" : "ACCEPTED";
         await claimRepository.updateFinderDecision({
           claimId,
           status: nextStatus,
           finderDecision,
           note: input.reason,
           acceptedAt: input.decision === "VERIFY_FOR_MEETUP",
-          rejectedAt: input.decision === "DECLINE" || input.decision === "ESCALATE_TO_CUSTODY"
+          rejectedAt: input.decision === "DECLINE"
         }, connection);
         if (input.decision === "ESCALATE_TO_CUSTODY") {
           await claimRepository.markRoomEscalated({ claimId, actorId: finderId, reason: input.reason }, connection);
+          
+          // Keep the claim and custody request in the same transaction.
+          if (!custodyRepository || !claim.foundPostId) {
+            throw new AppError("unavailable", "Custody transfer is unavailable");
+          }
+          const postId = claim.foundPostId;
+          const requestId = id();
+          await custodyRepository.createCustodyRequest({
+            id: requestId,
+            postId,
+            finderId,
+            claimId,
+            status: "PENDING",
+            reason: "DISPUTE",
+            reasonNotes: input.reason || "Chuyển từ claim escalation",
+            proposedHandoverPointId: null,
+            proposedTime: null,
+            idempotencyKey: `claim-escalate-${claimId}`
+          }, connection);
+          await custodyRepository.createCustodyLog({
+            id: id(),
+            custodyRequestId: requestId,
+            actorId: finderId,
+            action: "REQUESTED",
+            fromStatus: null,
+            toStatus: "PENDING",
+            notes: `Finder chuyển sang custody từ claim escalation với lý do: ${input.reason}`
+          }, connection);
+          const staffAndAdminIds = await custodyRepository.findStaffAndAdminUserIds();
+          for (const staffId of staffAndAdminIds) {
+            await notificationRepository.create({
+              userId: staffId,
+              type: "CUSTODY_REQUESTED",
+              title: "Yêu cầu chuyển giao custody mới từ claim escalation",
+              body: "A custody request needs staff review.",
+              entityType: "CUSTODY_REQUEST",
+              entityId: requestId
+            }, connection);
+          }
         } else if (isCorrection) {
           await claimRepository.clearRoomEscalation(claimId, connection);
         }

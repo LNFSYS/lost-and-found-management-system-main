@@ -17,7 +17,22 @@ interface AppDependencies {
 
 export function createApp({ services = defaultServices, checkReadiness = async () => { await pool.query("SELECT 1"); } }: AppDependencies = {}) {
   const app = express();
-  const { adminRoutes, handoverRoutes, authRoutes, claimRoutes, notificationRoutes, postRoutes, realtimeRoutes, returnRoutes, reportRoutes, adminConfigRoutes, configRoutes, staffRoutes } = createHttpRoutes(services);
+  const {
+    adminRoutes,
+    handoverRoutes,
+    authRoutes,
+    claimRoutes,
+    notificationRoutes,
+    postRoutes,
+    realtimeRoutes,
+    returnRoutes,
+    reportRoutes,
+    adminConfigRoutes,
+    configRoutes,
+    staffRoutes,
+    custodyRoutes,
+    dispositionRoutes
+  } = createHttpRoutes(services);
   const allowedOrigins = parseAllowedOrigins(env.frontendUrl);
   app.disable("x-powered-by");
   app.use(helmet());
@@ -49,6 +64,8 @@ export function createApp({ services = defaultServices, checkReadiness = async (
   app.use("/api/handover-points", handoverRoutes);
   app.use("/api/admin/configs", adminConfigRoutes);
   app.use("/api/admin", adminRoutes);
+  app.use("/api", custodyRoutes);
+  app.use("/api", dispositionRoutes);
   app.use("/api", (_request, response) => response.status(404).json({ message: "Không tìm thấy endpoint" }));
   app.use(errorHandler);
   return app;
