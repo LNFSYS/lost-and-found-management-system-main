@@ -1,4 +1,4 @@
-import type { RowDataPacket } from "mysql2";
+import type { ResultSetHeader, RowDataPacket } from "mysql2";
 import type { TransactionContext } from "../../../shared/application/transaction.js";
 import { sqlExecutor, type SqlExecutor } from "../../../shared/infrastructure/transaction-context.js";
 import type {
@@ -146,8 +146,8 @@ export function createMySqlDispositionRepository(pool: SqlExecutor): Disposition
       return rows[0] ? mapLegalHoldRow(rows[0]) : null;
     },
 
-    async listActiveLegalHolds(warehouseItemId) {
-      const [rows] = await runner().execute<LegalHoldRow[]>(
+    async listActiveLegalHolds(warehouseItemId, custom) {
+      const [rows] = await runner(custom).execute<LegalHoldRow[]>(
         `SELECT
           lh.*,
           wi.item_name,
@@ -222,7 +222,11 @@ export function createMySqlDispositionRepository(pool: SqlExecutor): Disposition
           u_find.full_name AS finder_user_name,
           u_create.full_name AS created_by_name,
           (SELECT COUNT(*) FROM storage_logs sl WHERE sl.warehouse_item_id = wi.id) AS log_count,
-          (SELECT COUNT(*) FROM claims cl WHERE cl.post_id = wi.post_id AND cl.status IN ('PENDING', 'ACCEPTED', 'MORE_INFO_REQUESTED')) AS active_claims_count
+          (SELECT COUNT(DISTINCT cl.id) FROM claims cl
+           LEFT JOIN return_appointments ra ON ra.claim_id = cl.id AND ra.status IN ('PENDING', 'ACCEPTED', 'RESCHEDULED')
+           LEFT JOIN chat_rooms cr ON cr.claim_id = cl.id AND cr.escalated_at IS NOT NULL
+           WHERE cl.post_id = wi.post_id AND (cl.status IN ('PENDING', 'CONVERSATION_OPEN', 'NEED_MORE_INFO', 'ACCEPTED')
+             OR ra.id IS NOT NULL OR cr.id IS NOT NULL)) AS active_claims_count
         FROM warehouse_items wi
         LEFT JOIN handover_points hp ON hp.id = wi.handover_point_id
         LEFT JOIN item_categories c ON c.id = wi.category_id
@@ -303,12 +307,24 @@ export function createMySqlDispositionRepository(pool: SqlExecutor): Disposition
       return { total, items };
     },
 
-    async countActiveClaimsForPost(postId) {
-      const [rows] = await runner().execute<RowDataPacket[]>(
-        `SELECT COUNT(*) AS total FROM claims WHERE post_id = ? AND status IN ('PENDING', 'ACCEPTED', 'MORE_INFO_REQUESTED')`,
+    async countActiveClaimsForPost(postId, custom) {
+      const [rows] = await runner(custom).execute<RowDataPacket[]>(
+        `SELECT COUNT(DISTINCT cl.id) AS total FROM claims cl
+         LEFT JOIN return_appointments ra ON ra.claim_id = cl.id AND ra.status IN ('PENDING', 'ACCEPTED', 'RESCHEDULED')
+         LEFT JOIN chat_rooms cr ON cr.claim_id = cl.id AND cr.escalated_at IS NOT NULL
+         WHERE cl.post_id = ? AND (cl.status IN ('PENDING', 'CONVERSATION_OPEN', 'NEED_MORE_INFO', 'ACCEPTED')
+           OR ra.id IS NOT NULL OR cr.id IS NOT NULL)`,
         [postId]
       );
       return Number(rows[0]?.total ?? 0);
+    },
+
+    async lockDispositionOrder(orderId, custom) {
+      await runner(custom).execute(`SELECT id FROM disposition_orders WHERE id = ? FOR UPDATE`, [orderId]);
+    },
+
+    async lockWarehouseItem(itemId, custom) {
+      await runner(custom).execute(`SELECT id FROM warehouse_items WHERE id = ? FOR UPDATE`, [itemId]);
     },
 
     async generateOrderNumber(type) {
@@ -552,13 +568,16 @@ export function createMySqlDispositionRepository(pool: SqlExecutor): Disposition
       );
     },
 
-    async attachOrderToWarehouseItems(itemIds, orderId, custom) {
-      if (itemIds.length === 0) return;
+    async attachOrderToWarehouseItems(itemIds, orderId, custom, expectedOrderId) {
+      if (itemIds.length === 0) return 0;
+      if (orderId === null && !expectedOrderId) throw new Error("Expected order ID is required when releasing items");
       const placeholders = itemIds.map(() => "?").join(", ");
-      await runner(custom).execute(
-        `UPDATE warehouse_items SET disposition_order_id = ? WHERE id IN (${placeholders})`,
-        [orderId, ...itemIds]
+      const [result] = await runner(custom).execute<ResultSetHeader>(
+        `UPDATE warehouse_items SET disposition_order_id = ?
+         WHERE id IN (${placeholders}) AND ${orderId === null ? "disposition_order_id = ?" : "disposition_order_id IS NULL"}`,
+        orderId === null ? [null, ...itemIds, expectedOrderId ?? null] : [orderId, ...itemIds]
       );
+      return result.affectedRows;
     },
 
     async addDispositionEvidence(evidence, custom) {
@@ -586,20 +605,33 @@ export function createMySqlDispositionRepository(pool: SqlExecutor): Disposition
       await runner(custom).execute(
         `UPDATE disposition_order_items
          SET status = 'PROCESSED', processed_at = NOW(), notes = ?
-         WHERE disposition_order_id = ? AND warehouse_item_id IN (${placeholders})`,
+         WHERE disposition_order_id = ? AND status = 'PENDING' AND warehouse_item_id IN (${placeholders})`,
         [notes ?? null, orderId, ...processedItemIds]
       );
     },
 
-    async updateWarehouseItemsStatus(itemIds, status, custom) {
-      if (itemIds.length === 0) return;
+    async updateWarehouseItemsStatus(orderId, itemIds, status, custom) {
+      if (itemIds.length === 0) return 0;
       const placeholders = itemIds.map(() => "?").join(", ");
-      await runner(custom).execute(
-        `UPDATE warehouse_items
-         SET status = ?, disposition_order_id = NULL
-         WHERE id IN (${placeholders})`,
-        [status, ...itemIds]
+      const [result] = await runner(custom).execute<ResultSetHeader>(
+        `UPDATE warehouse_items wi
+         SET wi.status = ?, wi.disposition_order_id = NULL
+         WHERE wi.id IN (${placeholders})
+           AND wi.disposition_order_id = ?
+           AND wi.status IN ('RECEIVED', 'STORED', 'EXPIRED')
+           AND wi.retention_deadline < NOW()
+           AND wi.legal_hold_count = 0
+           AND NOT EXISTS (SELECT 1 FROM legal_holds lh WHERE lh.warehouse_item_id = wi.id AND lh.is_active = TRUE)
+           AND EXISTS (SELECT 1 FROM disposition_order_items doi WHERE doi.disposition_order_id = ?
+             AND doi.warehouse_item_id = wi.id AND doi.status = 'PENDING')
+           AND NOT EXISTS (SELECT 1 FROM claims cl
+             LEFT JOIN return_appointments ra ON ra.claim_id = cl.id AND ra.status IN ('PENDING', 'ACCEPTED', 'RESCHEDULED')
+             LEFT JOIN chat_rooms cr ON cr.claim_id = cl.id AND cr.escalated_at IS NOT NULL
+             WHERE cl.post_id = wi.post_id AND (cl.status IN ('PENDING', 'CONVERSATION_OPEN', 'NEED_MORE_INFO', 'ACCEPTED')
+               OR ra.id IS NOT NULL OR cr.id IS NOT NULL))`,
+        [status, ...itemIds, orderId, orderId]
       );
+      return result.affectedRows;
     }
   };
 }

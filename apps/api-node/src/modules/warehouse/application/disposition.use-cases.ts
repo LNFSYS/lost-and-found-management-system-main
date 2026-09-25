@@ -1,6 +1,6 @@
 import type { TransactionRunner } from "../../../shared/application/transaction.js";
 import { AppError } from "../../../shared/domain/app-error.js";
-import type { NotificationRepository } from "../../notifications/application/notification.repository.port.js";
+import type { NotificationRepository } from "../../notifications/application/index.js";
 import {
   checkDispositionEligibility,
   dispositionOrderStatusLabels,
@@ -93,6 +93,7 @@ export function createDispositionUseCases(options: DispositionDependencies) {
 
       const holdId = id();
       await withTransaction(async (conn) => {
+        await dispositionRepository.lockWarehouseItem(item.id, conn);
         await dispositionRepository.createLegalHold(
           {
             id: holdId,
@@ -130,6 +131,9 @@ export function createDispositionUseCases(options: DispositionDependencies) {
       if (!releaseReason) throw new AppError("bad_request", "Vui lòng nhập lý do gỡ lệnh Legal Hold");
 
       await withTransaction(async (conn) => {
+        await dispositionRepository.lockWarehouseItem(hold.warehouseItemId, conn);
+        const currentHold = await dispositionRepository.findLegalHoldById(holdId, conn);
+        if (!currentHold?.isActive) throw new AppError("conflict", "Legal hold was already released");
         await dispositionRepository.releaseLegalHold(
           holdId,
           {
@@ -165,6 +169,9 @@ export function createDispositionUseCases(options: DispositionDependencies) {
       if (!input.warehouseItemIds || input.warehouseItemIds.length === 0) {
         throw new AppError("bad_request", "Cần chọn ít nhất một vật phẩm để tạo lệnh xử lý kho");
       }
+      if (new Set(input.warehouseItemIds).size !== input.warehouseItemIds.length) {
+        throw new AppError("bad_request", "Duplicate warehouse item IDs are not allowed");
+      }
 
       const reason = input.reason.trim();
       if (!reason) throw new AppError("bad_request", "Vui lòng nhập lý do tạo lệnh xử lý");
@@ -192,6 +199,20 @@ export function createDispositionUseCases(options: DispositionDependencies) {
       const orderNumber = await dispositionRepository.generateOrderNumber(input.dispositionType);
 
       await withTransaction(async (conn) => {
+        for (const itemId of [...input.warehouseItemIds].sort()) {
+          await dispositionRepository.lockWarehouseItem(itemId, conn);
+          const item = await warehouseRepository.findItemById(itemId, conn);
+          if (!item) throw new AppError("not_found", "Warehouse item not found");
+          const holds = await dispositionRepository.listActiveLegalHolds(itemId, conn);
+          const activeClaimsCount = item.postId ? await dispositionRepository.countActiveClaimsForPost(item.postId, conn) : 0;
+          const eligibility = checkDispositionEligibility({
+            status: item.status,
+            retentionDeadline: item.retentionDeadline ? new Date(item.retentionDeadline) : null,
+            legalHoldCount: holds.length,
+            activeClaimsCount
+          });
+          if (!eligibility.eligible) throw new AppError("conflict", `Warehouse item is no longer eligible: ${eligibility.blockers.join(", ")}`);
+        }
         await dispositionRepository.createDispositionOrder(
           {
             id: orderId,
@@ -204,7 +225,10 @@ export function createDispositionUseCases(options: DispositionDependencies) {
           input.warehouseItemIds,
           conn
         );
-        await dispositionRepository.attachOrderToWarehouseItems(input.warehouseItemIds, orderId, conn);
+        const attached = await dispositionRepository.attachOrderToWarehouseItems(input.warehouseItemIds, orderId, conn);
+        if (attached !== input.warehouseItemIds.length) {
+          throw new AppError("conflict", "One or more items already belong to another order");
+        }
       });
 
       const order = await dispositionRepository.findDispositionOrderById(orderId);
@@ -233,6 +257,25 @@ export function createDispositionUseCases(options: DispositionDependencies) {
       }
 
       await withTransaction(async (conn) => {
+        await dispositionRepository.lockDispositionOrder(orderId, conn);
+        const currentOrder = await dispositionRepository.findDispositionOrderById(orderId, conn);
+        if (currentOrder?.status !== "PENDING_APPROVAL" || !currentOrder.items?.length) {
+          throw new AppError("conflict", "Disposition order is no longer awaiting approval");
+        }
+        for (const orderItem of [...currentOrder.items].sort((a, b) => a.warehouseItemId.localeCompare(b.warehouseItemId))) {
+          await dispositionRepository.lockWarehouseItem(orderItem.warehouseItemId, conn);
+          const item = await warehouseRepository.findItemById(orderItem.warehouseItemId, conn);
+          if (!item || orderItem.status !== "PENDING") throw new AppError("conflict", "Order item is no longer eligible");
+          const holds = await dispositionRepository.listActiveLegalHolds(item.id, conn);
+          const activeClaimsCount = item.postId ? await dispositionRepository.countActiveClaimsForPost(item.postId, conn) : 0;
+          const eligibility = checkDispositionEligibility({
+            status: item.status,
+            retentionDeadline: item.retentionDeadline ? new Date(item.retentionDeadline) : null,
+            legalHoldCount: holds.length,
+            activeClaimsCount
+          });
+          if (!eligibility.eligible) throw new AppError("conflict", `Order item is no longer eligible: ${eligibility.blockers.join(", ")}`);
+        }
         await dispositionRepository.updateDispositionOrderStatus(
           orderId,
           {
@@ -258,9 +301,13 @@ export function createDispositionUseCases(options: DispositionDependencies) {
       const reason = input.reason.trim();
       if (!reason) throw new AppError("bad_request", "Vui lòng nhập lý do từ chối lệnh");
 
-      const itemIds = order.items?.map((item) => item.warehouseItemId) ?? [];
-
       await withTransaction(async (conn) => {
+        await dispositionRepository.lockDispositionOrder(orderId, conn);
+        const currentOrder = await dispositionRepository.findDispositionOrderById(orderId, conn);
+        if (currentOrder?.status !== "PENDING_APPROVAL") {
+          throw new AppError("conflict", "Disposition order is no longer pending approval");
+        }
+        const itemIds = currentOrder.items?.map((item) => item.warehouseItemId) ?? [];
         await dispositionRepository.updateDispositionOrderStatus(
           orderId,
           {
@@ -271,7 +318,8 @@ export function createDispositionUseCases(options: DispositionDependencies) {
         );
         // Release items from order
         if (itemIds.length > 0) {
-          await dispositionRepository.attachOrderToWarehouseItems(itemIds, null, conn);
+          const released = await dispositionRepository.attachOrderToWarehouseItems(itemIds, null, conn, orderId);
+          if (released !== itemIds.length) throw new AppError("conflict", "Order items changed during rejection");
         }
       });
 
@@ -289,9 +337,16 @@ export function createDispositionUseCases(options: DispositionDependencies) {
       const reason = input.reason.trim();
       if (!reason) throw new AppError("bad_request", "Vui lòng nhập lý do hủy lệnh");
 
-      const itemIds = order.items?.map((item) => item.warehouseItemId) ?? [];
-
       await withTransaction(async (conn) => {
+        await dispositionRepository.lockDispositionOrder(orderId, conn);
+        const currentOrder = await dispositionRepository.findDispositionOrderById(orderId, conn);
+        if (!currentOrder || (currentOrder.status !== "APPROVED" && currentOrder.status !== "PENDING_APPROVAL")) {
+          throw new AppError("conflict", "Disposition order can no longer be cancelled");
+        }
+        if (currentOrder.items?.some((item) => item.status !== "PENDING")) {
+          throw new AppError("conflict", "A partially processed order cannot be cancelled");
+        }
+        const itemIds = currentOrder.items?.map((item) => item.warehouseItemId) ?? [];
         await dispositionRepository.updateDispositionOrderStatus(
           orderId,
           {
@@ -304,7 +359,8 @@ export function createDispositionUseCases(options: DispositionDependencies) {
         );
         // Release items from order
         if (itemIds.length > 0) {
-          await dispositionRepository.attachOrderToWarehouseItems(itemIds, null, conn);
+          const released = await dispositionRepository.attachOrderToWarehouseItems(itemIds, null, conn, orderId);
+          if (released !== itemIds.length) throw new AppError("conflict", "Order items changed during cancellation");
         }
       });
 
@@ -323,6 +379,10 @@ export function createDispositionUseCases(options: DispositionDependencies) {
         throw new AppError("bad_request", "Cần chọn ít nhất một vật phẩm đã xử lý thực tế");
       }
 
+      if (new Set(input.processedItemIds).size !== input.processedItemIds.length) {
+        throw new AppError("bad_request", "Duplicate warehouse item IDs are not allowed");
+      }
+
       const targetStatus: WarehouseStatus =
         order.dispositionType === "DISPOSAL"
           ? "DISPOSED"
@@ -331,6 +391,34 @@ export function createDispositionUseCases(options: DispositionDependencies) {
             : "TRANSFERRED";
 
       await withTransaction(async (conn) => {
+        await dispositionRepository.lockDispositionOrder(orderId, conn);
+        const currentOrder = await dispositionRepository.findDispositionOrderById(orderId, conn);
+        if (!currentOrder || currentOrder.status !== "APPROVED" || !currentOrder.approvedBy) {
+          throw new AppError("conflict", "Disposition order is not approved");
+        }
+        const pendingIds = new Set(currentOrder.items?.filter((item) => item.status === "PENDING").map((item) => item.warehouseItemId));
+        if (input.processedItemIds.some((itemId) => !pendingIds.has(itemId))) {
+          throw new AppError("bad_request", "Every item must be pending in this disposition order");
+        }
+        if (input.evidenceUrls?.some((evidence) => evidence.warehouseItemId && !pendingIds.has(evidence.warehouseItemId))) {
+          throw new AppError("bad_request", "Evidence item does not belong to this disposition order");
+        }
+        const previousStatuses = new Map<string, WarehouseStatus>();
+        for (const itemId of [...input.processedItemIds].sort()) {
+          await dispositionRepository.lockWarehouseItem(itemId, conn);
+          const item = await warehouseRepository.findItemById(itemId, conn);
+          if (!item) throw new AppError("not_found", "Warehouse item not found");
+          const activeHolds = await dispositionRepository.listActiveLegalHolds(itemId, conn);
+          const activeClaimsCount = item.postId ? await dispositionRepository.countActiveClaimsForPost(item.postId, conn) : 0;
+          const eligibility = checkDispositionEligibility({
+            status: item.status,
+            retentionDeadline: item.retentionDeadline ? new Date(item.retentionDeadline) : null,
+            legalHoldCount: activeHolds.length,
+            activeClaimsCount
+          });
+          if (!eligibility.eligible) throw new AppError("conflict", `Item is no longer eligible: ${eligibility.blockers.join(", ")}`);
+          previousStatuses.set(itemId, item.status);
+        }
         // 1. Save evidence if provided
         if (input.evidenceUrls && input.evidenceUrls.length > 0) {
           const evidenceRecords = input.evidenceUrls.map((ev) => ({
@@ -345,11 +433,12 @@ export function createDispositionUseCases(options: DispositionDependencies) {
           await dispositionRepository.addDispositionEvidence(evidenceRecords, conn);
         }
 
-        // 2. Mark order items as PROCESSED
+        // 2. The guarded update must affect every approved, eligible item or the transaction rolls back.
+        const updatedCount = await dispositionRepository.updateWarehouseItemsStatus(orderId, input.processedItemIds, targetStatus, conn);
+        if (updatedCount !== input.processedItemIds.length) {
+          throw new AppError("conflict", "Warehouse eligibility changed; no disposition was recorded");
+        }
         await dispositionRepository.markOrderItemsProcessed(orderId, input.processedItemIds, input.notes, conn);
-
-        // 3. Update warehouse items status
-        await dispositionRepository.updateWarehouseItemsStatus(input.processedItemIds, targetStatus, conn);
 
         // 4. Create storage logs for all processed items
         for (const itemId of input.processedItemIds) {
@@ -363,7 +452,7 @@ export function createDispositionUseCases(options: DispositionDependencies) {
                 handoverPointId: item.handoverPoint?.id ?? "",
                 actorId,
                 action: targetStatus,
-                fromStatus: item.status,
+                fromStatus: previousStatuses.get(itemId) ?? item.status,
                 toStatus: targetStatus,
                 note: `Thực hiện lệnh xử lý ${order.orderNumber} (${dispositionTypeLabels[order.dispositionType]}): ${input.notes || "Hoàn tất"}`
               },
@@ -373,7 +462,7 @@ export function createDispositionUseCases(options: DispositionDependencies) {
         }
 
         // 5. Check if all items in order are processed -> Mark COMPLETED
-        const pendingItems = order.items?.filter((it) => !input.processedItemIds.includes(it.warehouseItemId) && it.status !== "PROCESSED") ?? [];
+        const pendingItems = currentOrder.items?.filter((it) => !input.processedItemIds.includes(it.warehouseItemId) && it.status !== "PROCESSED") ?? [];
         if (pendingItems.length === 0) {
           await dispositionRepository.updateDispositionOrderStatus(
             orderId,

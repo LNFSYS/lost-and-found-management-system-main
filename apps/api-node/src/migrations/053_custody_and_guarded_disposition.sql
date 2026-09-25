@@ -18,6 +18,9 @@ CREATE TABLE IF NOT EXISTS custody_requests (
   confirmed_handover_point_id CHAR(36) NULL,
   assigned_handler_id CHAR(36) NULL,
   warehouse_item_id CHAR(36) NULL,
+  active_post_id CHAR(36) GENERATED ALWAYS AS (
+    CASE WHEN status IN ('PENDING', 'ACCEPTED') THEN post_id ELSE NULL END
+  ) STORED,
   idempotency_key VARCHAR(100) NULL,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -25,6 +28,7 @@ CREATE TABLE IF NOT EXISTS custody_requests (
   INDEX idx_custody_finder (finder_id),
   INDEX idx_custody_status (status),
   UNIQUE INDEX uq_custody_idempotency (finder_id, idempotency_key),
+  UNIQUE INDEX uq_custody_active_post (active_post_id),
   CONSTRAINT fk_custody_post FOREIGN KEY (post_id) REFERENCES posts(id),
   CONSTRAINT fk_custody_finder FOREIGN KEY (finder_id) REFERENCES users(id),
   CONSTRAINT fk_custody_claim FOREIGN KEY (claim_id) REFERENCES claims(id) ON DELETE SET NULL,
@@ -185,10 +189,6 @@ PREPARE add_fk_warehouse_disp_order_stmt FROM @add_fk_warehouse_disp_order_sql;
 EXECUTE add_fk_warehouse_disp_order_stmt;
 DEALLOCATE PREPARE add_fk_warehouse_disp_order_stmt;
 
-ALTER TABLE warehouse_items
-  ADD CONSTRAINT fk_warehouse_custody_req FOREIGN KEY (custody_request_id) REFERENCES custody_requests(id) ON DELETE SET NULL,
-  ADD CONSTRAINT fk_warehouse_disp_order FOREIGN KEY (disposition_order_id) REFERENCES disposition_orders(id) ON DELETE SET NULL;
-
 -- 6. Add warehouse_item_id foreign key constraint to custody_requests
 SET @fk_custody_wh_item_exists = (
   SELECT COUNT(*)
@@ -251,3 +251,7 @@ CREATE TABLE IF NOT EXISTS disposition_evidence (
   CONSTRAINT fk_disp_evidence_item FOREIGN KEY (warehouse_item_id) REFERENCES warehouse_items(id) ON DELETE SET NULL,
   CONSTRAINT fk_disp_evidence_uploader FOREIGN KEY (uploaded_by) REFERENCES users(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+INSERT INTO config_entries (id, config_key, config_value, value_type, description, is_public)
+SELECT UUID(), 'warehouse.retention_alert_days', '7', 'INTEGER', 'Days before the retention deadline to alert authorised staff', FALSE
+WHERE NOT EXISTS (SELECT 1 FROM config_entries WHERE config_key = 'warehouse.retention_alert_days');

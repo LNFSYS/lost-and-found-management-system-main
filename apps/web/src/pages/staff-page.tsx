@@ -136,6 +136,12 @@ function statusLabel(status: WarehouseStatus | string | null) {
   return statusOptions.find((item) => item.value === status)?.label ?? status ?? "Chưa rõ";
 }
 
+function nextStatus(status: WarehouseStatus): WarehouseStatus {
+  if (status === "RECEIVED") return "STORED";
+  if (status === "STORED" || status === "CLAIMED") return "RETURNED";
+  return status;
+}
+
 function isOverdue(item: WarehouseItem) {
   return Boolean(
     item.retentionDeadline &&
@@ -249,6 +255,77 @@ export function StaffPage() {
         pageSize: 20
       })
     );
+  }
+
+  async function submitFilters(event: FormEvent) {
+    event.preventDefault();
+    setPendingAction("load");
+    setError("");
+    try { await loadDashboard(filters); }
+    catch (reason) { setError(messageOf(reason, "Không thể lọc danh sách kho")); }
+    finally { setPendingAction(""); }
+  }
+
+  async function submitCreate(event: FormEvent) {
+    event.preventDefault();
+    setPendingAction("create");
+    setError("");
+    try {
+      const payload: CreateWarehouseItemPayload = {
+        handoverPointId: createForm.handoverPointId,
+        itemName: createForm.itemName,
+        description: clean(createForm.description),
+        categoryId: clean(createForm.categoryId),
+        areaId: clean(createForm.areaId),
+        buildingId: clean(createForm.buildingId),
+        roomText: clean(createForm.roomText),
+        finderName: clean(createForm.finderName),
+        finderContact: clean(createForm.finderContact),
+        conditionNotes: createForm.conditionNotes,
+        storageCode: clean(createForm.storageCode),
+        receivedAt: createForm.receivedAt ? new Date(createForm.receivedAt).toISOString() : undefined
+      };
+      const created = await api.createWarehouseItem(payload);
+      setDashboard((current) => current ? { ...current, total: current.total + 1, items: [created, ...current.items] } : current);
+      setSelectedItemId(created.id);
+      setCreateForm({ ...emptyCreateForm, handoverPointId: createForm.handoverPointId });
+      setNotice("Đã tiếp nhận vật phẩm");
+    } catch (reason) { setError(messageOf(reason, "Không thể tiếp nhận vật phẩm")); }
+    finally { setPendingAction(""); }
+  }
+
+  async function loadLogs(itemId: string) {
+    setPendingAction("logs");
+    setError("");
+    try { setLogs(await api.getWarehouseLogs(itemId)); }
+    catch (reason) { setError(messageOf(reason, "Không thể tải nhật ký kho")); }
+    finally { setPendingAction(""); }
+  }
+
+  function selectItem(item: WarehouseItem) {
+    setSelectedItemId(item.id);
+    setUpdateForm({ status: nextStatus(item.status), conditionNotes: item.conditionNotes ?? "", storageCode: item.storageCode ?? "", note: "" });
+    void loadLogs(item.id);
+  }
+
+  async function submitUpdate(event: FormEvent) {
+    event.preventDefault();
+    if (!selectedItem) return;
+    setPendingAction("update");
+    setError("");
+    try {
+      const updated = await api.updateWarehouseItem(selectedItem.id, {
+        status: updateForm.status,
+        conditionNotes: clean(updateForm.conditionNotes),
+        storageCode: clean(updateForm.storageCode),
+        note: clean(updateForm.note)
+      });
+      setDashboard((current) => current ? { ...current, items: current.items.map((item) => item.id === updated.id ? updated : item) } : current);
+      setUpdateForm({ status: nextStatus(updated.status), conditionNotes: updated.conditionNotes ?? "", storageCode: updated.storageCode ?? "", note: "" });
+      setLogs(await api.getWarehouseLogs(updated.id));
+      setNotice("Đã cập nhật trạng thái kho");
+    } catch (reason) { setError(messageOf(reason, "Không thể cập nhật trạng thái kho")); }
+    finally { setPendingAction(""); }
   }
 
   async function loadCustodyQueue() {
@@ -467,7 +544,7 @@ export function StaffPage() {
     <div className="admin-page warehouse-page">
       <header className="admin-header">
         <div>
-          <h2>Quản lý Kho, Custody & Xử lý Vật phẩm</h2>
+          <h1>Kho nội bộ</h1>
           <p>Quy trình tiếp nhận có kiểm soát (Custody), theo dõi quá hạn (Retention) và lệnh tiêu hủy/quyên góp an toàn (Guarded Disposition).</p>
         </div>
         <button
@@ -536,6 +613,60 @@ export function StaffPage() {
             </div>
           )}
 
+          <div className="warehouse-layout">
+            <aside className="admin-panel admin-panel--form warehouse-receive-panel">
+              <div className="admin-panel-heading"><span><PackageCheck size={18} /></span><h2>Tiếp nhận vật phẩm</h2></div>
+              <form className="admin-form" onSubmit={submitCreate}>
+                <label className="input-field"><span>Điểm bàn giao</span><select required value={createForm.handoverPointId} onChange={(event) => setCreateForm({ ...createForm, handoverPointId: event.target.value })}>
+                  <option value="">Chọn điểm bàn giao</option>
+                  {catalog?.handoverPoints.map((point) => <option key={point.id} value={point.id}>{point.name} - {point.address}</option>)}
+                </select></label>
+                <label className="input-field"><span>Tên vật phẩm</span><input required value={createForm.itemName} onChange={(event) => setCreateForm({ ...createForm, itemName: event.target.value })} /></label>
+                <label className="input-field"><span>Danh mục</span><select value={createForm.categoryId} onChange={(event) => setCreateForm({ ...createForm, categoryId: event.target.value })}>
+                  <option value="">Chưa phân loại</option>
+                  {leafCategories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
+                </select></label>
+                <label className="input-field"><span>Mô tả</span><textarea rows={3} value={createForm.description} onChange={(event) => setCreateForm({ ...createForm, description: event.target.value })} /></label>
+                <label className="input-field"><span>Tình trạng khi nhận</span><textarea required rows={3} value={createForm.conditionNotes} onChange={(event) => setCreateForm({ ...createForm, conditionNotes: event.target.value })} /></label>
+                <div className="warehouse-form-pair">
+                  <label className="input-field"><span>Khu vực</span><select value={createForm.areaId} onChange={(event) => setCreateForm({ ...createForm, areaId: event.target.value, buildingId: "" })}>
+                    <option value="">Chưa rõ</option>{catalog?.areas.map((area) => <option key={area.id} value={area.id}>{area.name}</option>)}
+                  </select></label>
+                  <label className="input-field"><span>Địa điểm</span><select value={createForm.buildingId} onChange={(event) => setCreateForm({ ...createForm, buildingId: event.target.value })}>
+                    <option value="">Chưa rõ</option>{availableBuildings.map((building) => <option key={building.id} value={building.id}>{building.name}</option>)}
+                  </select></label>
+                </div>
+                <div className="warehouse-form-pair">
+                  <label className="input-field"><span>Phòng/vị trí</span><input value={createForm.roomText} onChange={(event) => setCreateForm({ ...createForm, roomText: event.target.value })} /></label>
+                  <label className="input-field"><span>Mã lưu kho</span><input value={createForm.storageCode} onChange={(event) => setCreateForm({ ...createForm, storageCode: event.target.value })} /></label>
+                </div>
+                <div className="warehouse-form-pair">
+                  <label className="input-field"><span>Người giao</span><input value={createForm.finderName} onChange={(event) => setCreateForm({ ...createForm, finderName: event.target.value })} /></label>
+                  <label className="input-field"><span>Liên hệ</span><input value={createForm.finderContact} onChange={(event) => setCreateForm({ ...createForm, finderContact: event.target.value })} /></label>
+                </div>
+                <label className="input-field"><span>Thời gian nhận</span><input type="datetime-local" value={createForm.receivedAt} onChange={(event) => setCreateForm({ ...createForm, receivedAt: event.target.value })} /></label>
+                <button className="primary-button" disabled={pendingAction === "create"}><PackageCheck size={17} /> Tiếp nhận</button>
+              </form>
+            </aside>
+
+            <div className="warehouse-main">
+              <form className="warehouse-filter-bar" onSubmit={submitFilters}>
+                <label className="input-field"><span>Tìm vật phẩm</span><input aria-label="Tìm vật phẩm trong kho" value={filters.q} onChange={(event) => setFilters({ ...filters, q: event.target.value })} /></label>
+                <label className="input-field"><span>Trạng thái</span><select value={filters.status} onChange={(event) => setFilters({ ...filters, status: event.target.value })}>
+                  <option value="">Tất cả</option>{statusOptions.map((status) => <option key={status.value} value={status.value}>{status.label}</option>)}
+                </select></label>
+                <label className="input-field"><span>Điểm bàn giao</span><select value={filters.handoverPointId} onChange={(event) => setFilters({ ...filters, handoverPointId: event.target.value })}>
+                  <option value="">Tất cả</option>{catalog?.handoverPoints.map((point) => <option key={point.id} value={point.id}>{point.name}</option>)}
+                </select></label>
+                <button className="secondary-button"><Search size={17} /> Tìm</button>
+              </form>
+              <section className="warehouse-counts" aria-label="Số vật phẩm tại điểm bàn giao">
+                {dashboard?.handoverCounts.map((point) => <article key={point.handoverPointId}>
+                  <MapPin size={17} /><strong>{point.itemCount}</strong><span>{point.name}</span>
+                  <small>{point.storedCount} đang lưu kho - {point.overdueCount} quá hạn</small>
+                </article>)}
+              </section>
+
           <div className="admin-table-container">
             <table className="admin-table">
               <thead>
@@ -545,6 +676,7 @@ export function StaffPage() {
                   <th>Vị trí lưu</th>
                   <th>Hạn lưu kho</th>
                   <th>Trạng thái</th>
+                  <th>Thao tác</th>
                 </tr>
               </thead>
               <tbody>
@@ -565,10 +697,41 @@ export function StaffPage() {
                         {statusLabel(item.status)}
                       </span>
                     </td>
+                    <td><button type="button" className="secondary-button warehouse-select-button" onClick={() => selectItem(item)}><History size={15} /> Chọn</button></td>
                   </tr>
                 ))}
               </tbody>
             </table>
+          </div>
+            </div>
+
+            <aside className="admin-panel warehouse-detail-panel">
+              <div className="admin-panel-heading"><span><Save size={18} /></span><h2>Cập nhật và nhật ký</h2></div>
+              {selectedItem ? <>
+                <div className="warehouse-selected-summary">
+                  <span className={`warehouse-status warehouse-status--${selectedItem.status.toLowerCase()}`}>{statusLabel(selectedItem.status)}</span>
+                  <h3>{selectedItem.itemName}</h3>
+                  <p>Hạn lưu giữ: {formatDate(selectedItem.retentionDeadline)} - Nhận lúc {formatDateTime(selectedItem.receivedAt)}</p>
+                </div>
+                <form className="admin-form" onSubmit={submitUpdate}>
+                  <label className="input-field"><span>Trạng thái mới</span><select value={updateForm.status} onChange={(event) => setUpdateForm({ ...updateForm, status: event.target.value as WarehouseStatus })}>
+                    {statusOptions.filter((status) => !["DISPOSED", "DONATED", "TRANSFERRED"].includes(status.value)).map((status) => <option key={status.value} value={status.value}>{status.label}</option>)}
+                  </select></label>
+                  <label className="input-field"><span>Mã lưu kho</span><input value={updateForm.storageCode} onChange={(event) => setUpdateForm({ ...updateForm, storageCode: event.target.value })} /></label>
+                  <label className="input-field"><span>Tình trạng</span><textarea rows={3} value={updateForm.conditionNotes} onChange={(event) => setUpdateForm({ ...updateForm, conditionNotes: event.target.value })} /></label>
+                  <label className="input-field"><span>Ghi chú nhật ký</span><textarea rows={2} value={updateForm.note} onChange={(event) => setUpdateForm({ ...updateForm, note: event.target.value })} /></label>
+                  <button className="primary-button" disabled={pendingAction === "update"}><CheckCircle2 size={17} /> Lưu trạng thái</button>
+                </form>
+                <div className="warehouse-log-list">
+                  <div className="admin-list-heading"><h2>Lịch sử</h2><strong>{logs.length}</strong></div>
+                  {logs.map((log) => <article key={log.id}>
+                    <strong>{statusLabel(log.fromStatus)} -&gt; {statusLabel(log.toStatus)}</strong>
+                    <span>{log.actor.fullName ?? "Nhân viên"} - {formatDateTime(log.createdAt)}</span>
+                    {(log.storageCode || log.conditionNotes || log.note) && <p>{[log.storageCode, log.conditionNotes, log.note].filter(Boolean).join(" | ")}</p>}
+                  </article>)}
+                </div>
+              </> : <div className="warehouse-empty warehouse-empty--compact"><History size={38} /><strong>Chọn một vật phẩm để xem nhật ký</strong></div>}
+            </aside>
           </div>
         </section>
       )}

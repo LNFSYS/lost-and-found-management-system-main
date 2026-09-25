@@ -98,7 +98,7 @@ export interface DispositionRepository {
 
   findLegalHoldById(id: string, db?: TransactionContext): Promise<LegalHoldRecord | null>;
 
-  listActiveLegalHolds(warehouseItemId: string): Promise<LegalHoldRecord[]>;
+  listActiveLegalHolds(warehouseItemId: string, db?: TransactionContext): Promise<LegalHoldRecord[]>;
 
   releaseLegalHold(
     id: string,
@@ -121,7 +121,10 @@ export interface DispositionRepository {
     legalHoldOnly?: boolean;
   }): Promise<{ total: number; items: OverdueWarehouseItemRecord[] }>;
 
-  countActiveClaimsForPost(postId: string): Promise<number>;
+  countActiveClaimsForPost(postId: string, db?: TransactionContext): Promise<number>;
+
+  lockDispositionOrder(orderId: string, db: TransactionContext): Promise<void>;
+  lockWarehouseItem(itemId: string, db: TransactionContext): Promise<void>;
 
   // Disposition Orders
   generateOrderNumber(type: DispositionType): Promise<string>;
@@ -164,7 +167,7 @@ export interface DispositionRepository {
     db?: TransactionContext
   ): Promise<void>;
 
-  attachOrderToWarehouseItems(itemIds: string[], orderId: string | null, db?: TransactionContext): Promise<void>;
+  attachOrderToWarehouseItems(itemIds: string[], orderId: string | null, db?: TransactionContext, expectedOrderId?: string): Promise<number>;
 
   addDispositionEvidence(
     evidence: Array<{
@@ -187,8 +190,9 @@ export interface DispositionRepository {
   ): Promise<void>;
 
   updateWarehouseItemsStatus(
+    orderId: string,
     itemIds: string[],
     status: WarehouseStatus,
     db?: TransactionContext
-  ): Promise<void>;
+  ): Promise<number>;
 }

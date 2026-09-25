@@ -1,4 +1,4 @@
-import type { RowDataPacket } from "mysql2";
+import type { ResultSetHeader, RowDataPacket } from "mysql2";
 import type { TransactionContext } from "../../../shared/application/transaction.js";
 import { sqlExecutor, type SqlExecutor } from "../../../shared/infrastructure/transaction-context.js";
 import type {
@@ -125,6 +125,24 @@ export function createMySqlCustodyRepository(pool: SqlExecutor): CustodyReposito
         [id]
       );
       return rows[0] ? mapCustodyRow(rows[0]) : null;
+    },
+
+    async lockCustodyRequestById(id, custom) {
+      await runner(custom).execute(`SELECT id FROM custody_requests WHERE id = ? FOR UPDATE`, [id]);
+    },
+
+    async findClaimPostId(claimId) {
+      const [rows] = await runner().execute<RowDataPacket[]>(
+        `SELECT post_id FROM claims WHERE id = ?`, [claimId]
+      );
+      return rows[0]?.post_id ?? null;
+    },
+
+    async findClaimantId(claimId) {
+      const [rows] = await runner().execute<RowDataPacket[]>(
+        `SELECT claimant_id FROM claims WHERE id = ?`, [claimId]
+      );
+      return rows[0]?.claimant_id ?? null;
     },
 
     async findActivePendingRequestByPost(postId, custom) {
@@ -302,8 +320,8 @@ export function createMySqlCustodyRepository(pool: SqlExecutor): CustodyReposito
       const [rows] = await runner(custom).execute<RowDataPacket[]>(
         `SELECT
           id, user_id, title, description, category_id, area_id, building_id,
-          room_text, handover_point_id, contact_info, status
-        FROM posts WHERE id = ?`,
+          room_text, handover_point_id, contact_info, status, type
+        FROM posts WHERE id = ? AND type = 'FOUND' AND deleted_at IS NULL`,
         [postId]
       );
       if (!rows[0]) return null;
@@ -318,20 +336,25 @@ export function createMySqlCustodyRepository(pool: SqlExecutor): CustodyReposito
         roomText: rows[0].room_text,
         handoverPointId: rows[0].handover_point_id,
         contactInfo: rows[0].contact_info,
-        status: rows[0].status
+        status: rows[0].status,
+        type: rows[0].type
       };
     },
 
     async updatePostStatus(postId, status, custom) {
-      await runner(custom).execute(
-        `UPDATE posts SET status = ? WHERE id = ?`,
+      const [result] = await runner(custom).execute<ResultSetHeader>(
+        `UPDATE posts SET status = ? WHERE id = ? AND type = 'FOUND'
+         AND deleted_at IS NULL AND status IN ('OPEN', 'MATCHED')`,
         [status, postId]
       );
+      return result.affectedRows === 1;
     },
 
     async findStaffAndAdminUserIds() {
       const [rows] = await runner().execute<UserRow[]>(
-        `SELECT id FROM users WHERE role IN ('STAFF', 'ADMIN') AND status = 'ACTIVE'`
+        `SELECT DISTINCT u.id FROM users u
+         INNER JOIN user_roles ur ON ur.user_id = u.id
+         WHERE ur.role_code IN ('STAFF', 'ADMIN') AND u.status = 'ACTIVE'`
       );
       return rows.map((r: UserRow) => r.id);
     }

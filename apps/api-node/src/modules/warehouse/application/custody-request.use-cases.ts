@@ -1,6 +1,6 @@
 import type { TransactionRunner } from "../../../shared/application/transaction.js";
 import { AppError } from "../../../shared/domain/app-error.js";
-import type { NotificationRepository } from "../../notifications/application/notification.repository.port.js";
+import type { NotificationRepository } from "../../notifications/application/index.js";
 import {
   calculateRetentionDeadline,
   custodyReasonLabels,
@@ -30,6 +30,20 @@ export interface CustodyDependencies {
 export function createCustodyUseCases(options: CustodyDependencies) {
   const { custodyRepository, warehouseRepository, notificationRepository, withTransaction, id } = options;
 
+  async function notifyClaimant(claimId: string | null | undefined, finderId: string, type: "CUSTODY_REQUESTED" | "CUSTODY_ACCEPTED" | "CUSTODY_REJECTED" | "CUSTODY_INTAKED", connection: Parameters<NotificationRepository["create"]>[1]) {
+    if (!claimId) return;
+    const claimantId = await custodyRepository.findClaimantId(claimId);
+    if (!claimantId || claimantId === finderId) return;
+    await notificationRepository.create({
+      userId: claimantId,
+      type,
+      title: "Custody status changed",
+      body: "The custody status of an item in your claim changed. Sign in to view the claim.",
+      entityType: "CLAIM",
+      entityId: claimId
+    }, connection);
+  }
+
   async function retentionDaysForCategory(categoryId: string | null | undefined) {
     if (!categoryId) {
       return warehouseRepository.getConfigInt("warehouse.retention_days_default", retentionFallbacks["warehouse.retention_days_default"]);
@@ -44,14 +58,24 @@ export function createCustodyUseCases(options: CustodyDependencies) {
     async createCustodyRequest(input: CreateCustodyRequestInput, finderId: string) {
       if (input.idempotencyKey) {
         const existing = await custodyRepository.findByIdempotencyKey(finderId, input.idempotencyKey);
-        if (existing) return existing;
+        if (existing) {
+          if (existing.postId !== input.postId || existing.claimId !== (input.claimId ?? null)) {
+            throw new AppError("conflict", "Idempotency key was already used for another custody request");
+          }
+          return existing;
+        }
       }
 
       const post = await custodyRepository.findPostDetailsForIntake(input.postId);
       if (!post) throw new AppError("not_found", "Không tìm thấy bài đăng");
+      if (post.type !== "FOUND") throw new AppError("bad_request", "Only found posts can enter custody");
       if (post.userId !== finderId) throw new AppError("forbidden", "Chỉ người nhặt (Finder) của bài đăng mới được yêu cầu chuyển custody");
-      if (post.status === "IN_CUSTODY" || post.status === "RESOLVED" || post.status === "CLOSED") {
+      if (post.status !== "OPEN" && post.status !== "MATCHED") {
         throw new AppError("bad_request", `Không thể yêu cầu custody cho bài đăng ở trạng thái ${post.status}`);
+      }
+
+      if (input.claimId && await custodyRepository.findClaimPostId(input.claimId) !== post.id) {
+        throw new AppError("bad_request", "Claim does not belong to this found post");
       }
 
       const activePending = await custodyRepository.findActivePendingRequestByPost(input.postId);
@@ -65,9 +89,9 @@ export function createCustodyUseCases(options: CustodyDependencies) {
       }
 
       const requestId = id();
-      await withTransaction(async (conn) => {
-        await custodyRepository.createCustodyRequest(
-          {
+      try {
+        await withTransaction(async (conn) => {
+          await custodyRepository.createCustodyRequest({
             id: requestId,
             postId: input.postId,
             finderId,
@@ -78,12 +102,9 @@ export function createCustodyUseCases(options: CustodyDependencies) {
             proposedHandoverPointId: input.proposedHandoverPointId ?? null,
             proposedTime: input.proposedTime ?? null,
             idempotencyKey: input.idempotencyKey ?? null
-          },
-          conn
-        );
+          }, conn);
 
-        await custodyRepository.createCustodyLog(
-          {
+          await custodyRepository.createCustodyLog({
             id: id(),
             custodyRequestId: requestId,
             actorId: finderId,
@@ -91,37 +112,29 @@ export function createCustodyUseCases(options: CustodyDependencies) {
             fromStatus: null,
             toStatus: "PENDING",
             notes: `Finder yêu cầu chuyển giao custody với lý do: ${custodyReasonLabels[input.reason]}`
-          },
-          conn
-        );
-
-        // Notify staff and admin users about the new custody request
-        const staffAndAdminIds = await custodyRepository.findStaffAndAdminUserIds();
-        if (staffAndAdminIds.length > 0) {
-          const reasonText = custodyReasonLabels[input.reason];
-          const handoverPointName = input.proposedHandoverPointId 
-            ? await warehouseRepository.findHandoverPointNameById(input.proposedHandoverPointId)
-            : "Chưa xác định";
-          
-          const proposedTimeText = input.proposedTime 
-            ? new Date(input.proposedTime).toLocaleString('vi-VN')
-            : "Chưa xác định";
-
+          }, conn);
+          const staffAndAdminIds = await custodyRepository.findStaffAndAdminUserIds();
           for (const staffId of staffAndAdminIds) {
-            await notificationRepository.create(
-              {
-                userId: staffId,
-                type: "CUSTODY_REQUESTED",
-                title: "Yêu cầu chuyển giao custody mới",
-                body: `Finder yêu cầu chuyển giao vật phẩm "${post.title}". Lý do: ${reasonText}. Điểm đề xuất: ${handoverPointName}. Ngày gửi: ${proposedTimeText}`,
-                entityType: "CUSTODY_REQUEST",
-                entityId: requestId
-              },
-              conn
-            );
+            await notificationRepository.create({
+              userId: staffId,
+              type: "CUSTODY_REQUESTED",
+              title: "Yêu cầu chuyển giao custody mới",
+              body: "A custody request needs staff review.",
+              entityType: "CUSTODY_REQUEST",
+              entityId: requestId
+            }, conn);
           }
-        }
-      });
+          await notifyClaimant(input.claimId, finderId, "CUSTODY_REQUESTED", conn);
+        });
+      } catch (error) {
+        const duplicate = typeof error === "object" && error !== null && "code" in error && error.code === "ER_DUP_ENTRY";
+        if (!duplicate) throw error;
+        const replay = input.idempotencyKey
+          ? await custodyRepository.findByIdempotencyKey(finderId, input.idempotencyKey)
+          : null;
+        if (replay && replay.postId === input.postId && replay.claimId === (input.claimId ?? null)) return replay;
+        throw new AppError("conflict", "An active custody request already exists for this post");
+      }
 
       const result = await custodyRepository.findCustodyRequestById(requestId);
       if (!result) throw new AppError("internal", "Không thể lấy thông tin yêu cầu custody vừa tạo");
@@ -132,14 +145,20 @@ export function createCustodyUseCases(options: CustodyDependencies) {
       return custodyRepository.listCustodyRequests(query);
     },
 
-    async getCustodyRequestDetail(requestId: string) {
+    async getCustodyRequestDetail(requestId: string, actorId: string, isStaffOrAdmin: boolean) {
       const request = await custodyRepository.findCustodyRequestById(requestId);
+      if (request && !isStaffOrAdmin && request.finderId !== actorId) {
+        throw new AppError("forbidden", "You cannot view this custody request");
+      }
       if (!request) throw new AppError("not_found", "Không tìm thấy yêu cầu custody");
       const logs = await custodyRepository.listCustodyLogs(requestId);
       return { request, logs };
     },
 
     async acceptCustodyRequest(requestId: string, input: AcceptCustodyRequestInput, actorId: string) {
+      if (input.assignedHandlerId && input.assignedHandlerId !== actorId) {
+        throw new AppError("forbidden", "A handler cannot be assigned without staff verification");
+      }
       const request = await custodyRepository.findCustodyRequestById(requestId);
       if (!request) throw new AppError("not_found", "Không tìm thấy yêu cầu custody");
       if (request.status !== "PENDING") {
@@ -152,6 +171,9 @@ export function createCustodyUseCases(options: CustodyDependencies) {
       const handoverPointName = await warehouseRepository.findHandoverPointNameById(input.confirmedHandoverPointId);
 
       await withTransaction(async (conn) => {
+        await custodyRepository.lockCustodyRequestById(requestId, conn);
+        const current = await custodyRepository.findCustodyRequestById(requestId, conn);
+        if (current?.status !== "PENDING") throw new AppError("conflict", "Custody request is no longer pending");
         await custodyRepository.updateCustodyRequest(
           requestId,
           {
@@ -195,6 +217,7 @@ export function createCustodyUseCases(options: CustodyDependencies) {
           },
           conn
         );
+        await notifyClaimant(request.claimId, request.finderId, "CUSTODY_ACCEPTED", conn);
       });
 
       return custodyRepository.findCustodyRequestById(requestId);
@@ -211,6 +234,9 @@ export function createCustodyUseCases(options: CustodyDependencies) {
       if (!reason) throw new AppError("bad_request", "Vui lòng nhập lý do từ chối");
 
       await withTransaction(async (conn) => {
+        await custodyRepository.lockCustodyRequestById(requestId, conn);
+        const current = await custodyRepository.findCustodyRequestById(requestId, conn);
+        if (current?.status !== "PENDING") throw new AppError("conflict", "Custody request is no longer pending");
         await custodyRepository.updateCustodyRequest(
           requestId,
           {
@@ -243,6 +269,7 @@ export function createCustodyUseCases(options: CustodyDependencies) {
           },
           conn
         );
+        await notifyClaimant(request.claimId, request.finderId, "CUSTODY_REJECTED", conn);
       });
 
       return custodyRepository.findCustodyRequestById(requestId);
@@ -263,6 +290,11 @@ export function createCustodyUseCases(options: CustodyDependencies) {
       if (!reason) throw new AppError("bad_request", "Vui lòng nhập lý do hủy yêu cầu");
 
       await withTransaction(async (conn) => {
+        await custodyRepository.lockCustodyRequestById(requestId, conn);
+        const current = await custodyRepository.findCustodyRequestById(requestId, conn);
+        if (current?.status !== "PENDING" && current?.status !== "ACCEPTED") {
+          throw new AppError("conflict", "Custody request can no longer be cancelled");
+        }
         await custodyRepository.updateCustodyRequest(
           requestId,
           {
@@ -277,7 +309,7 @@ export function createCustodyUseCases(options: CustodyDependencies) {
             custodyRequestId: requestId,
             actorId,
             action: "CANCELLED",
-            fromStatus: request.status,
+            fromStatus: current.status,
             toStatus: "CANCELLED",
             notes: `Hủy yêu cầu: ${reason}`
           },
@@ -319,10 +351,21 @@ export function createCustodyUseCases(options: CustodyDependencies) {
       const retentionDays = await retentionDaysForCategory(post.categoryId);
       const retentionDeadline = calculateRetentionDeadline(receivedAt, retentionDays);
       const warehouseItemId = id();
+      let resultItemId = warehouseItemId;
       const conditionNotes = input.conditionNotes.trim();
       const storageCode = input.storageCode?.trim() || null;
 
       await withTransaction(async (conn) => {
+        await custodyRepository.lockCustodyRequestById(requestId, conn);
+        const current = await custodyRepository.findCustodyRequestById(requestId, conn);
+        if (!current) throw new AppError("not_found", "Custody request not found");
+        if (current.status === "INTAKED" && current.warehouseItemId) {
+          resultItemId = current.warehouseItemId;
+          return;
+        }
+        if (current.status !== "PENDING" && current.status !== "ACCEPTED") {
+          throw new AppError("conflict", "Custody request is no longer available for intake");
+        }
         // 1. Create warehouse item
         await warehouseRepository.createItem(
           {
@@ -382,7 +425,7 @@ export function createCustodyUseCases(options: CustodyDependencies) {
             custodyRequestId: requestId,
             actorId,
             action: "INTAKED",
-            fromStatus: request.status,
+            fromStatus: current.status,
             toStatus: "INTAKED",
             notes: `Staff đã tiếp nhận vật phẩm thực tế vào kho (${storageCode ? `Mã vị trí: ${storageCode}` : "Chưa gắn mã"})`
           },
@@ -390,7 +433,9 @@ export function createCustodyUseCases(options: CustodyDependencies) {
         );
 
         // 5. Update post status to IN_CUSTODY
-        await custodyRepository.updatePostStatus(post.id, "IN_CUSTODY", conn);
+        if (!await custodyRepository.updatePostStatus(post.id, "IN_CUSTODY", conn)) {
+          throw new AppError("conflict", "Found post is no longer eligible for custody intake");
+        }
 
         // 6. Notify Finder
         await notificationRepository.create(
@@ -404,9 +449,10 @@ export function createCustodyUseCases(options: CustodyDependencies) {
           },
           conn
         );
+        await notifyClaimant(request.claimId, request.finderId, "CUSTODY_INTAKED", conn);
       });
 
-      const result = await warehouseRepository.findItemById(warehouseItemId);
+      const result = await warehouseRepository.findItemById(resultItemId);
       if (!result) throw new AppError("internal", "Không thể lấy lại thông tin vật phẩm kho vừa tạo");
       return result;
     }

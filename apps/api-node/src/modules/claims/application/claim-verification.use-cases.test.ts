@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createTestClaimUseCases, notificationRepository } from "../../../test/use-case-fixtures.js";
+import type { CustodyRepository } from "../../warehouse/application/index.js";
 import type { ClaimAuditEventRecord, ClaimRepository, ClaimStatus, FinderDecision, VerificationQuestionRecord } from "./claim.repository.port.js";
 
 const claimId = "11111111-1111-4111-8111-111111111111";
@@ -173,6 +174,44 @@ test("Finder verification is authoritative, appointment-eligible and idempotent"
   assert.equal(harness.audits.length, 1);
   assert.equal(harness.audits[0]?.action, "VERIFICATION_ACCEPTED");
   assert.equal(JSON.stringify(first).includes("private-expected-answer-hash"), false);
+});
+
+test("custody escalation creates a request without rejecting the peer claim", async () => {
+  let currentStatus: ClaimStatus = "CONVERSATION_OPEN";
+  let currentDecision: FinderDecision = "ACCEPTED";
+  let requests = 0;
+  const harness = commonRepository({ listVerificationQuestions: async () => [] });
+  harness.repository.findById = async () => claim(currentStatus, currentDecision);
+  harness.repository.findByIdForUpdate = async () => claim(currentStatus, currentDecision);
+  harness.repository.updateFinderDecision = async (input) => {
+    currentStatus = input.status;
+    currentDecision = input.finderDecision;
+  };
+  const custodyRepository = {
+    createCustodyRequest: async () => { requests++; },
+    createCustodyLog: async () => undefined,
+    findStaffAndAdminUserIds: async () => []
+  } as unknown as CustodyRepository;
+  const service = createTestClaimUseCases({ claimRepository: harness.repository, custodyRepository });
+  const result = await service.decideVerification(claimId, finderId, {
+    decision: "ESCALATE_TO_CUSTODY", reason: "Need staff to hold the item safely", idempotencyKey: "escalate-1"
+  });
+  assert.equal(result.claim.status, "NEED_MORE_INFO");
+  assert.equal(currentDecision, "PENDING");
+  assert.equal(requests, 1);
+  assert.equal(harness.audits[0]?.action, "CUSTODY_ESCALATED");
+});
+
+test("custody creation failure propagates from the claim transaction", async () => {
+  const harness = commonRepository({ listVerificationQuestions: async () => [] });
+  const custodyRepository = {
+    createCustodyRequest: async () => { throw new Error("insert failed"); }
+  } as unknown as CustodyRepository;
+  const service = createTestClaimUseCases({ claimRepository: harness.repository, custodyRepository });
+  await assert.rejects(service.decideVerification(claimId, finderId, {
+    decision: "ESCALATE_TO_CUSTODY", reason: "Need staff to hold the item safely", idempotencyKey: "escalate-2"
+  }), /insert failed/);
+  assert.equal(harness.audits.length, 0);
 });
 
 test("claimant answer response and audit history do not expose raw answers", async () => {

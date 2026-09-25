@@ -1,5 +1,5 @@
 import type { SqlExecutor } from "../../../shared/infrastructure/transaction-context.js";
-import type { NotificationRepository } from "../../notifications/application/notification.repository.port.js";
+import type { NotificationRepository } from "../../notifications/application/index.js";
 import type { RowDataPacket } from "mysql2";
 
 export interface RetentionAlertSchedulerOptions {
@@ -27,13 +27,20 @@ export function createRetentionAlertScheduler(options: RetentionAlertSchedulerOp
 
   async function findStaffAndAdminUserIds(): Promise<string[]> {
     const [rows] = await db.execute<UserRow[]>(
-      `SELECT id FROM users WHERE role IN ('STAFF', 'ADMIN') AND status = 'ACTIVE'`
+      `SELECT DISTINCT u.id FROM users u
+       INNER JOIN user_roles ur ON ur.user_id = u.id
+       WHERE ur.role_code IN ('STAFF', 'ADMIN') AND u.status = 'ACTIVE'`
     );
     return rows.map((r: UserRow) => r.id);
   }
 
   return {
     async scanAndAlertOverdue(): Promise<{ scannedCount: number; alertedCount: number }> {
+      const [configRows] = await db.execute<RowDataPacket[]>(
+        `SELECT config_value FROM config_entries WHERE config_key = 'warehouse.retention_alert_days' LIMIT 1`
+      );
+      const configuredDays = Number.parseInt(String(configRows[0]?.config_value ?? "7"), 10);
+      const alertDays = Number.isFinite(configuredDays) ? Math.max(1, Math.min(365, configuredDays)) : 7;
       // 1. Find items that are overdue or nearing retention deadline (< 7 days) and still in active custody
       const [items] = await db.execute<OverdueCandidateRow[]>(
         `SELECT
@@ -47,8 +54,10 @@ export function createRetentionAlertScheduler(options: RetentionAlertSchedulerOp
         FROM warehouse_items wi
         WHERE wi.status IN ('RECEIVED', 'STORED')
           AND wi.retention_deadline IS NOT NULL
-          AND wi.retention_deadline <= DATE_ADD(NOW(), INTERVAL 7 DAY)
-        LIMIT 100`
+          AND wi.retention_deadline <= DATE_ADD(NOW(), INTERVAL ? DAY)
+        ORDER BY wi.retention_deadline ASC
+        LIMIT 100`,
+        [alertDays]
       );
 
       if (items.length === 0) return { scannedCount: 0, alertedCount: 0 };
@@ -64,13 +73,10 @@ export function createRetentionAlertScheduler(options: RetentionAlertSchedulerOp
         const isOverdue = daysOverdue >= 0;
         const holdText = item.legal_hold_count > 0 ? " [Đang có Legal Hold]" : "";
 
-        const title = isOverdue
-          ? `Cảnh báo quá hạn lưu kho: ${item.item_name}`
-          : `Nhắc nhở sắp hết hạn lưu kho: ${item.item_name}`;
-
+        const title = isOverdue ? "Warehouse retention overdue" : "Warehouse retention reminder";
         const body = isOverdue
-          ? `Vật phẩm "${item.item_name}" (Vị trí: ${item.storage_code ?? "Chưa rõ"}) đã quá hạn lưu kho ${daysOverdue} ngày.${holdText} Vui lòng kiểm tra và xử lý.`
-          : `Vật phẩm "${item.item_name}" (Vị trí: ${item.storage_code ?? "Chưa rõ"}) sẽ hết hạn lưu kho trong vài ngày tới.${holdText}`;
+          ? `A warehouse task is ${daysOverdue} days overdue.${holdText} Open the staff queue for details.`
+          : `A warehouse retention deadline is approaching.${holdText} Open the staff queue for details.`;
 
         for (const userId of recipientIds) {
           const dedupeKey = `retention-alert:${item.id}:${todayStr}:${userId}`;

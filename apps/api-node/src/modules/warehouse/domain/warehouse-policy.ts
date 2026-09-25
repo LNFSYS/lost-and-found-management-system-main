@@ -43,7 +43,7 @@ export const retentionFallbacks = {
 } as const;
 
 export const transitionMap: Record<WarehouseStatus, WarehouseStatus[]> = {
-  PENDING_APPROVAL: ["RECEIVED", "DISPOSED"],
+  PENDING_APPROVAL: ["RECEIVED"],
   RECEIVED: ["STORED", "CLAIMED", "RETURNED", "EXPIRED"],
   STORED: ["CLAIMED", "RETURNED", "EXPIRED"],
   CLAIMED: ["STORED", "RETURNED"],
@@ -148,6 +148,9 @@ export function checkDispositionEligibility(item: {
   }
   if (item.status === "RETURNED" || item.status === "DISPOSED" || item.status === "DONATED" || item.status === "TRANSFERRED") {
     blockers.push(`Vật phẩm đã ở trạng thái kết thúc (${warehouseStatusLabels[item.status]})`);
+  }
+  if (item.status !== "RECEIVED" && item.status !== "STORED" && item.status !== "EXPIRED") {
+    blockers.push("Warehouse item is not available for disposition");
   }
   if (item.dispositionOrderId) {
     blockers.push("Vật phẩm đã được gán vào một lệnh xử lý kho khác");

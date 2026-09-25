@@ -40,7 +40,8 @@ export function createCustodyController({ custodyService }: { custodyService: Cu
 
     async getCustodyRequestDetail(req: Request, res: Response) {
       const { id } = custodyRequestIdParamSchema.parse(req.params);
-      const result = await custodyService.getCustodyRequestDetail(id);
+      const isStaffOrAdmin = req.auth!.roles.includes("STAFF") || req.auth!.roles.includes("ADMIN");
+      const result = await custodyService.getCustodyRequestDetail(id, req.auth!.sub, isStaffOrAdmin);
       res.json(result);
     },
 

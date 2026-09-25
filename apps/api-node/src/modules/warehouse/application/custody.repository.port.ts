@@ -56,6 +56,12 @@ export interface CustodyRepository {
 
   findCustodyRequestById(id: string, db?: TransactionContext): Promise<CustodyRequestRecord | null>;
 
+  lockCustodyRequestById(id: string, db: TransactionContext): Promise<void>;
+
+  findClaimPostId(claimId: string): Promise<string | null>;
+
+  findClaimantId(claimId: string): Promise<string | null>;
+
   findActivePendingRequestByPost(postId: string, db?: TransactionContext): Promise<CustodyRequestRecord | null>;
 
   findByIdempotencyKey(finderId: string, idempotencyKey: string, db?: TransactionContext): Promise<CustodyRequestRecord | null>;
@@ -106,9 +112,10 @@ export interface CustodyRepository {
     handoverPointId: string | null;
     contactInfo: string | null;
     status: string;
+    type: string;
   } | null>;
 
-  updatePostStatus(postId: string, status: string, db?: TransactionContext): Promise<void>;
+  updatePostStatus(postId: string, status: string, db?: TransactionContext): Promise<boolean>;
 
   findStaffAndAdminUserIds(): Promise<string[]>;
 }
