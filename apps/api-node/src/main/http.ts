@@ -21,6 +21,10 @@ import { createReportRoutes } from "../modules/reports/interfaces/http/report.ro
 import { createAdminConfigRoutes } from "../modules/system-config/interfaces/http/admin-config.routes.js";
 import { createConfigRoutes } from "../modules/system-config/interfaces/http/config.routes.js";
 import { createSystemConfigController } from "../modules/system-config/interfaces/http/system-config.controller.js";
+import { createCustodyController } from "../modules/warehouse/interfaces/http/custody.controller.js";
+import { createCustodyRoutes } from "../modules/warehouse/interfaces/http/custody.routes.js";
+import { createDispositionController } from "../modules/warehouse/interfaces/http/disposition.controller.js";
+import { createDispositionRoutes } from "../modules/warehouse/interfaces/http/disposition.routes.js";
 import { createStaffRoutes } from "../modules/warehouse/interfaces/http/staff.routes.js";
 import { createWarehouseController } from "../modules/warehouse/interfaces/http/warehouse.controller.js";
 import type { AccessTokenPayload } from "../shared/domain/auth.js";
@@ -43,6 +47,9 @@ export function createHttpRoutes(services: ApplicationServices) {
   const reportController = createReportController({ reportService: services.reportService });
   const systemConfigController = createSystemConfigController({ systemConfigService: services.systemConfigService });
   const warehouseController = createWarehouseController({ warehouseService: services.warehouseService });
+  const custodyController = createCustodyController({ custodyService: services.custodyService });
+  const dispositionController = createDispositionController({ dispositionService: services.dispositionService });
+
   return {
     adminRoutes: createAdminRoutes({ adminCatalogController, adminReportingController, adminUserController, auth }),
     handoverRoutes: createHandoverRoutes({ adminCatalogController }),
@@ -56,5 +63,7 @@ export function createHttpRoutes(services: ApplicationServices) {
     adminConfigRoutes: createAdminConfigRoutes({ systemConfigController, auth }),
     configRoutes: createConfigRoutes({ systemConfigController }),
     staffRoutes: createStaffRoutes({ warehouseController, auth }),
+    custodyRoutes: createCustodyRoutes({ custodyController, auth }),
+    dispositionRoutes: createDispositionRoutes({ dispositionController, auth })
   };
 }

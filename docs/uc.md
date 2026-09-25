@@ -204,13 +204,13 @@ Completed UC work above is not reassigned. The 76 Partial/Planned UCs are divide
 | UC-055 | Confirm a warehouse return | Staff / Admin | Mark a warehouse item as returned through a valid state transition and append the actor's storage log. | Implemented |
 | UC-056 | View warehouse storage logs | Staff / Admin | View the immutable action history for a warehouse item. | Implemented |
 | UC-057 | Calculate item retention deadline | System | Calculate and store the retention deadline from the receiving time and configured category policy. | Implemented |
-| UC-141 | Request transfer to staff custody | Finder | Ask to transfer a found item to an official handover point when direct return is unsuitable. | Planned |
-| UC-142 | Select staff intake point and time | Finder, Staff | Select an active handover point and proposed intake time for a custody transfer. | Planned |
-| UC-143 | List custody transfer requests | Staff, Admin | View pending, accepted, rejected, cancelled, and completed transfer requests. | Planned |
-| UC-144 | Accept a custody transfer request | Staff, Admin | Accept a valid transfer request and assign its intake point and handler. | Planned |
-| UC-145 | Reject or cancel a custody transfer request | Finder, Staff, Admin | Reject or cancel a transfer with a reason before the item is received into custody. | Planned |
-| UC-146 | Confirm staff intake | Staff | Confirm physical receipt, create the warehouse record, and change the item state to IN_CUSTODY. | Planned |
-| UC-147 | Receive custody status notifications | Finder, Claimant | Receive updates when a custody transfer is accepted, received, moved, or released. | Planned |
+| UC-141 | Request transfer to staff custody | Finder | Ask to transfer a found item to an official handover point when direct return is unsuitable. | Implemented |
+| UC-142 | Select staff intake point and time | Finder, Staff | Select an active handover point and proposed intake time for a custody transfer. | Implemented |
+| UC-143 | List custody transfer requests | Staff, Admin | View pending, accepted, rejected, cancelled, and completed transfer requests. | Implemented |
+| UC-144 | Accept a custody transfer request | Staff, Admin | Accept a valid transfer request and assign its intake point and handler. | Implemented |
+| UC-145 | Reject or cancel a custody transfer request | Finder, Staff, Admin | Reject or cancel a transfer with a reason before the item is received into custody. | Implemented |
+| UC-146 | Confirm staff intake | Staff | Confirm physical receipt, create the warehouse record, and change the item state to IN_CUSTODY. | Implemented |
+| UC-147 | Receive custody status notifications | Finder, Claimant | Receive updates when a custody transfer is accepted, received, moved, or released. | Implemented |
 
 ### 3.10 Feedback & Reputation
 
@@ -317,17 +317,17 @@ Completed UC work above is not reassigned. The 76 Partial/Planned UCs are divide
 
 | ID | Use Case | Actors | Use Case Description | Status |
 | --- | --- | --- | --- | --- |
-| UC-148 | List overdue warehouse items | Staff, Admin | View custody records whose retention deadline has passed and that are not legally blocked. | Planned |
-| UC-149 | View overdue item detail | Staff, Admin | View deadline, storage history, claim conflicts, appointments, holds, and disposition eligibility. | Planned |
-| UC-150 | Send retention deadline alerts | Scheduler | Notify staff before and after a custody record reaches its retention deadline. | Planned |
-| UC-151 | Check disposition eligibility | Staff, Admin | Verify retention, claim, appointment, dispute, and legal-hold rules before disposition starts. | Planned |
-| UC-152 | Apply or remove a legal hold | Admin | Block or unblock disposition with a documented reason, authorization, and audit entry. | Planned |
-| UC-153 | Create a disposition order | Admin | Create a donation, disposal, or transfer order for eligible warehouse items. | Planned |
-| UC-154 | View disposition order detail | Staff, Admin | View included items, reason, approval state, evidence, and processing history. | Planned |
-| UC-155 | Approve a disposition order | Admin | Approve an eligible disposition order before physical processing. | Planned |
-| UC-156 | Reject a disposition order | Admin | Reject an order with a recorded reason while leaving item custody records unchanged. | Planned |
-| UC-157 | Cancel a disposition order | Admin | Cancel an approved but unprocessed order with a reason and audit entry. | Planned |
-| UC-158 | Record disposition evidence | Staff, Admin | Upload evidence and completion details for an authorized donation, disposal, or transfer. | Planned |
+| UC-148 | List overdue warehouse items | Staff, Admin | View custody records whose retention deadline has passed and that are not legally blocked. | Implemented |
+| UC-149 | View overdue item detail | Staff, Admin | View deadline, storage history, claim conflicts, appointments, holds, and disposition eligibility. | Implemented |
+| UC-150 | Send retention deadline alerts | Scheduler | Notify staff before and after a custody record reaches its retention deadline. | Implemented |
+| UC-151 | Check disposition eligibility | Staff, Admin | Verify retention, claim, appointment, dispute, and legal-hold rules before disposition starts. | Implemented |
+| UC-152 | Apply or remove a legal hold | Admin | Block or unblock disposition with a documented reason, authorization, and audit entry. | Implemented |
+| UC-153 | Create a disposition order | Admin | Create a donation, disposal, or transfer order for eligible warehouse items. | Implemented |
+| UC-154 | View disposition order detail | Staff, Admin | View included items, reason, approval state, evidence, and processing history. | Implemented |
+| UC-155 | Approve a disposition order | Admin | Approve an eligible disposition order before physical processing. | Implemented |
+| UC-156 | Reject a disposition order | Admin | Reject an order with a recorded reason while leaving item custody records unchanged. | Implemented |
+| UC-157 | Cancel a disposition order | Admin | Cancel an approved but unprocessed order with a reason and audit entry. | Implemented |
+| UC-158 | Record disposition evidence | Staff, Admin | Upload evidence and completion details for an authorized donation, disposal, or transfer. | Implemented |
 | UC-159 | Create a donation campaign | Admin | Create a donation campaign with a name, receiving organization, schedule, and eligibility rules. | Planned |
 | UC-160 | Update a donation campaign | Admin | Update the campaign information while preserving its change history. | Planned |
 | UC-161 | Assign or remove campaign items | Staff, Admin | Add eligible custody items to or remove unprocessed items from a donation campaign. | Planned |

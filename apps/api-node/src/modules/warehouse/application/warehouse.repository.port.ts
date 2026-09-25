@@ -175,6 +175,7 @@ export interface WarehouseRepository {
   }, db?: TransactionContext): Promise<void>;
   listLogs(itemId: string): Promise<WarehouseStorageLog[]>;
   findHandoverPointById(id: string): Promise<string>;
+  findHandoverPointNameById(id: string): Promise<string | null>;
   findAreaById(id: string): Promise<string>;
   findBuildingById(id: string): Promise<{
     id: string;

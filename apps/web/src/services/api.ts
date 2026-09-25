@@ -314,6 +314,118 @@ export interface UpdateWarehouseItemPayload {
   storageCode?: string | null;
   note?: string | null;
 }
+export type CustodyReason = "INACTIVITY" | "SAFETY_CONCERN" | "DISPUTE" | "SENSITIVE_ITEM" | "VOLUNTARY";
+export type CustodyRequestStatus = "PENDING" | "ACCEPTED" | "REJECTED" | "CANCELLED" | "INTAKED";
+
+export interface CustodyRequest {
+  id: string;
+  postId: string;
+  postTitle?: string;
+  finderId: string;
+  finderName?: string;
+  finderContact?: string;
+  claimId: string | null;
+  status: CustodyRequestStatus;
+  reason: CustodyReason;
+  reasonNotes: string | null;
+  proposedHandoverPointId: string | null;
+  proposedHandoverPointName?: string | null;
+  proposedTime: string | null;
+  confirmedHandoverPointId: string | null;
+  confirmedHandoverPointName?: string | null;
+  assignedHandlerId: string | null;
+  assignedHandlerName?: string | null;
+  warehouseItemId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CustodyRequestLog {
+  id: string;
+  custodyRequestId: string;
+  actorId: string;
+  actorName?: string;
+  action: "REQUESTED" | "ACCEPTED" | "REJECTED" | "CANCELLED" | "INTAKED" | "COMMENTED";
+  fromStatus: string | null;
+  toStatus: string | null;
+  notes: string | null;
+  createdAt: string;
+}
+
+export interface CustodyRequestListResponse {
+  total: number;
+  items: CustodyRequest[];
+}
+
+export type DispositionType = "DISPOSAL" | "DONATION" | "TRANSFER";
+export type DispositionOrderStatus = "PENDING_APPROVAL" | "APPROVED" | "REJECTED" | "CANCELLED" | "COMPLETED";
+
+export interface LegalHold {
+  id: string;
+  warehouseItemId: string;
+  itemName?: string;
+  isActive: boolean;
+  reason: string;
+  appliedBy: { id: string; fullName: string | null };
+  appliedAt: string;
+  releasedBy?: { id: string; fullName: string | null } | null;
+  releasedAt?: string | null;
+  releaseReason?: string | null;
+}
+
+export interface OverdueWarehouseItem extends WarehouseItem {
+  daysOverdue: number;
+  legalHoldCount: number;
+  dispositionOrderId: string | null;
+  isEligibleForDisposition: boolean;
+  blockers: string[];
+}
+
+export interface OverdueItemsListResponse {
+  total: number;
+  items: OverdueWarehouseItem[];
+}
+
+export interface DispositionOrder {
+  id: string;
+  orderNumber: string;
+  dispositionType: DispositionType;
+  status: DispositionOrderStatus;
+  reason: string;
+  createdBy: { id: string; fullName: string | null };
+  approvedBy?: { id: string; fullName: string | null } | null;
+  approvedAt?: string | null;
+  rejectionReason?: string | null;
+  cancelledBy?: { id: string; fullName: string | null } | null;
+  cancelledAt?: string | null;
+  cancellationReason?: string | null;
+  completedBy?: { id: string; fullName: string | null } | null;
+  completedAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  items?: Array<{
+    id: string;
+    warehouseItemId: string;
+    itemName: string;
+    storageCode: string | null;
+    status: "PENDING" | "PROCESSED" | "REMOVED";
+    processedAt: string | null;
+    notes: string | null;
+  }>;
+  evidence?: Array<{
+    id: string;
+    fileUrl: string;
+    fileKind: "DOCUMENT" | "PHOTO" | "CERTIFICATE";
+    uploadedBy: { id: string; fullName: string | null };
+    description: string | null;
+    createdAt: string;
+  }>;
+}
+
+export interface DispositionOrderListResponse {
+  total: number;
+  items: DispositionOrder[];
+}
 export interface PostCatalog {
   categories: Array<{ id: string; name: string; parentId: string | null }>;
   areas: Array<{ id: string; name: string }>;
@@ -846,5 +958,97 @@ export const api = {
   listWarehouseItems: (filters: WarehouseFilters = {}) => raw<WarehouseDashboard>(`/staff/warehouse-items${queryString(filters)}`),
   createWarehouseItem: (payload: CreateWarehouseItemPayload) => raw<WarehouseItem>("/staff/warehouse-items", { method: "POST", body: JSON.stringify(payload) }),
   updateWarehouseItem: (id: string, payload: UpdateWarehouseItemPayload) => raw<WarehouseItem>(`/staff/warehouse-items/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
-  getWarehouseLogs: (id: string) => raw<{ logs: WarehouseStorageLog[] }>(`/staff/warehouse-items/${id}/logs`).then((payload) => payload.logs)
+  getWarehouseLogs: (id: string) => raw<{ logs: WarehouseStorageLog[] }>(`/staff/warehouse-items/${id}/logs`).then((payload) => payload.logs),
+
+  // Custody APIs (UC-141 -> UC-147)
+  createCustodyRequest: (payload: { postId: string; claimId?: string | null; reason: CustodyReason; reasonNotes?: string | null; proposedHandoverPointId?: string | null; proposedTime?: string | null; idempotencyKey?: string }) =>
+    raw<CustodyRequest>("/custody-requests", {
+      method: "POST",
+      body: JSON.stringify(payload),
+      headers: payload.idempotencyKey ? { "Idempotency-Key": payload.idempotencyKey } : undefined
+    }),
+  listMyCustodyRequests: (filters: { status?: CustodyRequestStatus | "ALL"; page?: number; pageSize?: number } = {}) =>
+    raw<CustodyRequestListResponse>(`/custody-requests/my${queryString(filters)}`),
+  getCustodyRequestDetail: (id: string) =>
+    raw<{ request: CustodyRequest; logs: CustodyRequestLog[] }>(`/custody-requests/${id}`),
+  cancelCustodyRequest: (id: string, reason: string) =>
+    raw<CustodyRequest>(`/custody-requests/${id}/cancel`, { method: "POST", body: JSON.stringify({ reason }) }),
+  listStaffCustodyRequests: (filters: { status?: CustodyRequestStatus | "ALL"; page?: number; pageSize?: number } = {}) =>
+    raw<CustodyRequestListResponse>(`/staff/custody-requests${queryString(filters)}`),
+  acceptCustodyRequest: (id: string, payload: { confirmedHandoverPointId: string; assignedHandlerId?: string | null; notes?: string | null }) =>
+    raw<CustodyRequest>(`/staff/custody-requests/${id}/accept`, { method: "POST", body: JSON.stringify(payload) }),
+  rejectCustodyRequest: (id: string, reason: string) =>
+    raw<CustodyRequest>(`/staff/custody-requests/${id}/reject`, { method: "POST", body: JSON.stringify({ reason }) }),
+  confirmStaffIntake: (
+    id: string,
+    payload: {
+      conditionNotes: string;
+      storageCode?: string | null;
+      handoverPointId?: string | null;
+      areaId?: string | null;
+      buildingId?: string | null;
+      roomText?: string | null;
+      receivedAt?: string;
+      idempotencyKey?: string;
+    }
+  ) =>
+    raw<WarehouseItem>(`/staff/custody-requests/${id}/intake`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+      headers: payload.idempotencyKey ? { "Idempotency-Key": payload.idempotencyKey } : undefined
+    }),
+
+  // Overdue & Legal Hold APIs (UC-148 -> UC-152)
+  listOverdueWarehouseItems: (filters: { page?: number; pageSize?: number; q?: string; handoverPointId?: string; legalHoldOnly?: boolean } = {}) =>
+    raw<OverdueItemsListResponse>(`/staff/warehouse/overdue${queryString(filters)}`),
+  getOverdueWarehouseItemDetail: (id: string) =>
+    raw<{ item: WarehouseItem; logs: WarehouseStorageLog[]; activeHolds: LegalHold[]; activeClaimsCount: number; eligibility: { eligible: boolean; blockers: string[] } }>(
+      `/staff/warehouse/items/${id}/overdue-detail`
+    ),
+  checkDispositionEligibility: (id: string) =>
+    raw<{ eligible: boolean; blockers: string[] }>(`/staff/warehouse/items/${id}/disposition-eligibility`),
+  applyLegalHold: (warehouseItemId: string, reason: string) =>
+    raw<LegalHold>(`/admin/warehouse/items/${warehouseItemId}/legal-hold`, {
+      method: "POST",
+      body: JSON.stringify({ warehouseItemId, reason })
+    }),
+  releaseLegalHold: (warehouseItemId: string, holdId: string, releaseReason: string) =>
+    raw<LegalHold>(`/admin/warehouse/items/${warehouseItemId}/legal-hold/${holdId}/release`, {
+      method: "POST",
+      body: JSON.stringify({ releaseReason })
+    }),
+
+  // Disposition Orders APIs (UC-153 -> UC-158)
+  createDispositionOrder: (payload: { dispositionType: DispositionType; reason: string; warehouseItemIds: string[] }) =>
+    raw<DispositionOrder>("/admin/disposition-orders", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    }),
+  listDispositionOrders: (filters: { status?: DispositionOrderStatus | "ALL"; dispositionType?: DispositionType | "ALL"; page?: number; pageSize?: number } = {}) =>
+    raw<DispositionOrderListResponse>(`/staff/disposition-orders${queryString(filters)}`),
+  getDispositionOrderDetail: (id: string) =>
+    raw<DispositionOrder>(`/staff/disposition-orders/${id}`),
+  approveDispositionOrder: (id: string) =>
+    raw<DispositionOrder>(`/admin/disposition-orders/${id}/approve`, { method: "POST" }),
+  rejectDispositionOrder: (id: string, reason: string) =>
+    raw<DispositionOrder>(`/admin/disposition-orders/${id}/reject`, { method: "POST", body: JSON.stringify({ reason }) }),
+  cancelDispositionOrder: (id: string, reason: string) =>
+    raw<DispositionOrder>(`/admin/disposition-orders/${id}/cancel`, { method: "POST", body: JSON.stringify({ reason }) }),
+  executeDisposition: (
+    id: string,
+    payload: {
+      processedItemIds: string[];
+      evidenceUrls?: Array<{
+        fileUrl: string;
+        fileKind: "DOCUMENT" | "PHOTO" | "CERTIFICATE";
+        description?: string;
+        warehouseItemId?: string;
+      }>;
+      notes?: string;
+    }
+  ) =>
+    raw<DispositionOrder>(`/staff/disposition-orders/${id}/execute`, {
+      method: "POST",
+      body: JSON.stringify(payload)
+    })
 };

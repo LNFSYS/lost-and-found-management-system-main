@@ -15,6 +15,16 @@ export const warehouseStatusSchema = z.enum([
   "TRANSFERRED"
 ]);
 
+// Guarded update schema: direct transition to DISPOSED, DONATED, TRANSFERRED is disallowed via simple update
+export const warehouseUpdatableStatusSchema = z.enum([
+  "PENDING_APPROVAL",
+  "RECEIVED",
+  "STORED",
+  "CLAIMED",
+  "RETURNED",
+  "EXPIRED"
+]);
+
 function atLeastOne(value: Record<string, unknown>) {
   return Object.values(value).some((item) => item !== undefined);
 }
@@ -46,7 +56,7 @@ export const createWarehouseItemSchema = z.object({
 });
 
 export const updateWarehouseItemSchema = z.object({
-  status: warehouseStatusSchema.optional(),
+  status: warehouseUpdatableStatusSchema.optional(),
   conditionNotes: nullableText(2000),
   storageCode: nullableText(60),
   note: nullableText(1000)

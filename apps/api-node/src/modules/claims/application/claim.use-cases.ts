@@ -6,6 +6,8 @@ import { validateImageUpload } from "../../../shared/domain/media.js";
 import type { ImageUpload } from "../../../shared/domain/upload.js";
 import type { MatchingRepository } from "../../matching/application/index.js";
 import type { NotificationEmailQueue, NotificationRecord, NotificationRepository } from "../../notifications/application/index.js";
+import type { CustodyRepository } from "../../warehouse/application/custody.repository.port.js";
+import type { WarehouseRepository } from "../../warehouse/application/warehouse.repository.port.js";
 import { canSubmitVerificationDecision, canUseRoom, isAppointmentEligible } from "../domain/claim-policy.js";
 import {
   findVerificationPrompt,
@@ -52,11 +54,13 @@ export interface ClaimDependencies {
   mediaStorage: PrivateMediaStorage;
   hashIdempotencyPayload: (value: string) => string;
   logger: Logger;
+  custodyRepository?: CustodyRepository;
+  warehouseRepository?: WarehouseRepository;
 }
 export function createClaimUseCases(options: ClaimDependencies) {
   const {
     claimRepository, matchingRepository, notificationRepository, notificationEmailQueue, realtimeNotifier, withTransaction, id, mediaStorage,
-    hashIdempotencyPayload, logger
+    hashIdempotencyPayload, logger, custodyRepository, warehouseRepository
   } = options;
 
   type StoredClaim = NonNullable<Awaited<ReturnType<typeof claimRepository.findById>>>;
@@ -715,6 +719,62 @@ export function createClaimUseCases(options: ClaimDependencies) {
         }, connection);
         if (input.decision === "ESCALATE_TO_CUSTODY") {
           await claimRepository.markRoomEscalated({ claimId, actorId: finderId, reason: input.reason }, connection);
+          
+          // Create custody request when escalating to custody
+          if (custodyRepository && warehouseRepository) {
+            const postId = claim.foundPostId ?? claim.lostPostId;
+            if (postId) {
+              try {
+                const requestId = id();
+                await custodyRepository.createCustodyRequest(
+                  {
+                    id: requestId,
+                    postId,
+                    finderId,
+                    claimId,
+                    status: "PENDING",
+                    reason: "DISPUTE",
+                    reasonNotes: input.reason || "Chuyển từ claim escalation",
+                    proposedHandoverPointId: null,
+                    proposedTime: null,
+                    idempotencyKey: `claim-escalate-${claimId}`
+                  },
+                  connection
+                );
+
+                await custodyRepository.createCustodyLog(
+                  {
+                    id: id(),
+                    custodyRequestId: requestId,
+                    actorId: finderId,
+                    action: "REQUESTED",
+                    fromStatus: null,
+                    toStatus: "PENDING",
+                    notes: `Finder chuyển sang custody từ claim escalation với lý do: ${input.reason}`
+                  },
+                  connection
+                );
+
+                // Notify staff and admin users about the new custody request
+                const staffAndAdminIds = await custodyRepository.findStaffAndAdminUserIds();
+                if (staffAndAdminIds.length > 0) {
+                  const postTitle = claim.posts.found.title || claim.posts.lost?.title || "vật phẩm";
+                  for (const staffId of staffAndAdminIds) {
+                    await notificationRepository.create({
+                      userId: staffId,
+                      type: "CUSTODY_REQUESTED",
+                      title: "Yêu cầu chuyển giao custody mới từ claim escalation",
+                      body: `Finder đã chuyển sang custody cho claim "${postTitle}". Lý do: ${input.reason || "Chuyển từ claim escalation"}`,
+                      entityType: "CUSTODY_REQUEST",
+                      entityId: requestId
+                    }, connection);
+                  }
+                }
+              } catch (custodyError) {
+                logger.error("Failed to create custody request from claim escalation", { error: custodyError, claimId, postId });
+              }
+            }
+          }
         } else if (isCorrection) {
           await claimRepository.clearRoomEscalation(claimId, connection);
         }

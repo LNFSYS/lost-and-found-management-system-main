@@ -22,12 +22,16 @@ import { createReportUseCases, type ReportDependencies } from "../modules/report
 import type { SystemConfigRepository } from "../modules/system-config/application/system-config.repository.port.js";
 import type { UserRepository } from "../modules/auth/application/user.repository.port.js";
 import type { WarehouseRepository } from "../modules/warehouse/application/warehouse.repository.port.js";
+import type { CustodyRepository } from "../modules/warehouse/application/custody.repository.port.js";
+import type { DispositionRepository } from "../modules/warehouse/application/disposition.repository.port.js";
 import { createNotificationUseCases, type NotificationDependencies } from "../modules/notifications/application/notification.use-cases.js";
 import { createSystemConfigUseCases, type SystemConfigDependencies } from "../modules/system-config/application/system-config.use-cases.js";
 import { createAdminUserUseCases, type AdminUserDependencies } from "../modules/admin/application/admin-user.use-cases.js";
 import { createAdminReportingUseCases, type AdminReportingDependencies } from "../modules/admin/application/admin-reporting.use-cases.js";
 import { createAdminCatalogUseCases, type AdminCatalogDependencies } from "../modules/admin/application/admin-catalog.use-cases.js";
 import { createWarehouseUseCases, type WarehouseDependencies } from "../modules/warehouse/application/warehouse.use-cases.js";
+import { createCustodyUseCases } from "../modules/warehouse/application/custody-request.use-cases.js";
+import { createDispositionUseCases } from "../modules/warehouse/application/disposition.use-cases.js";
 import { createReturnFeedbackUseCases, type ReturnFeedbackDependencies } from "../modules/returns/application/return-feedback.use-cases.js";
 import { createMatchingUseCases, type MatchingDependencies } from "../modules/matching/application/matching.use-cases.js";
 import { createPostUseCases, type PostDependencies } from "../modules/posts/application/post.use-cases.js";
@@ -49,6 +53,8 @@ export const reportRepository = unexpectedPort<ReportRepository>("reportReposito
 export const systemConfigRepository = unexpectedPort<SystemConfigRepository>("systemConfigRepository");
 export const userRepository = unexpectedPort<UserRepository>("userRepository");
 export const warehouseRepository = unexpectedPort<WarehouseRepository>("warehouseRepository");
+export const custodyRepository = unexpectedPort<CustodyRepository>("custodyRepository");
+export const dispositionRepository = unexpectedPort<DispositionRepository>("dispositionRepository");
 export const fakeTransaction: TransactionRunner = (work) => work(Object.freeze({}) as TransactionContext);
 export const fakeMediaStorage = unexpectedPort<PrivateMediaStorage>("private media storage");
 export const fakeAvatarStorage = unexpectedPort<AvatarStorage>("avatar storage");
@@ -70,6 +76,8 @@ export function createTestAdminCatalogUseCases(overrides: Partial<AdminCatalogDe
 export const adminCatalogService = createTestAdminCatalogUseCases();
 export function createTestWarehouseUseCases(overrides: Partial<WarehouseDependencies> = {}) { return createWarehouseUseCases({ warehouseRepository: warehouseRepository, withTransaction: fakeTransaction, id: randomUUID, ...overrides }); }
 export const warehouseService = createTestWarehouseUseCases();
+export const custodyService = createCustodyUseCases({ custodyRepository, warehouseRepository, notificationRepository, withTransaction: fakeTransaction, id: randomUUID });
+export const dispositionService = createDispositionUseCases({ dispositionRepository, warehouseRepository, notificationRepository, withTransaction: fakeTransaction, id: randomUUID });
 export function createTestReturnFeedbackUseCases(overrides: Partial<ReturnFeedbackDependencies> = {}) { return createReturnFeedbackUseCases({ repository: returnFeedbackRepository, adminAuditRepository: adminAuditRepository, runInTransaction: fakeTransaction, id: randomUUID, ...overrides }); }
 export const returnFeedbackService = createTestReturnFeedbackUseCases();
 export function createTestReportUseCases(overrides: Partial<ReportDependencies> = {}) { return createReportUseCases({ repository: reportRepository, transaction: fakeTransaction, id: randomUUID, hashPayload: fakeSecurity.hashToken, ...overrides }); }
@@ -87,6 +95,7 @@ export const geminiImageService = createImageAnalysisUseCases({ postRepository, 
 export const testServices = {
   notificationService,
   notificationEmailWorker: { runOnce: async () => ({ sent: 0, skipped: 0, deferred: 0, failed: 0 }) },
-  systemConfigService, adminUserService, adminReportingService, adminCatalogService, warehouseService, returnFeedbackService,
-  reportService, matchingService, postService, claimService, realtimeService, authService, geminiImageService
+  systemConfigService, adminUserService, adminReportingService, adminCatalogService, warehouseService,
+  custodyService, dispositionService,
+  returnFeedbackService, reportService, matchingService, postService, claimService, realtimeService, authService, geminiImageService
 };

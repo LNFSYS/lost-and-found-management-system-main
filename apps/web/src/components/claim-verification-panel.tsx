@@ -112,10 +112,10 @@ export function ClaimVerificationPanel({ claim, verification, onVerificationChan
         <strong>Finder đã chọn: {selectedDecision ?? "Đề xuất gặp mặt"}</strong>
         <dl><div><dt>Quyết định bởi</dt><dd>{actorName(latestDecision.actorId)}</dd></div><div><dt>Thời gian</dt><dd>{new Intl.DateTimeFormat("vi-VN", { dateStyle: "short", timeStyle: "short" }).format(new Date(latestDecision.createdAt))}</dd></div>{lastReason && <div><dt>Lý do</dt><dd>{lastReason}</dd></div>}</dl>
         <div className="review-appointment"><span>APPOINTMENT</span><button type="button" disabled title="Appointment thuộc LNFS-54"><CalendarDays /> Tạo lịch hẹn</button></div>
-        {finder && <button type="button" className="review-correct" onClick={toggleCorrection}>{correctionMode ? "Ẩn lựa chọn quyết định" : "Điều chỉnh quyết định"}</button>}
+        {finder && !custody && <button type="button" className="review-correct" onClick={toggleCorrection}>{correctionMode ? "Ẩn lựa chọn quyết định" : "Điều chỉnh quyết định"}</button>}
       </div>}
 
-      {!accepted && !active && <div className="review-outcome"><strong>{selectedDecision ? `Finder đã chọn: ${selectedDecision}` : verification.status === "PENDING" ? "Chờ Finder mở conversation" : custody ? "Đã chuyển sang custody" : verification.status === "REJECTED" ? "Claim đã bị từ chối" : "Conversation đã đóng"}</strong>{lastReason && <p>{lastReason}</p>}{finder && latestDecision && <button type="button" className="review-correct" onClick={toggleCorrection}>{correctionMode ? "Ẩn lựa chọn quyết định" : "Điều chỉnh quyết định"}</button>}</div>}
+      {!accepted && !active && <div className="review-outcome"><strong>{selectedDecision ? `Finder đã chọn: ${selectedDecision}` : verification.status === "PENDING" ? "Chờ Finder mở conversation" : custody ? "Đã chuyển sang custody" : verification.status === "REJECTED" ? "Claim đã bị từ chối" : "Conversation đã đóng"}</strong>{lastReason && <p>{lastReason}</p>}{finder && latestDecision && !custody && <button type="button" className="review-correct" onClick={toggleCorrection}>{correctionMode ? "Ẩn lựa chọn quyết định" : "Điều chỉnh quyết định"}</button>}</div>}
 
       {finder && (active || correctionMode) && <div ref={actionsRef} className="review-actions">
         <span>Bạn muốn thực hiện quyết định nào?</span>

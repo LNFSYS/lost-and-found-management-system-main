@@ -441,6 +441,11 @@ export function createWarehouseRepository(pool: SqlExecutor) {
       return rows[0]?.id ?? null;
     },
 
+    async findHandoverPointNameById(id: string) {
+      const [rows] = await pool.execute<RowDataPacket[]>("SELECT name FROM handover_points WHERE id = ? AND is_active = TRUE LIMIT 1", [id]);
+      return rows[0]?.name ?? null;
+    },
+
     async findAreaById(id: string) {
       const [rows] = await pool.execute<IdRow[]>("SELECT id FROM campus_areas WHERE id = ? AND is_active = TRUE LIMIT 1", [id]);
       return rows[0]?.id ?? null;
