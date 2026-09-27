@@ -6,6 +6,7 @@ const dateOnly = z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/, "Ngay phai co di
 export const reportEntityTypeSchema = z.enum(["POST", "USER", "CLAIM", "CHAT", "HANDOVER"]);
 export const reportStatusSchema = z.enum(["PENDING", "REVIEWED", "DISMISSED", "WITHDRAWN"]);
 export const moderationActionTypeSchema = z.enum([
+  "RESOLVE_REPORT",
   "WARN_USER",
   "HIDE_POST",
   "DELETE_POST",

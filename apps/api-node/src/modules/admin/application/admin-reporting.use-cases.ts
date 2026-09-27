@@ -124,7 +124,7 @@ function targetAuditState(target: ModerationTargetRecord | null) {
 
 function actionTargetType(actionType: ModerationActionType): ModerationTargetType {
   if (actionType === "HIDE_POST" || actionType === "DELETE_POST") return "POST";
-  if (actionType === "DISMISS_REPORT") return "REPORT";
+  if (actionType === "DISMISS_REPORT" || actionType === "RESOLVE_REPORT") return "REPORT";
   return "USER";
 }
 
@@ -169,7 +169,7 @@ function renderCsv(rows: Array<Record<string, string | number | null>>) {
 }
 
 function assertActionMatchesReport(actionType: ModerationActionType, report: LockedReportRecord) {
-  if (actionType === "DISMISS_REPORT") return;
+  if (actionType === "DISMISS_REPORT" || actionType === "RESOLVE_REPORT") return;
   if (report.entityType === "POST" && (actionType === "HIDE_POST" || actionType === "DELETE_POST" || actionType === "WARN_USER" || actionType === "BAN_USER" || actionType === "UNBAN_USER")) return;
   if (report.entityType === "USER" && (actionType === "WARN_USER" || actionType === "BAN_USER" || actionType === "UNBAN_USER")) return;
   throw new AppError("invalid_input", "Hanh dong moderation khong phu hop voi doi tuong report");
@@ -219,7 +219,7 @@ export function createAdminReportingUseCases(options: AdminReportingDependencies
   }
 
   async function applyAction(actionType: ModerationActionType, targetId: string, connection: TransactionContext) {
-    if (actionType === "DISMISS_REPORT" || actionType === "WARN_USER") return;
+    if (actionType === "DISMISS_REPORT" || actionType === "RESOLVE_REPORT" || actionType === "WARN_USER") return;
     if (actionType === "HIDE_POST" && !await repository.hidePost(targetId, connection)) throw new AppError("not_found", "Khong tim thay bai dang can an");
     if (actionType === "DELETE_POST" && !await repository.deletePost(targetId, connection)) throw new AppError("not_found", "Khong tim thay bai dang can xoa");
     if (actionType === "BAN_USER") {
