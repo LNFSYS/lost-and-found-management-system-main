@@ -61,6 +61,13 @@ function dashboard() {
 async function prepare(page: Page, calls: { created?: unknown; patched?: unknown }) {
   await page.route("**/api/auth/refresh", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(staffSession) }));
   await page.route("**/api/staff/warehouse-items/catalog", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(catalog) }));
+  for (const path of ["custody-requests", "warehouse/overdue", "disposition-orders"]) {
+    await page.route(new RegExp(`/api/staff/${path}(?:\\?.*)?$`), (route) => route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ total: 0, items: [] })
+    }));
+  }
   await page.route(/\/api\/staff\/warehouse-items(?:\?.*)?$/, async (route) => {
     if (route.request().method() === "POST") {
       calls.created = route.request().postDataJSON();
@@ -139,4 +146,43 @@ test("staff can open storage logs and update item state", async ({ page }) => {
   expect(calls.patched?.status).toBe("STORED");
   expect(calls.patched?.storageCode).toBe("A1-04");
   expect(calls.patched?.note).toBe("Move to shelf");
+});
+
+test("inventory filters, table and detail stay inside their layout at common widths", async ({ page }) => {
+  await prepare(page, {});
+  await page.goto("/staff");
+  await expect(page.locator(".warehouse-page .admin-stats-grid")).toBeVisible();
+
+  for (const width of [1920, 1440, 1180, 768, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    const bounds = await page.evaluate(() => {
+      const rect = (selector: string) => {
+        const { left, right, top, bottom } = document.querySelector(selector)!.getBoundingClientRect();
+        return { left, right, top, bottom };
+      };
+      return {
+        header: rect(".warehouse-page .admin-header"),
+        tabs: rect(".warehouse-page .admin-tabs"),
+        stats: rect(".warehouse-page .admin-stats-grid"),
+        receive: rect(".warehouse-receive-panel"),
+        main: rect(".warehouse-main"),
+        filter: rect(".warehouse-filter-bar"),
+        table: rect(".warehouse-inventory-section .admin-table-container"),
+        detail: rect(".warehouse-detail-panel"),
+        maxControlRight: Math.max(...Array.from(document.querySelectorAll(
+          ".warehouse-page .admin-tabs button, .warehouse-page .admin-stats-grid > *, .warehouse-page .warehouse-filter-bar > *"
+        ), (element) => element.getBoundingClientRect().right))
+      };
+    });
+
+    if (width > 1180) expect(bounds.receive.right, `receive/main overlap at ${width}px`).toBeLessThanOrEqual(bounds.main.left - 8);
+    else expect(bounds.receive.bottom, `receive/main overlap at ${width}px`).toBeLessThanOrEqual(bounds.main.top + 1);
+    expect(bounds.filter.right, `filters overflow at ${width}px`).toBeLessThanOrEqual(bounds.main.right + 1);
+    expect(bounds.table.right, `table overflow at ${width}px`).toBeLessThanOrEqual(bounds.main.right + 1);
+    expect(bounds.detail.top, `detail overlaps table at ${width}px`).toBeGreaterThanOrEqual(bounds.table.bottom - 1);
+    expect(bounds.header.right, `header overflow at ${width}px`).toBeLessThanOrEqual(width + 1);
+    expect(bounds.tabs.right, `tabs overflow at ${width}px`).toBeLessThanOrEqual(width + 1);
+    expect(bounds.stats.right, `stats overflow at ${width}px`).toBeLessThanOrEqual(width + 1);
+    expect(bounds.maxControlRight, `a control overflows at ${width}px`).toBeLessThanOrEqual(width + 1);
+  }
 });

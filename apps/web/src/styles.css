@@ -2006,9 +2006,14 @@ textarea {
 
 .warehouse-layout {
   display: grid;
-  grid-template-columns: minmax(330px, 0.82fr) minmax(0, 1.32fr) minmax(330px, 0.86fr);
+  grid-template-columns: minmax(280px, 340px) minmax(0, 1fr);
   gap: 16px;
   align-items: start;
+}
+
+.warehouse-layout > *,
+.warehouse-main > * {
+  min-width: 0;
 }
 
 .warehouse-receive-panel,
@@ -2020,6 +2025,7 @@ textarea {
 }
 
 .warehouse-detail-panel {
+  position: static;
   border-top-color: var(--fpt-green);
 }
 
@@ -8033,6 +8039,8 @@ textarea {
 .warehouse-page .warehouse-stat small { color: #6c7680; font-size: 0.75rem; }
 
 .warehouse-page .admin-table-container { border-radius: 8px; background: #fff; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06); overflow: hidden; }
+.warehouse-inventory-section .admin-table-container { overflow-x: auto; }
+.warehouse-inventory-section .admin-table { min-width: 820px; }
 .warehouse-page .admin-table { width: 100%; border-collapse: collapse; }
 .warehouse-page .admin-table thead { background: #f8fafc; }
 .warehouse-page .admin-table th { padding: 12px 16px; text-align: left; font-size: 0.75rem; font-weight: 700; color: #475569; text-transform: uppercase; letter-spacing: 0.5px; }
@@ -8168,6 +8176,19 @@ textarea {
 .warehouse-page .modal-content a { color: var(--fpt-blue); text-decoration: none; }
 .warehouse-page .modal-content a:hover { text-decoration: underline; }
 .warehouse-page .warning-text { color: #dc2626; font-size: 0.85rem; }
+
+@media (max-width: 900px) {
+  .warehouse-page .admin-stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 620px) {
+  .warehouse-page .admin-header { flex-direction: column; align-items: stretch; }
+  .warehouse-page .admin-header button { align-self: flex-start; }
+  .warehouse-page .admin-tabs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); overflow: visible; gap: 8px; }
+  .warehouse-page .admin-tabs button { min-width: 0; flex: none; line-height: 1.25; }
+  .warehouse-page .warehouse-filter-bar { grid-template-columns: 1fr; }
+  .warehouse-page .warehouse-filter-bar .secondary-button { grid-column: auto; width: 100%; justify-self: stretch; }
+}
 
 @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 

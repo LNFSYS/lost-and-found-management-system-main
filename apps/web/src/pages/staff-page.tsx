@@ -703,7 +703,6 @@ export function StaffPage() {
               </tbody>
             </table>
           </div>
-            </div>
 
             <aside className="admin-panel warehouse-detail-panel">
               <div className="admin-panel-heading"><span><Save size={18} /></span><h2>Cập nhật và nhật ký</h2></div>
@@ -732,6 +731,7 @@ export function StaffPage() {
                 </div>
               </> : <div className="warehouse-empty warehouse-empty--compact"><History size={38} /><strong>Chọn một vật phẩm để xem nhật ký</strong></div>}
             </aside>
+            </div>
           </div>
         </section>
       )}
