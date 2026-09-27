@@ -8,7 +8,6 @@ export function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const routeState = location.state as { from?: string; message?: string } | null;
-  const [redirectTo] = useState(routeState?.from ?? "/home");
   const [notice] = useState(routeState?.message ?? "");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -28,8 +27,9 @@ export function LoginPage() {
     setError("");
     setPending(true);
     try {
-      await login(email, password);
-      navigate(redirectTo, { replace: true });
+      const user = await login(email, password);
+      const destination = user.roles.includes("ADMIN") ? "/admin" : (routeState?.from ?? "/home");
+      navigate(destination, { replace: true });
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Không thể đăng nhập");
     } finally {

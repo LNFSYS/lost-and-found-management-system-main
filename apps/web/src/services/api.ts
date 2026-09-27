@@ -137,7 +137,7 @@ export interface PublicConfigResponse {
 }
 export type AdminReportEntityType = "POST" | "USER" | "CLAIM" | "CHAT" | "HANDOVER";
 export type AdminReportStatus = "PENDING" | "REVIEWED" | "DISMISSED" | "WITHDRAWN";
-export type ModerationActionType = "WARN_USER" | "HIDE_POST" | "DELETE_POST" | "BAN_USER" | "UNBAN_USER" | "DISMISS_REPORT";
+export type ModerationActionType = "RESOLVE_REPORT" | "WARN_USER" | "HIDE_POST" | "DELETE_POST" | "BAN_USER" | "UNBAN_USER" | "DISMISS_REPORT";
 export interface AdminModerationReport {
   id: string;
   reporter: { id: string; fullName: string; email: string };
