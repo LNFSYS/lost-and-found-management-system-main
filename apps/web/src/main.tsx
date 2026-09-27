@@ -37,6 +37,9 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
           <Route path="/forgot-password" element={<ForgotPasswordPage />} />
           <Route path="/reset-password" element={<ResetPasswordPage />} />
           <Route element={<RouteGuard />}>
+            <Route element={<RouteGuard roles={["ADMIN"]} />}>
+              <Route path="/admin" element={<AdminPage />} />
+            </Route>
             <Route element={<AppLayout />}>
               <Route path="/home" element={<Suspense fallback={<main className="center-state">Đang mở hành trình...</main>}><HomePage /></Suspense>} />
               <Route path="/profile" element={<ProfilePage />} />
@@ -51,9 +54,6 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
               <Route path="/reports" element={<ReportsPage />} />
               <Route element={<RouteGuard roles={["STAFF", "ADMIN"]} />}>
                 <Route path="/staff" element={<StaffPage />} />
-              </Route>
-              <Route element={<RouteGuard roles={["ADMIN"]} />}>
-                <Route path="/admin" element={<AdminPage />} />
               </Route>
             </Route>
           </Route>

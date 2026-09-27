@@ -13,6 +13,7 @@ import {
   FolderTree,
   Handshake,
   Layers3,
+  LogOut,
   MapPin,
   MapPinned,
   PencilLine,
@@ -26,9 +27,11 @@ import {
   UsersRound,
   X
 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { useAuth } from "../context/auth-context";
 import { api, type AdminAccessRole, type AdminArea, type AdminBuilding, type AdminCatalog, type AdminCategory, type AdminDashboardKpis, type AdminHandoverPoint, type AdminHandoverPointPayload, type AdminModerationReport, type AdminModerationReportDetail, type AdminReportEntityType, type AdminReportStatus, type AdminUser, type AdminUserStatus, type ConfigHistoryEntry, type ConfigValueType, type ModerationActionType, type SystemConfig } from "../services/api";
 
-type AdminTab = "operations" | "users" | "configs" | "categories" | "locations" | "handover";
+type AdminTab = "operations" | "moderation" | "users" | "configs" | "categories" | "locations" | "handover";
 type PendingAction = "" | "load" | "users" | "user" | "user-toggle" | "configs" | "config" | "config-history" | "reports" | "review" | "kpis" | "export" | "category" | "area" | "building" | "handover" | "toggle" | "delete";
 
 const emptyCategoryForm = { name: "", parentId: "", isActive: true };
@@ -55,6 +58,7 @@ const emptyReviewForm = { actionType: "DISMISS_REPORT" as ModerationActionType, 
 const reportEntityLabels: Record<AdminReportEntityType, string> = { POST: "Bài đăng", USER: "Người dùng", CLAIM: "Claim", CHAT: "Chat", HANDOVER: "Bàn giao" };
 const reportStatusLabels: Record<AdminReportStatus, string> = { PENDING: "Chờ xử lý", REVIEWED: "Đã xử lý", DISMISSED: "Đã bỏ qua", WITHDRAWN: "Đã rút" };
 const moderationActionLabels: Record<ModerationActionType, string> = {
+  RESOLVE_REPORT: "Ghi nhận đã xử lý",
   DISMISS_REPORT: "Bỏ qua report",
   WARN_USER: "Cảnh báo user",
   HIDE_POST: "Ẩn bài đăng",
@@ -64,9 +68,9 @@ const moderationActionLabels: Record<ModerationActionType, string> = {
 };
 
 function moderationActionsForReport(report: AdminModerationReport): ModerationActionType[] {
-  if (report.entityType === "POST") return ["DISMISS_REPORT", "WARN_USER", "HIDE_POST", "DELETE_POST", "BAN_USER", "UNBAN_USER"];
-  if (report.entityType === "USER") return ["DISMISS_REPORT", "WARN_USER", "BAN_USER", "UNBAN_USER"];
-  return ["DISMISS_REPORT"];
+  if (report.entityType === "POST") return ["RESOLVE_REPORT", "DISMISS_REPORT", "WARN_USER", "HIDE_POST", "DELETE_POST", "BAN_USER", "UNBAN_USER"];
+  if (report.entityType === "USER") return ["RESOLVE_REPORT", "DISMISS_REPORT", "WARN_USER", "BAN_USER", "UNBAN_USER"];
+  return ["RESOLVE_REPORT", "DISMISS_REPORT"];
 }
 const exportSectionLabels = {
   overview: "Tổng quan",
@@ -155,6 +159,8 @@ function HandoverMapPicker({ imageUrl, x, y, onChange }: { imageUrl: string; x: 
 }
 
 export function AdminPage() {
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
   const [catalog, setCatalog] = useState<AdminCatalog | null>(null);
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [userTotal, setUserTotal] = useState(0);
@@ -717,7 +723,29 @@ export function AdminPage() {
 
   if (pendingAction === "load" && !catalog) return <main className="center-state">Đang tải bảng quản trị...</main>;
 
-  return <section className="admin-page">
+  return <div className="admin-console">
+    <aside className="admin-sidebar">
+      <div className="admin-sidebar__brand">
+        <span className="brand-mark" aria-hidden="true"><i>F</i><i>P</i><i>T</i></span>
+        <span><strong>LNFS Admin</strong><small>Trung tâm quản trị</small></span>
+      </div>
+      <nav className="admin-tabs" aria-label="Chức năng quản trị">
+        <button type="button" className={activeTab === "operations" ? "active" : ""} onClick={() => setActiveTab("operations")}><ShieldCheck size={18} /><span>Vận hành</span></button>
+        <button type="button" className={activeTab === "moderation" ? "active" : ""} onClick={() => setActiveTab("moderation")}><FileText size={18} /><span>Moderation</span></button>
+        <button type="button" className={activeTab === "users" ? "active" : ""} onClick={() => setActiveTab("users")}><UsersRound size={18} /><span>Người dùng</span></button>
+        <button type="button" className={activeTab === "configs" ? "active" : ""} onClick={() => setActiveTab("configs")}><Settings2 size={18} /><span>Cấu hình</span></button>
+        <button type="button" className={activeTab === "categories" ? "active" : ""} onClick={() => setActiveTab("categories")}><FolderTree size={18} /><span>Danh mục</span></button>
+        <button type="button" className={activeTab === "locations" ? "active" : ""} onClick={() => setActiveTab("locations")}><MapPinned size={18} /><span>Khu vực</span></button>
+        <button type="button" className={activeTab === "handover" ? "active" : ""} onClick={() => setActiveTab("handover")}><Handshake size={18} /><span>Điểm bàn giao</span></button>
+      </nav>
+      <div className="admin-sidebar__account">
+        <span>{user?.fullName.slice(0, 1).toUpperCase()}</span>
+        <div><strong>{user?.fullName}</strong><small>{user?.email}</small></div>
+        <button type="button" title="Đăng xuất" aria-label="Đăng xuất" onClick={() => void logout().finally(() => navigate("/login", { replace: true }))}><LogOut size={18} /></button>
+      </div>
+    </aside>
+    <main className="admin-main">
+    <section className="admin-page">
     <header className="admin-hero">
       <div>
         <p className="eyebrow">ADMIN OPERATIONS</p>
@@ -731,15 +759,6 @@ export function AdminPage() {
       <StatCard icon={<Clock3 size={20} />} value={catalog?.stats.processingPosts ?? 0} label="Đang xử lý" />
       <StatCard icon={<UsersRound size={20} />} value={catalog?.stats.totalUsers ?? 0} label="Người dùng" />
       <StatCard icon={<CheckCircle2 size={20} />} value={catalog?.stats.returnedPosts ?? 0} label="Đã hoàn trả" />
-    </div>
-
-    <div className="admin-tabs" role="tablist" aria-label="Chức năng quản trị">
-      <button type="button" className={activeTab === "operations" ? "active" : ""} onClick={() => setActiveTab("operations")}><ShieldCheck size={18} /> Vận hành</button>
-      <button type="button" className={activeTab === "users" ? "active" : ""} onClick={() => setActiveTab("users")}><UsersRound size={18} /> Người dùng</button>
-      <button type="button" className={activeTab === "configs" ? "active" : ""} onClick={() => setActiveTab("configs")}><Settings2 size={18} /> Cấu hình</button>
-      <button type="button" className={activeTab === "categories" ? "active" : ""} onClick={() => setActiveTab("categories")}><FolderTree size={18} /> Danh mục</button>
-      <button type="button" className={activeTab === "locations" ? "active" : ""} onClick={() => setActiveTab("locations")}><MapPinned size={18} /> Khu vực</button>
-      <button type="button" className={activeTab === "handover" ? "active" : ""} onClick={() => setActiveTab("handover")}><Handshake size={18} /> Điểm bàn giao</button>
     </div>
 
     {notice && <p className="form-note admin-message">{notice}</p>}
@@ -813,6 +832,9 @@ export function AdminPage() {
         </div>
       </aside>
 
+    </div>}
+
+    {activeTab === "moderation" && <div className="admin-operations-layout admin-moderation-layout">
       <section className="admin-panel admin-panel--list admin-reports-panel">
         <div className="admin-list-heading"><div><p className="eyebrow">MODERATION</p><h2>Hàng đợi report</h2></div><strong>{reportTotal}</strong></div>
         <form className="admin-reporting-filters admin-reporting-filters--reports" onSubmit={applyReportFilters}>
@@ -1253,5 +1275,7 @@ export function AdminPage() {
         {!catalog?.handoverPoints.length && <div className="admin-empty"><MapPinned size={28} /><strong>Chưa có điểm bàn giao</strong><span>Tạo điểm đầu tiên và đặt marker trên bản đồ campus.</span></div>}
       </section>
     </div>}
-  </section>;
+    </section>
+    </main>
+  </div>;
 }

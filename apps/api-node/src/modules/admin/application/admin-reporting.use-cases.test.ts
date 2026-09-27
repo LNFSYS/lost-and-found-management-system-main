@@ -181,6 +181,33 @@ test("review report applies moderation action and records actor/reason without r
   assert.equal(JSON.stringify(auditRecords).includes("<script>"), false);
 });
 
+test("claim report can be resolved without mutating an unrelated post or user", async () => {
+  const report = makeReport({
+    entityType: "CLAIM",
+    entityId: "claim-id",
+    sourceType: "CLAIM",
+    sourceId: "claim-id",
+    entity: { type: "CLAIM", title: "Claim cần kiểm tra", status: "ACCEPTED", ownerName: "Finder", referenceId: "claim-id" }
+  });
+  const state = fakeRepository([report]);
+  const auditRecords: unknown[] = [];
+
+  const reviewed = await serviceFor(state.repository, auditRecords).reviewReport("admin-id", report.id, {
+    actionType: "RESOLVE_REPORT",
+    reason: "Đã kiểm tra thủ công và xử lý nghiệp vụ liên quan"
+  });
+
+  assert.equal(reviewed.status, "REVIEWED");
+  assert.equal(state.actions.length, 1);
+  assert.deepEqual(
+    (({ targetType, targetId }) => ({ targetType, targetId }))(state.actions[0] as { targetType: string; targetId: string }),
+    { targetType: "REPORT", targetId: report.id }
+  );
+  assert.equal(state.targets.get("post-id")?.status, "OPEN");
+  assert.equal(state.targets.get("user-id")?.status, "ACTIVE");
+  assert.match(JSON.stringify(auditRecords), /MODERATION_REPORT_REVIEWED/);
+});
+
 test("admin report detail returns permitted context and audit history", async () => {
   const state = fakeRepository([makeReport()]);
   state.repository.listReportAuditHistory = async () => [{

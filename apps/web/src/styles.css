@@ -1968,6 +1968,220 @@ textarea {
   background: #eef2f6;
 }
 
+/* Dedicated admin workspace */
+.admin-console {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: 256px minmax(0, 1fr);
+  background: #f4f7fa;
+}
+
+.admin-sidebar {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  padding: 22px 16px 16px;
+  border-right: 1px solid #d9e2ea;
+  background: #fff;
+  box-shadow: 8px 0 24px rgba(24, 40, 63, 0.04);
+  z-index: 20;
+}
+
+.admin-sidebar__brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 8px 22px;
+  border-bottom: 1px solid #e4eaf0;
+}
+
+.admin-sidebar__brand .brand-mark {
+  width: 54px;
+  height: 34px;
+  flex: 0 0 auto;
+}
+
+.admin-sidebar__brand > span:last-child,
+.admin-sidebar__account div {
+  min-width: 0;
+}
+
+.admin-sidebar__brand strong,
+.admin-sidebar__brand small,
+.admin-sidebar__account strong,
+.admin-sidebar__account small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-sidebar__brand strong {
+  color: var(--ink);
+  font: 800 1rem/1.2 var(--font-display);
+}
+
+.admin-sidebar__brand small {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.admin-sidebar .admin-tabs {
+  width: 100%;
+  display: grid;
+  gap: 5px;
+  margin: 20px 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.admin-sidebar .admin-tabs button {
+  width: 100%;
+  min-height: 46px;
+  justify-content: flex-start;
+  gap: 11px;
+  padding: 0 13px;
+  border-radius: 6px;
+  color: #526274;
+  text-align: left;
+}
+
+.admin-sidebar .admin-tabs button:hover {
+  color: var(--ink);
+  background: #f2f6f9;
+}
+
+.admin-sidebar .admin-tabs button.active {
+  color: #075eaa;
+  background: #eaf4fc;
+  box-shadow: inset 3px 0 0 var(--fpt-blue);
+}
+
+.admin-sidebar__account {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr) 34px;
+  align-items: center;
+  gap: 9px;
+  margin-top: auto;
+  padding: 14px 8px 0;
+  border-top: 1px solid #e4eaf0;
+}
+
+.admin-sidebar__account > span {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  color: #fff;
+  background: var(--fpt-blue);
+  font-weight: 800;
+}
+
+.admin-sidebar__account strong {
+  color: var(--ink);
+  font-size: 0.78rem;
+}
+
+.admin-sidebar__account small {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 0.65rem;
+}
+
+.admin-sidebar__account button {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border-color: #e2e8ee;
+  border-radius: 6px;
+  color: #9c4b19;
+  background: #fff7f1;
+}
+
+.admin-main {
+  min-width: 0;
+}
+
+.admin-main .admin-page {
+  width: min(100% - 48px, 1480px);
+  margin: 28px auto 64px;
+}
+
+.admin-main .admin-hero {
+  margin-bottom: 20px;
+}
+
+.admin-main .admin-hero h1 {
+  font-size: 2rem;
+}
+
+@media (max-width: 900px) {
+  .admin-console {
+    display: block;
+  }
+
+  .admin-sidebar {
+    position: sticky;
+    height: auto;
+    padding: 12px 16px;
+    border-right: 0;
+    border-bottom: 1px solid #d9e2ea;
+  }
+
+  .admin-sidebar__brand {
+    padding: 0 0 12px;
+  }
+
+  .admin-sidebar .admin-tabs {
+    display: flex;
+    margin: 10px 0 0;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .admin-sidebar .admin-tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .admin-sidebar .admin-tabs button {
+    width: auto;
+    flex: 0 0 auto;
+    padding: 0 12px;
+  }
+
+  .admin-sidebar .admin-tabs button.active {
+    box-shadow: inset 0 -3px 0 var(--fpt-blue);
+  }
+
+  .admin-sidebar__account {
+    position: absolute;
+    top: 12px;
+    right: 16px;
+    grid-template-columns: 34px;
+    margin: 0;
+    padding: 0;
+    border: 0;
+  }
+
+  .admin-sidebar__account > span,
+  .admin-sidebar__account div {
+    display: none;
+  }
+
+  .admin-main .admin-page {
+    width: min(100% - 32px, 720px);
+    margin: 24px auto 48px;
+  }
+}
+
 .admin-selected-report {
   display: grid;
   gap: 6px;
