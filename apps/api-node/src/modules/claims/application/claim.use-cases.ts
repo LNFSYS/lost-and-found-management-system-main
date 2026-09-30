@@ -38,6 +38,7 @@ export interface ClaimDependencies {
   claimRepository: ClaimRepository;
   matchingRepository: MatchingRepository;
   notificationRepository: NotificationRepository;
+  custodyRequestRepository?: import("../../warehouse/application/custody-request.repository.port.js").CustodyRequestRepository;
   notificationEmailQueue?: NotificationEmailQueue;
   realtimeNotifier?: {
     publishNotification(input: {
@@ -55,7 +56,7 @@ export interface ClaimDependencies {
 }
 export function createClaimUseCases(options: ClaimDependencies) {
   const {
-    claimRepository, matchingRepository, notificationRepository, notificationEmailQueue, realtimeNotifier, withTransaction, id, mediaStorage,
+    claimRepository, matchingRepository, notificationRepository, custodyRequestRepository, notificationEmailQueue, realtimeNotifier, withTransaction, id, mediaStorage,
     hashIdempotencyPayload, logger
   } = options;
 
@@ -715,6 +716,29 @@ export function createClaimUseCases(options: ClaimDependencies) {
         }, connection);
         if (input.decision === "ESCALATE_TO_CUSTODY") {
           await claimRepository.markRoomEscalated({ claimId, actorId: finderId, reason: input.reason }, connection);
+          if (custodyRequestRepository) {
+            const crId = id();
+            await custodyRequestRepository.createRequest({
+              id: crId,
+              claimId,
+              roomId: claim.roomId,
+              postId: context.foundPostId,
+              requesterId: finderId,
+              intakeType: "CUSTODY_TRANSFER",
+              handoverPointId: null,
+              reason: `(Sinh ra tự động từ quyết định đóng Claim #${claimId.slice(0, 8)})\n\n${input.reason}`
+            }, connection);
+            // We need to write Audit too, let's just do it
+            await custodyRequestRepository.writeAudit({
+              id: id(),
+              custodyRequestId: crId,
+              actorId: finderId,
+              action: "CREATED",
+              fromStatus: "PENDING",
+              toStatus: "PENDING",
+              metadata: { source: "CLAIM_ESCALATION" }
+            }, connection);
+          }
         } else if (isCorrection) {
           await claimRepository.clearRoomEscalation(claimId, connection);
         }

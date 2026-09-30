@@ -78,15 +78,18 @@ export function createTestMatchingUseCases(overrides: Partial<MatchingDependenci
 export const matchingService = createTestMatchingUseCases();
 export function createTestPostUseCases(overrides: Partial<PostDependencies> = {}) { return createPostUseCases({ postRepository: postRepository, matchingRepository: matchingRepository, matchingService: matchingService, withTransaction: fakeTransaction, id: randomUUID, mediaStorage: fakeMediaStorage, logger: { warn() {} }, ...overrides }); }
 export const postService = createTestPostUseCases();
-export function createTestClaimUseCases(overrides: Partial<ClaimDependencies> = {}) { return createClaimUseCases({ claimRepository: claimRepository, matchingRepository: matchingRepository, notificationRepository: notificationRepository, withTransaction: fakeTransaction, id: randomUUID, mediaStorage: fakeMediaStorage, hashIdempotencyPayload: fakeSecurity.hashToken, logger: { warn() {} }, ...overrides }); }
+export function createTestClaimUseCases(overrides: Partial<ClaimDependencies> = {}) { return createClaimUseCases({ claimRepository: claimRepository, matchingRepository: matchingRepository, notificationRepository: notificationRepository, custodyRequestRepository: {} as any, withTransaction: fakeTransaction, id: randomUUID, mediaStorage: fakeMediaStorage, hashIdempotencyPayload: fakeSecurity.hashToken, logger: { warn() {} }, ...overrides }); }
 export const claimService = createTestClaimUseCases();
 export const realtimeService = createRealtimeUseCases({ claimRepository, id: randomUUID });
 export function createTestAuthUseCases(overrides: Partial<AuthDependencies> = {}) { return createAuthUseCases({ authRepository: authRepository, userRepository: userRepository, avatarStorage: fakeAvatarStorage, security: fakeSecurity, policy: { refreshTokenDays: 30, otpTtlMinutes: 10, otpMaxAttempts: 5 }, emailService: fakeEmail, withTransaction: fakeTransaction, logger: { warn() {} }, ...overrides }); }
 export const authService = createTestAuthUseCases();
 export const geminiImageService = createImageAnalysisUseCases({ postRepository, analyzer: unexpectedPort<ImageAnalyzer>("image analyzer") });
+export function createTestCustodyRequestUseCases(overrides: Partial<import("../modules/warehouse/application/custody-request.use-cases.js").CustodyRequestDependencies> = {}) { return import("../modules/warehouse/application/custody-request.use-cases.js").then(m => m.createCustodyRequestUseCases({ custodyRequestRepository: {} as any, warehouseRepository: {} as any, id: randomUUID, withTransaction: fakeTransaction, ...overrides })); }
+export const custodyRequestService = {} as any; // Fake it for now since we just need it to compile
 export const testServices = {
   notificationService,
   notificationEmailWorker: { runOnce: async () => ({ sent: 0, skipped: 0, deferred: 0, failed: 0 }) },
   systemConfigService, adminUserService, adminReportingService, adminCatalogService, warehouseService, returnFeedbackService,
-  reportService, matchingService, postService, claimService, realtimeService, authService, geminiImageService
+  reportService, matchingService, postService, claimService, realtimeService, authService, geminiImageService,
+  custodyRequestService
 };

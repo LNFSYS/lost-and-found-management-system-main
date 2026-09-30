@@ -52,4 +52,12 @@ export const updateWarehouseItemSchema = z.object({
   note: nullableText(1000)
 }).refine(atLeastOne, "Cần ít nhất một trường để cập nhật");
 
-export type { CreateWarehouseItemInput, ListWarehouseItemsQuery, UpdateWarehouseItemInput, WarehouseStatus } from "../../application/warehouse.dto.js";
+export const returnWarehouseItemSchema = z.object({
+  receiverName: z.string().trim().min(2, "Tên người nhận phải từ 2 ký tự").max(150),
+  receiverIdentity: z.string().trim().min(3, "Mã số phải từ 3 ký tự").max(100),
+  receiverPhone: z.string().trim().min(9, "Số điện thoại không hợp lệ").max(20),
+  proofImage: z.string().min(10, "Vui lòng tải lên hình ảnh bằng chứng"),
+  note: nullableText(1000)
+});
+
+export type { CreateWarehouseItemInput, ListWarehouseItemsQuery, UpdateWarehouseItemInput, ReturnWarehouseItemInput, WarehouseStatus } from "../../application/warehouse.dto.js";

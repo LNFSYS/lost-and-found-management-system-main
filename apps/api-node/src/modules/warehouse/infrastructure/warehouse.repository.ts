@@ -323,6 +323,7 @@ export function createWarehouseRepository(pool: SqlExecutor) {
       areaId?: string | null;
       buildingId?: string | null;
       roomText?: string | null;
+      finderUserId?: string | null;
       finderName?: string | null;
       finderContact?: string | null;
       conditionNotes: string;
@@ -334,9 +335,9 @@ export function createWarehouseRepository(pool: SqlExecutor) {
       await sqlExecutor(db).execute(
         `INSERT INTO warehouse_items (
         id, post_id, handover_point_id, item_name, description, category_id, area_id, building_id,
-        room_text, finder_name, finder_contact, status, condition_notes, storage_code,
+        room_text, finder_user_id, finder_name, finder_contact, status, condition_notes, storage_code,
         received_at, retention_deadline, created_by
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'RECEIVED', ?, ?, ?, ?, ?)`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'RECEIVED', ?, ?, ?, ?, ?)`,
         [
           input.id,
           input.postId ?? null,
@@ -347,6 +348,7 @@ export function createWarehouseRepository(pool: SqlExecutor) {
           input.areaId ?? null,
           input.buildingId ?? null,
           input.roomText ?? null,
+          input.finderUserId ?? null,
           input.finderName ?? null,
           input.finderContact ?? null,
           input.conditionNotes,
@@ -436,6 +438,13 @@ export function createWarehouseRepository(pool: SqlExecutor) {
       return rows.map(mapLog);
     },
 
+    async generateNextStorageCode(db: DbExecutor = pool) {
+      const [rows] = await sqlExecutor(db).execute<RowDataPacket[]>("SELECT COUNT(*) AS total FROM warehouse_items");
+      const count = Number(rows[0]?.total ?? 0) + 1;
+      const year = new Date().getFullYear();
+      return `WH-${year}-${String(count).padStart(4, "0")}`;
+    },
+
     async findHandoverPointById(id: string) {
       const [rows] = await pool.execute<IdRow[]>("SELECT id FROM handover_points WHERE id = ? AND is_active = TRUE LIMIT 1", [id]);
       return rows[0]?.id ?? null;
@@ -454,6 +463,43 @@ export function createWarehouseRepository(pool: SqlExecutor) {
     async findPostById(id: string) {
       const [rows] = await pool.execute<IdRow[]>("SELECT id FROM posts WHERE id = ? AND deleted_at IS NULL LIMIT 1", [id]);
       return rows[0]?.id ?? null;
+    },
+
+    async updatePostStatus(id: string, status: string, db: DbExecutor = pool) {
+      await sqlExecutor(db).execute("UPDATE posts SET status = ?, updated_at = NOW() WHERE id = ?", [status, id]);
+    },
+
+    async getPostInfoForIntake(postId: string, db: DbExecutor = pool) {
+      const [rows] = await sqlExecutor(db).execute<Array<RowDataPacket & {
+        title: string;
+        description: string | null;
+        category_id: string | null;
+        area_id: string | null;
+        building_id: string | null;
+        room_text: string | null;
+        user_id: string;
+        user_name: string | null;
+        phone_number: string | null;
+      }>>(
+        `SELECT p.title, p.description, p.category_id, p.area_id, p.building_id, p.room_text,
+                p.user_id, u.full_name AS user_name, u.phone_number
+         FROM posts p
+         LEFT JOIN users u ON u.id = p.user_id
+         WHERE p.id = ? AND p.deleted_at IS NULL LIMIT 1`,
+        [postId]
+      );
+      if (!rows[0]) return null;
+      return {
+        title: rows[0].title,
+        description: rows[0].description,
+        categoryId: rows[0].category_id,
+        areaId: rows[0].area_id,
+        buildingId: rows[0].building_id,
+        roomText: rows[0].room_text,
+        finderUserId: rows[0].user_id,
+        finderName: rows[0].user_name,
+        finderContact: rows[0].phone_number
+      };
     },
 
     async findCategoryNames(id: string) {

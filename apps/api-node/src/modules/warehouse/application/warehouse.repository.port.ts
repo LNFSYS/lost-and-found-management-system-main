@@ -146,6 +146,7 @@ export interface WarehouseRepository {
     areaId?: string | null;
     buildingId?: string | null;
     roomText?: string | null;
+    finderUserId?: string | null;
     finderName?: string | null;
     finderContact?: string | null;
     conditionNotes: string;
@@ -173,7 +174,7 @@ export interface WarehouseRepository {
     storageCode?: string | null;
     note?: string | null;
   }, db?: TransactionContext): Promise<void>;
-  listLogs(itemId: string): Promise<WarehouseStorageLog[]>;
+  generateNextStorageCode(db?: TransactionContext): Promise<string>;
   findHandoverPointById(id: string): Promise<string>;
   findAreaById(id: string): Promise<string>;
   findBuildingById(id: string): Promise<{
@@ -181,10 +182,23 @@ export interface WarehouseRepository {
     areaId: string;
   } | null>;
   findPostById(id: string): Promise<string>;
+  updatePostStatus(id: string, status: string, db?: TransactionContext): Promise<void>;
+  getPostInfoForIntake(postId: string, db?: TransactionContext): Promise<{
+    title: string;
+    description: string | null;
+    categoryId: string | null;
+    areaId: string | null;
+    buildingId: string | null;
+    roomText: string | null;
+    finderUserId: string;
+    finderName: string | null;
+    finderContact: string | null;
+  } | null>;
   findCategoryNames(id: string): Promise<{
     id: string;
     name: string;
     parentName: string | null;
   } | null>;
   getConfigInt(key: string, fallback: number): Promise<number>;
+  listLogs(itemId: string): Promise<WarehouseStorageLog[]>;
 }

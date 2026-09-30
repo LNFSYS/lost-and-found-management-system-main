@@ -38,6 +38,8 @@ export function errorHandler(error: unknown, _request: Request, response: Respon
   const missingField = errorMessage.match(/Field '([^']+)' doesn't have a default value/i)?.[1];
   console.error("Unhandled API error", {
     name: error instanceof Error ? error.name : "UnknownError",
+    message: error instanceof Error ? error.message : String(error),
+    stack: error instanceof Error ? error.stack : undefined,
     code: code || undefined,
     missingField,
     ...databaseError

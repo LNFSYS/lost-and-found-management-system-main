@@ -4,7 +4,9 @@ import { calculateRetentionDeadline, canTransitionWarehouseStatus, retentionConf
 import type {
   CreateWarehouseItemInput,
   ListWarehouseItemsQuery,
-  UpdateWarehouseItemInput
+  UpdateWarehouseItemInput,
+  ReturnWarehouseItemInput,
+  WarehouseStatus
 } from "./warehouse.dto.js";
 import type { StorageLogAction, WarehouseRepository } from "./warehouse.repository.port.js";
 
@@ -81,7 +83,10 @@ export function createWarehouseUseCases(options: WarehouseDependencies) {
       const retentionDeadline = calculateRetentionDeadline(receivedAt, retentionDays);
       const warehouseItemId = id();
       const conditionNotes = input.conditionNotes.trim();
-      const storageCode = clean(input.storageCode);
+      let storageCode = clean(input.storageCode);
+      if (!storageCode) {
+        storageCode = await warehouseRepository.generateNextStorageCode();
+      }
 
       await withTransaction(async (connection) => {
         await warehouseRepository.createItem({
@@ -165,6 +170,56 @@ export function createWarehouseUseCases(options: WarehouseDependencies) {
       const item = await warehouseRepository.findItemById(itemId);
       if (!item) throw new AppError("not_found", "Không tìm thấy vật phẩm trong kho");
       return item;
+    },
+
+    async returnItem(itemId: string, input: ReturnWarehouseItemInput, actorId: string) {
+      await withTransaction(async (connection) => {
+        const current = await warehouseRepository.lockItemForUpdate(itemId, connection);
+        if (!current) throw new AppError("not_found", "Không tìm thấy vật phẩm trong kho");
+        if (current.status !== "STORED" && current.status !== "RECEIVED") {
+          throw new AppError("conflict", `Vật phẩm đang ở trạng thái ${warehouseStatusLabels[current.status as WarehouseStatus]} nên không thể thao tác trả lại`);
+        }
+
+        await warehouseRepository.updateItemState(current.id, {
+          status: "RETURNED",
+          returnedAt: new Date()
+        }, connection);
+
+        if (current.postId) {
+          await warehouseRepository.updatePostStatus(current.postId, "RESOLVED", connection);
+        }
+
+        const proofLines = input.proofImage
+          .split(/[\n,]+/)
+          .map((s) => s.trim())
+          .filter(Boolean)
+          .map((url) => `Hình ảnh bằng chứng: ${url}`);
+
+        const note = [
+          "TRẢ HÀNG CHO CHỦ SỞ HỮU",
+          `Tên người nhận: ${input.receiverName}`,
+          `Giấy tờ / Mã số: ${input.receiverIdentity}`,
+          `Điện thoại: ${input.receiverPhone}`,
+          ...proofLines,
+          input.note ? `\nGhi chú: ${input.note}` : ""
+        ].filter(Boolean).join("\n");
+
+        await warehouseRepository.createStorageLog({
+          id: id(),
+          warehouseItemId: current.id,
+          postId: current.postId,
+          handoverPointId: current.handoverPointId,
+          actorId,
+          action: "RETURNED",
+          fromStatus: current.status,
+          toStatus: "RETURNED",
+          conditionNotes: current.conditionNotes,
+          storageCode: current.storageCode,
+          note
+        }, connection);
+      });
+
+      return warehouseRepository.findItemById(itemId);
     },
 
     async listLogs(itemId: string) {
