@@ -18,6 +18,10 @@ export function databasePoolOptions(multipleStatements: boolean): PoolOptions {
     password: env.db.password,
     waitForConnections: true,
     connectionLimit: 10,
+    connectTimeout: 20_000,
+    // mysql2 only enables idle eviction when maxIdle is below connectionLimit.
+    maxIdle: 2,
+    idleTimeout: 30_000,
     timezone: "Z",
     multipleStatements,
     ssl: env.db.ssl ? {
@@ -43,7 +47,7 @@ function databaseErrorCode(error: unknown): string | undefined {
 
 function isUnavailableConnectionError(error: unknown): boolean {
   const code = databaseErrorCode(error);
-  if (code && ["ECONNRESET", "ECONNREFUSED", "ETIMEDOUT", "PROTOCOL_CONNECTION_LOST", "PROTOCOL_ENQUEUE_AFTER_FATAL_ERROR"].includes(code)) {
+  if (code && ["ECONNRESET", "ECONNREFUSED", "ETIMEDOUT", "EAI_AGAIN", "ENOTFOUND", "PROTOCOL_CONNECTION_LOST", "PROTOCOL_ENQUEUE_AFTER_FATAL_ERROR"].includes(code)) {
     return true;
   }
   return error instanceof Error && /connection is in closed state|connection lost|closed state/i.test(error.message);

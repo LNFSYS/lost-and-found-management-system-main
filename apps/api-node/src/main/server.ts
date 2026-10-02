@@ -4,6 +4,7 @@ import { pool } from "./database.js";
 import { services } from "./runtime.js";
 import { checkWarehouseMaintenanceSchema } from "./warehouse-maintenance-schema.js";
 import { createWarehouseMaintenanceTask } from "./warehouse-maintenance.js";
+import { notificationEmailWorkerError } from "./notification-email-worker-error.js";
 
 const app = createApp();
 const server = app.listen(env.port, () => console.info(`LNFS auth API listening on http://localhost:${env.port}`));
@@ -13,8 +14,8 @@ async function processNotificationEmailQueue() {
   notificationWorkerRunning = true;
   try {
     await services.notificationEmailWorker.runOnce();
-  } catch {
-    console.warn("notification_email_worker_tick_failed", { errorCode: "WORKER_TICK_FAILED" });
+  } catch (error) {
+    console.warn("notification_email_worker_tick_failed", notificationEmailWorkerError(error));
   } finally {
     notificationWorkerRunning = false;
   }
