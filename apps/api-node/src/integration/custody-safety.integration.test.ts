@@ -4,7 +4,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import test from "node:test";
+import test, { after } from "node:test";
 import mysql, { type RowDataPacket } from "mysql2/promise";
 import { createPersistence } from "../main/persistence.js";
 import { runMigrations } from "../migrations/migration-runner.js";
@@ -15,11 +15,14 @@ import { createNotificationEmailQueue } from "../modules/notifications/applicati
 import { createPrivateMediaStorage } from "../shared/infrastructure/private-media-storage.js";
 import { createServices } from "../main/services.js";
 import { createApp } from "../main/app.js";
+import { pool as defaultPool } from "../main/database.js";
 import { createAuthSecurity } from "../modules/auth/infrastructure/auth-security.js";
 import { env } from "../shared/infrastructure/config/env.js";
 import { once } from "node:events";
 import type { AddressInfo } from "node:net";
 import { preflightMigrations } from "../migrations/migration-preflight.js";
+
+after(async () => { await defaultPool.end(); });
 
 test("isolated MySQL custody: authorization, concurrency, lifecycle, proof and notifications", { skip: process.env.LNFS_DB_INTEGRATION !== "1" }, async t => {
   const host = process.env.LNFS_TEST_DB_HOST;

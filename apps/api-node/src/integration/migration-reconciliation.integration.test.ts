@@ -4,7 +4,7 @@ import { mkdtemp, rm, writeFile, readFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import test from "node:test";
+import test, { after } from "node:test";
 import mysql, { type Pool, type RowDataPacket } from "mysql2/promise";
 import { runMigrations } from "../migrations/migration-runner.js";
 import { migrationLockName, readMigrationFiles, type MigrationPool } from "../migrations/migration-state.js";
@@ -12,6 +12,9 @@ import { canonicalClaimVersion, legacyClaimVersion, reconcileClaimMigration } fr
 import { createPersistence } from "../main/persistence.js";
 import { createReturnFeedbackUseCases } from "../modules/returns/application/return-feedback.use-cases.js";
 import { exerciseHttpRuntime } from "../test/http-runtime-scenario.js";
+import { pool as defaultPool } from "../main/database.js";
+
+after(async () => { await defaultPool.end(); });
 
 const enabled = process.env.LNFS_DB_INTEGRATION === "1";
 const directory = fileURLToPath(new URL("../migrations/", import.meta.url));

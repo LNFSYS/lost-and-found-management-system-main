@@ -65,3 +65,4 @@ CREATE TABLE warehouse_completed_returns (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 -- Immutable payload fingerprint; legacy rows remain nullable and are checked conservatively.
 ALTER TABLE custody_requests ADD COLUMN request_payload JSON NULL;
+

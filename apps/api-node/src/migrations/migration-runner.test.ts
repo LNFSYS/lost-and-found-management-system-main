@@ -11,6 +11,16 @@ import { legacyMigrationCompatibility } from "./legacy-migration-compatibility.j
 import { migrationChecksums, pendingMigrationFiles, readMigrationFiles, validateMigrationState } from "./migration-state.js";
 import { type MigrationPool, type LedgerRow, type AttemptRow } from "./migration-state.js";
 
+test("custody safety SQL retains the exact applied Aiven checksum", async () => {
+  const sql = await readFile(new URL("./054_custody_safety_contract.sql", import.meta.url), "utf8");
+  const checksum = "8032afbbd87f5d7c487d87e6964368e05d7b5a923436b8d0493f8dd6f9b72f86";
+  assert.equal(migrationChecksums(sql).normalized, checksum);
+  validateMigrationState([{ version: "054_custody_safety_contract.sql", sql, ...migrationChecksums(sql) }], {
+    ledger: [{ version: "054_custody_safety_contract.sql", checksum }],
+    attempts: [{ version: "054_custody_safety_contract.sql", checksum, status: "APPLIED" }]
+  });
+});
+
 async function withMigration(sql: string, run: (directory: string) => Promise<void>) {
   const directory = await mkdtemp(path.join(os.tmpdir(), "lnfs-migration-test-"));
   await writeFile(path.join(directory, "001_probe.sql"), sql, "utf8");

@@ -6,15 +6,18 @@ import type { AddressInfo } from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import test from "node:test";
+import test, { after } from "node:test";
 import mysql, { type Pool, type PoolOptions, type RowDataPacket } from "mysql2/promise";
 import { createApp } from "../main/app.js";
+import { pool as defaultPool } from "../main/database.js";
 import { runInTransaction } from "../shared/infrastructure/config/db.js";
 import { runMigrations, type MigrationPool } from "../migrations/migration-runner.js";
 import { readMigrationFiles } from "../migrations/migration-state.js";
 import { createAdminUserRepository } from "../modules/admin/infrastructure/admin-user.repository.js";
 import { createPersistence } from "../main/persistence.js";
 import { createAdminUserUseCases } from "../modules/admin/application/admin-user.use-cases.js";
+
+after(async () => { await defaultPool.end(); });
 
 const integrationEnabled = process.env.LNFS_DB_INTEGRATION === "1";
 const skipReason = integrationEnabled
