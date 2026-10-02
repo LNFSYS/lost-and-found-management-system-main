@@ -398,6 +398,47 @@ textarea {
   border: 1px solid #ffd6d1;
 }
 
+.field-error {
+  display: block;
+  margin: 4px 0 0;
+  color: var(--danger);
+  font-size: 0.82rem;
+  font-weight: 400;
+  line-height: 1.5;
+}
+
+.input-field [aria-invalid="true"] {
+  border-color: var(--danger);
+}
+
+.warehouse-return-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  align-items: start;
+}
+
+.warehouse-return-verification {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.warehouse-return-verification input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  min-height: 18px;
+  flex: 0 0 18px;
+  margin: 2px 0 0;
+  padding: 0;
+}
+
+@media (max-width: 600px) {
+  .warehouse-return-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 .form-note {
   color: #14683a;
   background: var(--fpt-green-soft);

@@ -30,6 +30,7 @@ import {
 } from "lucide-react";
 import {
   api,
+  ApiError,
   type AcceptCustodyRequestPayload,
   type CreateWarehouseItemPayload,
   type CustodyRequest,
@@ -44,6 +45,20 @@ import {
 
 type StaffTab = "custody" | "warehouse" | "dashboard" | "logs";
 type PendingAction = "" | "load" | "create" | "update" | "logs" | "custody" | "custody-action";
+
+const returnTextRules = {
+  receiverName: { min: 2, max: 150, message: "Họ và tên người nhận phải có từ 2 đến 150 ký tự." },
+  receiverPhone: { min: 9, max: 20, message: "Số điện thoại phải có từ 9 đến 20 ký tự." },
+  receiverIdentity: { min: 3, max: 100, message: "Mã thẻ SV / CMND / CCCD phải có từ 3 đến 100 ký tự." },
+  note: { min: 0, max: 1000, message: "Ghi chú bàn giao không được vượt quá 1000 ký tự." }
+};
+type ReturnTextField = keyof typeof returnTextRules;
+
+function returnTextError(field: ReturnTextField, value: string) {
+  const rule = returnTextRules[field];
+  const length = value.trim().length;
+  return length < rule.min || length > rule.max ? rule.message : "";
+}
 
 const statusOptions: Array<{ value: WarehouseStatus; label: string }> = [
   { value: "RECEIVED", label: "Đã tiếp nhận" },
@@ -879,7 +894,19 @@ function WarehouseInventoryTab({
     note: ""
   });
   const [uploadingProof, setUploadingProof] = useState(false);
+  const [returnErrors, setReturnErrors] = useState<Record<string, string>>({});
+  const [returnError, setReturnError] = useState("");
+  const [returnVerified, setReturnVerified] = useState(false);
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
+
+  function changeReturnText(field: ReturnTextField, value: string) {
+    setReturnForm(prev => ({ ...prev, [field]: value }));
+    setReturnErrors(prev => ({ ...prev, [field]: prev[field] ? returnTextError(field, value) : "" }));
+  }
+
+  function returnFieldError(field: string) {
+    return returnErrors[field] ? <small id={`return-${field}-error`} className="field-error" role="alert">{returnErrors[field]}</small> : null;
+  }
 
   function parseStorageLogNote(noteText: string) {
     const references = /^Proof references: ([0-9a-f -]+)$/im.exec(noteText)?.[1].trim().split(/\s+/) ?? [];
@@ -952,6 +979,9 @@ function WarehouseInventoryTab({
   }
 
   function openReturnModal(item: WarehouseItem) {
+    setReturnErrors({});
+    setReturnError("");
+    setReturnVerified(false);
     setReturnTargetItem(item);
     setReturnForm({ claimId: "", recipientId: "", receiverName: "", receiverIdentity: "", receiverPhone: "", proofImages: [], note: "" });
   }
@@ -959,12 +989,22 @@ function WarehouseInventoryTab({
   async function submitReturn(event: FormEvent) {
     event.preventDefault();
     if (!returnTargetItem) return;
+    const errors: Record<string, string> = {};
+    for (const field of Object.keys(returnTextRules) as ReturnTextField[]) {
+      const message = returnTextError(field, returnForm[field]);
+      if (message) errors[field] = message;
+    }
+    if (returnForm.proofImages.length < 1 || returnForm.proofImages.length > 5) errors.proofImage = "Vui lòng tải lên từ 1 đến 5 ảnh bằng chứng.";
+    if (!returnVerified) errors.verified = "Vui lòng xác nhận đã đối chiếu người nhận và bằng chứng bàn giao.";
+    setReturnErrors(errors);
+    setReturnError("");
+    if (Object.keys(errors).length) return;
     setPendingAction("update");
     onError("");
     onNotice("");
     try {
       await api.returnWarehouseItem(returnTargetItem.id, {
-        claimId: returnForm.claimId, recipientId: returnForm.recipientId,
+        claimId: returnForm.claimId || null, recipientId: returnForm.recipientId || null,
         receiverName: clean(returnForm.receiverName) ?? "",
         receiverIdentity: clean(returnForm.receiverIdentity) ?? "",
         receiverPhone: clean(returnForm.receiverPhone) ?? "",
@@ -978,7 +1018,10 @@ function WarehouseInventoryTab({
         await loadLogs(returnTargetItem.id, true).catch(() => undefined);
       }
     } catch (reason) {
-      onError(messageOf(reason, "Không thể xử lý trả hàng"));
+      if (reason instanceof ApiError) {
+        setReturnErrors(Object.fromEntries(Object.entries(reason.fieldErrors).map(([field, messages]) => [field, messages.join(" ")])));
+      }
+      setReturnError(messageOf(reason, "Không thể xử lý trả hàng"));
     } finally {
       setPendingAction("");
     }
@@ -1281,24 +1324,27 @@ function WarehouseInventoryTab({
               <button type="button" className="close-btn" onClick={() => setReturnTargetItem(null)}><X size={18} /></button>
             </div>
 
-            <form className="admin-form modal-form" style={{ padding: "16px 20px", overflowY: "auto", flex: 1, display: "flex", flexDirection: "column", gap: "12px" }} onSubmit={submitReturn}>
+            <form noValidate className="admin-form modal-form" style={{ padding: "16px 20px", overflowY: "auto", flex: 1, display: "flex", flexDirection: "column", gap: "12px" }} onSubmit={submitReturn}>
               <div className="staff-alert staff-alert--info" style={{ padding: "8px 12px", fontSize: "0.78rem", margin: 0, display: "flex", alignItems: "center", gap: "8px" }}>
                 <Info size={15} style={{ flexShrink: 0 }} />
                 <span>Người nhận có thể không có tài khoản hoặc không có claim trên hệ thống. Vui lòng kiểm tra giấy tờ tùy thân trước khi xác nhận; thông tin sẽ được lưu trong hồ sơ bàn giao riêng tư.</span>
               </div>
 
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+              <div className="warehouse-return-grid">
                 <label className="input-field" style={{ margin: 0 }}>
                   <span>Họ và tên người nhận <strong className="required-star">*</strong></span>
-                  <input required value={returnForm.receiverName} onChange={(event) => setReturnForm({ ...returnForm, receiverName: event.target.value })} placeholder="Nhập họ và tên người nhận" />
+                  <input required minLength={2} maxLength={150} value={returnForm.receiverName} aria-invalid={Boolean(returnErrors.receiverName)} aria-describedby={returnErrors.receiverName ? "return-receiverName-error" : undefined} onChange={(event) => changeReturnText("receiverName", event.target.value)} onBlur={() => setReturnErrors(prev => ({ ...prev, receiverName: returnTextError("receiverName", returnForm.receiverName) }))} placeholder="Nhập họ và tên người nhận" />
+                  {returnFieldError("receiverName")}
                 </label>
                 <label className="input-field" style={{ margin: 0 }}>
                   <span>Số điện thoại <strong className="required-star">*</strong></span>
-                  <input required type="tel" value={returnForm.receiverPhone} onChange={(event) => setReturnForm({ ...returnForm, receiverPhone: event.target.value })} placeholder="Nhập số điện thoại" />
+                  <input required type="tel" minLength={9} maxLength={20} value={returnForm.receiverPhone} aria-invalid={Boolean(returnErrors.receiverPhone)} aria-describedby={returnErrors.receiverPhone ? "return-receiverPhone-error" : undefined} onChange={(event) => changeReturnText("receiverPhone", event.target.value)} onBlur={() => setReturnErrors(prev => ({ ...prev, receiverPhone: returnTextError("receiverPhone", returnForm.receiverPhone) }))} placeholder="Nhập số điện thoại" />
+                  {returnFieldError("receiverPhone")}
                 </label>
                 <label className="input-field" style={{ margin: 0 }}>
                   <span>Mã thẻ SV / CMND / CCCD <strong className="required-star">*</strong></span>
-                  <input required value={returnForm.receiverIdentity} onChange={(event) => setReturnForm({ ...returnForm, receiverIdentity: event.target.value })} placeholder="Nhập mã số giấy tờ" />
+                  <input required minLength={3} maxLength={100} value={returnForm.receiverIdentity} aria-invalid={Boolean(returnErrors.receiverIdentity)} aria-describedby={returnErrors.receiverIdentity ? "return-receiverIdentity-error" : undefined} onChange={(event) => changeReturnText("receiverIdentity", event.target.value)} onBlur={() => setReturnErrors(prev => ({ ...prev, receiverIdentity: returnTextError("receiverIdentity", returnForm.receiverIdentity) }))} placeholder="Nhập mã số giấy tờ" />
+                  {returnFieldError("receiverIdentity")}
                 </label>
               </div>
               {returnRecipients.length > 0 && (
@@ -1311,15 +1357,19 @@ function WarehouseInventoryTab({
                     <option value="">Trả trực tiếp, không có claim</option>
                     {returnRecipients.map(recipient => <option key={recipient.claimId} value={recipient.claimId}>{recipient.fullName} · {recipient.claimId.slice(0, 8)}</option>)}
                   </select>
+                  {returnFieldError("claimId")}
+                  {returnFieldError("recipientId")}
                 </label>
               )}
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", alignItems: "start" }}>
+              <div className="warehouse-return-grid">
                 <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-                  <label><input type="checkbox" required />Tôi đã đối chiếu người nhận và bằng chứng bàn giao</label>
+                  <label className="warehouse-return-verification"><input type="checkbox" required checked={returnVerified} aria-invalid={Boolean(returnErrors.verified)} aria-describedby={returnErrors.verified ? "return-verified-error" : undefined} onChange={event => { setReturnVerified(event.target.checked); setReturnErrors(prev => ({ ...prev, verified: "" })); }} />Tôi đã đối chiếu người nhận và bằng chứng bàn giao</label>
+                  {returnFieldError("verified")}
 
                   <label className="input-field" style={{ margin: 0 }}>
                     <span style={{ fontSize: "0.8rem" }}>Ghi chú bàn giao</span>
-                    <textarea value={returnForm.note} onChange={(event) => setReturnForm({ ...returnForm, note: event.target.value })} rows={2} style={{ padding: "6px 10px", fontSize: "0.82rem", resize: "none" }} placeholder="Ghi chú tình trạng lúc giao (nếu có)..." />
+                    <textarea maxLength={1000} value={returnForm.note} aria-invalid={Boolean(returnErrors.note)} aria-describedby={returnErrors.note ? "return-note-error" : undefined} onChange={(event) => changeReturnText("note", event.target.value)} rows={2} style={{ padding: "6px 10px", fontSize: "0.82rem", resize: "none" }} placeholder="Ghi chú tình trạng lúc giao (nếu có)..." />
+                    {returnFieldError("note")}
                   </label>
                 </div>
 
@@ -1355,11 +1405,20 @@ function WarehouseInventoryTab({
                       accept="image/jpeg,image/png,image/webp"
                       multiple
                       disabled={uploadingProof}
-                      required={returnForm.proofImages.length === 0}
+                      aria-label="Ảnh bằng chứng bàn giao"
+                      aria-invalid={Boolean(returnErrors.proofImage)}
+                      aria-describedby={returnErrors.proofImage ? "return-proofImage-error" : undefined}
                       style={{ display: "none" }}
                       onChange={async (event) => {
-                        const files = Array.from(event.target.files || []);
+                        const input = event.currentTarget;
+                        const files = Array.from(input.files || []);
                         if (!files.length) return;
+                        if (returnForm.proofImages.length + files.length > 5) {
+                          setReturnErrors(prev => ({ ...prev, proofImage: "Chỉ được tải lên tối đa 5 ảnh bằng chứng." }));
+                          input.value = "";
+                          return;
+                        }
+                        setReturnErrors(prev => ({ ...prev, proofImage: "" }));
                         setUploadingProof(true);
                         try {
                           for (const file of files) {
@@ -1367,14 +1426,16 @@ function WarehouseInventoryTab({
                             setReturnForm((prev) => ({ ...prev, proofImages: [...prev.proofImages, res.id] }));
                           }
                         } catch (error) {
-                          onError(messageOf(error, "Không thể tải lên ảnh bằng chứng"));
+                          setReturnErrors(prev => ({ ...prev, proofImage: messageOf(error, "Không thể tải lên ảnh bằng chứng") }));
                         } finally {
                           setUploadingProof(false);
-                          event.currentTarget.value = "";
+                          input.value = "";
                         }
                       }}
                     />
                   </label>
+
+                  {returnFieldError("proofImage")}
 
                   {returnForm.proofImages.length > 0 && (
                     <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", marginTop: "6px", maxHeight: "190px", overflowY: "auto" }}>
@@ -1420,6 +1481,7 @@ function WarehouseInventoryTab({
                             onClick={(e) => {
                               e.stopPropagation();
                               setReturnForm((prev) => ({ ...prev, proofImages: prev.proofImages.filter((_, i) => i !== index) }));
+                              setReturnErrors(prev => ({ ...prev, proofImage: returnForm.proofImages.length <= 1 ? "Vui lòng tải lên từ 1 đến 5 ảnh bằng chứng." : "" }));
                             }}
                             style={{
                               position: "absolute",
@@ -1448,6 +1510,7 @@ function WarehouseInventoryTab({
                 </div>
               </div>
 
+              {returnError && <p className="form-error" role="alert">{returnError}</p>}
               <div className="custody-modal-actions" style={{ marginTop: "4px", paddingTop: "10px", borderTop: "1px solid #f1f5f9" }}>
                 <button className="primary-button" disabled={pendingAction === "update" || uploadingProof}>
                   {pendingAction === "update" ? <LoaderCircle className="spin-icon" size={17} /> : <CheckCircle2 size={17} />}

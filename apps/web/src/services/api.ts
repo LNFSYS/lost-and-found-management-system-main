@@ -693,6 +693,13 @@ function normalizeSession(session: SessionResponse): SessionResponse {
   return { ...session, user: normalizeUser(session.user) };
 }
 
+export class ApiError extends Error {
+  constructor(message: string, public readonly status: number, public readonly fieldErrors: Record<string, string[]> = {}) {
+    super(message);
+    this.name = "ApiError";
+  }
+}
+
 async function raw<T>(path: string, init: RequestInit = {}, retry = true): Promise<T> {
   if (typeof navigator !== "undefined" && !navigator.onLine && isMutation(init)) {
     throw new Error("Bạn đang offline. Thao tác này chưa được gửi và cần kết nối mạng để thực hiện.");
@@ -715,8 +722,14 @@ async function raw<T>(path: string, init: RequestInit = {}, retry = true): Promi
     if (session) return raw<T>(path, init, false);
   }
   if (!response.ok) {
-    const payload = await response.json().catch(() => ({})) as { message?: string };
-    throw new Error(payload.message ?? "Yêu cầu không thành công");
+    const payload = await response.json().catch(() => ({})) as { message?: string; errors?: Record<string, unknown> };
+    const fieldErrors: Record<string, string[]> = {};
+    if (payload.errors && typeof payload.errors === "object") {
+      for (const [field, messages] of Object.entries(payload.errors)) {
+        if (Array.isArray(messages)) fieldErrors[field] = messages.filter((message): message is string => typeof message === "string");
+      }
+    }
+    throw new ApiError(payload.message ?? "Yêu cầu không thành công", response.status, fieldErrors);
   }
   if (response.status === 204) return undefined as T;
   return response.json() as Promise<T>;

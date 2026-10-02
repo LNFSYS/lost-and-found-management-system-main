@@ -31,3 +31,10 @@ test("semantic application errors preserve the previous HTTP status and payload"
     code: "PAYLOAD_TOO_LARGE", message: "Nội dung gửi lên vượt quá giới hạn cho phép"
   });
 });
+
+test("database connection failures return a retryable unavailable response", () => {
+  const error = Object.assign(new Error("read ECONNRESET"), { code: "ECONNRESET" });
+  const result = responseFor(error);
+  assert.equal(result.status, 503);
+  assert.deepEqual(result.body, { message: "Kết nối cơ sở dữ liệu tạm thời gián đoạn, vui lòng thử lại." });
+});

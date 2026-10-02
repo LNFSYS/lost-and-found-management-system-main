@@ -16,6 +16,12 @@ test("accepts an in-person return without an account or claim", () => {
   assert.equal(parsed.receiverName, directReturn.receiverName);
 });
 
+test("normalizes empty claim fields from direct-return forms", () => {
+  const parsed = returnWarehouseItemSchema.parse({ ...directReturn, claimId: "", recipientId: "" });
+  assert.equal(parsed.claimId, null);
+  assert.equal(parsed.recipientId, null);
+});
+
 test("requires claim and recipient ids together when linking an online claim", () => {
   assert.throws(() => returnWarehouseItemSchema.parse({ ...directReturn, claimId: "00000000-0000-4000-8000-000000000001" }));
 });

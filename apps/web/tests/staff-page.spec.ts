@@ -150,6 +150,37 @@ test("staff can open storage logs and update item state", async ({ page }) => {
 });
 
 for (const viewport of [{ width: 1440, height: 1000 }, { width: 390, height: 844 }]) {
+  test(`warehouse return shows field errors before submitting at ${viewport.width}px`, async ({ page }, testInfo) => {
+    await page.setViewportSize(viewport);
+    await prepare(page, {});
+    await page.route("**/api/staff/warehouse-items/*/return-recipients", route => route.fulfill({ json: { recipients: [] } }));
+    let returnRequests = 0;
+    await page.route("**/api/staff/warehouse-items/*/return", route => {
+      returnRequests++;
+      return route.fulfill({ json: item });
+    });
+    await page.goto("/staff");
+    await page.getByRole("button", { name: "Kho tài sản", exact: true }).click();
+    await page.getByRole("button", { name: "Trả cho chủ sở hữu", exact: true }).click();
+    const modal = page.locator(".custody-modal");
+    const phone = modal.getByLabel(/^Số điện thoại/);
+    await phone.fill("0359");
+    await phone.blur();
+    await expect(modal.locator("#return-receiverPhone-error")).toHaveText("Số điện thoại phải có từ 9 đến 20 ký tự.");
+    await expect(phone).toHaveAttribute("aria-invalid", "true");
+    await modal.getByRole("button", { name: "Xác nhận Đã trả hàng" }).click();
+    await expect(modal.locator("#return-receiverName-error")).toBeVisible();
+    await expect(modal.locator("#return-receiverIdentity-error")).toBeVisible();
+    await expect(modal.locator("#return-proofImage-error")).toBeVisible();
+    await expect(modal.locator("#return-verified-error")).toBeVisible();
+    expect(returnRequests).toBe(0);
+    await phone.fill("0359123456");
+    await expect(phone).toHaveAttribute("aria-invalid", "false");
+    await expect(modal.locator("#return-receiverPhone-error")).toHaveCount(0);
+    await page.screenshot({ path: testInfo.outputPath(`return-errors-${viewport.width}.png`) });
+    expect(await modal.evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBeTruthy();
+  });
+
   test(`staff server pagination and filtering at ${viewport.width}px`, async ({ page }, testInfo) => {
     await page.setViewportSize(viewport);
     await prepare(page, {});
@@ -204,3 +235,52 @@ for (const viewport of [{ width: 1440, height: 1000 }, { width: 390, height: 844
     expect(warehouseQueries.some(query => new URLSearchParams(query).get("status") === "STORED" && new URLSearchParams(query).get("page") === "1")).toBeTruthy();
   });
 }
+
+test("warehouse return retains server field errors and can retry an in-person return", async ({ page }) => {
+  await prepare(page, {});
+  await page.route("**/api/staff/warehouse-items/*/return-recipients", route => route.fulfill({ json: { recipients: [] } }));
+  const pageErrors: string[] = [];
+  page.on("pageerror", error => pageErrors.push(error.message));
+  const proofId = "00000000-0000-4000-8000-000000000000";
+  const image = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a5n8AAAAASUVORK5CYII=", "base64");
+  let uploads = 0;
+  await page.route("**/api/staff/warehouse-items/upload-proof", route => {
+    uploads++;
+    return route.fulfill({ json: { id: proofId } });
+  });
+  await page.route("**/api/staff/warehouse-proofs/*", route => route.fulfill({ contentType: "image/png", body: image }));
+  let attempts = 0;
+  await page.route("**/api/staff/warehouse-items/*/return", route => {
+    const payload = route.request().postDataJSON();
+    expect(payload.claimId).toBeNull();
+    expect(payload.recipientId).toBeNull();
+    expect(payload.proofImage).toBe(proofId);
+    attempts++;
+    return attempts === 1
+      ? route.fulfill({ status: 422, json: { message: "Dữ liệu nhập chưa hợp lệ", errors: { receiverPhone: ["Vui lòng kiểm tra lại số điện thoại người nhận."] } } })
+      : route.fulfill({ json: { ...item, status: "RETURNED" } });
+  });
+  await page.goto("/staff");
+  await page.getByRole("button", { name: "Kho tài sản", exact: true }).click();
+  await page.getByRole("button", { name: "Trả cho chủ sở hữu", exact: true }).click();
+  const modal = page.locator(".custody-modal");
+  await modal.getByLabel(/^Họ và tên người nhận/).fill("Nguyễn An");
+  await modal.getByLabel(/^Số điện thoại/).fill("0359123456");
+  await modal.getByLabel(/^Mã thẻ SV/).fill("DE123456");
+  await modal.getByRole("checkbox").check();
+  const upload = modal.getByLabel("Ảnh bằng chứng bàn giao", { exact: true });
+  await upload.setInputFiles(Array.from({ length: 6 }, (_, index) => ({ name: `proof-${index}.png`, mimeType: "image/png", buffer: image })));
+  await expect(modal.locator("#return-proofImage-error")).toHaveText("Chỉ được tải lên tối đa 5 ảnh bằng chứng.");
+  expect(uploads).toBe(0);
+  await upload.setInputFiles({ name: "proof.png", mimeType: "image/png", buffer: image });
+  await expect(modal.getByText("1 ảnh đã lưu riêng tư", { exact: true })).toBeVisible();
+  await modal.getByRole("button", { name: "Xác nhận Đã trả hàng" }).click();
+  await expect(modal.locator("#return-receiverPhone-error")).toHaveText("Vui lòng kiểm tra lại số điện thoại người nhận.");
+  await expect(modal.getByLabel(/^Họ và tên người nhận/)).toHaveValue("Nguyễn An");
+  await modal.getByLabel(/^Số điện thoại/).fill("0359123457");
+  await modal.getByRole("button", { name: "Xác nhận Đã trả hàng" }).click();
+  await expect(page.getByText("Đã hoàn tất trả hàng cho chủ sở hữu!", { exact: true })).toBeVisible();
+  await expect(modal).toHaveCount(0);
+  expect(attempts).toBe(2);
+  expect(pageErrors).toEqual([]);
+});

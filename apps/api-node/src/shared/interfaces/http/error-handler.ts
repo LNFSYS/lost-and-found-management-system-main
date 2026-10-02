@@ -28,13 +28,18 @@ export function errorHandler(error: unknown, _request: Request, response: Respon
   if (["ER_ROW_IS_REFERENCED_2", "ER_ROW_IS_REFERENCED", "ER_NO_REFERENCED_ROW_2", "ER_NO_REFERENCED_ROW"].includes(code)) {
     return response.status(409).json({ message: "Dữ liệu đang được sử dụng hoặc liên kết không hợp lệ" });
   }
+  const errorMessage = error instanceof Error ? error.message : "";
+  if (["ECONNRESET", "ECONNREFUSED", "ETIMEDOUT", "PROTOCOL_CONNECTION_LOST", "PROTOCOL_ENQUEUE_AFTER_FATAL_ERROR"].includes(code)
+    || /connection is in closed state|connection lost|closed state/i.test(errorMessage)) {
+    console.error("Database connection unavailable", { code: code || undefined, message: errorMessage });
+    return response.status(503).json({ message: "Kết nối cơ sở dữ liệu tạm thời gián đoạn, vui lòng thử lại." });
+  }
   const databaseError = typeof error === "object" && error !== null
     ? {
         errno: "errno" in error ? Number((error as { errno?: unknown }).errno) || undefined : undefined,
         sqlState: "sqlState" in error ? String((error as { sqlState?: unknown }).sqlState ?? "") || undefined : undefined
       }
     : {};
-  const errorMessage = error instanceof Error ? error.message : "";
   const missingField = errorMessage.match(/Field '([^']+)' doesn't have a default value/i)?.[1];
   console.error("Unhandled API error", {
     name: error instanceof Error ? error.name : "UnknownError",
