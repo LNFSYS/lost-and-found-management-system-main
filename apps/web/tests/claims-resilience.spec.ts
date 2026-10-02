@@ -174,3 +174,77 @@ test("Finder makes an explicit appointment-eligible decision in the private room
   expect(decisionRequest!.body.decision).toBe("VERIFY_FOR_MEETUP");
   expect(decisionRequest!.body).not.toHaveProperty("idempotencyKey");
 });
+
+test("Finder can request custody from chat without closing or deciding the claim", async ({ page }) => {
+  const finderSession = { ...session, user: { ...session.user, id: "finder-a", fullName: "Finder A" } };
+  const finderClaim = {
+    ...claimA,
+    claimantId: "claimant-a",
+    finderId: "finder-a",
+    appointmentEligible: false,
+    conversationDecision: "OPEN_CONVERSATION"
+  };
+  const initialVerification = {
+    claimId: finderClaim.id,
+    status: "CONVERSATION_OPEN",
+    appointmentEligible: false,
+    participantRole: "FINDER",
+    roomEscalation: null,
+    policy: { templateId: "wallet-bag", templateVersion: 1, minimumAnswers: 1, answeredCount: 0, matchedCount: 0, readyForDecision: false },
+    questions: [],
+    history: []
+  };
+  const reason = "I cannot safely keep the item any longer";
+  const handoverPointId = "66666666-6666-4666-8666-666666666666";
+  let decisionBody: Record<string, unknown> | null = null;
+
+  await page.route("**/api/auth/refresh", (route) => fulfillJson(route, finderSession));
+  await page.route("**/api/handover-points", (route) => fulfillJson(route, {
+    handoverPoints: [{ id: handoverPointId, name: "Campus Lost & Found Desk - Phòng CTSV", address: "Tòa Alpha", isActive: true }]
+  }));
+  await page.route("**/api/claims?page=1&pageSize=50", (route) => fulfillJson(route, {
+    items: [finderClaim], total: 1, page: 1, pageSize: 50, hasMore: false
+  }));
+  await page.route(`**/api/claims/${finderClaim.id}`, (route) => fulfillJson(route, finderClaim));
+  await page.route(`**/api/claims/${finderClaim.id}/messages*`, (route) => fulfillJson(route, {
+    room: { id: "room-a", claimId: finderClaim.id, status: finderClaim.status, participantRole: "FINDER", createdAt: finderClaim.createdAt },
+    items: [], hasMore: false, nextCursor: null
+  }));
+  await page.route(`**/api/claims/${finderClaim.id}/evidence`, (route) => fulfillJson(route, { items: [] }));
+  await page.route(`**/api/claims/${finderClaim.id}/verification/templates`, (route) => fulfillJson(route, {
+    category: "vi / bop",
+    template: { id: "wallet-bag", version: 1, minimumAnswers: 1, customFollowUpAllowed: true, prompts: [] }
+  }));
+  await page.route(`**/api/claims/${finderClaim.id}/verification`, (route) => fulfillJson(route, initialVerification));
+  await page.route(`**/api/claims/${finderClaim.id}/verification/decision`, async (route) => {
+    decisionBody = route.request().postDataJSON() as Record<string, unknown>;
+    await fulfillJson(route, {
+      claim: finderClaim,
+      verification: {
+        ...initialVerification,
+        roomEscalation: { escalatedAt: "2026-09-18T02:00:00.000Z", escalatedBy: "finder-a", reason }
+      },
+      message: {
+        id: "custody-message", roomId: "room-a", sender: { id: "finder-a", fullName: "Finder A" },
+        clientMessageId: "verification-decision-custody-key", content: "Custody request sent to Staff",
+        messageType: "SYSTEM", isRead: false, readAt: null, createdAt: "2026-09-18T02:00:00.000Z"
+      }
+    });
+  });
+
+  await page.goto(`/claims/${finderClaim.id}`);
+  await page.getByRole("button", { name: /custody/i }).click();
+  await expect(page.getByRole("heading", { name: "Yêu cầu Bàn giao cho Quầy Staff (Custody)" })).toBeVisible();
+  await expect(page.locator(".claim-custody-hours")).toContainText("08:00/08:15–12:00");
+  await page.locator("#claim-custody-handover-point").selectOption(handoverPointId);
+  await page.locator("#claim-custody-reason").fill(reason);
+  await page.getByRole("button", { name: "Gửi Yêu cầu Bàn giao" }).click();
+
+  await expect(page.getByText("Đã gửi yêu cầu chuyển sang custody")).toBeVisible();
+  await expect(page.getByText("Yêu cầu đang chờ Staff xử lý.")).toBeVisible();
+  await expect(page.getByRole("button", { name: /custody/i })).toHaveCount(0);
+  await expect(page.getByLabel("Tin nhắn riêng")).toBeEnabled();
+  expect(decisionBody?.decision).toBe("ESCALATE_TO_CUSTODY");
+  expect(decisionBody?.reason).toBe(reason);
+  expect(decisionBody?.handoverPointId).toBe(handoverPointId);
+});

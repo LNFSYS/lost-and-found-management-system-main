@@ -7681,6 +7681,32 @@ textarea {
 .matches-hero dt { color: var(--muted); font-size: 0.67rem; font-weight: 750; }
 .matches-hero dd { margin: 0; color: var(--fpt-blue-dark); font: 800 1.7rem var(--font-display); }
 
+.matches-hero__actions { min-width: 0; display: grid; gap: 14px; }
+.found-item-choice { padding: 16px; border: 2px solid #94b9d7; border-radius: 7px; background: #fff; box-shadow: 0 8px 20px rgba(24, 66, 104, 0.1); }
+.found-item-choice__heading { margin-bottom: 13px; display: flex; align-items: center; gap: 10px; }
+.found-item-choice__badge { width: 38px; height: 38px; display: grid; place-items: center; border-radius: 6px; color: #fff; background: var(--fpt-blue); }
+.found-item-choice__badge svg { width: 20px; height: 20px; }
+.found-item-choice__heading .eyebrow { margin: 0 0 3px; color: var(--fpt-blue); font-size: 0.62rem; font-weight: 850; }
+.found-item-choice__heading h2 { margin: 0; color: var(--ink); font-size: 1rem; line-height: 1.3; }
+.found-item-choice__buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.found-item-choice__option { min-width: 0; min-height: 74px; padding: 12px; display: flex; align-items: center; justify-content: flex-start; gap: 11px; border: 2px solid transparent; border-radius: 6px; font: inherit; text-align: left; cursor: pointer; transition: transform 140ms ease, box-shadow 140ms ease; }
+.found-item-choice__option:hover { transform: translateY(-1px); box-shadow: 0 5px 12px rgba(15, 39, 64, 0.12); }
+.found-item-choice__option:focus-visible { outline: 3px solid #111827; outline-offset: 2px; }
+.found-item-choice__option > svg { width: 22px; height: 22px; flex: 0 0 auto; }
+.found-item-choice__option > span { min-width: 0; display: grid; gap: 4px; }
+.found-item-choice__option strong { font-size: 0.86rem; line-height: 1.25; }
+.found-item-choice__option small { font-size: 0.69rem; line-height: 1.35; }
+.found-item-choice__option--keep { color: #14532d; border-color: #69ad82; background: #edf8f0; }
+.found-item-choice__option--keep.is-selected { border-color: #168044; box-shadow: inset 0 0 0 1px #168044; }
+.found-item-choice__option--custody { color: #fff; border-color: #a94400; background: #b94d00; }
+.found-item-choice__option--custody:hover { background: #9f4100; }
+.found-item-choice__option:disabled { cursor: wait; opacity: 0.75; }
+.found-item-choice__hours,
+.found-item-choice__status { margin: 10px 0 0; color: var(--muted); font-size: 0.74rem; line-height: 1.5; }
+.found-item-choice__status { color: #147247; font-weight: 700; }
+.found-item-choice__error { margin: 10px 0 0; color: #b42318; font-size: 0.8rem; font-weight: 700; }
+.custody-hours-note { padding: 9px 11px; border-left: 3px solid var(--fpt-blue); background: #f1f8fe; font-size: 0.8rem; line-height: 1.5; }
+
 .matching-method {
   min-height: 82px;
   margin: 16px 0 26px;
@@ -7826,8 +7852,8 @@ textarea {
 .match-penalties > div { display: grid; gap: 4px; font-size: 0.69rem; line-height: 1.45; }
 
 .match-analysis-card > footer {
-  min-height: 58px;
-  padding: 0 24px;
+  min-height: 80px;
+  padding: 12px 24px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -7840,7 +7866,7 @@ textarea {
 .match-analysis-card > footer span { color: var(--muted); }
 .match-analysis-card > footer a { color: var(--fpt-blue); }
 .match-analysis-card > footer svg { width: 15px; }
-.match-claim-button { min-height: 52px; min-width: 245px; padding: 0 22px; display: inline-flex; align-items: center; justify-content: center; gap: 10px; border: 0; border-radius: 8px; color: #fff; background: linear-gradient(135deg, var(--fpt-orange), var(--fpt-orange-dark)); box-shadow: 0 8px 20px rgba(227, 91, 20, .24); font-size: .9rem; font-weight: 900; cursor: pointer; transition: transform .18s ease, box-shadow .18s ease; }
+.match-claim-button { min-height: 56px; min-width: 265px; padding: 0 24px; display: inline-flex; align-items: center; justify-content: center; gap: 10px; border: 0; border-radius: 8px; color: #fff; background: linear-gradient(135deg, var(--fpt-orange), var(--fpt-orange-dark)); box-shadow: 0 8px 20px rgba(227, 91, 20, .24); font-size: .9rem; font-weight: 900; cursor: pointer; transition: transform .18s ease, box-shadow .18s ease; }
 .match-claim-button:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 11px 24px rgba(227, 91, 20, .32); }
 .match-claim-button:focus-visible { outline: 3px solid rgba(227, 91, 20, .3); outline-offset: 3px; }
 .match-claim-button svg { width: 21px !important; height: 21px; }
@@ -7912,6 +7938,9 @@ textarea {
   .matches-hero { min-height: 0; padding: 24px 18px; }
   .matches-hero dl { grid-template-columns: 1fr; }
   .matches-hero dl > div + div { border-top: 1px solid #d5e4f0; border-left: 0; }
+  .found-item-choice__buttons { grid-template-columns: 1fr; }
+  .custody-modal-overlay { padding: 14px; }
+  .custody-modal { max-height: calc(100vh - 28px); overflow-y: auto; padding: 20px; }
   .matching-method { grid-template-columns: auto 1fr; padding-inline: 4px; }
   .matching-method > small { grid-column: 2; }
   .matching-thresholds { grid-template-columns: 1fr; }
@@ -7923,7 +7952,7 @@ textarea {
   .match-candidate-image .post-card__media { height: auto; aspect-ratio: 16 / 9; }
   .match-explanation { padding: 18px; }
   .match-token-groups > div { grid-template-columns: 1fr; gap: 4px; }
-  .match-analysis-card > footer { padding: 13px 18px; align-items: flex-start; flex-direction: column; }
+  .match-analysis-card > footer { min-height: 0; padding: 16px 18px; align-items: flex-start; flex-direction: column; }
   .match-claim-button { width: 100%; min-width: 0; }
   .matches-empty > div { flex-direction: column; }
 }
@@ -8898,6 +8927,24 @@ textarea {
   font-size: 0.84rem;
 }
 
+.custody-modal--claim-transfer { width: min(540px, 100%); padding: 26px; }
+.custody-modal--claim-transfer .custody-modal__header { align-items: flex-start; margin-bottom: 0; padding-right: 22px; }
+.custody-modal--claim-transfer .custody-modal__header > div { min-width: 0; flex: 1; }
+.custody-modal--claim-transfer .custody-modal__header h3 { padding-right: 2px; font-size: 1.05rem; line-height: 1.25; }
+.custody-modal--claim-transfer .custody-modal__header p { margin-top: 5px; font-size: 0.8rem; line-height: 1.4; }
+.claim-custody-hours { display: grid; grid-template-columns: 16px minmax(0, 1fr); align-items: start; gap: 9px; padding: 10px; border-left: 2px solid var(--fpt-blue); color: #64748b; background: #eff6ff; }
+.claim-custody-hours svg { width: 16px; margin-top: 2px; color: var(--fpt-blue); }
+.claim-custody-hours p { margin: 0; font-size: 0.78rem; line-height: 1.45; }
+.claim-custody-form { margin-top: 2px; }
+.claim-custody-form label { display: grid; gap: 7px; color: #334155; font-size: 0.82rem; font-weight: 750; }
+.claim-custody-form select, .claim-custody-form textarea { width: 100%; min-height: 44px; padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 8px; color: #1e293b; background: #fff; font: inherit; font-size: 0.8rem; }
+.claim-custody-form textarea { min-height: 62px; resize: vertical; }
+.claim-custody-form .field-hint { display: flex; align-items: center; gap: 6px; margin: -8px 0 0; }
+.claim-custody-form .field-hint svg { width: 14px; }
+.claim-custody-form .custody-modal-actions { flex-wrap: wrap; }
+.claim-custody-form .custody-modal-actions button { min-height: 42px; white-space: normal; }
+.claim-custody-form .custody-modal-actions button:disabled { cursor: not-allowed; opacity: 0.62; transform: none; }
+
 .close-btn {
   position: absolute;
   top: 0;
@@ -9163,6 +9210,9 @@ textarea {
 }
 
 @media (max-width: 640px) {
+  .custody-modal--claim-transfer { padding: 18px; }
+  .custody-modal--claim-transfer .custody-modal__header h3 { font-size: 0.98rem; }
+  .claim-custody-form .custody-modal-actions { display: grid; grid-template-columns: minmax(0, 1fr) auto; }
   .staff-page-container { width: min(100% - 24px, 100%); margin: 16px auto 32px; }
   .warehouse-stats { grid-template-columns: 1fr; }
   .staff-tabs { display: flex; overflow-x: auto; width: 100%; }
@@ -9172,3 +9222,6 @@ textarea {
 }
 
 
+/* Warehouse list controls share the width of the operational surface. */
+.warehouse-pagination { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 0; min-height: 60px; flex-wrap: wrap; }
+.warehouse-pagination span { font-size: 14px; }

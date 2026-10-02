@@ -34,7 +34,7 @@ export function PostDetailPage() {
   const [custodyNotice, setCustodyNotice] = useState("");
   const [custodyError, setCustodyError] = useState("");
 
-  async function openCustodyModal() {
+  const openCustodyModal = useCallback(async () => {
     setCustodyError("");
     try {
       const res = await api.listPublicHandoverPoints();
@@ -46,7 +46,7 @@ export function PostDetailPage() {
     } catch (err) {
       setCustodyError(err instanceof Error ? err.message : "Không thể tải danh sách điểm bàn giao");
     }
-  }
+  }, []);
 
   async function submitCustodyRequest(e: FormEvent) {
     e.preventDefault();
@@ -207,6 +207,7 @@ export function PostDetailPage() {
             <div>
               <h3>Yêu cầu Bàn giao cho Quầy Staff (Custody)</h3>
               <p>Chuyển giao vật phẩm bài đăng <strong>{post.title}</strong> cho nhân viên lưu kho.</p>
+              <p className="custody-hours-note">Giờ làm việc Phòng DVSV: thứ Hai–thứ Sáu, buổi sáng 08:00/08:15–12:00 và buổi chiều 13:30–17:00, trừ ngày nghỉ lễ.</p>
             </div>
             <button type="button" className="close-btn" onClick={() => setCustodyModalOpen(false)}><X size={18} /></button>
           </div>

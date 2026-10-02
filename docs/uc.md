@@ -1,17 +1,17 @@
 # 3. Business Use Case Catalogue - FPTU Lost & Found System (LNFS)
 
-This catalogue was updated on 21 September 2026 from the runtime source currently integrated into `dev` and the audited Git evidence recorded below. `Implemented` requires active runtime evidence on `dev`; schema or migration-only evidence is not sufficient. `Partial` means part of the actor goal exists, while `Planned` means no complete runtime flow is available.
+Mappings and totals reconciled on 2 October 2026 against `origin/dev` (`ef78a53`). The UC row statuses below remain the dev baseline, not completion claims for `feat/lnfs-55`. Branch evidence and outstanding release gates are in [LNFS-55-SAFETY-VERIFICATION.md](LNFS-55-SAFETY-VERIFICATION.md). `Implemented` requires active runtime evidence on `dev`; schema or migration-only evidence is not sufficient. `Partial` means part of the actor goal exists, while `Planned` means no complete runtime flow is available.
 
-- **Implemented:** 92 use cases
+- **Implemented:** 97 use cases
 - **Partial:** 5 use cases
-- **Planned:** 71 use cases
+- **Planned:** 66 use cases
 - **Total:** 168 business use cases
 
 `Claimant` means the owner of the LOST post. `Finder` means the owner of the matched FOUND post. PWA, mobile browser, and a future native application are delivery channels, not business use cases, and are therefore excluded from this catalogue.
 
-## 3.1 Source-Control Ownership Audit
+## 3.1 Historical Source-Control Ownership Audit
 
-The history contains 73 commits across all references after normalizing author identities: Quan 55, Khoa 12, Dat 5, and Luong 1. Commit count is included only as an audit fact; ownership below is based on changed business modules, tests, routes, and UI rather than raw commit volume.
+The retained 21 September snapshot (not a fresh author audit) contains 73 commits across all references after normalizing author identities: Quan 55, Khoa 12, Dat 5, and Luong 1. Commit count is included only as an audit fact; ownership below is based on changed business modules, tests, routes, and UI rather than raw commit volume.
 
 | Contributor | Completed UC evidence already integrated into `dev` | Primary commits |
 | --- | --- | --- |
@@ -22,15 +22,15 @@ The history contains 73 commits across all references after normalizing author i
 
 ### Remaining Work Allocation
 
-Completed UC work above is not reassigned. The 76 Partial/Planned UCs are divided by cohesive workflow, with UC-167 assigned to Quan for the cross-module journey projection and UC-168 assigned to Khoa for notification delivery preferences.
+Completed UC work above is not reassigned. The 71 Partial/Planned UCs in the retained dev catalogue are divided by cohesive workflow, with UC-167 assigned to Quan for the cross-module journey projection and UC-168 assigned to Khoa for notification delivery preferences.
 
 | Assignee | Remaining UC IDs | Count | Main responsibility |
 | --- | --- | ---: | --- |
 | Luong | UC-106 to UC-118; UC-126 to UC-133 | 21 | Port guided verification into Clean Architecture, complete multiple-claimant handling, and implement appointment negotiation. |
-| Quan | UC-097 to UC-105; UC-134 to UC-140; UC-163 to UC-167 | 21 | Matching feedback/model operations, direct-handover completion, audit/moderation visibility, and the end-to-end item journey projection. |
-| Khoa | UC-093 to UC-096; UC-119 to UC-125; UC-141 to UC-146; UC-168 | 18 | User-report lifecycle, realtime/private communication extensions, Staff custody transfer/intake, and notification delivery preferences. |
+| Quan | UC-097 to UC-105; UC-134 to UC-140; UC-163, UC-164, UC-166, UC-167 | 20 | Matching feedback/model operations, direct-handover completion, audit/moderation visibility, and the end-to-end item journey projection. |
+| Khoa | UC-119 to UC-125; UC-141 to UC-146; UC-168 | 14 | User-report lifecycle, realtime/private communication extensions, Staff custody transfer/intake, and notification delivery preferences. |
 | Dat | UC-147 to UC-162 | 16 | Custody notifications, overdue handling, legal holds, disposition orders, evidence, and donation campaigns. |
-| **Total** | **UC-093 to UC-168** | **76** | **All currently Partial or Planned business UCs are assigned once.** |
+| **Total** | **Partial/Planned rows only** | **71** | **All currently Partial or Planned business UCs are assigned once.** |
 
 ### 3.2 Authentication & Authorization
 
@@ -201,7 +201,7 @@ Completed UC work above is not reassigned. The 76 Partial/Planned UCs are divide
 | UC-052 | Receive a warehouse item | Staff / Admin | Create a custody record, validate its storage location, assign the initial state, and record the receiving action. | Implemented |
 | UC-053 | Update warehouse item details | Staff / Admin | Update permitted warehouse information such as location, condition notes, and storage code. | Implemented |
 | UC-054 | Move an item to stored state | Staff / Admin | Apply the valid warehouse state transition from received to stored and append a storage log. | Implemented |
-| UC-055 | Confirm a warehouse return | Staff / Admin | Mark a warehouse item as returned through a valid state transition and append the actor's storage log. | Implemented |
+| UC-055 | Confirm a warehouse return | Staff / Admin | Confirm the actual verified recipient, private return evidence and authorized completion; mark the item returned and append the custody log. Branch hardening evidence is separate from dev status. | Implemented |
 | UC-056 | View warehouse storage logs | Staff / Admin | View the immutable action history for a warehouse item. | Implemented |
 | UC-057 | Calculate item retention deadline | System | Calculate and store the retention deadline from the receiving time and configured category policy. | Implemented |
 | UC-141 | Request transfer to staff custody | Finder | Ask to transfer a found item to an official handover point when direct return is unsuitable. | Planned |
@@ -209,7 +209,7 @@ Completed UC work above is not reassigned. The 76 Partial/Planned UCs are divide
 | UC-143 | List custody transfer requests | Staff, Admin | View pending, accepted, rejected, cancelled, and completed transfer requests. | Planned |
 | UC-144 | Accept a custody transfer request | Staff, Admin | Accept a valid transfer request and assign its intake point and handler. | Planned |
 | UC-145 | Reject or cancel a custody transfer request | Finder, Staff, Admin | Reject or cancel a transfer with a reason before the item is received into custody. | Planned |
-| UC-146 | Confirm staff intake | Staff | Confirm physical receipt, create the warehouse record, and change the item state to IN_CUSTODY. | Planned |
+| UC-146 | Confirm staff intake | Staff | Confirm physical receipt, create a RECEIVED warehouse record and mark the custody request INTAKED without resolving the post or deciding ownership. | Planned |
 | UC-147 | Receive custody status notifications | Finder, Claimant | Receive updates when a custody transfer is accepted, received, moved, or released. | Planned |
 
 ### 3.10 Feedback & Reputation
@@ -356,3 +356,9 @@ Completed UC work above is not reassigned. The 76 Partial/Planned UCs are divide
 | ID | Use Case | Actors | Use Case Description | Status |
 | --- | --- | --- | --- | --- |
 | UC-168 | Manage notification delivery preferences | Authenticated User | Configure optional in-app, PWA push, immediate email, delayed-unread email, digest, and quiet-hour preferences by event category while mandatory security delivery remains enabled. | Partial |
+
+### Branch safety evidence (not status upgrades)
+
+`feat/lnfs-55` adds guards and regression evidence for UC-026–031, UC-040/042, UC-051–057, UC-058–060, UC-141–147, UC-150–155/158 and UC-168. No new actor goal is introduced by these fixes, so no new UC ID is allocated. Custody request, claim, warehouse and post states are separate: request/accept do not change the physical custodian; intake does not resolve a post or reject a claim. Only verified completed return resolves the linked posts and authorizes existing participant feedback.
+
+Full Admin disposition-order/evidence screens, all overdue task categories, provider/manual QA and shared DB rollout remain incomplete. Do not mark these Planned UCs Implemented based on this branch alone. Recompute totals with `node scripts/check-uc-catalogue.mjs`; it reads UC rows rather than an assumed fixed catalogue size.

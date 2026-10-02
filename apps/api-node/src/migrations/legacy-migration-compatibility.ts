@@ -1,9 +1,31 @@
 import type { MigrationCompatibilityEntry } from "./migration-state.js";
 
-// These exact records were read from the shared Aiven ledger on 2026-09-12.
+// Exact records read from the shared Aiven ledger on 2026-09-12 and 2026-10-02.
 // Entries with unavailable SQL remain historical compatibility records, never
 // substitutes for new forward migrations.
 export const legacyMigrationCompatibility = [
+  {
+    // Original SQL is unavailable. User-authorized forward recovery on 2026-10-02
+    // certifies only the observed schema, NOT the original migration's effects.
+    // No alias: fresh databases still require the new 057 contract.
+    version: "054_matching_feedback_periodic_refresh.sql",
+    checksum: "404c6ac5d3b9424db1a82eef2238924ac5f2ef36366c89fd4ed03b97ab60853d",
+    verifier: "matching-feedback-recovery-baseline"
+  },
+  {
+    // Original SQL is unavailable; only the current baseline and absent column
+    // are checked. Never execute a reconstructed file under this ledger name.
+    version: "055_remove_proposed_time_from_custody.sql",
+    checksum: "97d256de30d11e39472fd6b69c7680e4272b3caa74e544841726c0030ee71c10",
+    verifier: "custody-time-removal"
+  },
+  {
+    // Recovered from 70911f6 and compared read-only with the Aiven ledger.
+    // This recognizes history, NOT equivalent scope. Canonical 053 must still run.
+    version: "053_custody_and_guarded_disposition.sql",
+    checksum: "63b1268a45409de6b4b12eb7473a3e5254459bd9da0e4db1c0c3497d9e4c4eef",
+    verifier: "custody-recovery-baseline"
+  },
   {
     version: "040_peer_claim_conversations.sql",
     checksum: "b221b91ca91d232084eb2feafa77bc108dfd746ee678e8c4ec53d844904f625a",

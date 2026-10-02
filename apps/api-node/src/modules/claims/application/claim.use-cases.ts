@@ -6,6 +6,8 @@ import { validateImageUpload } from "../../../shared/domain/media.js";
 import type { ImageUpload } from "../../../shared/domain/upload.js";
 import type { MatchingRepository } from "../../matching/application/index.js";
 import type { NotificationEmailQueue, NotificationRecord, NotificationRepository } from "../../notifications/application/index.js";
+import type { CustodyRequestRepository, WarehouseRepository } from "../../warehouse/application/index.js";
+import { custodyNotifications } from "../../warehouse/application/index.js";
 import { canSubmitVerificationDecision, canUseRoom, isAppointmentEligible } from "../domain/claim-policy.js";
 import {
   findVerificationPrompt,
@@ -28,7 +30,7 @@ import type {
 } from "./claim.dto.js";
 import type { ClaimRepository, ClaimStatus } from "./claim.repository.port.js";
 
-type WorkflowNotificationKind = "CLAIM" | "CHAT" | "APPOINTMENT" | "RETURN";
+type WorkflowNotificationKind = "CLAIM" | "CHAT" | "APPOINTMENT" | "RETURN" | "CUSTODY";
 
 function claimNotFound() {
   return new AppError("not_found", "Không tìm thấy yêu cầu xác minh");
@@ -38,7 +40,8 @@ export interface ClaimDependencies {
   claimRepository: ClaimRepository;
   matchingRepository: MatchingRepository;
   notificationRepository: NotificationRepository;
-  custodyRequestRepository?: import("../../warehouse/application/custody-request.repository.port.js").CustodyRequestRepository;
+  custodyRequestRepository?: CustodyRequestRepository;
+  warehouseRepository: WarehouseRepository;
   notificationEmailQueue?: NotificationEmailQueue;
   realtimeNotifier?: {
     publishNotification(input: {
@@ -56,7 +59,7 @@ export interface ClaimDependencies {
 }
 export function createClaimUseCases(options: ClaimDependencies) {
   const {
-    claimRepository, matchingRepository, notificationRepository, custodyRequestRepository, notificationEmailQueue, realtimeNotifier, withTransaction, id, mediaStorage,
+    claimRepository, matchingRepository, notificationRepository, custodyRequestRepository, warehouseRepository, notificationEmailQueue, realtimeNotifier, withTransaction, id, mediaStorage,
     hashIdempotencyPayload, logger
   } = options;
 
@@ -368,6 +371,10 @@ export function createClaimUseCases(options: ClaimDependencies) {
         // fails, the transaction rolls back the claim and room as well.
         const post = await claimRepository.findClaimablePostForUpdate(input.postId, connection);
         if (!post) throw new AppError("conflict", "Bài viết không còn mở để nhắn tin");
+        if (input.sourceFoundPostId) {
+          const source = await claimRepository.findClaimablePostForUpdate(input.sourceFoundPostId, connection);
+          if (post.type !== "LOST" || !source || source.type !== "FOUND" || source.ownerId !== requesterId) throw new AppError("forbidden", "FOUND source phải thuộc người gửi");
+        }
 
         // A direct conversation is always between the requester and the post
         // owner. Keep the requester as claimant for both LOST and FOUND posts
@@ -413,6 +420,7 @@ export function createClaimUseCases(options: ClaimDependencies) {
           claim = createdClaim;
         }
 
+        if (input.sourceFoundPostId) await claimRepository.linkSourceFoundPost(claim.id, input.sourceFoundPostId, connection);
         const participant = await claimRepository.findParticipant(claim.id, requesterId, connection);
         if (!participant || !canUseRoom(claim.status, participant.consentStatus)) throw claimNotFound();
 
@@ -661,6 +669,7 @@ export function createClaimUseCases(options: ClaimDependencies) {
         operation: "VERIFICATION_DECISION",
         decision: input.decision,
         reason: input.reason,
+        handoverPointId: input.handoverPointId ?? null,
         correctsEventId: input.correctsEventId ?? null
       });
 
@@ -668,6 +677,10 @@ export function createClaimUseCases(options: ClaimDependencies) {
       let decisionNotification: NotificationRecord | null = null;
       let decisionNotificationUserId: string | null = null;
       let decisionRoomId: string | null = null;
+      const custodyDelivery = custodyRequestRepository ? custodyNotifications({ notificationRepository, notificationEmailQueue,
+        publishCustodyNotification: async (userId, notification) => { await realtimeNotifier?.publishNotification({ userId, notification, workflow: "CUSTODY" }); }
+      }, custodyRequestRepository) : null;
+      let custodyEvents: Array<{ userId: string; notification: NotificationRecord }> = [];
       await withTransaction(async (connection) => {
         const claim = await claimRepository.findByIdForUpdate(claimId, connection);
         const participant = claim ? await claimRepository.findParticipant(claimId, finderId, connection) : null;
@@ -680,6 +693,9 @@ export function createClaimUseCases(options: ClaimDependencies) {
         const finalActions = new Set(["VERIFICATION_ACCEPTED", "VERIFICATION_DECLINED", "CUSTODY_ESCALATED", "VERIFICATION_DECISION_CORRECTED"]);
         const latestDecision = [...history].reverse().find((event) => finalActions.has(event.action));
         const isCorrection = Boolean(input.correctsEventId);
+        if (isCorrection && input.decision === "ESCALATE_TO_CUSTODY") {
+          throw new AppError("conflict", "Không thể chuyển custody bằng cách sửa một quyết định đã kết thúc");
+        }
         if (isCorrection) {
           if (!latestDecision || latestDecision.id !== input.correctsEventId || !["ACCEPTED", "REJECTED"].includes(claim.status)) {
             throw new AppError("conflict", "Chỉ có thể sửa quyết định xác minh mới nhất");
@@ -704,62 +720,82 @@ export function createClaimUseCases(options: ClaimDependencies) {
           ? "ACCEPTED"
           : input.decision === "REQUEST_MORE_INFO"
             ? "NEED_MORE_INFO"
-            : "REJECTED";
-        const finderDecision = input.decision === "DECLINE" ? "DECLINED" : "ACCEPTED";
-        await claimRepository.updateFinderDecision({
-          claimId,
-          status: nextStatus,
-          finderDecision,
-          note: input.reason,
-          acceptedAt: input.decision === "VERIFY_FOR_MEETUP",
-          rejectedAt: input.decision === "DECLINE" || input.decision === "ESCALATE_TO_CUSTODY"
-        }, connection);
+            : input.decision === "ESCALATE_TO_CUSTODY"
+              ? claim.status
+              : "REJECTED";
+        const finderDecision = input.decision === "DECLINE" ? "DECLINED"
+          : input.decision === "ESCALATE_TO_CUSTODY" ? claim.finderDecision : "ACCEPTED";
+        if (input.decision !== "ESCALATE_TO_CUSTODY") {
+          await claimRepository.updateFinderDecision({
+            claimId,
+            status: nextStatus,
+            finderDecision,
+            note: input.reason,
+            acceptedAt: input.decision === "VERIFY_FOR_MEETUP",
+            rejectedAt: input.decision === "DECLINE"
+          }, connection);
+        }
         if (input.decision === "ESCALATE_TO_CUSTODY") {
-          await claimRepository.markRoomEscalated({ claimId, actorId: finderId, reason: input.reason }, connection);
-          if (custodyRequestRepository) {
-            const crId = id();
-            await custodyRequestRepository.createRequest({
-              id: crId,
-              claimId,
-              roomId: claim.roomId,
-              postId: context.foundPostId,
-              requesterId: finderId,
-              intakeType: "CUSTODY_TRANSFER",
-              handoverPointId: null,
-              reason: `(Sinh ra tự động từ quyết định đóng Claim #${claimId.slice(0, 8)})\n\n${input.reason}`
-            }, connection);
-            // We need to write Audit too, let's just do it
-            await custodyRequestRepository.writeAudit({
-              id: id(),
-              custodyRequestId: crId,
-              actorId: finderId,
-              action: "CREATED",
-              fromStatus: "PENDING",
-              toStatus: "PENDING",
-              metadata: { source: "CLAIM_ESCALATION" }
-            }, connection);
+          if (!custodyRequestRepository) throw new AppError("internal", "Custody request service is unavailable");
+          if (!input.handoverPointId) throw new AppError("invalid_input", "Cần chọn quầy nhận bàn giao");
+          if (!await warehouseRepository.findHandoverPointById(input.handoverPointId)) {
+            throw new AppError("not_found", "Không tìm thấy quầy bàn giao đang hoạt động");
           }
+          if (room?.escalatedAt) throw new AppError("conflict", "Yêu cầu custody đã được gửi cho claim này");
+          if (!await custodyRequestRepository.lockEligiblePost(context.foundPostId, finderId, connection)) throw new AppError("forbidden", "Custody cần bài FOUND của Finder");
+          if (await custodyRequestRepository.findActiveByPostId(context.foundPostId, finderId, connection) || await custodyRequestRepository.hasWarehouseItem(context.foundPostId, connection)) throw new AppError("conflict", "Vật phẩm đã có yêu cầu custody/hồ sơ kho");
+          const pendingCustody = await custodyRequestRepository.findPendingByClaimId(claimId, connection);
+          if (pendingCustody) throw new AppError("conflict", "Đã có yêu cầu custody đang chờ Staff xử lý");
+          await claimRepository.markRoomEscalated({ claimId, actorId: finderId, reason: input.reason }, connection);
+          const custodyRequestId = id();
+          await custodyRequestRepository.createRequest({
+            id: custodyRequestId,
+            claimId,
+            roomId: claim.roomId,
+            postId: context.foundPostId,
+            requesterId: finderId,
+            intakeType: "CUSTODY_TRANSFER",
+            handoverPointId: input.handoverPointId,
+            reason: input.reason,
+            idempotencyKey: input.idempotencyKey
+          }, connection);
+          await custodyRequestRepository.writeAudit({
+            id: id(),
+            custodyRequestId,
+            actorId: finderId,
+            action: "CREATED",
+            fromStatus: null,
+            toStatus: "PENDING",
+            metadata: { source: "CLAIM_ESCALATION", claimId }
+          }, connection);
+          custodyEvents = await custodyDelivery!.record({ id: custodyRequestId, postId: context.foundPostId, claimId, requesterId: finderId, event: "CREATED" }, connection);
         } else if (isCorrection) {
           await claimRepository.clearRoomEscalation(claimId, connection);
         }
 
-        const notificationType = nextStatus === "ACCEPTED"
+        const notificationType = input.decision === "ESCALATE_TO_CUSTODY"
+          ? "CUSTODY_REQUEST_CREATED" as const
+          : nextStatus === "ACCEPTED"
           ? "CLAIM_ACCEPTED" as const
           : nextStatus === "NEED_MORE_INFO"
             ? "CLAIM_MORE_INFO_REQUESTED" as const
             : "CLAIM_REJECTED" as const;
-        decisionNotification = await notificationRepository.create({
+        if (input.decision !== "ESCALATE_TO_CUSTODY") decisionNotification = await notificationRepository.create({
           userId: claim.claimantId,
           type: notificationType,
-          title: notificationType === "CLAIM_ACCEPTED"
-            ? "Yêu cầu trao đổi riêng đã được xác nhận"
-            : notificationType === "CLAIM_MORE_INFO_REQUESTED"
-              ? "Yêu cầu trao đổi cần thêm thông tin"
-              : "Yêu cầu trao đổi đã được cập nhật",
-          body: "Đăng nhập để xem trạng thái mới trong khu vực Trao đổi riêng.",
+          title: notificationType === "CUSTODY_REQUEST_CREATED"
+            ? "Finder đã đề nghị chuyển vật phẩm sang custody"
+            : notificationType === "CLAIM_ACCEPTED"
+              ? "Yêu cầu trao đổi riêng đã được xác nhận"
+              : notificationType === "CLAIM_MORE_INFO_REQUESTED"
+                ? "Yêu cầu trao đổi cần thêm thông tin"
+                : "Yêu cầu trao đổi đã được cập nhật",
+          body: notificationType === "CUSTODY_REQUEST_CREATED"
+            ? "Yêu cầu bàn giao đang chờ Staff xử lý. Claim chưa được chấp nhận hoặc từ chối."
+            : "Đăng nhập để xem trạng thái mới trong khu vực Trao đổi riêng.",
           entityType: "CLAIM",
           entityId: claimId,
-          dedupeKey: `claim:${claimId}:status:${nextStatus}:${input.idempotencyKey}`
+          dedupeKey: `claim:${claimId}:${notificationType}:${input.idempotencyKey}`
         }, connection);
         decisionNotificationUserId = claim.claimantId;
         decisionRoomId = room?.id ?? null;
@@ -802,11 +838,14 @@ export function createClaimUseCases(options: ClaimDependencies) {
           decisionMessage = await claimRepository.createMessage({
             roomId: room.id,
             senderId: finderId,
-            content: `⚖️ ${isCorrection ? "Finder đã điều chỉnh quyết định" : "Finder đã chọn quyết định"}: ${decisionLabel}`,
+            content: input.decision === "ESCALATE_TO_CUSTODY"
+              ? `📦 Finder đã gửi yêu cầu bàn giao vật phẩm sang custody. Claim vẫn giữ trạng thái hiện tại và đang chờ Staff xử lý. Lý do: ${input.reason}`
+              : `⚖️ ${isCorrection ? "Finder đã điều chỉnh quyết định" : "Finder đã chọn quyết định"}: ${decisionLabel}`,
             clientMessageId: `verification-decision-${input.idempotencyKey}`
           }, connection);
         }
       });
+      await custodyDelivery?.publish(custodyEvents);
       await publishWorkflowNotification({
         userId: decisionNotificationUserId,
         notification: decisionNotification,

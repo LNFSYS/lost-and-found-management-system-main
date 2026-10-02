@@ -45,6 +45,7 @@ interface MatchPairRow {
 }
 
 export interface ClaimRepository {
+  linkSourceFoundPost(claimId: string, postId: string, db: TransactionContext): Promise<void>;
   findClaimablePostForUpdate(postId: string, connection: TransactionContext): Promise<{
     id: string;
     ownerId: string;

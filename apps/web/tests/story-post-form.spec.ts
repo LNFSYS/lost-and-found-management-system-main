@@ -153,6 +153,32 @@ test("opens the persisted matching analysis after a no-match scan", async ({ pag
   await expect(page.getByText("Chưa có bài đối ứng vượt ngưỡng 45%")).toBeVisible();
 });
 
+test("hides the viewer's own LOST match but keeps inactive matching posts visible", async ({ page }) => {
+  await prepare(page, () => undefined);
+  const response = matchResponse(true);
+  const baseMatch = response.results[0];
+  const ownLostPost = { ...foundCandidate, id: "own-lost", type: "LOST", title: "Bài LOST của tôi", canEdit: true };
+  const closedLostPost = { ...foundCandidate, id: "closed-lost", type: "LOST", status: "CLOSED", title: "Bài LOST đã đóng", canEdit: false };
+  await page.route("**/api/posts/post-1/matches", (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({
+      ...response,
+      source: { ...sourcePost, type: "FOUND" },
+      results: [
+        { ...baseMatch, matchId: "match-own", candidate: ownLostPost },
+        { ...baseMatch, matchId: "match-closed", candidate: closedLostPost }
+      ]
+    })
+  }));
+
+  await page.goto("/posts/post-1/matches");
+  await expect(page.getByRole("heading", { name: "Bài LOST của tôi" })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Bài LOST đã đóng" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Không thể nhắn tin với bài này" })).toBeDisabled();
+  await expect(page.locator(".matches-hero__actions dd").first()).toHaveText("1");
+});
+
 test("opens My Posts from the top navigation after matching", async ({ page }) => {
   await prepare(page, () => undefined);
   await fillCommonForm(page);

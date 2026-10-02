@@ -30,6 +30,7 @@ export type AnswerVerificationQuestionInput = {
 export type VerificationDecisionInput = {
   decision: "VERIFY_FOR_MEETUP" | "REQUEST_MORE_INFO" | "DECLINE" | "ESCALATE_TO_CUSTODY";
   reason: string;
+  handoverPointId?: string | undefined;
   correctsEventId?: string | undefined;
   idempotencyKey: string;
 };
@@ -38,6 +39,7 @@ export type CreateMessageInput = { content: string; clientMessageId?: string | u
 
 export type CreateDirectMessageInput = {
   postId: string;
+  sourceFoundPostId?: string | undefined;
   content: string;
   clientMessageId?: string | undefined;
 };

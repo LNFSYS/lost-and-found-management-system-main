@@ -2,7 +2,7 @@ import { AppError } from "../../../shared/domain/app-error.js";
 import type { ClaimRepository } from "../../claims/application/index.js";
 import type { NotificationRecord } from "../../notifications/application/index.js";
 
-export type WorkflowNotificationKind = "CLAIM" | "CHAT" | "APPOINTMENT" | "RETURN";
+export type WorkflowNotificationKind = "CLAIM" | "CHAT" | "APPOINTMENT" | "RETURN" | "CUSTODY";
 
 interface EventStreamResponse {
   destroyed: boolean;

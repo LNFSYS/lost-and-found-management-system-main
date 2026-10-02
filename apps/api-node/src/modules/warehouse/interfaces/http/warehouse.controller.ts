@@ -1,8 +1,6 @@
 import type { Request, Response } from "express";
-import { v2 as cloudinary, type UploadApiResponse } from "cloudinary";
+import { z } from "zod";
 import { HttpError } from "../../../../shared/interfaces/http/http-error.js";
-import { validateImageUpload } from "../../../../shared/domain/media.js";
-import { env } from "../../../../shared/infrastructure/config/env.js";
 import type { WarehouseUseCases } from "../../application/warehouse.use-cases.js";
 import {
   createWarehouseItemSchema,
@@ -48,31 +46,43 @@ export function createWarehouseController({ warehouseService }: {
 
     async uploadProof(request: Request, response: Response) {
       if (!request.file) throw new HttpError(400, "Cần chọn một tệp ảnh bằng chứng");
-      const image = validateImageUpload(request.file);
-      let url: string;
-      if (env.cloudinary.cloudName && env.cloudinary.apiKey && env.cloudinary.apiSecret) {
-        try {
-          cloudinary.config({
-            cloud_name: env.cloudinary.cloudName,
-            api_key: env.cloudinary.apiKey,
-            api_secret: env.cloudinary.apiSecret,
-            secure: true
-          });
-          const result = await new Promise<UploadApiResponse>((resolve, reject) => {
-            const stream = cloudinary.uploader.upload_stream(
-              { folder: "lnfs/warehouse-proof", resource_type: "image" },
-              (err, res) => (err || !res ? reject(err || new Error("Cloudinary upload failed")) : resolve(res))
-            );
-            stream.end(request.file!.buffer);
-          });
-          url = result.secure_url;
-        } catch (err) {
-          url = `data:${image.mimeType};base64,${request.file.buffer.toString("base64")}`;
-        }
-      } else {
-        url = `data:${image.mimeType};base64,${request.file.buffer.toString("base64")}`;
-      }
-      response.json({ url });
+      const { itemId } = z.object({ itemId: z.string().uuid() }).parse(request.body);
+      response.json(await warehouseService.uploadProof(itemId, request.file, actorId(request)));
+    },
+    async getProof(request: Request, response: Response) {
+      const proof = await warehouseService.getProof(routeId(request), actorId(request));
+      response.setHeader("Cache-Control", "private, no-store");
+      response.setHeader("X-Content-Type-Options", "nosniff");
+      response.type(proof.contentType).send(proof.body);
+    },
+    async reserveItem(request: Request, response: Response) {
+      const input = z.object({ claimId: z.string().uuid(), recipientId: z.string().uuid() }).parse(request.body);
+      response.json(await warehouseService.reserveItem(routeId(request), input.claimId, input.recipientId, actorId(request)));
+    },
+    async returnRecipients(request: Request, response: Response) {
+      response.json(await warehouseService.returnRecipients(routeId(request), actorId(request)));
+    },
+    async releaseReservation(request: Request, response: Response) {
+      const { reason } = z.object({ reason: z.string().trim().min(3).max(1000) }).parse(request.body);
+      response.json(await warehouseService.releaseReservation(routeId(request), reason, actorId(request)));
+    },
+    async legalHold(request: Request, response: Response) {
+      const input = z.object({ held: z.boolean(), reason: z.string().trim().min(3).max(1000) }).parse(request.body);
+      await warehouseService.legalHold(routeId(request), input.held, input.reason, actorId(request));
+      response.sendStatus(204);
+    },
+    async requestDisposition(request: Request, response: Response) {
+      const input = z.object({ target: z.enum(["DISPOSED","DONATED","TRANSFERRED"]), reason: z.string().trim().min(3).max(1000) }).parse(request.body);
+      response.status(201).json(await warehouseService.requestDisposition(routeId(request), input.target, input.reason, actorId(request)));
+    },
+    async approveDisposition(request: Request, response: Response) {
+      await warehouseService.approveDisposition(routeId(request), actorId(request));
+      response.sendStatus(204);
+    },
+    async executeDisposition(request: Request, response: Response) {
+      const { proofIds } = z.object({ proofIds: z.array(z.string().uuid()).min(1).max(5) }).parse(request.body);
+      await warehouseService.executeDisposition(routeId(request), actorId(request), proofIds);
+      response.sendStatus(204);
     }
   };
   return warehouseController;

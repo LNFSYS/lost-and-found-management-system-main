@@ -118,9 +118,53 @@ export interface WarehouseItemLock {
   status: WarehouseStatus;
   conditionNotes: string | null;
   storageCode: string | null;
+  retentionDeadline: Date | null;
+  legalHold: boolean;
+  reservedClaimId: string | null;
 }
 
 export interface WarehouseRepository {
+  isStaff(actorId: string, db?: TransactionContext): Promise<boolean>;
+  isAdmin(actorId: string, db?: TransactionContext): Promise<boolean>;
+  lockPhysicalPost(postId: string, db: TransactionContext): Promise<void>;
+  findCompletedReturn(itemId: string, db: TransactionContext): Promise<{
+    claimId: string | null;
+    recipientId: string | null;
+    receiverName: string | null;
+    receiverIdentity: string | null;
+    receiverPhone: string | null;
+    actorId: string;
+    proofIds: string[];
+  } | null>;
+  listExpiredProofs(db: TransactionContext): Promise<Array<{ id: string; storageRef: string; }>>;
+  deleteUnusedProof(id: string, db: TransactionContext): Promise<void>;
+  listOverdueRequests(db: TransactionContext): Promise<Array<{ id: string; postId: string | null; claimId: string | null; requesterId: string; }>>;
+  lockFoundPost(postId: string, db: TransactionContext): Promise<boolean>;
+  hasItemForPost(postId: string, db: TransactionContext): Promise<boolean>;
+  hasBlockingCases(postId: string | null, db: TransactionContext, completingClaimId?: string): Promise<boolean>;
+  verifiedRecipient(claimId: string, postId: string | null, recipientId: string, db: TransactionContext): Promise<boolean>;
+  listVerifiedRecipients(postId: string | null): Promise<Array<{ claimId: string; recipientId: string; fullName: string; }>>;
+  reserve(itemId: string, claimId: string | null, db: TransactionContext): Promise<void>;
+  completeReturn(input: {
+    id: string;
+    itemId: string;
+    claimId: string | null;
+    recipientId: string | null;
+    receiverName: string;
+    receiverIdentity: string;
+    receiverPhone: string;
+    actorId: string;
+    proofIds: string[];
+    completedAt: Date;
+  }, db: TransactionContext): Promise<string | null>;
+  createProof(input: { id: string; itemId: string; actorId: string; storageRef: string; format: string; bytes: number; }): Promise<void>;
+  findProof(id: string, db?: TransactionContext): Promise<{ id: string; itemId: string; actorId: string; storageRef: string; format: string; attached: boolean; } | null>;
+  attachProof(id: string, db: TransactionContext): Promise<void>;
+  createApproval(input: { id: string; itemId: string; actorId: string; target: "DISPOSED" | "DONATED" | "TRANSFERRED"; reason: string; }, db: TransactionContext): Promise<void>;
+  lockApproval(id: string, db: TransactionContext): Promise<{ id: string; itemId: string; requesterId: string; target: "DISPOSED" | "DONATED" | "TRANSFERRED"; status: string; } | null>;
+  approveAction(id: string, actorId: string, db: TransactionContext): Promise<void>;
+  executeAction(id: string, db: TransactionContext): Promise<void>;
+  setLegalHold(itemId: string, held: boolean, db: TransactionContext): Promise<void>;
   getCatalog(): Promise<WarehouseCatalog>;
   getStats(): Promise<WarehouseDashboardStats>;
   listHandoverCounts(): Promise<HandoverItemCount[]>;
@@ -135,6 +179,7 @@ export interface WarehouseRepository {
     items: WarehouseItem[];
   }>;
   findItemById(itemId: string, db?: TransactionContext): Promise<WarehouseItem | null>;
+  findItemByPostId(postId: string): Promise<{ id: string; status: WarehouseStatus; } | null>;
   lockItemForUpdate(itemId: string, connection: TransactionContext): Promise<WarehouseItemLock | null>;
   createItem(input: {
     id: string;
@@ -175,13 +220,13 @@ export interface WarehouseRepository {
     note?: string | null;
   }, db?: TransactionContext): Promise<void>;
   generateNextStorageCode(db?: TransactionContext): Promise<string>;
-  findHandoverPointById(id: string): Promise<string>;
-  findAreaById(id: string): Promise<string>;
+  findHandoverPointById(id: string): Promise<string | null>;
+  findAreaById(id: string): Promise<string | null>;
   findBuildingById(id: string): Promise<{
     id: string;
     areaId: string;
   } | null>;
-  findPostById(id: string): Promise<string>;
+  findPostById(id: string): Promise<string | null>;
   updatePostStatus(id: string, status: string, db?: TransactionContext): Promise<void>;
   getPostInfoForIntake(postId: string, db?: TransactionContext): Promise<{
     title: string;

@@ -53,11 +53,17 @@ export const updateWarehouseItemSchema = z.object({
 }).refine(atLeastOne, "Cần ít nhất một trường để cập nhật");
 
 export const returnWarehouseItemSchema = z.object({
-  receiverName: z.string().trim().min(2, "Tên người nhận phải từ 2 ký tự").max(150),
-  receiverIdentity: z.string().trim().min(3, "Mã số phải từ 3 ký tự").max(100),
-  receiverPhone: z.string().trim().min(9, "Số điện thoại không hợp lệ").max(20),
-  proofImage: z.string().min(10, "Vui lòng tải lên hình ảnh bằng chứng"),
+  claimId: uuid.nullable().optional(),
+  recipientId: uuid.nullable().optional(),
+  receiverName: z.string().trim().min(2).max(150),
+  receiverIdentity: z.string().trim().min(3).max(100),
+  receiverPhone: z.string().trim().min(9).max(20),
+  proofImage: z.string().max(200).refine(value => value.split("\n").length <= 5 && value.split("\n").every(id => uuid.safeParse(id).success), "Cần reference proof hợp lệ"),
   note: nullableText(1000)
+}).superRefine((value, context) => {
+  if (Boolean(value.claimId) !== Boolean(value.recipientId)) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ["claimId"], message: "claimId và recipientId phải được gửi cùng nhau hoặc cùng bỏ trống" });
+  }
 });
 
 export type { CreateWarehouseItemInput, ListWarehouseItemsQuery, UpdateWarehouseItemInput, ReturnWarehouseItemInput, WarehouseStatus } from "../../application/warehouse.dto.js";

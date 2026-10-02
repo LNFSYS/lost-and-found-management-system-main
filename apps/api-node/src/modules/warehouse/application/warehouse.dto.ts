@@ -7,4 +7,12 @@ export type CreateWarehouseItemInput = { handoverPointId: string; itemName: stri
 
 export type UpdateWarehouseItemInput = { status?: "EXPIRED" | "PENDING_APPROVAL" | "RECEIVED" | "STORED" | "CLAIMED" | "RETURNED" | "DISPOSED" | "DONATED" | "TRANSFERRED" | undefined; note?: string | null | undefined; conditionNotes?: string | null | undefined; storageCode?: string | null | undefined; };
 
-export type ReturnWarehouseItemInput = { receiverName: string; receiverIdentity: string; receiverPhone: string; proofImage: string; note?: string | null | undefined; };
+export type ReturnWarehouseItemInput = {
+  claimId?: string | null;
+  recipientId?: string | null;
+  receiverName: string;
+  receiverIdentity: string;
+  receiverPhone: string;
+  proofImage: string;
+  note?: string | null | undefined;
+};

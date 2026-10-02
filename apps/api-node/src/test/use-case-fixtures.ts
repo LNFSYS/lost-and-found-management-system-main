@@ -68,7 +68,7 @@ export function createTestAdminReportingUseCases(overrides: Partial<AdminReporti
 export const adminReportingService = createTestAdminReportingUseCases();
 export function createTestAdminCatalogUseCases(overrides: Partial<AdminCatalogDependencies> = {}) { return createAdminCatalogUseCases({ adminCatalogRepository: adminCatalogRepository, id: randomUUID, ...overrides }); }
 export const adminCatalogService = createTestAdminCatalogUseCases();
-export function createTestWarehouseUseCases(overrides: Partial<WarehouseDependencies> = {}) { return createWarehouseUseCases({ warehouseRepository: warehouseRepository, withTransaction: fakeTransaction, id: randomUUID, ...overrides }); }
+export function createTestWarehouseUseCases(overrides: Partial<WarehouseDependencies> = {}) { return createWarehouseUseCases({ warehouseRepository: warehouseRepository, custodyRequestRepository: unexpectedPort("custody repository"), proofStorage: fakeMediaStorage, withTransaction: fakeTransaction, id: randomUUID, ...overrides }); }
 export const warehouseService = createTestWarehouseUseCases();
 export function createTestReturnFeedbackUseCases(overrides: Partial<ReturnFeedbackDependencies> = {}) { return createReturnFeedbackUseCases({ repository: returnFeedbackRepository, adminAuditRepository: adminAuditRepository, runInTransaction: fakeTransaction, id: randomUUID, ...overrides }); }
 export const returnFeedbackService = createTestReturnFeedbackUseCases();
@@ -78,7 +78,7 @@ export function createTestMatchingUseCases(overrides: Partial<MatchingDependenci
 export const matchingService = createTestMatchingUseCases();
 export function createTestPostUseCases(overrides: Partial<PostDependencies> = {}) { return createPostUseCases({ postRepository: postRepository, matchingRepository: matchingRepository, matchingService: matchingService, withTransaction: fakeTransaction, id: randomUUID, mediaStorage: fakeMediaStorage, logger: { warn() {} }, ...overrides }); }
 export const postService = createTestPostUseCases();
-export function createTestClaimUseCases(overrides: Partial<ClaimDependencies> = {}) { return createClaimUseCases({ claimRepository: claimRepository, matchingRepository: matchingRepository, notificationRepository: notificationRepository, custodyRequestRepository: {} as any, withTransaction: fakeTransaction, id: randomUUID, mediaStorage: fakeMediaStorage, hashIdempotencyPayload: fakeSecurity.hashToken, logger: { warn() {} }, ...overrides }); }
+export function createTestClaimUseCases(overrides: Partial<ClaimDependencies> = {}) { return createClaimUseCases({ claimRepository: claimRepository, matchingRepository: matchingRepository, notificationRepository: notificationRepository, custodyRequestRepository: {} as any, warehouseRepository, withTransaction: fakeTransaction, id: randomUUID, mediaStorage: fakeMediaStorage, hashIdempotencyPayload: fakeSecurity.hashToken, logger: { warn() {} }, ...overrides }); }
 export const claimService = createTestClaimUseCases();
 export const realtimeService = createRealtimeUseCases({ claimRepository, id: randomUUID });
 export function createTestAuthUseCases(overrides: Partial<AuthDependencies> = {}) { return createAuthUseCases({ authRepository: authRepository, userRepository: userRepository, avatarStorage: fakeAvatarStorage, security: fakeSecurity, policy: { refreshTokenDays: 30, otpTtlMinutes: 10, otpMaxAttempts: 5 }, emailService: fakeEmail, withTransaction: fakeTransaction, logger: { warn() {} }, ...overrides }); }

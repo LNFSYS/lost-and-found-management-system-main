@@ -315,6 +315,8 @@ export interface UpdateWarehouseItemPayload {
   note?: string | null;
 }
 export interface ReturnWarehouseItemPayload {
+  claimId?: string | null;
+  recipientId?: string | null;
   receiverName: string;
   receiverIdentity: string;
   receiverPhone: string;
@@ -630,7 +632,7 @@ export interface ClaimVerificationState {
     createdAt: string;
   }>;
 }
-export type NotificationType = "CLAIM_REQUEST_RECEIVED" | "CLAIM_ACCEPTED" | "CLAIM_MORE_INFO_REQUESTED" | "CLAIM_REJECTED" | "CLAIM_WITHDRAWN";
+export type NotificationType = "CLAIM_REQUEST_RECEIVED" | "CLAIM_ACCEPTED" | "CLAIM_MORE_INFO_REQUESTED" | "CLAIM_REJECTED" | "CLAIM_WITHDRAWN" | "CUSTODY_REQUEST_CREATED";
 export interface AppNotification {
   id: string;
   type: NotificationType;
@@ -829,8 +831,8 @@ export const api = {
     const requestKey = payload.requestKey ?? crypto.randomUUID();
     return raw<ClaimRecord & { idempotent: boolean }>("/claims", { method: "POST", headers: { "Idempotency-Key": requestKey }, body: JSON.stringify({ ...payload, requestKey: undefined }) });
   },
-  createDirectMessage: (postId: string, content: string, clientMessageId: string = crypto.randomUUID()) =>
-    raw<{ claim: ClaimRecord; message: ClaimMessage }>("/claims/direct-messages", { method: "POST", headers: { "Idempotency-Key": clientMessageId }, body: JSON.stringify({ postId, content }) }),
+  createDirectMessage: (postId: string, content: string, clientMessageId: string = crypto.randomUUID(), sourceFoundPostId?: string) =>
+    raw<{ claim: ClaimRecord; message: ClaimMessage }>("/claims/direct-messages", { method: "POST", headers: { "Idempotency-Key": clientMessageId }, body: JSON.stringify({ postId, content, sourceFoundPostId }) }),
   decideClaim: (claimId: string, decision: "ACCEPT" | "DECLINE" | "REQUEST_MORE_INFO", note: string, idempotencyKey: string = crypto.randomUUID()) => raw<ClaimRecord>(`/claims/${claimId}/decision`, { method: "POST", headers: { "Idempotency-Key": idempotencyKey }, body: JSON.stringify({ decision, note }) }),
   withdrawClaim: (claimId: string, idempotencyKey: string = crypto.randomUUID()) => raw<ClaimRecord>(`/claims/${claimId}/withdraw`, { method: "POST", headers: { "Idempotency-Key": idempotencyKey } }),
   listClaimRooms: () => raw<ClaimRoomsResponse>("/claims/rooms"),
@@ -869,6 +871,7 @@ export const api = {
   decideClaimVerification: (claimId: string, payload: {
     decision: "VERIFY_FOR_MEETUP" | "REQUEST_MORE_INFO" | "DECLINE" | "ESCALATE_TO_CUSTODY";
     reason: string;
+    handoverPointId?: string;
     correctsEventId?: string;
     idempotencyKey: string;
   }) => raw<{ claim: ClaimRecord; verification: ClaimVerificationState; message: ClaimMessage | null }>(`/claims/${claimId}/verification/decision`, {
@@ -926,16 +929,19 @@ export const api = {
   createWarehouseItem: (payload: CreateWarehouseItemPayload) => raw<WarehouseItem>("/staff/warehouse-items", { method: "POST", body: JSON.stringify(payload) }),
   updateWarehouseItem: (id: string, payload: UpdateWarehouseItemPayload) => raw<WarehouseItem>(`/staff/warehouse-items/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
   returnWarehouseItem: (id: string, payload: ReturnWarehouseItemPayload) => raw<WarehouseItem>(`/staff/warehouse-items/${id}/return`, { method: "POST", body: JSON.stringify(payload) }),
-  uploadWarehouseProof: (file: File) => {
+  uploadWarehouseProof: (file: File, itemId: string) => {
     const form = new FormData();
     form.append("file", file);
-    return raw<{ url: string }>("/staff/warehouse-items/upload-proof", { method: "POST", body: form });
+    form.append("itemId", itemId);
+    return raw<{ id: string; url: string }>("/staff/warehouse-items/upload-proof", { method: "POST", body: form });
   },
+  getWarehouseProof: (id: string) => mediaBlob(`/staff/warehouse-proofs/${id}`),
+  getWarehouseReturnRecipients: (id: string) => raw<{ recipients: Array<{ claimId: string; recipientId: string; fullName: string }> }>(`/staff/warehouse-items/${id}/return-recipients`),
   getWarehouseLogs: (id: string) => raw<{ logs: WarehouseStorageLog[] }>(`/staff/warehouse-items/${id}/logs`).then((payload) => payload.logs),
   // Custody requests
   listCustodyRequests: (filters: CustodyRequestFilters = {}) => raw<CustodyRequestListResponse>(`/staff/custody-requests${queryString(filters)}`),
   getCustodyRequest: (id: string) => raw<CustodyRequestDetailResponse>(`/staff/custody-requests/${id}`),
-  getMyCustodyRequestByPost: (postId: string) => raw<{ request: CustodyRequest | null }>(`/staff/custody-requests/mine/post/${postId}`),
+  getMyCustodyRequestByPost: (postId: string) => raw<{ request: CustodyRequest | null; warehouseItem?: { id: string; status: WarehouseStatus } | null }>(`/staff/custody-requests/mine/post/${postId}`),
   createCustodyRequest: (payload: CreateCustodyRequestPayload) => raw<{ request: CustodyRequest; idempotent: boolean }>("/staff/custody-requests", { method: "POST", body: JSON.stringify(payload) }),
   acceptCustodyRequest: (id: string, payload: AcceptCustodyRequestPayload) => raw<CustodyRequest>(`/staff/custody-requests/${id}/accept`, { method: "PATCH", body: JSON.stringify(payload) }),
   rejectCustodyRequest: (id: string, payload: RejectCustodyRequestPayload) => raw<CustodyRequest>(`/staff/custody-requests/${id}/reject`, { method: "PATCH", body: JSON.stringify(payload) }),

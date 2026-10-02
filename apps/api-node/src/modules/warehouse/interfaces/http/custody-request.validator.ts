@@ -18,11 +18,11 @@ export const listCustodyRequestsQuerySchema = z.object({
 export const createCustodyRequestSchema = z.object({
   claimId: uuid.nullable().optional(),
   roomId: uuid.nullable().optional(),
-  postId: uuid.nullable().optional(),
+  postId: uuid,
   reason: nullableText(2000),
   handoverPointId: uuid.nullable().optional(),
-  intakeType: z.enum(["CUSTODY_TRANSFER", "WALK_IN"]).optional(),
-  idempotencyKey: z.string().trim().max(64).optional()
+  intakeType: z.literal("CUSTODY_TRANSFER").optional(),
+  idempotencyKey: z.string().trim().min(8).max(190).regex(/^[A-Za-z0-9._:-]+$/).optional()
 });
 
 export const acceptCustodyRequestSchema = z.object({

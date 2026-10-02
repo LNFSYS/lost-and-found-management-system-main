@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode, type ImgHTMLAttributes } from "react";
 import {
   AlertTriangle,
   Archive,
@@ -109,9 +109,22 @@ function statusLabel(status: WarehouseStatus | string | null) {
 
 function nextStatus(status: WarehouseStatus): WarehouseStatus {
   if (status === "RECEIVED") return "STORED";
-  if (status === "STORED" || status === "CLAIMED") return "RETURNED";
-  if (status === "EXPIRED") return "DISPOSED";
   return status;
+}
+
+function ProofImage({ proofId, onPreview, ...props }: ImgHTMLAttributes<HTMLImageElement> & { proofId: string; onPreview: (url: string) => void }) {
+  const [url, setUrl] = useState("");
+  useEffect(() => {
+    let active = true, objectUrl = "";
+    api.getWarehouseProof(proofId).then(blob => { objectUrl = URL.createObjectURL(blob); if (active) setUrl(objectUrl); else URL.revokeObjectURL(objectUrl); }).catch(() => setUrl(""));
+    return () => { active = false; if (objectUrl) URL.revokeObjectURL(objectUrl); };
+  }, [proofId]);
+  return url ? <img {...props} src={url} onClick={() => onPreview(url)} /> : <span>Ảnh riêng tư</span>;
+}
+
+function Pagination({ page, pageSize, total, busy, onPage }: { page: number; pageSize: number; total: number; busy: boolean; onPage: (page: number) => void }) {
+  const pages = Math.max(1, Math.ceil(total / pageSize));
+  return <nav className="warehouse-pagination" aria-label="Phân trang"><button type="button" className="secondary-button" disabled={busy || page <= 1} onClick={() => onPage(page - 1)}>Trước</button><span>{page} / {pages} · {total} mục</span><button type="button" className="secondary-button" disabled={busy || page >= pages} onClick={() => onPage(page + 1)}>Sau</button></nav>;
 }
 
 function isOverdue(item: WarehouseItem) {
@@ -157,7 +170,7 @@ function CustodyQueueTab({
   pendingAction: PendingAction;
   error: string;
   notice: string;
-  onRefreshCustody: () => Promise<void>;
+  onRefreshCustody: (status?: string, page?: number) => Promise<void>;
   onNotice: (msg: string) => void;
   onError: (msg: string) => void;
   setPendingAction: (action: PendingAction) => void;
@@ -170,7 +183,8 @@ function CustodyQueueTab({
   const [rejectForm, setRejectForm] = useState(emptyRejectForm);
   const [intakeForm, setIntakeForm] = useState(emptyIntakeForm);
   const [createForm, setCreateForm] = useState(emptyCreateForm);
-  const [statusFilter, setStatusFilter] = useState<string>("ALL");
+  const [statusFilter, updateStatusFilter] = useState<string>("ALL");
+  function setStatusFilter(status: string) { updateStatusFilter(status); void onRefreshCustody(status, 1); }
 
   const allCategories = useMemo(() => {
     if (!catalog?.categories) return [];
@@ -196,8 +210,7 @@ function CustodyQueueTab({
 
   const filteredRequests = useMemo(() => {
     if (!custodyData?.items) return [];
-    if (statusFilter === "ALL") return custodyData.items;
-    return custodyData.items.filter((item) => item.status === statusFilter);
+    return custodyData.items;
   }, [custodyData, statusFilter]);
 
   const [createdWalkInItem, setCreatedWalkInItem] = useState<WarehouseItem | null>(null);
@@ -226,6 +239,7 @@ function CustodyQueueTab({
       onNotice("Đã tiếp nhận vật phẩm thành công (Walk-in)");
       setCreateForm({ ...emptyCreateForm, handoverPointId: createForm.handoverPointId });
       setWalkInModalOpen(false);
+      await onRefreshCustody();
     } catch (reason) {
       onError(messageOf(reason, "Không thể tiếp nhận vật phẩm"));
     } finally {
@@ -399,6 +413,7 @@ function defaultHandoverTime() {
           </div>
         </div>
 
+        {custodyData && <Pagination page={custodyData.page} pageSize={custodyData.pageSize} total={custodyData.total} busy={Boolean(pendingAction)} onPage={page => void onRefreshCustody(statusFilter, page)} />}
         <div className="custody-request-list">
           {filteredRequests.map((request) => {
             const statusCfg = custodyStatusLabels[request.status];
@@ -796,7 +811,7 @@ function WarehouseInventoryTab({
   pendingAction: PendingAction;
   error: string;
   notice: string;
-  onRefresh: () => Promise<void>;
+  onRefresh: (filters?: typeof emptyFilters, page?: number) => Promise<void>;
   setPendingAction: (a: PendingAction) => void;
   onNotice: (msg: string) => void;
   onError: (msg: string) => void;
@@ -806,6 +821,19 @@ function WarehouseInventoryTab({
   const [logs, setLogs] = useState<WarehouseStorageLog[]>([]);
   const [updateModalOpen, setUpdateModalOpen] = useState(false);
   const [returnTargetItem, setReturnTargetItem] = useState<WarehouseItem | null>(null);
+  const [returnRecipients, setReturnRecipients] = useState<Array<{ claimId: string; recipientId: string; fullName: string }>>([]);
+  useEffect(() => {
+    let active = true;
+    setReturnRecipients([]);
+    if (returnTargetItem) {
+      void api.getWarehouseReturnRecipients(returnTargetItem.id).then(value => {
+        if (active) setReturnRecipients(value.recipients);
+      }).catch(() => {
+        if (active) setReturnRecipients([]);
+      });
+    }
+    return () => { active = false; };
+  }, [returnTargetItem?.id]);
   const [expandedImage, setExpandedImage] = useState<string | null>(null);
 
   async function compressImage(file: File, maxWidth: number = 800, quality: number = 0.7): Promise<string> {
@@ -843,6 +871,7 @@ function WarehouseInventoryTab({
     note: ""
   });
   const [returnForm, setReturnForm] = useState({
+    claimId: "", recipientId: "",
     receiverName: "",
     receiverIdentity: "",
     receiverPhone: "",
@@ -853,19 +882,9 @@ function WarehouseInventoryTab({
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
 
   function parseStorageLogNote(noteText: string) {
-    if (!noteText) return { cleanNote: "", imageUrls: [] as string[] };
-    const imageUrlRegex = /(https?:\/\/[^\s]+\.(?:png|jpg|jpeg|webp)|https?:\/\/res\.cloudinary\.com\/[^\s]+|data:image\/[a-zA-Z]+;base64,[^\s]+)/gi;
-    const imageUrls: string[] = [];
-    let match;
-    while ((match = imageUrlRegex.exec(noteText)) !== null) {
-      imageUrls.push(match[1]);
-    }
-    let cleanNote = noteText;
-    imageUrls.forEach((url) => {
-      cleanNote = cleanNote.replace(`Hình ảnh bằng chứng: ${url}`, "").replace(`Hình ảnh bằng chứng:${url}`, "").replace(url, "");
-    });
-    cleanNote = cleanNote.split("\n").map((line) => line.trim()).filter(Boolean).join(" • ");
-    return { cleanNote, imageUrls };
+    const references = /^Proof references: ([0-9a-f -]+)$/im.exec(noteText)?.[1].trim().split(/\s+/) ?? [];
+    const cleanNote = noteText.split("\n").filter(line => !/https?:\/\/|data:image|Hình ảnh bằng chứng|Proof references:/i.test(line)).map(line => line.trim()).filter(Boolean).join(" • ");
+    return { cleanNote, imageUrls: references.filter(id => /^[0-9a-f-]{36}$/i.test(id)) };
   }
   const selectedItem = useMemo(
     () => dashboard?.items.find((item) => item.id === selectedItemId) ?? null,
@@ -877,7 +896,7 @@ function WarehouseInventoryTab({
     setPendingAction("load");
     onError("");
     try {
-      await onRefresh();
+      await onRefresh(filters, 1);
     } catch (reason) {
       onError(messageOf(reason, "Không thể lọc danh sách kho"));
     } finally {
@@ -934,7 +953,7 @@ function WarehouseInventoryTab({
 
   function openReturnModal(item: WarehouseItem) {
     setReturnTargetItem(item);
-    setReturnForm({ receiverName: "", receiverIdentity: "", receiverPhone: "", proofImages: [], note: "" });
+    setReturnForm({ claimId: "", recipientId: "", receiverName: "", receiverIdentity: "", receiverPhone: "", proofImages: [], note: "" });
   }
 
   async function submitReturn(event: FormEvent) {
@@ -945,9 +964,10 @@ function WarehouseInventoryTab({
     onNotice("");
     try {
       await api.returnWarehouseItem(returnTargetItem.id, {
-        receiverName: returnForm.receiverName,
-        receiverIdentity: returnForm.receiverIdentity,
-        receiverPhone: returnForm.receiverPhone,
+        claimId: returnForm.claimId, recipientId: returnForm.recipientId,
+        receiverName: clean(returnForm.receiverName) ?? "",
+        receiverIdentity: clean(returnForm.receiverIdentity) ?? "",
+        receiverPhone: clean(returnForm.receiverPhone) ?? "",
         proofImage: returnForm.proofImages.join("\n") || "",
         note: clean(returnForm.note)
       });
@@ -1032,6 +1052,7 @@ function WarehouseInventoryTab({
           </form>
 
           {/* Item List Grid */}
+          {dashboard && <Pagination page={dashboard.page} pageSize={dashboard.pageSize} total={dashboard.total} busy={Boolean(pendingAction)} onPage={page => void onRefresh(filters, page)} />}
           <div className="warehouse-item-list">
             {dashboard?.items.map((item) => (
               <article className={`warehouse-item-card ${selectedItemId === item.id ? "is-selected" : ""}`} key={item.id}>
@@ -1043,7 +1064,7 @@ function WarehouseInventoryTab({
                     <button type="button" className="secondary-button warehouse-select-button" onClick={() => selectItem(item)}>
                       <History size={14} /> Chi tiết & Nhật ký
                     </button>
-                    {["RECEIVED", "STORED"].includes(item.status) && (
+                    {["RECEIVED", "STORED", "CLAIMED"].includes(item.status) && (
                       <button type="button" className="primary-button warehouse-select-button" onClick={() => openReturnModal(item)}>
                         <UserCheck size={14} /> Trả cho chủ sở hữu
                       </button>
@@ -1153,10 +1174,10 @@ function WarehouseInventoryTab({
                             <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginTop: "6px" }}>
                               {imageUrls.map((url, i) => (
                                 <div key={i} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "2px" }}>
-                                  <img
-                                    src={url}
+                                  <ProofImage
+                                    proofId={url}
                                     alt={`Ảnh bằng chứng ${i + 1}`}
-                                    onClick={() => setPreviewImageUrl(url)}
+                                    onPreview={setPreviewImageUrl}
                                     style={{
                                       width: "56px",
                                       height: "56px",
@@ -1211,7 +1232,7 @@ function WarehouseInventoryTab({
               <label className="input-field">
                 <span>Trạng thái chuyển tiếp <strong className="required-star">*</strong></span>
                 <select value={updateForm.status} onChange={(event) => setUpdateForm({ ...updateForm, status: event.target.value as WarehouseStatus })}>
-                  {statusOptions.map((status) => (
+                  {statusOptions.filter(status => status.value === selectedItem?.status || ["RECEIVED","STORED","EXPIRED"].includes(status.value)).map((status) => (
                     <option key={status.value} value={status.value}>{status.label}</option>
                   ))}
                 </select>
@@ -1263,25 +1284,38 @@ function WarehouseInventoryTab({
             <form className="admin-form modal-form" style={{ padding: "16px 20px", overflowY: "auto", flex: 1, display: "flex", flexDirection: "column", gap: "12px" }} onSubmit={submitReturn}>
               <div className="staff-alert staff-alert--info" style={{ padding: "8px 12px", fontSize: "0.78rem", margin: 0, display: "flex", alignItems: "center", gap: "8px" }}>
                 <Info size={15} style={{ flexShrink: 0 }} />
-                <span>Việc bàn giao sẽ đóng bài đăng và lưu vết người nhận. Vui lòng kiểm tra kỹ giấy tờ tùy thân trước khi xác nhận.</span>
+                <span>Người nhận có thể không có tài khoản hoặc không có claim trên hệ thống. Vui lòng kiểm tra giấy tờ tùy thân trước khi xác nhận; thông tin sẽ được lưu trong hồ sơ bàn giao riêng tư.</span>
               </div>
 
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                <label className="input-field" style={{ margin: 0 }}>
+                  <span>Họ và tên người nhận <strong className="required-star">*</strong></span>
+                  <input required value={returnForm.receiverName} onChange={(event) => setReturnForm({ ...returnForm, receiverName: event.target.value })} placeholder="Nhập họ và tên người nhận" />
+                </label>
+                <label className="input-field" style={{ margin: 0 }}>
+                  <span>Số điện thoại <strong className="required-star">*</strong></span>
+                  <input required type="tel" value={returnForm.receiverPhone} onChange={(event) => setReturnForm({ ...returnForm, receiverPhone: event.target.value })} placeholder="Nhập số điện thoại" />
+                </label>
+                <label className="input-field" style={{ margin: 0 }}>
+                  <span>Mã thẻ SV / CMND / CCCD <strong className="required-star">*</strong></span>
+                  <input required value={returnForm.receiverIdentity} onChange={(event) => setReturnForm({ ...returnForm, receiverIdentity: event.target.value })} placeholder="Nhập mã số giấy tờ" />
+                </label>
+              </div>
+              {returnRecipients.length > 0 && (
+                <label className="input-field" style={{ margin: 0 }}>
+                  <span>Liên kết claim trực tuyến (không bắt buộc)</span>
+                  <select value={returnForm.claimId} onChange={(event) => {
+                    const recipient = returnRecipients.find(value => value.claimId === event.target.value);
+                    setReturnForm(prev => ({ ...prev, claimId: recipient?.claimId ?? "", recipientId: recipient?.recipientId ?? "", receiverName: recipient?.fullName ?? prev.receiverName }));
+                  }}>
+                    <option value="">Trả trực tiếp, không có claim</option>
+                    {returnRecipients.map(recipient => <option key={recipient.claimId} value={recipient.claimId}>{recipient.fullName} · {recipient.claimId.slice(0, 8)}</option>)}
+                  </select>
+                </label>
+              )}
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", alignItems: "start" }}>
                 <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-                  <label className="input-field" style={{ margin: 0 }}>
-                    <span style={{ fontSize: "0.8rem" }}>Họ và tên người nhận <strong className="required-star">*</strong></span>
-                    <input required minLength={2} style={{ height: "36px", padding: "0 10px", fontSize: "0.85rem" }} value={returnForm.receiverName} onChange={(event) => setReturnForm({ ...returnForm, receiverName: event.target.value })} placeholder="Nguyễn Văn A" />
-                  </label>
-
-                  <label className="input-field" style={{ margin: 0 }}>
-                    <span style={{ fontSize: "0.8rem" }}>Số điện thoại <strong className="required-star">*</strong></span>
-                    <input required type="tel" minLength={9} style={{ height: "36px", padding: "0 10px", fontSize: "0.85rem" }} value={returnForm.receiverPhone} onChange={(event) => setReturnForm({ ...returnForm, receiverPhone: event.target.value })} placeholder="0987654321" />
-                  </label>
-
-                  <label className="input-field" style={{ margin: 0 }}>
-                    <span style={{ fontSize: "0.8rem" }}>Mã thẻ SV / CMND / CCCD <strong className="required-star">*</strong></span>
-                    <input required minLength={3} style={{ height: "36px", padding: "0 10px", fontSize: "0.85rem" }} value={returnForm.receiverIdentity} onChange={(event) => setReturnForm({ ...returnForm, receiverIdentity: event.target.value })} placeholder="Nhập mã số..." />
-                  </label>
+                  <label><input type="checkbox" required />Tôi đã đối chiếu người nhận và bằng chứng bàn giao</label>
 
                   <label className="input-field" style={{ margin: 0 }}>
                     <span style={{ fontSize: "0.8rem" }}>Ghi chú bàn giao</span>
@@ -1311,10 +1345,10 @@ function WarehouseInventoryTab({
                       {uploadingProof ? <LoaderCircle className="spin-icon" size={22} /> : <ImagePlus size={22} />}
                     </span>
                     <strong style={{ fontSize: "0.82rem", color: "#1e293b" }}>
-                      {uploadingProof ? "Đang tải lên Cloudinary..." : returnForm.proofImages.length ? "Thêm ảnh bằng chứng khác" : "Chọn / Kéo thả ảnh bằng chứng"}
+                      {uploadingProof ? "Đang lưu ảnh riêng tư..." : returnForm.proofImages.length ? "Thêm ảnh bằng chứng khác" : "Chọn ảnh bằng chứng"}
                     </strong>
                     <small style={{ fontSize: "0.72rem", color: "#64748b" }}>
-                      {returnForm.proofImages.length ? `${returnForm.proofImages.length} ảnh đã tải lên Cloudinary` : "Tự động lưu trữ Cloudinary"}
+                      {returnForm.proofImages.length ? `${returnForm.proofImages.length} ảnh đã lưu riêng tư` : "JPEG, PNG, WEBP; tối đa 5 ảnh"}
                     </small>
                     <input
                       type="file"
@@ -1329,8 +1363,8 @@ function WarehouseInventoryTab({
                         setUploadingProof(true);
                         try {
                           for (const file of files) {
-                            const res = await api.uploadWarehouseProof(file);
-                            setReturnForm((prev) => ({ ...prev, proofImages: [...prev.proofImages, res.url] }));
+                            const res = await api.uploadWarehouseProof(file, returnTargetItem.id);
+                            setReturnForm((prev) => ({ ...prev, proofImages: [...prev.proofImages, res.id] }));
                           }
                         } catch (error) {
                           onError(messageOf(error, "Không thể tải lên ảnh bằng chứng"));
@@ -1358,10 +1392,10 @@ function WarehouseInventoryTab({
                             boxShadow: "0 2px 4px rgba(0, 0, 0, 0.06)"
                           }}
                         >
-                          <img
-                            src={img}
+                          <ProofImage
+                            proofId={img}
                             alt={`Bằng chứng ${index + 1}`}
-                            onClick={() => setPreviewImageUrl(img)}
+                            onPreview={setPreviewImageUrl}
                             style={{ width: "100%", height: "100%", objectFit: "cover", cursor: "pointer" }}
                             title="Click để phóng to ảnh bằng chứng"
                           />
@@ -1449,6 +1483,10 @@ function WarehouseInventoryTab({
 /* ─────────────── Main Staff Page ─────────────── */
 
 export function StaffPage() {
+  const warehouseQuery = useRef({ ...emptyFilters, page: 1 });
+  const custodyQuery = useRef({ status: "ALL", page: 1 });
+  const custodyLoadSequence = useRef(0);
+  const warehouseLoadSequence = useRef(0);
   const [activeTab, setActiveTab] = useState<StaffTab>("custody");
   const [catalog, setCatalog] = useState<WarehouseCatalog | null>(null);
   const [dashboard, setDashboard] = useState<WarehouseDashboard | null>(null);
@@ -1463,11 +1501,17 @@ export function StaffPage() {
   }
 
   async function loadDashboard() {
-    setDashboard(await api.listWarehouseItems({ page: 1, pageSize: 12 }));
+    const sequence = ++warehouseLoadSequence.current;
+    const q = { ...warehouseQuery.current };
+    const result = await api.listWarehouseItems({ q: q.q || undefined, status: q.status ? q.status as WarehouseStatus : undefined, handoverPointId: q.handoverPointId || undefined, page: q.page, pageSize: 12 });
+    if (sequence === warehouseLoadSequence.current) setDashboard(result);
   }
 
   async function loadCustody() {
-    setCustodyData(await api.listCustodyRequests({ page: 1, pageSize: 20 }));
+    const sequence = ++custodyLoadSequence.current;
+    const q = { ...custodyQuery.current };
+    const result = await api.listCustodyRequests({ status: q.status !== "ALL" ? q.status as CustodyRequestStatus : undefined, page: q.page, pageSize: 20 });
+    if (sequence === custodyLoadSequence.current) setCustodyData(result);
   }
 
   async function loadInitial() {
@@ -1492,17 +1536,20 @@ export function StaffPage() {
     }
   }, [activeTab, dashboard]);
 
-  async function refreshCustody() {
+  async function refreshCustody(status?: string, page?: number) {
+    if (status !== undefined) custodyQuery.current.status = status;
+    if (page !== undefined) custodyQuery.current.page = page;
     try {
-      await loadCustody();
+      await Promise.all([loadCustody(), loadDashboard()]);
     } catch (reason) {
       setError(messageOf(reason, "Không thể làm mới hàng đợi custody"));
     }
   }
 
-  async function refreshWarehouse() {
+  async function refreshWarehouse(filters?: typeof emptyFilters, page?: number) {
+    if (filters) warehouseQuery.current = { ...filters, page: page ?? 1 };
     try {
-      await loadDashboard();
+      await Promise.all([loadDashboard(), loadCustody()]);
     } catch (reason) {
       setError(messageOf(reason, "Không thể làm mới dữ liệu kho"));
     }

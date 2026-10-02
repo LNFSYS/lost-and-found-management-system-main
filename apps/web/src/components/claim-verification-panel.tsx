@@ -1,4 +1,4 @@
-import { AlertTriangle, CalendarDays, CheckCircle2, Clock3, HelpCircle, LockKeyhole, ShieldAlert, ShieldCheck, X, XCircle } from "lucide-react";
+import { AlertTriangle, CalendarDays, CheckCircle2, Clock3, HelpCircle, LoaderCircle, LockKeyhole, PackageCheck, ShieldAlert, ShieldCheck, X, XCircle } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 import { api, type ClaimMessage, type ClaimRecord, type ClaimVerificationState } from "../services/api";
 
@@ -34,6 +34,9 @@ interface Props {
 export function ClaimVerificationPanel({ claim, verification, onVerificationChange, onClaimChange, onDecisionMessage }: Props) {
   const [decision, setDecision] = useState<Decision | null>(null);
   const [reason, setReason] = useState("");
+  const [handoverPoints, setHandoverPoints] = useState<Array<{ id: string; name: string; address: string }>>([]);
+  const [handoverPointId, setHandoverPointId] = useState("");
+  const [loadingHandoverPoints, setLoadingHandoverPoints] = useState(false);
   const [correctionMode, setCorrectionMode] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -52,11 +55,26 @@ export function ClaimVerificationPanel({ claim, verification, onVerificationChan
     return "System";
   }
 
-  function openDecision(value: Decision) {
+  async function openDecision(value: Decision) {
     if (value === "VERIFY_FOR_MEETUP" && !verification?.policy.readyForDecision) return;
     setDecision(value);
     setReason("");
     setError("");
+    if (value === "ESCALATE_TO_CUSTODY") {
+      setHandoverPoints([]);
+      setHandoverPointId("");
+      setLoadingHandoverPoints(true);
+      try {
+        const result = await api.listPublicHandoverPoints();
+        const activePoints = result.handoverPoints.filter((point) => point.isActive);
+        setHandoverPoints(activePoints);
+        setHandoverPointId(activePoints[0]?.id ?? "");
+      } catch (failure) {
+        setError(failure instanceof Error ? failure.message : "Không tải được danh sách quầy bàn giao");
+      } finally {
+        setLoadingHandoverPoints(false);
+      }
+    }
   }
 
   function toggleCorrection() {
@@ -69,6 +87,7 @@ export function ClaimVerificationPanel({ claim, verification, onVerificationChan
 
   async function confirmDecision() {
     if (!verification || !decision || !reason.trim()) return;
+    if (decision === "ESCALATE_TO_CUSTODY" && !handoverPointId) return;
     setBusy(true);
     setError("");
     if (retry.current?.decision !== decision) retry.current = { decision, key: crypto.randomUUID() };
@@ -76,6 +95,7 @@ export function ClaimVerificationPanel({ claim, verification, onVerificationChan
       const result = await api.decideClaimVerification(claim.id, {
         decision,
         reason: reason.trim(),
+        handoverPointId: decision === "ESCALATE_TO_CUSTODY" ? handoverPointId : undefined,
         correctsEventId: active ? undefined : latestDecision?.id,
         idempotencyKey: retry.current.key
       });
@@ -98,7 +118,7 @@ export function ClaimVerificationPanel({ claim, verification, onVerificationChan
   const custody = Boolean(verification.roomEscalation);
   const lastReason = metadataText(latestDecision?.metadata ?? null, "reason");
   const selectedDecision = decisionLabel(latestDecision?.metadata?.decision);
-  const showActions = finder && (active || correctionMode);
+  const showActions = finder && (active || correctionMode) && !custody;
 
   return <>
     <section className={`review-panel review-panel--${accepted ? "eligible" : custody ? "custody" : verification.status.toLowerCase()}`}>
@@ -107,6 +127,12 @@ export function ClaimVerificationPanel({ claim, verification, onVerificationChan
         <strong>{accepted ? "✓ " : ""}{verification.policy.answeredCount} / {verification.policy.minimumAnswers} câu trả lời tối thiểu</strong>
         <span className={accepted ? "success" : "pending"}>{accepted ? "Đủ điều kiện đặt lịch" : verification.policy.readyForDecision ? "Có thể đưa ra quyết định" : "Chưa đủ điều kiện đặt lịch"}</span>
       </div>
+
+      {custody && <div className="review-outcome review-outcome--custody" role="status">
+        <strong>Đã gửi yêu cầu chuyển sang custody</strong>
+        <p>Yêu cầu đang chờ Staff xử lý. Claim vẫn giữ nguyên trạng thái, chưa được chấp nhận hoặc từ chối; hai bên vẫn có thể tiếp tục trao đổi.</p>
+        {verification.roomEscalation?.reason && <p><strong>Lý do:</strong> {verification.roomEscalation.reason}</p>}
+      </div>}
 
       {accepted && latestDecision && <div className="review-outcome">
         <strong>Finder đã chọn: {selectedDecision ?? "Đề xuất gặp mặt"}</strong>
@@ -117,9 +143,9 @@ export function ClaimVerificationPanel({ claim, verification, onVerificationChan
 
       {!accepted && !active && <div className="review-outcome"><strong>{selectedDecision ? `Finder đã chọn: ${selectedDecision}` : verification.status === "PENDING" ? "Chờ Finder mở conversation" : custody ? "Đã chuyển sang custody" : verification.status === "REJECTED" ? "Claim đã bị từ chối" : "Conversation đã đóng"}</strong>{lastReason && <p>{lastReason}</p>}{finder && latestDecision && <button type="button" className="review-correct" onClick={toggleCorrection}>{correctionMode ? "Ẩn lựa chọn quyết định" : "Điều chỉnh quyết định"}</button>}</div>}
 
-      {finder && (active || correctionMode) && <div ref={actionsRef} className="review-actions">
+      {showActions && <div ref={actionsRef} className="review-actions">
         <span>Bạn muốn thực hiện quyết định nào?</span>
-        {(Object.keys(decisionContent) as Decision[]).map((value) => {
+        {(Object.keys(decisionContent) as Decision[]).filter((value) => !correctionMode || value !== "ESCALATE_TO_CUSTODY").map((value) => {
           const item = decisionContent[value];
           const Icon = item.icon;
           const disabled = value === "VERIFY_FOR_MEETUP" && !verification.policy.readyForDecision;
@@ -128,14 +154,53 @@ export function ClaimVerificationPanel({ claim, verification, onVerificationChan
       </div>}
     </section>
 
-    {decision && <div className="decision-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) setDecision(null); }}>
+    {decision && decision !== "ESCALATE_TO_CUSTODY" && <div className="decision-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) setDecision(null); }}>
       <section className="decision-modal" role="dialog" aria-modal="true" aria-labelledby="decision-modal-title">
         <header><div><span>Xác nhận quyết định</span><h3 id="decision-modal-title">{decisionContent[decision].title}</h3></div><button type="button" onClick={() => setDecision(null)} disabled={busy} title="Đóng"><X /></button></header>
-        <p>{decision === "VERIFY_FOR_MEETUP" ? "Bạn đang xác nhận claim đã đủ điều kiện để tiến tới meetup." : "Quyết định sẽ cập nhật trạng thái claim trên server."}</p>
+        <p>{decision === "VERIFY_FOR_MEETUP"
+          ? "Bạn đang xác nhận claim đã đủ điều kiện để tiến tới meetup."
+          : "Quyết định sẽ cập nhật trạng thái claim trên server."}</p>
         <label>Lý do / nhận xét<textarea value={reason} onChange={(event) => setReason(event.target.value)} minLength={3} maxLength={1000} autoFocus required /></label>
         <div className="decision-audit-note"><LockKeyhole /> Quyết định này sẽ được ghi vào audit.</div>
         {error && <div className="decision-modal-error"><AlertTriangle /> {error}</div>}
         <footer><button type="button" className="secondary" onClick={() => setDecision(null)} disabled={busy}>Hủy</button><button type="button" onClick={() => void confirmDecision()} disabled={busy || !reason.trim()}>{busy ? "Đang ghi..." : "Xác nhận quyết định"}</button></footer>
+      </section>
+    </div>}
+
+    {decision === "ESCALATE_TO_CUSTODY" && <div className="custody-modal-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) setDecision(null); }}>
+      <section className="custody-modal custody-modal--claim-transfer" role="dialog" aria-modal="true" aria-labelledby="custody-transfer-title">
+        <header className="custody-modal__header">
+          <span className="modal-badge modal-badge--blue"><PackageCheck /></span>
+          <div>
+            <h3 id="custody-transfer-title">Yêu cầu Bàn giao cho Quầy Staff (Custody)</h3>
+            <p>Chuyển giao vật phẩm bài đăng <strong>{claim.posts.found.title}</strong> cho nhân viên lưu trữ tại quầy.</p>
+          </div>
+          <button type="button" className="close-btn" onClick={() => setDecision(null)} disabled={busy} title="Đóng"><X /></button>
+        </header>
+
+        <div className="claim-custody-hours"><Clock3 /><p>Giờ làm việc Phòng DVSV: thứ Hai–thứ Sáu, buổi sáng 08:00/08:15–12:00 và buổi chiều 13:30–17:00, trừ ngày nghỉ lễ.</p></div>
+
+        <form className="modal-form claim-custody-form" onSubmit={(event) => { event.preventDefault(); void confirmDecision(); }}>
+          <label htmlFor="claim-custody-handover-point">Điểm quầy nhận bàn giao <span className="required-star">*</span>
+            <select id="claim-custody-handover-point" value={handoverPointId} onChange={(event) => setHandoverPointId(event.target.value)} required disabled={loadingHandoverPoints || handoverPoints.length === 0}>
+              <option value="">{loadingHandoverPoints ? "Đang tải danh sách quầy..." : "Chọn quầy bàn giao"}</option>
+              {handoverPoints.map((point) => <option key={point.id} value={point.id}>{point.name} - {point.address}</option>)}
+            </select>
+          </label>
+          {!loadingHandoverPoints && handoverPoints.length === 0 && <small className="field-hint">Hiện chưa có quầy bàn giao nào đang hoạt động.</small>}
+          <label htmlFor="claim-custody-reason">Ghi chú / Lời nhắn cho Staff
+            <textarea id="claim-custody-reason" value={reason} onChange={(event) => setReason(event.target.value)} minLength={3} maxLength={1000} placeholder="Ví dụ: Tôi sẽ mang chìa khóa đến quầy vào giờ ra chơi 10h sáng..." required />
+          </label>
+          {loadingHandoverPoints && <small className="field-hint" role="status"><LoaderCircle className="spin-icon" /> Đang tải quầy bàn giao...</small>}
+          {error && <div className="decision-modal-error"><AlertTriangle /> {error}</div>}
+          <footer className="custody-modal-actions">
+            <button className="primary-button" type="submit" disabled={busy || loadingHandoverPoints || !handoverPointId || reason.trim().length < 3}>
+              {busy ? <LoaderCircle className="spin-icon" /> : <CheckCircle2 size={18} />}
+              {busy ? "Đang gửi yêu cầu..." : "Gửi Yêu cầu Bàn giao"}
+            </button>
+            <button className="secondary-button" type="button" onClick={() => setDecision(null)} disabled={busy}>Đóng</button>
+          </footer>
+        </form>
       </section>
     </div>}
   </>;

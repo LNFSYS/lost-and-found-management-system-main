@@ -253,7 +253,9 @@ export function createMatchingRepository(pool: SqlExecutor, withTransaction: Sql
                'penalties', JSON_ARRAY('Kết quả đã được tính lại.')
              ),
              updated_at = UTC_TIMESTAMP()
-         WHERE lost_post_id = ? OR found_post_id = ?`,
+           WHERE (lost_post_id = ? OR found_post_id = ?)
+             AND lost_post_id IN (SELECT id FROM posts WHERE type = 'LOST' AND status IN ('OPEN','MATCHED') AND deleted_at IS NULL)
+             AND found_post_id IN (SELECT id FROM posts WHERE type = 'FOUND' AND status IN ('OPEN','MATCHED') AND deleted_at IS NULL)`,
           [source.id, source.id]
         );
         for (const match of matches) await upsertResult(connection, source, match);
@@ -266,7 +268,7 @@ export function createMatchingRepository(pool: SqlExecutor, withTransaction: Sql
        ${activeMatchJoin}
        WHERE (mr.lost_post_id = ? OR mr.found_post_id = ?)
          AND mr.total_score >= ?
-         AND ${activeMatchWhere}
+         AND lost_post.deleted_at IS NULL AND found_post.deleted_at IS NULL
        ORDER BY mr.total_score DESC, mr.updated_at DESC`,
         [postId, postId, minimumScore]
       );

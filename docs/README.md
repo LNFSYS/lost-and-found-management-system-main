@@ -45,6 +45,9 @@ Không đánh dấu Done chỉ vì có migration, schema, ticket, mockup, skelet
 | [traceability-matrix.md](traceability-matrix.md) | Mapping BR → FR/NFR → UC → evidence |
 | [uc.md](uc.md) | Catalogue 168 business UC, actor, mô tả, status và ownership phần việc còn lại |
 | [notification-email-rules.md](notification-email-rules.md) | Event matrix, preference, privacy, retry và chống gửi email trùng |
+| [warehouse-retention-and-status-rules.md](warehouse-retention-and-status-rules.md) | Project retention defaults, custody/warehouse state gates, authorization and rollout constraints |
+| [LNFS-55-SAFETY-VERIFICATION.md](LNFS-55-SAFETY-VERIFICATION.md) | Feature-branch audit fixes, verification and remaining release blockers; not dev completion |
+| [database-warehouse-recovery.md](database-warehouse-recovery.md) | Aiven forward recovery, encrypted backup/rehearsal, preserved migration history and manual linkage reviews |
 | [CLEAN_ARCHITECTURE.md](CLEAN_ARCHITECTURE.md) | Node.js-only Clean Architecture, module contracts, transaction và verification |
 | [CLEAN_ARCHITECTURE_FILE_MAP.md](CLEAN_ARCHITECTURE_FILE_MAP.md) | Mapping source trước/sau refactor |
 | [LNFS_NODE_ONLY_ARCHITECTURE.drawio](LNFS_NODE_ONLY_ARCHITECTURE.drawio) | System Architecture, FE Package, BE Package |

@@ -80,8 +80,15 @@ export function createServices(persistence: Persistence, config: typeof env = en
     transaction, idFactory: id, clock: () => new Date()
   });
   const adminCatalogService = createAdminCatalogUseCases({ adminCatalogRepository, id });
-  const warehouseService = createWarehouseUseCases({ warehouseRepository, withTransaction: transaction, id });
-  const custodyRequestService = createCustodyRequestUseCases({ custodyRequestRepository, warehouseRepository, notificationRepository, withTransaction: transaction, id });
+  const realtimeService = createRealtimeUseCases({ claimRepository, id });
+  const custodyDelivery = { notificationRepository, notificationEmailQueue,
+    publishCustodyNotification: async (userId: string, notification: import("../modules/notifications/application/index.js").NotificationRecord) => {
+      realtimeService.publishNotification({ userId, notification, workflow: "CUSTODY" });
+    }
+  };
+  const proofStorage = createPrivateMediaStorage({ uploadDir: config.uploadDir, namespace: "warehouse-proof", invalidPathMessage: "Invalid proof path", notFoundMessage: "Proof not found" });
+  const warehouseService = createWarehouseUseCases({ warehouseRepository, custodyRequestRepository, proofStorage, ...custodyDelivery, withTransaction: transaction, id });
+  const custodyRequestService = createCustodyRequestUseCases({ custodyRequestRepository, warehouseRepository, ...custodyDelivery, withTransaction: transaction, id });
   const returnFeedbackService = createReturnFeedbackUseCases({
     repository: returnFeedbackRepository, adminAuditRepository, runInTransaction: transaction, id
   });
@@ -93,9 +100,8 @@ export function createServices(persistence: Persistence, config: typeof env = en
     postRepository, matchingRepository, matchingService,
     withTransaction: transaction, id, mediaStorage: postMediaStorage, logger: console
   });
-  const realtimeService = createRealtimeUseCases({ claimRepository, id });
   const claimService = createClaimUseCases({
-    claimRepository, matchingRepository, notificationRepository, custodyRequestRepository, notificationEmailQueue,
+    claimRepository, matchingRepository, notificationRepository, custodyRequestRepository, warehouseRepository, notificationEmailQueue,
     realtimeNotifier: realtimeService,
     withTransaction: transaction, id, mediaStorage: claimMediaStorage,
     hashIdempotencyPayload: security.hashToken, logger: console

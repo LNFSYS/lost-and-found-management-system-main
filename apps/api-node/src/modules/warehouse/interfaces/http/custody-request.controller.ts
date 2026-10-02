@@ -22,11 +22,11 @@ export function createCustodyRequestController({ custodyRequestService }: {
 
   const custodyRequestController = {
     async listRequests(request: Request, response: Response) {
-      response.json(await custodyRequestService.listRequests(listCustodyRequestsQuerySchema.parse(request.query)));
+      response.json(await custodyRequestService.listRequests(listCustodyRequestsQuerySchema.parse(request.query), actorId(request)));
     },
 
     async getRequest(request: Request, response: Response) {
-      response.json(await custodyRequestService.getRequest(routeId(request)));
+      response.json(await custodyRequestService.getRequest(routeId(request), actorId(request)));
     },
 
     async getMyRequestByPost(request: Request, response: Response) {

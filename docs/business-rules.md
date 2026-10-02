@@ -1,6 +1,6 @@
 # Luật nghiệp vụ LNFS
 
-Cập nhật: **21/09/2026**
+Cập nhật mapping: **02/10/2026**. Dev catalogue status và feature-branch enforcement được phân biệt; xem [verification](LNFS-55-SAFETY-VERIFICATION.md).
 
 ## 1. Quy ước
 
@@ -14,63 +14,63 @@ Cập nhật: **21/09/2026**
 
 | ID | Luật | UC | Status |
 | --- | --- | --- | --- |
-| BR-01 | Đăng ký phải qua OTP email còn hạn; email FPT/edu không bắt buộc. | UC-031, UC-032 | Enforced |
-| BR-02 | Tài khoản mới nhận role nền USER và audience STUDENT hoặc LECTURER; client không tự cấp STAFF/ADMIN. | UC-002, UC-032 | Enforced |
-| BR-03 | Password dùng bcrypt; OTP, refresh token và reset token không lưu plaintext; token có expiry/use-once phù hợp. | UC-031–UC-036 | Enforced |
-| BR-04 | Login chỉ thành công với account ACTIVE và session version hợp lệ. | UC-001, UC-033, UC-034 | Enforced |
-| BR-05 | Refresh token được rotate trong transaction; logout revoke session hiện tại. | UC-034, UC-035 | Enforced |
-| BR-06 | Protected endpoint phải xác thực JWT; Admin API chỉ chấp nhận ADMIN, Staff API chỉ chấp nhận STAFF/ADMIN theo route. | UC-001, UC-002, UC-062 | Enforced |
-| BR-07 | Post chỉ có LOST hoặc FOUND; chỉ owner được update/delete/upload/delete media của bài. | UC-040–UC-043, UC-048, UC-050 | Enforced |
-| BR-08 | Post cần title, description, category cụ thể, contact, incident time không ở tương lai và location hợp lệ. | UC-040, UC-041 | Enforced |
-| BR-09 | Building phải thuộc area đã chọn; LOST không dùng handover point; FOUND phải có nơi lưu/area/custom location/handover hợp lệ. | UC-040, UC-041, UC-055 | Enforced |
-| BR-10 | PRIVATE_DETAILS chỉ dành cho FOUND; public response phải che contact, location chi tiết và tín hiệu nhận dạng nhạy cảm. | UC-041, UC-044, UC-054 | Enforced current post/search/match/private-media scope; guided private answers chưa có |
-| BR-11 | Public board không trả post soft-deleted/hidden và chỉ trả status hợp lệ. | UC-043, UC-046, UC-047 | Enforced |
-| BR-12 | Category có hai cấp; post phải chọn danh mục cụ thể, không chọn nhóm chính. | UC-040, UC-041, UC-064 | Enforced |
-| BR-13 | Không hard-delete category/area/building còn reference; nếu còn dữ liệu phải chuyển inactive. | UC-064, UC-065 | Enforced |
-| BR-14 | Upload chỉ nhận JPEG/PNG/WEBP hợp lệ, theo giới hạn size/count; MIME phải khớp file signature. | UC-048, UC-050 | Enforced |
-| BR-15 | Media không trả storage URI nội bộ; client truy cập qua protected endpoint/proxy sau authorization. | UC-048, UC-050, UC-054 | Enforced cho post media |
-| BR-16 | Gemini chỉ chạy khi user chủ động gửi ảnh; tối đa 5 ảnh và tổng dung lượng theo validator hiện tại. | UC-086, UC-088 | Enforced |
-| BR-17 | Gemini chỉ tạo draft; user phải review/chỉnh sửa và tự xác nhận trước khi lưu post. | UC-086, UC-088 | Enforced ở Web flow |
-| BR-18 | OCR/visible text không được dùng để công khai serial đầy đủ, IMEI, QR/barcode, email, phone hoặc giấy tờ. | UC-086, UC-091 | Partial; cần provider regression test sâu hơn |
+| BR-01 | Đăng ký phải qua OTP email còn hạn; email FPT/edu không bắt buộc. | UC-001, UC-002 | Enforced |
+| BR-02 | Tài khoản mới nhận role nền USER và audience STUDENT hoặc LECTURER; client không tự cấp STAFF/ADMIN. | UC-002, UC-066 | Enforced |
+| BR-03 | Password dùng bcrypt; OTP, refresh token và reset token không lưu plaintext; token có expiry/use-once phù hợp. | UC-001–UC-007 | Enforced |
+| BR-04 | Login chỉ thành công với account ACTIVE và session version hợp lệ. | UC-003, UC-004 | Enforced |
+| BR-05 | Refresh token được rotate trong transaction; logout revoke session hiện tại. | UC-004, UC-005 | Enforced |
+| BR-06 | Protected endpoint phải xác thực JWT; Admin API chỉ chấp nhận ADMIN, Staff API chỉ chấp nhận STAFF/ADMIN theo route. | UC-003, UC-008, UC-050–UC-057, UC-062–UC-068 | Enforced |
+| BR-07 | Post chỉ có LOST hoặc FOUND; chỉ owner được update/delete/upload/delete media của bài. | UC-018–UC-025 | Enforced |
+| BR-08 | Post cần title, description, category cụ thể, contact, incident time không ở tương lai và location hợp lệ. | UC-018, UC-019 | Enforced |
+| BR-09 | Building phải thuộc area đã chọn; LOST không dùng handover point; FOUND phải có nơi lưu/area/custom location/handover hợp lệ. | UC-016, UC-018, UC-019, UC-049 | Enforced |
+| BR-10 | PRIVATE_DETAILS chỉ dành cho FOUND; public response phải che contact, location chi tiết và tín hiệu nhận dạng nhạy cảm. | UC-015, UC-019, UC-024, UC-028 | Enforced current post/search/match/private-media scope; guided private answers chưa có |
+| BR-11 | Public board không trả post soft-deleted/hidden và chỉ trả status hợp lệ. | UC-013–UC-015, UC-022 | Enforced |
+| BR-12 | Category có hai cấp; post phải chọn danh mục cụ thể, không chọn nhóm chính. | UC-016, UC-018, UC-019, UC-069–UC-071 | Enforced |
+| BR-13 | Không hard-delete category/area/building còn reference; nếu còn dữ liệu phải chuyển inactive. | UC-071, UC-074, UC-077, UC-081 | Enforced |
+| BR-14 | Upload chỉ nhận JPEG/PNG/WEBP hợp lệ, theo giới hạn size/count; MIME phải khớp file signature. | UC-023–UC-025, UC-044, UC-045 | Enforced |
+| BR-15 | Media không trả storage URI nội bộ; client truy cập qua protected endpoint/proxy sau authorization. | UC-024, UC-045, UC-055 | Enforced cho post media |
+| BR-16 | Gemini chỉ chạy khi user chủ động gửi ảnh; tối đa 5 ảnh và tổng dung lượng theo validator hiện tại. | UC-017 | Enforced |
+| BR-17 | Gemini chỉ tạo draft; user phải review/chỉnh sửa và tự xác nhận trước khi lưu post. | UC-017 | Enforced ở Web flow |
+| BR-18 | OCR/visible text không được dùng để công khai serial đầy đủ, IMEI, QR/barcode, email, phone hoặc giấy tờ. | UC-017, UC-028, UC-030 | Partial; cần provider regression test sâu hơn |
 
 ## 3. Matching và điểm bàn giao
 
 | ID | Luật | UC | Status |
 | --- | --- | --- | --- |
-| BR-19 | Create/update post gọi matching best-effort; matching failure không rollback một post hợp lệ. | UC-068 | Enforced |
-| BR-20 | Matching chỉ so sánh bài đối nghịch LOST/FOUND đang hoạt động, có candidate limit và time window. | UC-068, UC-070 | Enforced |
-| BR-21 | Score dùng text, category, location, time, image và safe OCR; weight/threshold đọc từ config/default. | UC-069, UC-070, UC-091 | Enforced |
-| BR-22 | Candidate dưới ngưỡng yếu bị bỏ; tier cao hơn chỉ là gợi ý, không auto-verify ownership, claim hoặc return. | UC-070–UC-072 | Enforced |
-| BR-23 | Khác category mạnh hoặc lệch thời gian lớn phải có penalty/cap, trừ khi tín hiệu mạnh phù hợp. | UC-070, UC-076 | Enforced |
-| BR-24 | Match lưu score thành phần, tier, matcher version và explanation; xem/re-run phải qua authorization/rate limit. | UC-071, UC-072, UC-075, UC-076 | Enforced |
-| BR-25 | Match của PRIVATE_DETAILS không lộ raw tokens/OCR/location cho actor không có quyền. | UC-054, UC-076 | Enforced trong serializer |
-| BR-26 | Public API chỉ trả handover point active. Admin không hard-delete point có appointment PENDING/ACCEPTED/RESCHEDULED hoặc reference vận hành; phải inactive. | UC-008–UC-010, UC-055–UC-057 | Enforced |
+| BR-19 | Create/update post gọi matching best-effort; matching failure không rollback một post hợp lệ. | UC-029 | Enforced |
+| BR-20 | Matching chỉ so sánh bài đối nghịch LOST/FOUND đang hoạt động, có candidate limit và time window. | UC-029–UC-031 | Enforced |
+| BR-21 | Score dùng text, category, location, time, image và safe OCR; weight/threshold đọc từ config/default. | UC-030 | Enforced |
+| BR-22 | Candidate dưới ngưỡng yếu bị bỏ; tier cao hơn chỉ là gợi ý, không auto-verify ownership, claim hoặc return. | UC-026, UC-028, UC-030, UC-110 | Enforced |
+| BR-23 | Khác category mạnh hoặc lệch thời gian lớn phải có penalty/cap, trừ khi tín hiệu mạnh phù hợp. | UC-028, UC-030 | Enforced |
+| BR-24 | Match lưu score thành phần, tier, matcher version và explanation; xem/re-run phải qua authorization/rate limit. | UC-026–UC-028, UC-031 | Enforced |
+| BR-25 | Match của PRIVATE_DETAILS không lộ raw tokens/OCR/location cho actor không có quyền. | UC-028 | Enforced trong serializer |
+| BR-26 | Public API chỉ trả handover point active. Admin không hard-delete point có appointment PENDING/ACCEPTED/RESCHEDULED hoặc reference vận hành; phải inactive. | UC-049, UC-078–UC-081 | Enforced |
 | BR-27 | Migration đã chạy không được sửa; toàn bộ lịch sử phải qua preflight trước DDL; runner và reconciliation dùng chung database lock. Alias chỉ được đối soát khi checksum/schema/backfill khớp và có phê duyệt. | N/A | Enforced trong runner và isolated MySQL tests 07/09; shared Aiven chưa reconcile |
 | BR-28 | Node.js + TypeScript là backend, business-write và migration owner duy nhất; module phụ thuộc core qua public application contract. Java đã ngừng sử dụng. | N/A | Enforced: composition root, injected ports và architecture check |
-| BR-44 | Moderation phải suy ra target từ report hoặc quan hệ backend hợp lệ; không nhận target ID tùy ý từ client. BAN_USER không được tự khóa admin hoặc khóa Admin active cuối cùng. | UC-066 | Enforced |
-| BR-45 | Avatar được lưu bằng Cloudinary authenticated storage; database chỉ lưu metadata ổn định, không dùng local absolute path làm nguồn chính. | UC-038 | Enforced |
-| BR-46 | Dashboard tách metrics theo khoảng thời gian khỏi current snapshot; UI và export phải giữ nhãn scope tương ứng. | UC-067, UC-084 | Enforced |
+| BR-44 | Moderation phải suy ra target từ report hoặc quan hệ backend hợp lệ; không nhận target ID tùy ý từ client. BAN_USER không được tự khóa admin hoặc khóa Admin active cuối cùng. | UC-083, UC-093–UC-096, UC-165, UC-067 | Enforced |
+| BR-45 | Avatar được lưu bằng Cloudinary authenticated storage; database chỉ lưu metadata ổn định, không dùng local absolute path làm nguồn chính. | UC-010, UC-011 | Enforced |
+| BR-46 | Dashboard tách metrics theo khoảng thời gian khỏi current snapshot; UI và export phải giữ nhãn scope tương ứng. | UC-084, UC-085 | Enforced |
 
 ## 4. Staff, custody và warehouse
 
 | ID | Luật | UC | Status |
 | --- | --- | --- | --- |
-| BR-29 | Shared DB không được tham chiếu file chỉ tồn tại trên một máy; shared object storage là yêu cầu trước multi-instance staging. | UC-048, UC-050 | Planned |
-| BR-30 | Metadata media còn nhưng file mất phải trả 404 có kiểm soát, không để unhandled 500. | UC-048 | Enforced cho local post media |
-| BR-31 | Admin catalog write cần audit actor, action, before/after và timestamp. | UC-064, UC-065 | Planned |
-| BR-32 | Staff page chỉ công bố hoàn thành khi có operational flow và backend role evidence. | UC-062 | Enforced cho warehouse operations hiện tại |
-| BR-33 | Claim chỉ áp dụng FOUND; Owner không claim bài của mình và một user không tạo duplicate claim. | UC-052, UC-053 | Enforced current claim API; full multi-claimant policy còn cần xác nhận |
-| BR-34 | Claim state transition phải transaction/lock; một FOUND không có hai accepted claims. | UC-003–UC-007 | Enforced cho guided verification: row lock, current-state guard, idempotency audit và unique accepted claim; appointment runtime chưa có |
-| BR-35 | Evidence chỉ hiển thị cho claimant, post owner và reviewer có quyền; private answer không trả trước cho claimant. | UC-049, UC-054, UC-087–UC-092 | Enforced cho participant-scoped evidence và guided answers: expected answer chỉ lưu hash, raw claimant answer không lưu, match result không trả cho claimant |
-| BR-36 | Evidence confidence chỉ hỗ trợ review; không phải xác minh 100% và không thay thế human verification. | UC-089, UC-090, UC-092 | Enforced cho explicit Finder review; confidence/match chỉ hỗ trợ và không tự chuyển claim sang `ACCEPTED` |
-| BR-37 | Appointment chỉ tạo sau accepted verification; một claim chỉ có một active appointment. | UC-021–UC-024 | Eligibility guard enforced: chỉ claim `ACCEPTED`; appointment lifecycle vẫn Planned |
-| BR-37A | Feedback sau trả đồ chỉ mở khi return COMPLETED có dual confirmation hoặc custody outcome được ủy quyền; mỗi participant gửi một lần và không tự cộng reputation cho chính mình. | UC-025, UC-039 | Enforced cho feedback runtime; phụ thuộc LNFS-54 để tạo completed return thật |
-| BR-38 | Disposition kho bị chặn nếu còn claim, appointment, dispute hoặc legal hold pending; overdue không tự động thanh lý. | UC-016–UC-020 | Planned |
-| BR-39 | Warehouse receive/store/return chỉ Staff/Admin; mỗi transition phải ghi actor, action, from/to, note và timestamp. | UC-011–UC-015, UC-059–UC-061 | Enforced |
-| BR-40 | FOUND mặc định do Finder giữ; Staff custody là escalation/optional branch và chỉ bắt đầu sau intake confirmation. | UC-016–UC-020 | Planned |
-| BR-41 | Native Mobile và PWA phải dùng chung authorization, privacy, validation và state rule với Web; offline không được báo transaction thành công trước server. | UC-093–UC-100 | Partial/Planned |
-| BR-42 | Retention/disposition policy theo loại vật phẩm cần đơn vị vận hành xác nhận; không tự coi thời hạn kỹ thuật là policy chính thức. | UC-016–UC-020 | TBD |
-| BR-43 | Staff chỉ xem routine conversation khi có escalation, lý do truy cập, quyền phù hợp, dữ liệu tối thiểu và audit. | UC-077–UC-083 | Planned |
+| BR-29 | Shared DB không được tham chiếu file chỉ tồn tại trên một máy; shared object storage là yêu cầu trước multi-instance staging. | UC-023–UC-025, UC-044, UC-045 | Planned |
+| BR-30 | Metadata media còn nhưng file mất phải trả 404 có kiểm soát, không để unhandled 500. | UC-024, UC-045 | Enforced cho local post media |
+| BR-31 | Admin catalog write cần audit actor, action, before/after và timestamp. | UC-069–UC-081, UC-163 | Planned |
+| BR-32 | Staff page chỉ công bố hoàn thành khi có operational flow và backend role evidence. | UC-050–UC-057, UC-143–UC-146 | Enforced cho warehouse operations hiện tại |
+| BR-33 | Claim chỉ áp dụng FOUND; Owner không claim bài của mình và một user không tạo duplicate claim. | UC-034, UC-042 | Enforced current claim API; full multi-claimant policy còn cần xác nhận |
+| BR-34 | Claim state transition phải transaction/lock; một FOUND không có hai accepted claims. | UC-034–UC-038, UC-107–UC-118 | Enforced cho guided verification: row lock, current-state guard, idempotency audit và unique accepted claim; appointment runtime chưa có |
+| BR-35 | Evidence chỉ hiển thị cho claimant, post owner và reviewer có quyền; private answer không trả trước cho claimant. | UC-043–UC-045, UC-107–UC-109 | Partial theo dev catalogue: evidence/answers là private participant-scoped; raw answer có thể lưu trong private chat, human review không dùng automatic hash comparison |
+| BR-36 | Evidence confidence chỉ hỗ trợ review; không phải xác minh 100% và không thay thế human verification. | UC-109, UC-110 | Enforced cho explicit Finder review; confidence/match chỉ hỗ trợ và không tự chuyển claim sang `ACCEPTED` |
+| BR-37 | Appointment chỉ tạo sau accepted verification; một claim chỉ có một active appointment. | UC-126–UC-133 | Eligibility guard enforced: chỉ claim `ACCEPTED`; appointment lifecycle vẫn Planned |
+| BR-37A | Feedback sau trả đồ chỉ mở khi return COMPLETED có dual confirmation hoặc custody outcome được ủy quyền; mỗi participant gửi một lần và không tự cộng reputation cho chính mình. | UC-055, UC-058–UC-060, UC-139 | Enforced cho feedback runtime; phụ thuộc LNFS-54 để tạo completed return thật |
+| BR-38 | Disposition kho bị chặn nếu còn claim, appointment, dispute hoặc legal hold pending; overdue không tự động thanh lý. | UC-148–UC-158 | Planned |
+| BR-39 | Warehouse receive/store/return chỉ Staff/Admin; mỗi transition phải ghi actor, action, from/to, note và timestamp. | UC-050–UC-057 | Enforced |
+| BR-40 | FOUND mặc định do Finder giữ; Staff custody là escalation/optional branch và chỉ bắt đầu sau intake confirmation. | UC-141–UC-147 | Planned |
+| BR-41 | Native Mobile và PWA phải dùng chung authorization, privacy, validation và state rule với Web; offline không được báo transaction thành công trước server. | N/A (channels) | Partial/Planned |
+| BR-42 | Retention/disposition policy theo loại vật phẩm cần đơn vị vận hành xác nhận; không tự coi thời hạn kỹ thuật là policy chính thức. | UC-057, UC-148, UC-151 | TBD |
+| BR-43 | Staff chỉ xem routine conversation khi có escalation, lý do truy cập, quyền phù hợp, dữ liệu tối thiểu và audit. | UC-112–UC-114, UC-164 | Planned |
 
 ## 5. Notification delivery
 
@@ -101,7 +101,7 @@ PENDING → CONVERSATION_OPEN ↔ NEED_MORE_INFO
 → ACCEPTED / REJECTED
 ~~~
 
-Custody escalation dùng `REJECTED` kèm `chat_rooms.escalated_at/by/reason` và audit `CUSTODY_ESCALATED`.
+Trên `feat/lnfs-55`, custody escalation giữ nguyên claim status, thêm `chat_rooms.escalated_at/by/reason` và audit `CUSTODY_ESCALATED`; reject/cancel custody xóa projection escalation, không xóa history. Đây chưa là completion trên dev.
 Chỉ `ACCEPTED` là appointment-eligible; `CONVERSATION_OPEN` không phải ownership verification.
 
 Quy tắc bắt buộc:
@@ -110,7 +110,7 @@ Quy tắc bắt buộc:
 2. Finder hỏi và đánh giá từng Owner; không dùng first-claim-wins.
 3. Appointment chỉ confirmed khi hai bên cùng đồng ý.
 4. Direct handover cần Finder xác nhận đã giao và Owner xác nhận đã nhận.
-5. Chỉ dual confirmation hợp lệ mới chuyển RETURNED.
+5. Direct return cần dual confirmation; custody return cần Staff authorization, verified recipient và private proof. Chỉ status string không mở feedback.
 6. Dispute/no-show không tự kết luận gian lận; có thể escalate.
 7. Nếu chuyển Staff, phải có TRANSFER_REQUESTED và intake confirmation trước IN_CUSTODY.
 
@@ -124,3 +124,18 @@ Một rule chỉ được chuyển từ Planned/Partial sang Enforced khi có ru
 ## Notification email enforcement
 
 Optional claim/chat email is never the source of truth: the committed in-app notification remains canonical. Only verified, active users with current entity access can receive a generic authenticated-link email. A read notification or opened room cancels pending optional delivery. Security OTP and password-reset email are mandatory and bypass optional preference settings. SMTP failure is isolated to outbox state and cannot roll back a committed claim, message, or notification. Known delivery failures use bounded retry; an uncertain provider timeout is quarantined/cancelled rather than retried because the current SMTP provider cannot guarantee exactly-once delivery.
+
+## 9. Branch custody safety rules (feat/lnfs-55)
+
+| ID | Rule | UC | Evidence scope |
+| --- | --- | --- | --- |
+| BR-53 | Custody needs owned active undeleted FOUND plus valid claim/room; keys scope to actor/operation and immutable original payload. One active request/intake per physical post; retry cannot expose another user's record. | UC-141–UC-146 | Branch use cases, row locks, constraints, isolated MySQL |
+| BR-54 | Request/accept are not physical custody. Intake never resolves a post or accepts/rejects ownership. Cancel/reject before intake restores room decisions, preserving all audit events. | UC-141–UC-147 | Branch state/notification tests |
+| BR-55 | CLAIMED/RETURNED/DISPOSED/DONATED/TRANSFERRED require canonical workflow, not PATCH. Staff reserve needs verified participant; release needs reason/no blocker/storage location. Legal hold and approval require Admin; requester cannot approve own order. Execution rechecks deadline, claim/appointment/dispute/hold in transaction; denied attempts are logged. | UC-053–UC-055, UC-151–UC-158 | Branch safety endpoints; full order/evidence UI remains Planned |
+| BR-56 | Project defaults are documents/cards/keys/vehicle papers 120, electronics 90, perishables 3, others 60 days. Use UTC physical receivedAt, reject future time and invalid override; not an approved university policy. | UC-052, UC-057, UC-146, UC-148 | Common policy + isolated SQL |
+| BR-57 | Canonical custody return needs actual verified claimant, existing participant relationships and Staff-private proof IDs. Completion authorizes feedback without synthetic participants. Unattached proofs expire after 72 hours; raw public/base64 identity images are not rendered from legacy notes. | UC-055, UC-058–UC-060 | Private storage port, authenticated proxy, canonical completion tests |
+| BR-58 | Create/accept/reject/cancel/intake/return notification and optional outbox commit atomically; generic privacy-safe text, event/recipient dedupe and post-commit realtime. Recipient follows only an authorized custody/claim/post link. | UC-147, UC-168 | Branch transaction/notification tests; SMTP provider unverified |
+| BR-59 | Overdue maintenance sends a deduplicated reminder, never disposes/deletes/transitions item. Legal hold does not suppress operational reminders. | UC-150 | Branch custody-item reminder only; stale claims/meetups and walk-in reminders remain gaps |
+| BR-60 | Saved permitted inactive matches survive refresh; deleted/hidden/private data remain guarded. Own LOST is hidden. LOST chat retains authorized physical FOUND linkage; absent linkage cannot create custody/ownership workflow. | UC-026–UC-031, UC-040, UC-042 | Real repository/HTTP regression |
+
+See [warehouse rules](warehouse-retention-and-status-rules.md) for state semantics, rollout prerequisites and remaining gaps. Existing dev Planned/Partial actor goals are not upgraded by this branch rule table.

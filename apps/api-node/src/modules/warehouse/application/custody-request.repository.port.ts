@@ -11,6 +11,7 @@ export interface CustodyRequest {
   status: CustodyRequestStatus;
   intakeType: CustodyIntakeType;
   reason: string | null;
+  requestHash?: string | null;
   rejectionReason: string | null;
   handoverPoint: { id: string; name: string | null; address: string | null } | null;
   confirmedHandoverAt: string | null;
@@ -25,6 +26,7 @@ export interface CustodyRequestLock {
   claimId: string | null;
   postId: string | null;
   requesterId: string;
+  roomId: string | null;
   status: CustodyRequestStatus;
   intakeType: CustodyIntakeType;
   handoverPointId: string | null;
@@ -54,11 +56,18 @@ export interface CustodyRequestRepository {
 
   lockForUpdate(id: string, connection: TransactionContext): Promise<CustodyRequestLock | null>;
 
-  findByIdempotencyKey(key: string): Promise<CustodyRequest | null>;
+  findByIdempotencyKey(key: string, actorId: string, db?: TransactionContext): Promise<CustodyRequest | null>;
 
-  findPendingByClaimId(claimId: string): Promise<CustodyRequest | null>;
+  findPendingByClaimId(claimId: string, db?: TransactionContext): Promise<CustodyRequest | null>;
 
-  findActiveByPostId(postId: string, requesterId: string): Promise<CustodyRequest | null>;
+  findActiveByPostId(postId: string, requesterId: string, db?: TransactionContext): Promise<CustodyRequest | null>;
+
+  lockEligiblePost(postId: string, actorId: string, db: TransactionContext): Promise<boolean>;
+  validateClaimLink(postId: string, actorId: string, claimId: string, roomId: string | null, db: TransactionContext): Promise<boolean>;
+  hasWarehouseItem(postId: string, db: TransactionContext): Promise<boolean>;
+  isStaff(actorId: string, db?: TransactionContext): Promise<boolean>;
+  clearEscalation(claimId: string, db: TransactionContext): Promise<void>;
+  notificationRecipients(postId: string | null, claimId: string | null, requesterId: string, db: TransactionContext): Promise<string[]>;
 
   createRequest(input: {
     id: string;

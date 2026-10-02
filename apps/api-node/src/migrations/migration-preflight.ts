@@ -24,7 +24,13 @@ export async function preflightMigrations(input: { directory: string; pool: Migr
       appliedMigrations: state.ledger.length,
       appliedAttempts: state.attempts.filter((attempt) => attempt.status === "APPLIED").length,
       compatibilityRecords: compatibilityMatches.filter((match) => match.source === "ledger").map((match) => match.version),
-      pending
+      pending,
+      warnings: [
+        ...(compatibilityMatches.some(match => match.verifier === "custody-recovery-baseline")
+          ? ["Historical 053 ledger scope differs from recovered custody runtime schema. No alias: canonical 053 and additive 054 remain required; old disposition/legal-hold tables are not certified by this recovery."] : []),
+        ...(compatibilityMatches.some(match => ["matching-feedback-recovery-baseline", "custody-time-removal"].includes(match.verifier))
+          ? ["Original SQL for historical matching 054 / custody-time 055 is unavailable. Exact ledger records and observed schema are recognized for user-approved forward recovery only; original data/configuration effects are NOT certified or replayed."] : [])
+      ]
     };
   } catch (error) {
     await connection.query("ROLLBACK").catch(() => undefined);

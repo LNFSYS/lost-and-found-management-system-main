@@ -174,7 +174,7 @@ Luồng sau là target end-to-end. Current runtime mới bao phủ đến claim/
 4. Owner gửi verification request cho FOUND phù hợp.
 5. Finder thực hiện `ACCEPT / OPEN_CONVERSATION`; hệ thống mở conversation riêng đúng cặp Owner–Finder–LOST–FOUND và giữ claim ở `CONVERSATION_OPEN`.
 6. Finder dùng guided questions theo category; Owner trả lời qua private answer control mà không xem expected answer.
-7. Finder chọn `NEED_MORE_INFO`, final `ACCEPTED`, `REJECTED`, hoặc custody escalation (`REJECTED` + escalation metadata). Chỉ `ACCEPTED` đủ điều kiện tạo appointment.
+7. Finder chọn `NEED_MORE_INFO`, final `ACCEPTED`, `REJECTED`, hoặc custody escalation. Trên `feat/lnfs-55`, custody giữ nguyên claim status, có request riêng và escalation metadata; request/accept chưa đổi custodian, intake chưa resolve post. Chỉ `ACCEPTED` đủ điều kiện tạo appointment. Xem [warehouse rules](warehouse-retention-and-status-rules.md).
 8. Hai bên đề xuất và cùng xác nhận thời gian/địa điểm; appointment chỉ confirmed khi có mutual agreement.
 9. Hai bên gặp trực tiếp; Finder xác nhận HANDED_OVER, Owner xác nhận RECEIVED.
 10. Chỉ khi dual confirmation hợp lệ, hệ thống mới chuyển item sang RETURNED/đóng hồ sơ.

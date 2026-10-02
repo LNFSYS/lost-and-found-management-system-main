@@ -16,6 +16,8 @@ export function createStaffRoutes({ warehouseController, custodyRequestControlle
   // Allow any authenticated user (Finder / Staff / Admin) to create custody requests
   staffRoutes.post("/custody-requests", requireAuth, (req, res, next) => custodyRequestController.createRequest(req, res).catch(next));
   staffRoutes.get("/custody-requests/mine/post/:postId", requireAuth, (req, res, next) => custodyRequestController.getMyRequestByPost(req, res).catch(next));
+  staffRoutes.get("/custody-requests/:id", requireAuth, (req, res, next) => custodyRequestController.getRequest(req, res).catch(next));
+  staffRoutes.patch("/custody-requests/:id/cancel", requireAuth, (req, res, next) => custodyRequestController.cancelRequest(req, res).catch(next));
 
   // Restricted routes for Staff and Admin only
   staffRoutes.use(requireAuth, requireAnyRole("STAFF", "ADMIN"));
@@ -42,16 +44,22 @@ export function createStaffRoutes({ warehouseController, custodyRequestControlle
   staffRoutes.get("/warehouse-items", (req, res, next) => warehouseController.listItems(req, res).catch(next));
   staffRoutes.post("/warehouse-items", (req, res, next) => warehouseController.createItem(req, res).catch(next));
   staffRoutes.post("/warehouse-items/upload-proof", uploadProofMiddleware, (req, res, next) => warehouseController.uploadProof(req, res).catch(next));
+  staffRoutes.get("/warehouse-proofs/:id", (req, res, next) => warehouseController.getProof(req, res).catch(next));
+  staffRoutes.post("/warehouse-items/:id/reserve", (req, res, next) => warehouseController.reserveItem(req, res).catch(next));
+  staffRoutes.post("/warehouse-items/:id/release-reservation", (req, res, next) => warehouseController.releaseReservation(req, res).catch(next));
+  staffRoutes.post("/warehouse-items/:id/legal-hold", (req, res, next) => warehouseController.legalHold(req, res).catch(next));
+  staffRoutes.post("/warehouse-items/:id/disposition", (req, res, next) => warehouseController.requestDisposition(req, res).catch(next));
+  staffRoutes.post("/warehouse-approvals/:id/approve", (req, res, next) => warehouseController.approveDisposition(req, res).catch(next));
+  staffRoutes.post("/warehouse-approvals/:id/execute", (req, res, next) => warehouseController.executeDisposition(req, res).catch(next));
   staffRoutes.patch("/warehouse-items/:id", (req, res, next) => warehouseController.updateItem(req, res).catch(next));
   staffRoutes.post("/warehouse-items/:id/return", (req, res, next) => warehouseController.returnItem(req, res).catch(next));
+  staffRoutes.get("/warehouse-items/:id/return-recipients", (req, res, next) => warehouseController.returnRecipients(req, res).catch(next));
   staffRoutes.get("/warehouse-items/:id/logs", (req, res, next) => warehouseController.listLogs(req, res).catch(next));
 
   // Custody request management
   staffRoutes.get("/custody-requests", (req, res, next) => custodyRequestController.listRequests(req, res).catch(next));
-  staffRoutes.get("/custody-requests/:id", (req, res, next) => custodyRequestController.getRequest(req, res).catch(next));
   staffRoutes.patch("/custody-requests/:id/accept", (req, res, next) => custodyRequestController.acceptRequest(req, res).catch(next));
   staffRoutes.patch("/custody-requests/:id/reject", (req, res, next) => custodyRequestController.rejectRequest(req, res).catch(next));
-  staffRoutes.patch("/custody-requests/:id/cancel", (req, res, next) => custodyRequestController.cancelRequest(req, res).catch(next));
   staffRoutes.post("/custody-requests/:id/intake", (req, res, next) => custodyRequestController.confirmIntake(req, res).catch(next));
 
   return staffRoutes;
