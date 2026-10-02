@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, rm, writeFile, readFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import test from "node:test";
+import test, { after } from "node:test";
 import mysql, { type Pool, type RowDataPacket } from "mysql2/promise";
 import { runMigrations } from "../migrations/migration-runner.js";
 import { migrationLockName, readMigrationFiles, type MigrationPool } from "../migrations/migration-state.js";
@@ -12,6 +12,9 @@ import { canonicalClaimVersion, legacyClaimVersion, reconcileClaimMigration } fr
 import { createPersistence } from "../main/persistence.js";
 import { createReturnFeedbackUseCases } from "../modules/returns/application/return-feedback.use-cases.js";
 import { exerciseHttpRuntime } from "../test/http-runtime-scenario.js";
+import { pool as defaultPool } from "../main/database.js";
+
+after(async () => { await defaultPool.end(); });
 
 const enabled = process.env.LNFS_DB_INTEGRATION === "1";
 const directory = fileURLToPath(new URL("../migrations/", import.meta.url));
@@ -97,7 +100,8 @@ test("isolated MySQL: fresh/legacy migration reconciliation and runtime contract
       await runMigrations({ directory: beforeAlias, pool: asMigrationPool(pool), log: silent });
       const data = await fixture(pool, true);
       const oldDir = await migrationDirectory(42);
-      await writeFile(path.join(oldDir, legacyClaimVersion), files.find((f) => f.version === canonicalClaimVersion)!.sql);
+      // Exact historical SQL from 6e3491b, not current SQL renamed to an audited alias.
+      await writeFile(path.join(oldDir, legacyClaimVersion), await readFile(new URL("../test/fixtures/040_peer_claim_conversations.sql", import.meta.url), "utf8"));
       await runMigrations({ directory: oldDir, pool: asMigrationPool(pool), log: silent });
       await runMigrations({ directory, pool: asMigrationPool(pool), log: silent });
       const [before] = await pool.query<RowDataPacket[]>("SELECT * FROM schema_migrations ORDER BY version");

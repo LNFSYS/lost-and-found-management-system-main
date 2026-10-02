@@ -31,3 +31,42 @@ test("semantic application errors preserve the previous HTTP status and payload"
     code: "PAYLOAD_TOO_LARGE", message: "Nội dung gửi lên vượt quá giới hạn cho phép"
   });
 });
+
+test("database connection failures return a retryable unavailable response", () => {
+  const error = Object.assign(new Error("read ECONNRESET"), { code: "ECONNRESET" });
+  const result = responseFor(error);
+  assert.equal(result.status, 503);
+  assert.deepEqual(result.body, { message: "Kết nối cơ sở dữ liệu tạm thời gián đoạn, vui lòng thử lại." });
+});
+
+test("database failure logs identify the route without raw URLs or credentials", (t) => {
+  const log = t.mock.method(console, "error", () => {});
+  const result = { status: 0 };
+  const response = {
+    status(status: number) { result.status = status; return this; },
+    json() { return this; }
+  };
+  const request = {
+    method: "POST", route: { path: "/warehouse-items/:id/return" },
+    originalUrl: "/warehouse-items/private-id/return?token=private-token",
+    headers: { authorization: "Bearer private-token" }
+  };
+  errorHandler(Object.assign(new Error("private connection message"), { code: "ECONNRESET" }), request as Request, response as Response, () => {});
+  assert.equal(result.status, 503);
+  assert.deepEqual(log.mock.calls[0].arguments, ["Database connection unavailable", {
+    code: "ECONNRESET", method: "POST", route: "/warehouse-items/:id/return"
+  }]);
+});
+
+test("temporary and failed DNS lookups return 503 without disclosing the hostname", (t) => {
+  const log = t.mock.method(console, "error", () => {});
+  for (const code of ["EAI_AGAIN", "ENOTFOUND"]) {
+    const error = Object.assign(new Error(`getaddrinfo ${code} private-db-host`), { code, syscall: "getaddrinfo" });
+    const result = responseFor(error);
+    assert.equal(result.status, 503);
+    assert.deepEqual(result.body, { message: "Kết nối cơ sở dữ liệu tạm thời gián đoạn, vui lòng thử lại." });
+  }
+  assert.equal(log.mock.calls.length, 2);
+  assert.equal(JSON.stringify(log.mock.calls.map(call => call.arguments)).includes("private-db-host"), false);
+  assert.equal((log.mock.calls[0].arguments[1] as { syscall: string }).syscall, "getaddrinfo");
+});

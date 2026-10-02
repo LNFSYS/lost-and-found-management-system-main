@@ -24,15 +24,14 @@ async function captureQuery(run: () => Promise<unknown>) {
   }
 }
 
-test("stored matching results exclude inactive or deleted posts on both sides", async () => {
+test("saved matching history includes inactive posts but excludes deleted posts on both sides", async () => {
   const captured = await captureQuery(() => matchingRepository.listForPost("post-id", 0.45));
 
   assert.match(captured.query, /INNER JOIN posts lost_post/);
   assert.match(captured.query, /INNER JOIN posts found_post/);
   assert.match(captured.query, /lost_post\.deleted_at IS NULL/);
   assert.match(captured.query, /found_post\.deleted_at IS NULL/);
-  assert.match(captured.query, /lost_post\.status IN \('OPEN', 'MATCHED'\)/);
-  assert.match(captured.query, /found_post\.status IN \('OPEN', 'MATCHED'\)/);
+  assert.doesNotMatch(captured.query, /status IN/);
   assert.deepEqual(captured.values, ["post-id", "post-id", 0.45]);
 });
 

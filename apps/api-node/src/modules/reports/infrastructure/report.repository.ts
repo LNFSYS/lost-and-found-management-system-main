@@ -119,6 +119,15 @@ export function createReportRepository(database: SqlExecutor): ReportRepository 
     },
 
     async create(input, connection) {
+      // Serialize dispute creation with the physical item's disposition gate.
+      const type = input.target.entityType;
+      const targetId = input.target.entityId;
+      const sourceQuery = type === "POST" ? "SELECT ? AS post_id"
+        : type === "CLAIM" ? "SELECT COALESCE(source_found_post_id,post_id) AS post_id FROM claims WHERE id = ?"
+          : type === "CHAT" ? "SELECT COALESCE(c.source_found_post_id,c.post_id) AS post_id FROM chat_rooms r JOIN claims c ON c.id = r.claim_id WHERE r.id = ?"
+            : "SELECT COALESCE(c.source_found_post_id,c.post_id) AS post_id FROM return_appointments a JOIN claims c ON c.id = a.claim_id WHERE a.id = ?";
+      const [targets] = await executor(connection).execute<RowDataPacket[]>(sourceQuery, [targetId]);
+      if (targets[0]?.post_id) await executor(connection).execute("SELECT id FROM posts WHERE id = ? FOR UPDATE", [targets[0].post_id]);
       await executor(connection).execute(
         `INSERT INTO reports (id, reporter_id, entity_type, entity_id, source_type, source_id, reason, details, idempotency_key, request_hash)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,

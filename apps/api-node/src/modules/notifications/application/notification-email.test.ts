@@ -28,6 +28,16 @@ const notification: NotificationRecord = {
   createdAt: "2026-09-23T00:00:00.000Z"
 };
 
+test("same-day, overnight and UTC quiet hours end at the next local boundary", () => {
+  const day = { ...preferences, quietHoursStart: "09:00", quietHoursEnd: "17:00" };
+  assert.equal(quietHoursEnd(day, new Date("2026-10-02T05:00:00Z"))?.toISOString(), "2026-10-02T10:00:00.000Z");
+  assert.equal(quietHoursEnd(day, new Date("2026-10-02T10:00:00Z")), null);
+  const night = { ...preferences, quietHoursStart: "22:00", quietHoursEnd: "08:00" };
+  assert.equal(quietHoursEnd(night, new Date("2026-10-02T16:00:00Z"))?.toISOString(), "2026-10-03T01:00:00.000Z");
+  assert.equal(quietHoursEnd(night, new Date("2026-10-03T00:00:00Z"))?.toISOString(), "2026-10-03T01:00:00.000Z");
+  assert.equal(quietHoursEnd({ ...day, timezone: "UTC" }, new Date("2026-10-02T12:00:00Z"))?.toISOString(), "2026-10-02T17:00:00.000Z");
+});
+
 function repository(overrides: Partial<NotificationEmailRepository> = {}) {
   return {
     getPreferences: async () => preferences,

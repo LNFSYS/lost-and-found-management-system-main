@@ -21,7 +21,7 @@ export function quietHoursEnd(preferences: NotificationEmailPreferences, now: Da
   const end = clockMinutes(preferences.quietHoursEnd);
   const within = start < end ? current >= start && current < end : current >= start || current < end;
   if (!within) return null;
-  const minutes = current >= start ? 1_440 - current + end : end - current;
+  const minutes = start < end || current < end ? end - current : 1_440 - current + end;
   return new Date(now.getTime() + Math.max(1, minutes) * 60_000);
 }
 
@@ -56,12 +56,14 @@ function eventCopy(eventType: NotificationEmailEvent, count: number) {
   }
 }
 
-function genericContent(count: number, entityId: string | null, frontendUrl: string, eventType: NotificationEmailEvent, summaryLink = false) {
+function genericContent(count: number, entityId: string | null, frontendUrl: string, eventType: NotificationEmailEvent, summaryLink = false, entityType?: string | null) {
   // Only claim/chat rows have a guaranteed participant-scoped detail route. Other
   // categories use the authenticated notification center instead of guessing a
   // claim URL from an appointment/custody/feedback entity id.
   const useSummaryLink = summaryLink || !["CHAT", "CLAIM"].includes(eventType);
-  const deepLink = useSummaryLink
+  const deepLink = entityType === "CUSTODY_REQUEST" && entityId && !summaryLink
+    ? new URL(`/notifications?custodyRequestId=${encodeURIComponent(entityId)}`, frontendUrl).toString()
+    : useSummaryLink
     ? new URL("/notifications", frontendUrl).toString()
     : entityId ? new URL(`/claims/${entityId}`, frontendUrl).toString() : new URL("/home", frontendUrl).toString();
   const copy = eventCopy(eventType, count);
@@ -143,7 +145,7 @@ export function createNotificationEmailWorker(options: {
     }
     const distinctEntities = new Set(eligible.map((entry) => entry.entityId).filter(Boolean)).size;
     const content = genericContent(eligible.length, eligible[0]!.entityId, options.frontendUrl, item.eventType,
-      item.deliveryMode === "DIGEST" && distinctEntities > 1);
+      item.deliveryMode === "DIGEST" && distinctEntities > 1, eligible[0]!.entityType);
     try {
       await options.emailDelivery.send({
         to: eligible[0]!.email,

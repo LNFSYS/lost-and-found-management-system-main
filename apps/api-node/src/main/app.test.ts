@@ -2,13 +2,16 @@ import jwt from "jsonwebtoken";
 import assert from "node:assert/strict";
 import { once } from "node:events";
 import type { AddressInfo } from "node:net";
-import test from "node:test";
+import test, { after } from "node:test";
 import type { AdminUserRecord } from "../modules/admin/application/admin-user.repository.port.js";
 import type { SystemConfigRecord } from "../modules/system-config/application/system-config.repository.port.js";
 import type { Role } from "../shared/domain/auth.js";
 import { env } from "../shared/infrastructure/config/env.js";
 import { adminReportingService, adminUserService, authService, claimRepository, reportService, returnFeedbackService, systemConfigService, testServices } from "../test/use-case-fixtures.js";
 import { createApp } from "./app.js";
+import { pool } from "./database.js";
+
+after(async () => { await pool.end(); });
 
 const userId = "11111111-1111-4111-8111-111111111111";
 const configId = "22222222-2222-4222-8222-222222222222";

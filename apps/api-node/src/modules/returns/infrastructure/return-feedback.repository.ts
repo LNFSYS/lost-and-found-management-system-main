@@ -109,13 +109,14 @@ export function createReturnFeedbackRepository(pool: SqlExecutor) {
       const [rows] = await sqlExecutor(connection).execute<AppointmentRow[]>(
         `SELECT ra.id, ra.claim_id, ra.post_id, ra.status, ra.completed_at,
               ra.finder_confirmed_at, ra.owner_confirmed_at, ra.custody_authorized_at,
-              c.claimant_id, claimant.full_name AS claimant_name,
+              claimant.id AS claimant_id, claimant.full_name AS claimant_name,
               p.user_id AS finder_id, finder.full_name AS finder_name,
               p.title AS post_title
        FROM return_appointments ra
        INNER JOIN claims c ON c.id = ra.claim_id
        INNER JOIN posts p ON p.id = ra.post_id
-       INNER JOIN users claimant ON claimant.id = c.claimant_id
+       INNER JOIN posts target ON target.id = c.post_id
+       INNER JOIN users claimant ON claimant.id = CASE WHEN c.source_found_post_id IS NOT NULL THEN target.user_id ELSE c.claimant_id END
        INNER JOIN users finder ON finder.id = p.user_id
        WHERE ra.id = ?
        LIMIT 1${forUpdate ? " FOR UPDATE" : ""}`,

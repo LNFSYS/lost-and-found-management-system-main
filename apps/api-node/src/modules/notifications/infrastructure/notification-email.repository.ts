@@ -189,7 +189,10 @@ export function createNotificationEmailRepository(pool: SqlExecutor) {
       const [rows] = await pool.execute<OutboxRow[]>(
         `SELECT ${outboxColumns}, u.email, (u.email_verified_at IS NOT NULL) AS email_verified,
           (u.status = 'ACTIVE') AS account_active, (n.is_read = FALSE) AS notification_unread,
-          CASE WHEN o.entity_type <> 'CLAIM' THEN TRUE
+          CASE WHEN o.entity_type = 'CUSTODY_REQUEST' THEN EXISTS (
+              SELECT 1 FROM custody_requests cr WHERE cr.id = o.entity_id AND (cr.requester_id = o.recipient_user_id
+                OR EXISTS(SELECT 1 FROM user_roles ur WHERE ur.user_id = o.recipient_user_id AND ur.role_code IN ('STAFF','ADMIN'))))
+            WHEN o.entity_type <> 'CLAIM' THEN TRUE
             WHEN EXISTS (SELECT 1 FROM claim_participants cp WHERE cp.claim_id = o.entity_id AND cp.user_id = o.recipient_user_id) THEN TRUE
             ELSE FALSE END AS entity_accessible
          FROM notification_email_outbox o

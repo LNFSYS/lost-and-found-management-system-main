@@ -26,6 +26,9 @@ export async function runMigrations(input: {
     // Validate all history before even the first pending migration can auto-commit DDL.
     const compatibilityMatches = validateMigrationState(files, state, legacyMigrationCompatibility);
     await verifyMigrationCompatibility(connection, compatibilityMatches);
+    for (const match of compatibilityMatches.filter(match => ["matching-feedback-recovery-baseline", "custody-time-removal"].includes(match.verifier))) {
+      log(`Recognized exact historical record ${match.version} by current-schema verification only; original SQL/data/configuration effects remain unavailable and unverified. No alias or replay.`);
+    }
     const pending = pendingMigrationFiles(files, state, compatibilityMatches);
     await connection.query(`CREATE TABLE IF NOT EXISTS schema_migrations (
       version VARCHAR(100) PRIMARY KEY, checksum CHAR(64) NOT NULL,

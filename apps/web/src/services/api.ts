@@ -314,6 +314,87 @@ export interface UpdateWarehouseItemPayload {
   storageCode?: string | null;
   note?: string | null;
 }
+export interface ReturnWarehouseItemPayload {
+  claimId?: string | null;
+  recipientId?: string | null;
+  receiverName: string;
+  receiverIdentity: string;
+  receiverPhone: string;
+  proofImage: string;
+  note?: string | null;
+}
+export type CustodyRequestStatus = "PENDING" | "ACCEPTED" | "REJECTED" | "CANCELLED" | "INTAKED";
+export type CustodyIntakeType = "CUSTODY_TRANSFER" | "WALK_IN";
+export interface CustodyRequest {
+  id: string;
+  claimId: string | null;
+  roomId: string | null;
+  postId: string | null;
+  requester: { id: string; fullName: string | null };
+  handler: { id: string; fullName: string | null } | null;
+  status: CustodyRequestStatus;
+  intakeType: CustodyIntakeType;
+  reason: string | null;
+  rejectionReason: string | null;
+  handoverPoint: { id: string; name: string | null; address: string | null } | null;
+  confirmedHandoverAt: string | null;
+  warehouseItemId: string | null;
+  createdAt: string;
+  updatedAt: string;
+  post: { id: string; title: string | null } | null;
+}
+export interface CustodyRequestAuditEntry {
+  id: string;
+  custodyRequestId: string;
+  actorId: string;
+  actorName: string | null;
+  action: string;
+  fromStatus: string | null;
+  toStatus: string;
+  metadata: Record<string, unknown> | null;
+  createdAt: string;
+}
+export interface CustodyRequestListResponse {
+  counts: Record<CustodyRequestStatus, number>;
+  total: number;
+  page: number;
+  pageSize: number;
+  items: CustodyRequest[];
+}
+export interface CustodyRequestDetailResponse {
+  request: CustodyRequest;
+  audit: CustodyRequestAuditEntry[];
+}
+export interface CustodyRequestFilters {
+  status?: CustodyRequestStatus | "";
+  page?: number;
+  pageSize?: number;
+}
+export interface CreateCustodyRequestPayload {
+  claimId?: string | null;
+  roomId?: string | null;
+  postId?: string | null;
+  reason?: string | null;
+  handoverPointId?: string | null;
+  intakeType?: CustodyIntakeType;
+  idempotencyKey?: string;
+}
+export interface AcceptCustodyRequestPayload {
+  handoverPointId: string;
+  confirmedHandoverAt?: string | null;
+  reason?: string | null;
+}
+export interface RejectCustodyRequestPayload {
+  reason: string;
+}
+export interface CancelCustodyRequestPayload {
+  reason?: string | null;
+}
+export interface IntakeCustodyRequestPayload {
+  conditionNotes: string;
+  storageCode?: string | null;
+  confirmedHandoverAt?: string | null;
+}
 export interface PostCatalog {
   categories: Array<{ id: string; name: string; parentId: string | null }>;
   areas: Array<{ id: string; name: string }>;
@@ -551,7 +632,7 @@ export interface ClaimVerificationState {
     createdAt: string;
   }>;
 }
-export type NotificationType = "CLAIM_REQUEST_RECEIVED" | "CLAIM_ACCEPTED" | "CLAIM_MORE_INFO_REQUESTED" | "CLAIM_REJECTED" | "CLAIM_WITHDRAWN";
+export type NotificationType = "CLAIM_REQUEST_RECEIVED" | "CLAIM_ACCEPTED" | "CLAIM_MORE_INFO_REQUESTED" | "CLAIM_REJECTED" | "CLAIM_WITHDRAWN" | "CUSTODY_REQUEST_CREATED";
 export interface AppNotification {
   id: string;
   type: NotificationType;
@@ -612,6 +693,13 @@ function normalizeSession(session: SessionResponse): SessionResponse {
   return { ...session, user: normalizeUser(session.user) };
 }
 
+export class ApiError extends Error {
+  constructor(message: string, public readonly status: number, public readonly fieldErrors: Record<string, string[]> = {}) {
+    super(message);
+    this.name = "ApiError";
+  }
+}
+
 async function raw<T>(path: string, init: RequestInit = {}, retry = true): Promise<T> {
   if (typeof navigator !== "undefined" && !navigator.onLine && isMutation(init)) {
     throw new Error("Bạn đang offline. Thao tác này chưa được gửi và cần kết nối mạng để thực hiện.");
@@ -634,8 +722,14 @@ async function raw<T>(path: string, init: RequestInit = {}, retry = true): Promi
     if (session) return raw<T>(path, init, false);
   }
   if (!response.ok) {
-    const payload = await response.json().catch(() => ({})) as { message?: string };
-    throw new Error(payload.message ?? "Yêu cầu không thành công");
+    const payload = await response.json().catch(() => ({})) as { message?: string; errors?: Record<string, unknown> };
+    const fieldErrors: Record<string, string[]> = {};
+    if (payload.errors && typeof payload.errors === "object") {
+      for (const [field, messages] of Object.entries(payload.errors)) {
+        if (Array.isArray(messages)) fieldErrors[field] = messages.filter((message): message is string => typeof message === "string");
+      }
+    }
+    throw new ApiError(payload.message ?? "Yêu cầu không thành công", response.status, fieldErrors);
   }
   if (response.status === 204) return undefined as T;
   return response.json() as Promise<T>;
@@ -750,8 +844,8 @@ export const api = {
     const requestKey = payload.requestKey ?? crypto.randomUUID();
     return raw<ClaimRecord & { idempotent: boolean }>("/claims", { method: "POST", headers: { "Idempotency-Key": requestKey }, body: JSON.stringify({ ...payload, requestKey: undefined }) });
   },
-  createDirectMessage: (postId: string, content: string, clientMessageId: string = crypto.randomUUID()) =>
-    raw<{ claim: ClaimRecord; message: ClaimMessage }>("/claims/direct-messages", { method: "POST", headers: { "Idempotency-Key": clientMessageId }, body: JSON.stringify({ postId, content }) }),
+  createDirectMessage: (postId: string, content: string, clientMessageId: string = crypto.randomUUID(), sourceFoundPostId?: string) =>
+    raw<{ claim: ClaimRecord; message: ClaimMessage }>("/claims/direct-messages", { method: "POST", headers: { "Idempotency-Key": clientMessageId }, body: JSON.stringify({ postId, content, sourceFoundPostId }) }),
   decideClaim: (claimId: string, decision: "ACCEPT" | "DECLINE" | "REQUEST_MORE_INFO", note: string, idempotencyKey: string = crypto.randomUUID()) => raw<ClaimRecord>(`/claims/${claimId}/decision`, { method: "POST", headers: { "Idempotency-Key": idempotencyKey }, body: JSON.stringify({ decision, note }) }),
   withdrawClaim: (claimId: string, idempotencyKey: string = crypto.randomUUID()) => raw<ClaimRecord>(`/claims/${claimId}/withdraw`, { method: "POST", headers: { "Idempotency-Key": idempotencyKey } }),
   listClaimRooms: () => raw<ClaimRoomsResponse>("/claims/rooms"),
@@ -790,6 +884,7 @@ export const api = {
   decideClaimVerification: (claimId: string, payload: {
     decision: "VERIFY_FOR_MEETUP" | "REQUEST_MORE_INFO" | "DECLINE" | "ESCALATE_TO_CUSTODY";
     reason: string;
+    handoverPointId?: string;
     correctsEventId?: string;
     idempotencyKey: string;
   }) => raw<{ claim: ClaimRecord; verification: ClaimVerificationState; message: ClaimMessage | null }>(`/claims/${claimId}/verification/decision`, {
@@ -846,5 +941,23 @@ export const api = {
   listWarehouseItems: (filters: WarehouseFilters = {}) => raw<WarehouseDashboard>(`/staff/warehouse-items${queryString(filters)}`),
   createWarehouseItem: (payload: CreateWarehouseItemPayload) => raw<WarehouseItem>("/staff/warehouse-items", { method: "POST", body: JSON.stringify(payload) }),
   updateWarehouseItem: (id: string, payload: UpdateWarehouseItemPayload) => raw<WarehouseItem>(`/staff/warehouse-items/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
-  getWarehouseLogs: (id: string) => raw<{ logs: WarehouseStorageLog[] }>(`/staff/warehouse-items/${id}/logs`).then((payload) => payload.logs)
+  returnWarehouseItem: (id: string, payload: ReturnWarehouseItemPayload) => raw<WarehouseItem>(`/staff/warehouse-items/${id}/return`, { method: "POST", body: JSON.stringify(payload) }),
+  uploadWarehouseProof: (file: File, itemId: string) => {
+    const form = new FormData();
+    form.append("file", file);
+    form.append("itemId", itemId);
+    return raw<{ id: string; url: string }>("/staff/warehouse-items/upload-proof", { method: "POST", body: form });
+  },
+  getWarehouseProof: (id: string) => mediaBlob(`/staff/warehouse-proofs/${id}`),
+  getWarehouseReturnRecipients: (id: string) => raw<{ recipients: Array<{ claimId: string; recipientId: string; fullName: string }> }>(`/staff/warehouse-items/${id}/return-recipients`),
+  getWarehouseLogs: (id: string) => raw<{ logs: WarehouseStorageLog[] }>(`/staff/warehouse-items/${id}/logs`).then((payload) => payload.logs),
+  // Custody requests
+  listCustodyRequests: (filters: CustodyRequestFilters = {}) => raw<CustodyRequestListResponse>(`/staff/custody-requests${queryString(filters)}`),
+  getCustodyRequest: (id: string) => raw<CustodyRequestDetailResponse>(`/staff/custody-requests/${id}`),
+  getMyCustodyRequestByPost: (postId: string) => raw<{ request: CustodyRequest | null; warehouseItem?: { id: string; status: WarehouseStatus } | null }>(`/staff/custody-requests/mine/post/${postId}`),
+  createCustodyRequest: (payload: CreateCustodyRequestPayload) => raw<{ request: CustodyRequest; idempotent: boolean }>("/staff/custody-requests", { method: "POST", body: JSON.stringify(payload) }),
+  acceptCustodyRequest: (id: string, payload: AcceptCustodyRequestPayload) => raw<CustodyRequest>(`/staff/custody-requests/${id}/accept`, { method: "PATCH", body: JSON.stringify(payload) }),
+  rejectCustodyRequest: (id: string, payload: RejectCustodyRequestPayload) => raw<CustodyRequest>(`/staff/custody-requests/${id}/reject`, { method: "PATCH", body: JSON.stringify(payload) }),
+  cancelCustodyRequest: (id: string, payload: CancelCustodyRequestPayload) => raw<CustodyRequest>(`/staff/custody-requests/${id}/cancel`, { method: "PATCH", body: JSON.stringify(payload) }),
+  confirmCustodyIntake: (id: string, payload: IntakeCustodyRequestPayload) => raw<CustodyRequest>(`/staff/custody-requests/${id}/intake`, { method: "POST", body: JSON.stringify(payload) })
 };

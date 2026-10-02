@@ -8,7 +8,7 @@ Updated: **18/09/2026**
 - `ACCEPT / OPEN_CONVERSATION` produces `CONVERSATION_OPEN`; it does not verify ownership.
 - `NEED_MORE_INFO` remains appointment-ineligible.
 - `ACCEPTED` is the only ownership-verified and appointment-eligible claim state.
-- Decline and custody escalation produce `REJECTED`; custody is distinguished by room escalation fields and the `CUSTODY_ESCALATED` audit event.
+- Decline produces `REJECTED`. On `feat/lnfs-55`, custody escalation preserves claim status; it creates a separate request, room escalation projection and `CUSTODY_ESCALATED` audit event. Reject/cancel custody clears the projection, never history. See [warehouse rules](warehouse-retention-and-status-rules.md).
 - `finder_decision = ACCEPTED` is legacy conversation consent and is not an appointment eligibility signal.
 
 ## Runtime evidence

@@ -1,5 +1,6 @@
 import { env } from "../shared/infrastructure/config/env.js";
 import { services } from "./runtime.js";
+import { notificationEmailWorkerError } from "./notification-email-worker-error.js";
 
 let running = false;
 async function tick() {
@@ -7,9 +8,9 @@ async function tick() {
   running = true;
   try {
     await services.notificationEmailWorker.runOnce();
-  } catch {
+  } catch (error) {
     // The application worker must never reveal SMTP/provider payloads in logs.
-    console.warn("notification_email_worker_tick_failed", { errorCode: "WORKER_TICK_FAILED" });
+    console.warn("notification_email_worker_tick_failed", notificationEmailWorkerError(error));
   } finally {
     running = false;
   }
