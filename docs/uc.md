@@ -78,7 +78,7 @@ Completed UC work above is not reassigned. The 76 Partial/Planned UCs are divide
 
 **Commit evidence:** Quan implemented and hardened persisted matching, scoring, access control, and explanations in `4d6841b` and `489cdc9`.
 
-**Remaining work:** UC-097 to UC-100 are assigned to Quan.
+**Runtime evidence:** UC-098 to UC-100 have API/UI and refresh-worker code with unit/Playwright coverage. Verification is still partial: isolated MySQL concurrency and complete manual role/privacy QA remain pending. See `docs/matching-feedback-review.md`. UC-097 notifications remain outside this scope.
 
 | ID | Use Case | Actors | Use Case Description | Status |
 | --- | --- | --- | --- | --- |
@@ -89,9 +89,9 @@ Completed UC work above is not reassigned. The 76 Partial/Planned UCs are divide
 | UC-030 | Calculate matching score | System | Compare LOST and FOUND posts using normalized text, category, location, time, image tags, and safe OCR signals. | Implemented |
 | UC-031 | Store active match results | System | Persist calculated LOST-FOUND results and expose only candidates whose source posts remain active. | Implemented |
 | UC-097 | Notify owner about a new match | System, Post Owner | Notify the owner when a newly calculated candidate reaches the configured matching threshold. | Planned |
-| UC-098 | Dismiss a match suggestion | Post Owner | Hide a suggestion that the owner has reviewed and determined is not relevant. | Planned |
-| UC-099 | Submit match feedback | Post Owner | Mark a suggestion as useful, irrelevant, or incorrect to improve later matching evaluation. | Planned |
-| UC-100 | Refresh matches periodically | Scheduler | Recalculate active LOST and FOUND candidates on a configured schedule without deciding ownership. | Planned |
+| UC-098 | Dismiss a match suggestion | Post Owner | Hide a suggestion that the owner has reviewed and determined is not relevant. Dismissal is scoped to the actor and source post and does not resurface during later refreshes. | Partial - verification pending |
+| UC-099 | Submit match feedback | Post Owner | Mark a suggestion once as useful, irrelevant, or incorrect using an idempotent correlation key; feedback remains separate from ownership and workflow state. | Partial - verification pending |
+| UC-100 | Refresh matches periodically | Scheduler | Recalculate eligible active LOST and FOUND candidates on a configured schedule using database leases and a local overlap guard without deciding ownership. | Partial - verification pending |
 
 ### 3.5 Matching Model & AI Operations
 
