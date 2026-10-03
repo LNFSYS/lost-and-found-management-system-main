@@ -139,3 +139,12 @@ Optional claim/chat email is never the source of truth: the committed in-app not
 | BR-60 | Saved permitted inactive matches survive refresh; deleted/hidden/private data remain guarded. Own LOST is hidden. LOST chat retains authorized physical FOUND linkage; absent linkage cannot create custody/ownership workflow. | UC-026–UC-031, UC-040, UC-042 | Real repository/HTTP regression |
 
 See [warehouse rules](warehouse-retention-and-status-rules.md) for state semantics, rollout prerequisites and remaining gaps. Existing dev Planned/Partial actor goals are not upgraded by this branch rule table.
+
+## Matching Feedback and Refresh Contract (3 October 2026)
+
+| ID | Rule | UC | Evidence / Limit |
+| --- | --- | --- | --- |
+| BR-61 | Owner/Staff/Admin reads use the same total/page/pageSize/hasMore contract. Recalculate retains the requesting actor and pagination; source authorization and private-signal redaction still apply. | UC-026, UC-027, UC-028 | Post controller/serializer and real HTTP pagination tests |
+| BR-62 | A source owner rates a match once (USEFUL/IRRELEVANT/INCORRECT). Exact correlation-key replay returns the same record; conflicting reuse is 409. Dismissal is actor/source/match scoped and survives refresh. Neither action is proof of ownership. | UC-098, UC-099 | Application, repository, HTTP and browser regressions; manual/privacy release QA remains separate |
+| BR-63 | Refresh jobs require active non-deleted posts. Each just-in-time claim receives a unique, expiring lease; heartbeat and result/complete/fail writes require the current unexpired token. Ineligible jobs become FAILED; transient failures back off 15 minutes and stop after 5 attempts. A later legitimate schedule starts a new attempt budget only after successful completion, not for exhausted jobs. | UC-100 | Real concurrent SQL tests, application worker and graceful shutdown tests |
+| BR-64 | Historical matching 054 SQL/checksum stays unchanged. When 057 has actually run with the reviewed checksum and its entire feedback/dismissal/job schema verifies, the read-only plan reports 054 as superseded, never APPLIED. Missing/drifted schema, unknown checksums or incomplete attempts block DDL. Lease changes use new additive 060. | UC-098–UC-100 | Fresh, original-054 and dev-057 isolated upgrade/repeat-run tests; shared deployment is separate |

@@ -332,7 +332,7 @@ export async function verifyMatchingFeedbackRecoveryBaseline(connection: Migrati
     ["matching_jobs", "fk_matching_jobs_post", "post_id", "posts", "id"]
   ], failures);
   for (const table of tables) if (!actual.tables.some(row => row.table_name === table && row.engine === "InnoDB" && row.table_collation === "utf8mb4_unicode_ci")) failures.push(`table:${table}`);
-  if (failures.length) throw new Error(`Matching recovery baseline mismatch (original SQL remains unavailable): ${failures.join(", ")}`);
+  if (failures.length) throw new Error(`Matching recovery baseline mismatch: ${failures.join(", ")}`);
 }
 
 const verifiers: Record<MigrationSchemaVerifier, (connection: MigrationConnection) => Promise<void>> = {

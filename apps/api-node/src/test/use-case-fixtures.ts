@@ -74,7 +74,7 @@ export function createTestReturnFeedbackUseCases(overrides: Partial<ReturnFeedba
 export const returnFeedbackService = createTestReturnFeedbackUseCases();
 export function createTestReportUseCases(overrides: Partial<ReportDependencies> = {}) { return createReportUseCases({ repository: reportRepository, transaction: fakeTransaction, id: randomUUID, hashPayload: fakeSecurity.hashToken, ...overrides }); }
 export const reportService = createTestReportUseCases();
-export function createTestMatchingUseCases(overrides: Partial<MatchingDependencies> = {}) { return createMatchingUseCases({ matchingRepository: matchingRepository, postRepository: postRepository, ...overrides }); }
+export function createTestMatchingUseCases(overrides: Partial<MatchingDependencies> = {}) { return createMatchingUseCases({ matchingRepository: matchingRepository, postRepository: postRepository, idFactory: randomUUID, ...overrides }); }
 export const matchingService = createTestMatchingUseCases();
 export function createTestPostUseCases(overrides: Partial<PostDependencies> = {}) { return createPostUseCases({ postRepository: postRepository, matchingRepository: matchingRepository, matchingService: matchingService, withTransaction: fakeTransaction, id: randomUUID, mediaStorage: fakeMediaStorage, logger: { warn() {} }, ...overrides }); }
 export const postService = createTestPostUseCases();

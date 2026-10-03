@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { defaultMatchingConfig, type MatchingConfig } from "../domain/matching.engine.js";
-import { sanitizeMatchingConfig } from "./matching.use-cases.js";
+import type { MatchingRepository } from "./matching.repository.port.js";
+import { createMatchingUseCases, sanitizeMatchingConfig } from "./matching.use-cases.js";
 
 function config(overrides: Partial<MatchingConfig> = {}): MatchingConfig {
   return {
@@ -42,4 +43,70 @@ test("matching config falls back when all weights are unusable", () => {
   }));
 
   assert.deepEqual(sanitized.weights, defaultMatchingConfig.weights);
+});
+
+function feedbackFixture() {
+  let feedback: Awaited<ReturnType<MatchingRepository["findFeedback"]>> = null;
+  let dismissal: Awaited<ReturnType<MatchingRepository["findDismissal"]>> = null;
+  const repository = {
+    findMatchForPost: async (matchId: string, postId: string) => matchId === "match-1" && postId === "post-1"
+      ? { id: matchId, lostPostId: postId, foundPostId: "post-2" }
+      : null,
+    findFeedback: async () => feedback,
+    saveFeedback: async (input: Parameters<MatchingRepository["saveFeedback"]>[0]) => {
+      feedback ??= { ...input, createdAt: "2026-09-27T00:00:00.000Z", updatedAt: "2026-09-27T00:00:00.000Z" };
+      return feedback;
+    },
+    findDismissal: async () => dismissal,
+    saveDismissal: async (input: Parameters<MatchingRepository["saveDismissal"]>[0]) => {
+      dismissal ??= { id: input.id, correlationKey: input.correlationKey, reason: input.reason, createdAt: "2026-09-27T00:00:00.000Z" };
+      return dismissal;
+    }
+  } as unknown as MatchingRepository;
+  return createMatchingUseCases({ matchingRepository: repository, postRepository: {} as never, idFactory: () => "record-1" });
+}
+
+test("match feedback replay returns the original record without duplication", async () => {
+  const service = feedbackFixture();
+  const input = { matchId: "match-1", postId: "post-1", userId: "user-1", value: "USEFUL" as const, correlationKey: "request-123" };
+  const first = await service.submitFeedback(input);
+  const replay = await service.submitFeedback(input);
+
+  assert.equal(replay.id, first.id);
+  await assert.rejects(
+    service.submitFeedback({ ...input, value: "INCORRECT" }),
+    (error: unknown) => error instanceof Error && "code" in error && error.code === "conflict"
+  );
+});
+
+test("match dismissal replay is idempotent and forged match identifiers are rejected", async () => {
+  const service = feedbackFixture();
+  const input = { matchId: "match-1", postId: "post-1", userId: "user-1", correlationKey: "request-456" };
+  const first = await service.dismissSuggestion(input);
+  const replay = await service.dismissSuggestion(input);
+
+  assert.equal(replay.id, first.id);
+  await assert.rejects(
+    service.dismissSuggestion({ ...input, matchId: "forged-match", correlationKey: "request-789" }),
+    (error: unknown) => error instanceof Error && "code" in error && error.code === "not_found"
+  );
+});
+
+test("owned LOST suggestions are removed before calculating pagination metadata", async () => {
+  const matches = Array.from({ length: 42 }, (_, index) => ({ id: `match-${index}`, lostPostId: `lost-${index}`, foundPostId: "source", updatedAt: "2026-10-03T00:00:00.000Z" }));
+  const service = createMatchingUseCases({
+    matchingRepository: {
+      getConfigNumber: async (_key: string, fallback: number) => fallback,
+      listForPost: async (_post: string, _score: number, viewer?: string) => { assert.equal(viewer, "owner"); return matches; }
+    } as unknown as MatchingRepository,
+    postRepository: { findVisibleByIds: async () => matches.map((match, index) => ({ id: match.lostPostId, type: "LOST", userId: index === 0 ? "owner" : "other" })) } as never,
+    idFactory: () => "fixture"
+  });
+  const result = await service.getStoredResults("source", undefined, "owner", 2, 20);
+  assert.equal(result.total, 41);
+  assert.equal(result.page, 2);
+  assert.equal(result.pageSize, 20);
+  assert.equal(result.hasMore, true);
+  assert.equal(result.results.length, 20);
+  assert.equal(result.results[0].candidate.id, "lost-21");
 });

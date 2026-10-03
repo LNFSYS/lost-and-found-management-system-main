@@ -462,6 +462,12 @@ export interface PostSummary {
   };
 }
 export type MatchTier = "WEAK" | "SUGGESTION" | "NOTIFY" | "HIGH_CONFIDENCE";
+export type MatchFeedbackValue = "USEFUL" | "IRRELEVANT" | "INCORRECT";
+export interface MatchFeedbackRecord {
+  id: string; matchId: string; userId: string; sourcePostId: string;
+  value: MatchFeedbackValue; note: string | null; correlationKey: string;
+  createdAt: string; updatedAt: string;
+}
 export interface MatchExplanation {
   tier: MatchTier;
   summary: string;
@@ -490,6 +496,7 @@ export interface PostMatchResult {
   explanation: MatchExplanation | null;
   matcherVersion: string;
   calculatedAt: string;
+  feedback: MatchFeedbackRecord | null;
 }
 export interface PostMatchesResponse {
   source: PostSummary;
@@ -498,6 +505,10 @@ export interface PostMatchesResponse {
   thresholds: { weak: number; suggestion: number; notification: number; highConfidence: number };
   weights: { text: number; category: number; location: number; time: number; image: number; ocr: number };
   results: PostMatchResult[];
+  total: number;
+  page: number;
+  pageSize: number;
+  hasMore: boolean;
 }
 export type ClaimStatus = "PENDING" | "CONVERSATION_OPEN" | "NEED_MORE_INFO" | "ACCEPTED" | "REJECTED" | "CANCELLED";
 export type FinderDecision = "PENDING" | "ACCEPTED" | "DECLINED";
@@ -827,8 +838,10 @@ export const api = {
     form.append("mediaKind", "ITEM");
     return raw(`/posts/${postId}/media`, { method: "POST", body: form });
   },
-  getPostMatches: (postId: string) => raw<PostMatchesResponse>(`/posts/${postId}/matches`),
-  recalculatePostMatches: (postId: string) => raw<PostMatchesResponse>(`/posts/${postId}/matches/recalculate`, { method: "POST" }),
+  getPostMatches: (postId: string, page = 1, pageSize = 20) => raw<PostMatchesResponse>(`/posts/${postId}/matches${queryString({ page, pageSize })}`),
+  recalculatePostMatches: (postId: string, page = 1, pageSize = 20) => raw<PostMatchesResponse>(`/posts/${postId}/matches/recalculate${queryString({ page, pageSize })}`, { method: "POST" }),
+  submitMatchFeedback: (postId: string, matchId: string, payload: { value: MatchFeedbackValue; note?: string | null; correlationKey: string }) => raw<MatchFeedbackRecord>(`/posts/${postId}/matches/${matchId}/feedback`, { method: "POST", body: JSON.stringify(payload) }),
+  dismissMatch: (postId: string, matchId: string, payload: { reason?: string | null; correlationKey: string }) => raw<{ id: string; correlationKey: string; reason: string | null; createdAt: string }>(`/posts/${postId}/matches/${matchId}/dismiss`, { method: "POST", body: JSON.stringify(payload) }),
   getReturnFeedbackEligibility: (appointmentId: string) => raw<ReturnFeedbackEligibility>(`/returns/${appointmentId}/feedback/eligibility`),
   submitReturnFeedback: (appointmentId: string, payload: { rating: number; comment?: string | null; idempotencyKey: string }) => raw<SubmitReturnFeedbackResponse>(`/returns/${appointmentId}/feedback`, { method: "POST", body: JSON.stringify(payload) }),
   listClaims: (query?: { page?: number; pageSize?: number }) => {

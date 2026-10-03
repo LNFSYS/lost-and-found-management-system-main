@@ -47,7 +47,10 @@ Requirements target bao phủ Web Application, PWA và Native Mobile. Status bê
 | FR-MATCH-01 | Create/update post chạy bounded best-effort matching với bài đối nghịch đang hoạt động. | UC-029 | P0 | Implemented |
 | FR-MATCH-02 | Matching dùng text normalization tiếng Việt, category, location, time, image tags và safe OCR tags với weight/threshold. | UC-030 | P0 | Implemented |
 | FR-MATCH-03 | Kết quả lưu score thành phần, tier, matcher version và explanation; owner có thể xem/re-run theo quyền và rate limit. | UC-026–UC-028, UC-031 | P0 | Implemented |
-| FR-MATCH-04 | Match notification/10-minute refresh không mở lại popup đã đóng và không auto chuyển trạng thái. | UC-097–UC-100 | P1 | Planned |
+| FR-MATCH-04 | New-match notification must remain privacy-safe and must not decide ownership or change workflow state. | UC-097 | P1 | Planned; notification producer excluded from this matching change |
+| FR-MATCH-06 | GET and recalculate return total/page/pageSize/hasMore with stable ordering, actor-scoped ratings and persisted dismissals. Page size defaults to 20, maximum 50. | UC-026, UC-027, UC-098, UC-099 | P0 | Branch implementation; real HTTP pagination/recalculate regressions |
+| FR-MATCH-07 | Only the source owner can rate/dismiss eligible suggestions; exact correlation-key replays are idempotent and conflicting reuse returns 409. Refresh never clears feedback/dismissals or changes ownership, claim, appointment or custody. | UC-098, UC-099 | P0 | Partial pending merge/manual role QA; API/UI and SQL evidence in matching review |
+| FR-MATCH-08 | Periodic refresh uses stored signals, active non-deleted posts, just-in-time claims, unique lease tokens and heartbeat. Only current leases may persist results/complete/fail; five attempts maximum, 15-minute failure backoff, ineligible posts stop permanently. | UC-100 | P0 | Partial pending merge/rollout; isolated SQL concurrency and retry regressions |
 | FR-TRAIN-01 | Custom model chỉ được công bố sau dataset hợp pháp, anonymization, labeling, evaluation, versioning và inference artifact. | UC-101–UC-105 | P2 | Planned |
 
 ### 2.4 Peer verification, chat và appointment
@@ -103,7 +106,7 @@ Requirements target bao phủ Web Application, PWA và Native Mobile. Status bê
 | NFR-SEC-03 | Auth, Gemini và matching rerun có rate limit phù hợp. | P0 | Implemented cho current module |
 | NFR-VALID-01 | Payload/query/params/upload được validate tại backend và merged update state được kiểm tra. | P0 | Implemented cho current post/catalog module |
 | NFR-PRIV-01 | Private post/media/match signal/evidence không lộ cho actor sai quyền. | P0 | Implemented authorization/proxy trong current API; shared local storage là deployment risk |
-| NFR-DATA-01 | Migration tuần tự, checksum-protected; migration đã chạy không sửa. | P0 | Preflight toàn bộ ledger, named lock, alias reconciliation dry-run và real MySQL fresh/upgrade/partial-failure tests có; rollout Aiven còn pending |
+| NFR-DATA-01 | Migration order/history is checksum-protected; applied SQL and ledger checksums are immutable. Verified recovery 057 may supersede pending historical matching 054 without replay or fake APPLIED records. New lease columns use additive 060 with schema existence checks. | P0 | Exact SQL/checksum + schema-gated read-only plan; fresh/original-054/dev-057 isolated regression tests. Applying 060 to shared DB is a separate rollout. |
 | NFR-DATA-02 | Shared Aiven/dev DB không dùng cho destructive test; integration test dùng database local riêng. | P0 | Process rule |
 | NFR-PERF-01 | Board có pagination; matching có candidate limit/window và rerun rate limit. | P0 | Implemented ở tested baseline; chưa load test |
 | NFR-PORT-01 | Media tồn tại sau restart/deploy và đọc được từ mọi instance. | P0 | Avatar dùng Cloudinary; media bài đăng vẫn local storage nên requirement tổng thể chưa đạt |

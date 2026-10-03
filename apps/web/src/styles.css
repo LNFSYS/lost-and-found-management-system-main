@@ -7892,6 +7892,51 @@ textarea {
 .match-penalties > svg { width: 17px; flex: 0 0 auto; }
 .match-penalties > div { display: grid; gap: 4px; font-size: 0.69rem; line-height: 1.45; }
 
+.match-feedback {
+  padding: 16px 24px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-top: 1px solid #e5edf4;
+  background: #fff;
+}
+.match-feedback > strong { margin-right: auto; font-size: 0.78rem; }
+.match-feedback__options { display: flex; flex-wrap: wrap; gap: 8px; }
+.match-feedback button,
+.match-feedback__saved,
+.match-pagination button {
+  min-height: 38px;
+  padding: 0 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 1px solid #c9dbea;
+  border-radius: 6px;
+  color: var(--fpt-blue-dark);
+  background: #f8fbfd;
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+.match-feedback button { cursor: pointer; }
+.match-feedback button:hover:not(:disabled) { border-color: var(--fpt-blue); background: #edf6ff; }
+.match-feedback button:disabled { cursor: wait; opacity: 0.55; }
+.match-feedback button svg,
+.match-feedback__saved svg,
+.match-pagination button svg { width: 16px; }
+.match-feedback__saved { color: #17663a; border-color: #b9dfc8; background: #f0faf4; }
+.match-feedback .match-dismiss { color: #923a2d; border-color: #edc8c1; background: #fff7f5; }
+
+.match-pagination {
+  margin-top: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+}
+.match-pagination span { color: var(--muted); font-size: 0.75rem; font-weight: 800; }
+.match-pagination button:disabled { opacity: 0.45; }
+
 .match-analysis-card > footer {
   min-height: 80px;
   padding: 12px 24px;
@@ -7992,6 +8037,9 @@ textarea {
   .match-analysis-card__content { padding: 18px; grid-template-columns: 1fr; }
   .match-candidate-image .post-card__media { height: auto; aspect-ratio: 16 / 9; }
   .match-explanation { padding: 18px; }
+  .match-feedback { padding: 16px 18px; align-items: stretch; flex-direction: column; }
+  .match-feedback__options { display: grid; grid-template-columns: 1fr; }
+  .match-feedback button, .match-feedback__saved { width: 100%; }
   .match-token-groups > div { grid-template-columns: 1fr; gap: 4px; }
   .match-analysis-card > footer { min-height: 0; padding: 16px 18px; align-items: flex-start; flex-direction: column; }
   .match-claim-button { width: 100%; min-width: 0; }

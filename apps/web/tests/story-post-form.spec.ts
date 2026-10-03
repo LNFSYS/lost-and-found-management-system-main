@@ -76,8 +76,10 @@ function matchResponse(withCandidate = false) {
         penalties: []
       },
       matcherVersion: "rule-v2-explainable",
-      calculatedAt: "2026-08-20T09:10:00.000Z"
+      calculatedAt: "2026-08-20T09:10:00.000Z",
+      feedback: null
     }] : []
+    , total: withCandidate ? 1 : 0, page: 1, pageSize: 20, hasMore: false
   };
 }
 
@@ -92,7 +94,7 @@ async function prepare(page: Page, onCreate: (payload: Record<string, unknown>) 
     return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ total: 0, page: 1, pageSize: 6, items: [] }) });
   });
   await page.route("**/api/posts/post-1/media", (route) => route.fulfill({ status: 201, contentType: "application/json", body: "{}" }));
-  await page.route(/\/api\/posts\/post-1\/matches(?:\/recalculate)?$/, (route) => route.fulfill({
+  await page.route(/\/api\/posts\/post-1\/matches(?:\/recalculate)?(?:\?.*)?$/, (route) => route.fulfill({
     status: 200,
     contentType: "application/json",
     body: JSON.stringify(matchResponse(withCandidate))
@@ -150,7 +152,7 @@ test("opens the persisted matching analysis after a no-match scan", async ({ pag
 
   await expect(page).toHaveURL(/\/posts\/post-1\/matches$/, { timeout: 6_000 });
   await expect(page.getByRole("heading", { name: /So sánh bài/i })).toBeVisible();
-  await expect(page.getByText("Chưa có bài đối ứng vượt ngưỡng 45%")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Chưa có gợi ý phù hợp" })).toBeVisible();
 });
 
 test("hides the viewer's own LOST match but keeps inactive matching posts visible", async ({ page }) => {
@@ -159,11 +161,12 @@ test("hides the viewer's own LOST match but keeps inactive matching posts visibl
   const baseMatch = response.results[0];
   const ownLostPost = { ...foundCandidate, id: "own-lost", type: "LOST", title: "Bài LOST của tôi", canEdit: true };
   const closedLostPost = { ...foundCandidate, id: "closed-lost", type: "LOST", status: "CLOSED", title: "Bài LOST đã đóng", canEdit: false };
-  await page.route("**/api/posts/post-1/matches", (route) => route.fulfill({
+  await page.route(/\/api\/posts\/post-1\/matches(?:\?.*)?$/, (route) => route.fulfill({
     status: 200,
     contentType: "application/json",
     body: JSON.stringify({
       ...response,
+      total: 2,
       source: { ...sourcePost, type: "FOUND" },
       results: [
         { ...baseMatch, matchId: "match-own", candidate: ownLostPost },
@@ -188,6 +191,58 @@ test("opens My Posts from the top navigation after matching", async ({ page }) =
   await page.locator(".topbar").getByRole("link", { name: "Bài của tôi" }).click();
   await expect(page).toHaveURL(/\/my-posts$/);
   await expect(page.getByRole("tab", { name: "Bài đăng của tôi" })).toHaveAttribute("aria-selected", "true");
+});
+
+test("rates and dismisses a persisted match without starting a claim", async ({ page }) => {
+  let feedbackCalls = 0;
+  let dismissCalls = 0;
+  await prepare(page, () => undefined, true);
+  await page.route(/\/api\/posts\/post-1\/matches(?:\?.*)?$/, (route) => route.fulfill({
+    status: 200, contentType: "application/json", body: JSON.stringify(matchResponse(dismissCalls === 0))
+  }));
+  await page.route("**/api/posts/post-1/matches/match-1/feedback", async (route) => {
+    feedbackCalls += 1;
+    const payload = route.request().postDataJSON() as { value: string; correlationKey: string };
+    expect(payload.value).toBe("USEFUL");
+    expect(payload.correlationKey.length).toBeGreaterThan(7);
+    await route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify({ id: "feedback-1", matchId: "match-1", userId: "user-1", sourcePostId: "post-1", value: "USEFUL", note: null, correlationKey: payload.correlationKey, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }) });
+  });
+  await page.route("**/api/posts/post-1/matches/match-1/dismiss", async (route) => {
+    dismissCalls += 1;
+    await route.fulfill({ status: 201, contentType: "application/json", body: "{}" });
+  });
+  page.on("dialog", (dialog) => dialog.accept());
+
+  await page.goto("/posts/post-1/matches");
+  await page.locator(".match-feedback__options button").first().click();
+  await expect(page.locator(".match-feedback__saved")).toBeVisible();
+  await page.locator(".match-dismiss").click();
+  await expect(page.locator(".match-analysis-card")).toHaveCount(0);
+  expect(feedbackCalls).toBe(1);
+  expect(dismissCalls).toBe(1);
+  await expect(page).toHaveURL(/\/posts\/post-1\/matches$/);
+});
+
+test("paginates matching results and preserves page on recalculate", async ({ page }, testInfo) => {
+  await prepare(page, () => undefined, true);
+  const response = matchResponse(true);
+  const results = Array.from({ length: 41 }, (_, index) => ({ ...response.results[0], matchId: `match-${index}`, candidate: { ...response.results[0].candidate, id: `found-${index}`, title: `Wallet candidate ${index + 1}` } }));
+  await page.route(/\/api\/posts\/post-1\/matches(?:\/recalculate)?(?:\?.*)?$/, route => {
+    const url = new URL(route.request().url());
+    const current = Number(url.searchParams.get("page") ?? 1);
+    return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ...response, total: results.length, page: current, pageSize: 20, hasMore: current < 3, results: results.slice((current - 1) * 20, current * 20) }) });
+  });
+  await page.goto("/posts/post-1/matches");
+  await expect(page.locator(".match-rank").first()).toHaveText("#01");
+  await page.getByRole("navigation", { name: "Phân trang gợi ý matching" }).getByRole("button", { name: "Sau" }).click();
+  await expect(page.locator(".match-rank").first()).toHaveText("#21");
+  await page.getByRole("button", { name: "Tính lại matching" }).click();
+  await expect(page.locator(".match-rank").first()).toHaveText("#21");
+  await expect(page.locator(".match-analysis-card")).toHaveCount(20);
+  await page.screenshot({ path: testInfo.outputPath("matching-desktop.png") });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({ path: testInfo.outputPath("matching-mobile.png") });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 });
 
 test("analyzes an image, fills an editable draft, posts it and shows real category candidates", async ({ page }) => {

@@ -69,6 +69,8 @@ test("isolated recovery: preserved history/labels, full restore and conservative
 
     await t.test("exact unavailable-history records require real schema; labels and ledger remain unchanged", async () => {
       for (const entry of legacyMigrationCompatibility.filter(entry => entry.version.startsWith("054_") || entry.version.startsWith("055_"))) {
+        const [existing] = await pool.execute<RowDataPacket[]>("SELECT version FROM schema_migrations WHERE version=?", [entry.version]);
+        if (existing.length) continue;
         await pool.execute("INSERT INTO schema_migrations(version,checksum) VALUES(?,?)", [entry.version, entry.checksum]);
         await pool.execute("INSERT INTO schema_migration_attempts(version,checksum,status) VALUES(?,?,'APPLIED')", [entry.version, entry.checksum]);
       }

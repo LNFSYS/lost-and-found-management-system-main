@@ -67,6 +67,8 @@ export function createPostRoutes({ postController, auth }: {
   postRoutes.post("/", requireAuth, (req, res, next) => postController.createPost(req, res).catch(next));
   postRoutes.get("/:id/matches", requireAuth, (req, res, next) => postController.listMatches(req, res).catch(next));
   postRoutes.post("/:id/matches/recalculate", requireAuth, matchingRecalculationLimit, (req, res, next) => postController.recalculateMatches(req, res).catch(next));
+  postRoutes.post("/:id/matches/:matchId/feedback", requireAuth, matchingRecalculationLimit, (req, res, next) => postController.submitMatchFeedback(req, res).catch(next));
+  postRoutes.post("/:id/matches/:matchId/dismiss", requireAuth, matchingRecalculationLimit, (req, res, next) => postController.dismissMatch(req, res).catch(next));
   postRoutes.get("/:id", optionalAuth, (req, res, next) => postController.getPost(req, res).catch(next));
   postRoutes.patch("/:id", requireAuth, (req, res, next) => postController.updatePost(req, res).catch(next));
   postRoutes.delete("/:id", requireAuth, (req, res, next) => postController.softDeletePost(req, res).catch(next));

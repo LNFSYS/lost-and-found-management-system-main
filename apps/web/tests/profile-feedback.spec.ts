@@ -91,9 +91,13 @@ test("profile lets an eligible participant submit return feedback once", async (
   await expect(page.locator(".return-feedback-status").first()).toContainText("Bạn có thể gửi feedback");
   await page.locator(".return-feedback-form select").selectOption("5");
   await page.locator(".return-feedback-form textarea").fill("Cảm ơn bạn đã trả đồ đúng hẹn");
+  const feedbackRequest = page.waitForRequest((request) =>
+    request.method() === "POST" && request.url().endsWith(`/api/returns/${appointmentId}/feedback`)
+  );
   await page.locator(".return-feedback-form button").click();
+  const payload = (await feedbackRequest).postDataJSON();
 
   await expect(page.locator(".return-feedback-status.is-done")).toContainText("5/5");
   await expect(page.locator(".profile-grid")).toContainText("6");
-  expect(submitted?.idempotencyKey).toBe(`feedback-${appointmentId}-${session.user.id}`);
+  expect(payload.idempotencyKey).toBe(`feedback-${appointmentId}-${session.user.id}`);
 });

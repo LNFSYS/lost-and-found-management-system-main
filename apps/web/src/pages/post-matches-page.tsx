@@ -6,6 +6,8 @@ import {
   CheckCircle2,
   Clock3,
   Database,
+  CircleHelp,
+  EyeOff,
   Hand,
   LoaderCircle,
   MapPin,
@@ -14,15 +16,18 @@ import {
   RefreshCw,
   ScanSearch,
   ShieldCheck,
+  ThumbsDown,
+  ThumbsUp,
   X
 } from "lucide-react";
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { PostImage } from "./posts-page";
 import {
   api,
   type MatchExplanation,
   type MatchTier,
+  type MatchFeedbackValue,
   type PostMatchResult,
   type PostMatchesResponse
 } from "../services/api";
@@ -72,7 +77,7 @@ function SignalTokens({ explanation }: { explanation: MatchExplanation | null })
   </div>)}</div>;
 }
 
-function MatchCandidateCard({ result, rank, weights, onClaim, claiming, canMessage }: { result: PostMatchResult; rank: number; weights: PostMatchesResponse["weights"]; onClaim: () => void; claiming?: boolean; canMessage: boolean }) {
+function MatchCandidateCard({ result, rank, weights, onClaim, claiming, canMessage, onFeedback, onDismiss, pending, canReview }: { result: PostMatchResult; rank: number; weights: PostMatchesResponse["weights"]; onClaim: () => void; claiming?: boolean; canMessage: boolean; onFeedback: (value: MatchFeedbackValue) => void; onDismiss: () => void; pending: boolean; canReview: boolean }) {
   const explanation = result.explanation;
   return <article className={`match-analysis-card match-analysis-card--${result.scoreTier.toLowerCase()}`}>
     <header className="match-analysis-card__header">
@@ -103,6 +108,15 @@ function MatchCandidateCard({ result, rank, weights, onClaim, claiming, canMessa
       {explanation?.penalties.length ? <div className="match-penalties"><AlertTriangle /> <div>{explanation.penalties.map((penalty) => <span key={penalty}>{penalty}</span>)}</div></div> : null}
     </div>
 
+    {canReview && <div className="match-feedback" aria-label="Đánh giá gợi ý">
+      <strong>Gợi ý này có chính xác không?</strong>
+      {result.feedback ? <span className={`match-feedback__saved match-feedback__saved--${result.feedback.value.toLowerCase()}`}><Check /> Đã đánh giá: {{ USEFUL: "Hữu ích", IRRELEVANT: "Không liên quan", INCORRECT: "Sai kết quả" }[result.feedback.value]}</span> : <div className="match-feedback__options">
+        <button type="button" disabled={pending} onClick={() => onFeedback("USEFUL")}><ThumbsUp /> Hữu ích</button>
+        <button type="button" disabled={pending} onClick={() => onFeedback("IRRELEVANT")}><CircleHelp /> Không liên quan</button>
+        <button type="button" disabled={pending} onClick={() => onFeedback("INCORRECT")}><ThumbsDown /> Sai kết quả</button>
+      </div>}
+      <button className="match-dismiss" type="button" disabled={pending} onClick={onDismiss}><EyeOff /> Ẩn gợi ý</button>
+    </div>}
     <footer>
       <button className="match-claim-button" type="button" disabled={claiming || !canMessage} onClick={onClaim}><MessageCircle /> {claiming ? "Đang mở phòng chat..." : canMessage ? "Nhắn tin với người đăng" : "Không thể nhắn tin với bài này"}</button>
       <span><Database /> Đã lưu · {formatDate(result.calculatedAt)}</span>
@@ -118,6 +132,14 @@ export function PostMatchesPage() {
   const [loading, setLoading] = useState(true);
   const [recalculating, setRecalculating] = useState(false);
   const [claimingMatchId, setClaimingMatchId] = useState<string | null>(null);
+  const [pendingMatchId, setPendingMatchId] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const requestKeys = useRef(new Map<string, string>());
+  function requestKey(action: string) {
+    const scope = `${postId}:${action}`;
+    if (!requestKeys.current.has(scope)) requestKeys.current.set(scope, crypto.randomUUID());
+    return requestKeys.current.get(scope)!;
+  }
   const [keepItemConfirmed, setKeepItemConfirmed] = useState(false);
   const [custodyModalOpen, setCustodyModalOpen] = useState(false);
   const [handoverPoints, setHandoverPoints] = useState<Array<{ id: string; name: string; address?: string | null }>>([]);
@@ -135,12 +157,14 @@ export function PostMatchesPage() {
     let active = true;
     setLoading(true);
     setError("");
-    api.getPostMatches(postId)
+    api.getPostMatches(postId, page)
       .then((value) => { if (active) setData(value); })
       .catch((reason: Error) => { if (active) setError(reason.message); })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, [postId]);
+  }, [postId, page]);
+
+  useEffect(() => { setPage(1); }, [postId]);
 
   useEffect(() => {
     let active = true;
@@ -157,12 +181,34 @@ export function PostMatchesPage() {
     setRecalculating(true);
     setError("");
     try {
-      setData(await api.recalculatePostMatches(postId));
+      setData(await api.recalculatePostMatches(postId, page));
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Không thể tính lại matching lúc này.");
     } finally {
       setRecalculating(false);
     }
+  }
+
+  async function submitFeedback(result: PostMatchResult, value: MatchFeedbackValue) {
+    setPendingMatchId(result.matchId);
+    setError("");
+    try {
+      const feedback = await api.submitMatchFeedback(postId, result.matchId, { value, correlationKey: requestKey(`feedback:${result.matchId}:${value}`) });
+      setData(current => current ? { ...current, results: current.results.map(item => item.matchId === result.matchId ? { ...item, feedback } : item) } : current);
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "Không thể gửi đánh giá."); }
+    finally { setPendingMatchId(null); }
+  }
+
+  async function dismiss(result: PostMatchResult) {
+    setPendingMatchId(result.matchId);
+    setError("");
+    try {
+      await api.dismissMatch(postId, result.matchId, { correlationKey: requestKey(`dismiss:${result.matchId}`) });
+      const refreshed = await api.getPostMatches(postId, page);
+      if (!refreshed.results.length && page > 1) setPage(page - 1);
+      else setData(refreshed);
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "Không thể ẩn gợi ý."); }
+    finally { setPendingMatchId(null); }
   }
 
   async function openCustodyModal() {
@@ -266,7 +312,7 @@ export function PostMatchesPage() {
       </div>
       <div className="matches-hero__actions">
         <dl>
-          <div><dt>Kết quả hiển thị</dt><dd>{visibleResults.length}</dd></div>
+          <div><dt>Kết quả hiển thị</dt><dd>{data.total - hiddenOwnedLostCount}</dd></div>
           <div><dt>Đạt ngưỡng gợi ý</dt><dd>{actionableCount}</dd></div>
           <div><dt>Điểm cao nhất</dt><dd>{topScore === null ? "—" : percentage(topScore)}</dd></div>
         </dl>
@@ -307,15 +353,16 @@ export function PostMatchesPage() {
 
     {error && <div className="match-page-warning"><AlertTriangle /> {error}</div>}
     {visibleResults.length ? <section className="match-analysis-list" aria-label="Danh sách ứng viên matching">
-      {visibleResults.map((result, index) => <MatchCandidateCard key={result.matchId} result={result} rank={index + 1} weights={data.weights} onClaim={() => void openConversation(result)} canMessage={!result.candidate.canEdit && ["OPEN", "MATCHED"].includes(result.candidate.status)} claiming={claimingMatchId === result.matchId} />)}
+      {visibleResults.map((result, index) => <MatchCandidateCard key={result.matchId} result={result} rank={(data.page - 1) * data.pageSize + index + 1} weights={data.weights} onClaim={() => void openConversation(result)} canMessage={!result.candidate.canEdit && ["OPEN", "MATCHED"].includes(result.candidate.status)} claiming={claimingMatchId === result.matchId} pending={pendingMatchId === result.matchId} canReview={data.source.canEdit && ["OPEN", "MATCHED"].includes(data.source.status) && ["OPEN", "MATCHED"].includes(result.candidate.status)} onFeedback={value => void submitFeedback(result, value)} onDismiss={() => void dismiss(result)} />)}
     </section> : <section className="matches-empty">
       <ScanSearch />
       <p className="eyebrow">Lượt quét đã hoàn tất</p>
-      <h2>{hiddenOwnedLostCount ? "Không có bài đối ứng để hiển thị" : "Chưa có bài đối ứng vượt ngưỡng 45%"}</h2>
+      <h2>{hiddenOwnedLostCount ? "Không có bài đối ứng để hiển thị" : "Chưa có gợi ý phù hợp"}</h2>
       <p>{hiddenOwnedLostCount ? "Các bài LOST do bạn đăng được ẩn khỏi kết quả matching. Những bài đối ứng khác, kể cả bài đã đóng, vẫn được hiển thị." : "Bài vẫn ở trạng thái mở. Bạn có thể tính lại khi có báo cáo mới hoặc bổ sung mô tả rõ hơn cho bài đăng."}</p>
       <div><Link to={`/posts/${data.source.id}`}>Xem bài của tôi</Link><Link to="/posts">Mở bảng tin</Link></div>
     </section>}
 
+    {data.total > data.pageSize && <nav className="match-pagination" aria-label="Phân trang gợi ý matching"><button type="button" disabled={data.page <= 1 || loading} onClick={() => setPage(page - 1)}><ArrowLeft /> Trước</button><span>Trang {data.page} / {Math.ceil(data.total / data.pageSize)}</span><button type="button" disabled={!data.hasMore || loading} onClick={() => setPage(page + 1)}>Sau <ArrowRight /></button></nav>}
     <aside className="matching-safety-note"><ShieldCheck /><div><strong>Human verification required</strong><p>Điểm cao không tự động đổi trạng thái bài, chấp nhận claim hay cho phép nhận đồ.</p></div></aside>
 
     {custodyModalOpen && <div className="custody-modal-overlay" onClick={() => setCustodyModalOpen(false)}>

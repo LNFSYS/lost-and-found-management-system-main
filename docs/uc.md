@@ -1,10 +1,10 @@
 # 3. Business Use Case Catalogue - FPTU Lost & Found System (LNFS)
 
-Mappings and totals reconciled on 2 October 2026 against `origin/dev` (`ef78a53`). The UC row statuses below remain the dev baseline, not completion claims for `feat/lnfs-55`. Branch evidence and outstanding release gates are in [LNFS-55-SAFETY-VERIFICATION.md](LNFS-55-SAFETY-VERIFICATION.md). `Implemented` requires active runtime evidence on `dev`; schema or migration-only evidence is not sufficient. `Partial` means part of the actor goal exists, while `Planned` means no complete runtime flow is available.
+Mappings reconciled on 3 October 2026 against `origin/dev` (`03c7bda`, including PR #77). UC-098 to UC-100 remain Partial while the matching branch is under review; their branch evidence is in [matching-feedback-review.md](matching-feedback-review.md). Warehouse release gates remain in [LNFS-55-SAFETY-VERIFICATION.md](LNFS-55-SAFETY-VERIFICATION.md). `Implemented` requires active runtime evidence on `dev`; schema or migration-only evidence is not sufficient. `Partial` means part of the actor goal exists, while `Planned` means no complete runtime flow is available.
 
 - **Implemented:** 97 use cases
-- **Partial:** 5 use cases
-- **Planned:** 66 use cases
+- **Partial:** 8 use cases
+- **Planned:** 63 use cases
 - **Total:** 168 business use cases
 
 `Claimant` means the owner of the LOST post. `Finder` means the owner of the matched FOUND post. PWA, mobile browser, and a future native application are delivery channels, not business use cases, and are therefore excluded from this catalogue.
@@ -78,7 +78,7 @@ Completed UC work above is not reassigned. The 71 Partial/Planned UCs in the ret
 
 **Commit evidence:** Quan implemented and hardened persisted matching, scoring, access control, and explanations in `4d6841b` and `489cdc9`.
 
-**Remaining work:** UC-097 to UC-100 are assigned to Quan.
+**Runtime evidence:** UC-098 to UC-100 have actor-scoped feedback/dismissal, paginated HTTP results and a fenced, bounded refresh worker on the matching branch. Regression coverage includes real HTTP contracts and isolated SQL upgrade/concurrency scenarios. Full manual role/privacy QA, production rollout and merge evidence remain separate gates. See [matching review](matching-feedback-review.md). UC-097 notifications remain outside this scope; no new UC ID is introduced.
 
 | ID | Use Case | Actors | Use Case Description | Status |
 | --- | --- | --- | --- | --- |
@@ -87,11 +87,11 @@ Completed UC work above is not reassigned. The 71 Partial/Planned UCs in the ret
 | UC-028 | View matching explanation | Post Owner / Staff / Admin | Review the overall tier, component scores, and redacted reasons behind a matching suggestion. | Implemented |
 | UC-029 | Generate matches after post changes | System | Run matching on a best-effort basis after a post is created or updated without rolling back the valid post. | Implemented |
 | UC-030 | Calculate matching score | System | Compare LOST and FOUND posts using normalized text, category, location, time, image tags, and safe OCR signals. | Implemented |
-| UC-031 | Store active match results | System | Persist calculated LOST-FOUND results and expose only candidates whose source posts remain active. | Implemented |
+| UC-031 | Store active match results | System | Persist calculated active LOST-FOUND results while retaining permitted inactive saved history; deleted/hidden/private candidates remain guarded. | Implemented |
 | UC-097 | Notify owner about a new match | System, Post Owner | Notify the owner when a newly calculated candidate reaches the configured matching threshold. | Planned |
-| UC-098 | Dismiss a match suggestion | Post Owner | Hide a suggestion that the owner has reviewed and determined is not relevant. | Planned |
-| UC-099 | Submit match feedback | Post Owner | Mark a suggestion as useful, irrelevant, or incorrect to improve later matching evaluation. | Planned |
-| UC-100 | Refresh matches periodically | Scheduler | Recalculate active LOST and FOUND candidates on a configured schedule without deciding ownership. | Planned |
+| UC-098 | Dismiss a match suggestion | Post Owner | Hide a suggestion that the owner has reviewed and determined is not relevant. Dismissal is scoped to the actor and source post and does not resurface during later refreshes. | Partial |
+| UC-099 | Submit match feedback | Post Owner | Mark a suggestion once as useful, irrelevant, or incorrect using an idempotent correlation key; feedback remains separate from ownership and workflow state. | Partial |
+| UC-100 | Refresh matches periodically | Scheduler | Recalculate eligible active LOST and FOUND candidates with just-in-time fenced leases, heartbeat, bounded retries and graceful shutdown, without deciding ownership. | Partial |
 
 ### 3.5 Matching Model & AI Operations
 

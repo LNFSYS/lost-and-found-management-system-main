@@ -2,6 +2,8 @@
 
 ## Scope and History
 
+**3 October 2026 update:** the matching branch recovered the exact original `054_matching_feedback_periodic_refresh.sql`, normalized SHA256 `404c6ac5d3b9424db1a82eef2238924ac5f2ef36366c89fd4ed03b97ab60853d`. The 2 October unavailable-source statements below are retained as historical recovery context, not the current status of matching 054. Its original SQL is immutable. A database with the original applied record skips it; a database with reviewed 057 but no 054 record uses schema-verified, read-only supersession without inventing history or converting legacy labels. New worker lease fields belong to `060_matching_refresh_leases.sql`. This update does not apply 060 on Aiven or deploy API/Web. Original custody-time 055 remains unavailable.
+
 This is forward recovery on `feat/lnfs-55`, not a reconstruction of missing applied SQL.
 The user authorized creating and applying the missing runtime schema on Aiven on 2026-10-02.
 

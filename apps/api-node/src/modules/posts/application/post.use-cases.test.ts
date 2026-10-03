@@ -119,10 +119,15 @@ test("private candidate explanations hide raw signals from the source owner but 
         explanation,
         isNotified: false,
         createdAt: "2026-09-01T09:00:00.000Z",
-        updatedAt: "2026-09-01T09:00:00.000Z"
+        updatedAt: "2026-09-01T09:00:00.000Z",
+        feedback: null
       },
       candidate
-    }]
+    }],
+    total: 1,
+    page: 1,
+    pageSize: 20,
+    hasMore: false
   };
 
   const originalFindVisibleById = postRepository.findVisibleById;

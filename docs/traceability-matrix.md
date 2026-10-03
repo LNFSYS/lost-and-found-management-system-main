@@ -86,3 +86,14 @@ UC-M01–UC-M12 là nhóm mobile target lịch sử, chưa thuộc catalogue 168
 | BR-27 | NFR-DATA-01–02 | N/A | exact historical ledger + schema verifiers; no aliases for historical custody/matching scope; canonical 053, safety 054 and recovery 056–058 applied on Aiven after encrypted backup/isolated restore. Missing original SQL remains unverified; two LOST custody links require physical-source review. See [recovery evidence](database-warehouse-recovery.md). |
 
 See [warehouse rules](warehouse-retention-and-status-rules.md) for project policy defaults, state semantics and release constraints. No UC row is upgraded from branch-only evidence.
+
+## Matching Branch Audit Corrections (3 October 2026)
+
+| BR | FR / NFR | UC | Code and Verification |
+| --- | --- | --- | --- |
+| BR-61 | FR-MATCH-06 | UC-026–UC-028 | post.controller.ts, post.use-cases.ts, matching.use-cases.ts; http-runtime-scenario.ts verifies more than 20 matches, page 2 and owner-scoped recalculate |
+| BR-62 | FR-MATCH-07 | UC-098, UC-099 | matching use cases/repository, post-matches-page.tsx; application + real HTTP dismissal/feedback replay tests, story-post-form.spec.ts; Partial until reviewed merge/manual QA |
+| BR-63 | FR-MATCH-08 | UC-100 | matching-refresh.worker.ts, matching.repository.ts, main/server.ts, 060_matching_refresh_leases.sql; matching-refresh.integration.test.ts fences two SQL connections, expired completion/failure/persistence, closed posts and five-attempt exhaustion |
+| BR-64 | NFR-DATA-01–02 | UC-098–UC-100 | matching-recovery-supersession.ts, migration runner/preflight, immutable 054/057, additive 060; matching-refresh.integration.test.ts verifies three upgrade paths, ledger/timestamps/legacy labels and schema drift |
+
+No new UC is introduced. UC-097 notification delivery remains Planned and is not conflated with this scheduler. Evidence and rollout limitations: [matching-feedback-review.md](matching-feedback-review.md).

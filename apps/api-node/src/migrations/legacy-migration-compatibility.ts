@@ -5,9 +5,8 @@ import type { MigrationCompatibilityEntry } from "./migration-state.js";
 // substitutes for new forward migrations.
 export const legacyMigrationCompatibility = [
   {
-    // Original SQL is unavailable. User-authorized forward recovery on 2026-10-02
-    // certifies only the observed schema, NOT the original migration's effects.
-    // No alias: fresh databases still require the new 057 contract.
+    // Original SQL recovered on the matching branch; preserve its exact history.
+    // Recovery 057 remains a separate, additive contract, not a ledger alias.
     version: "054_matching_feedback_periodic_refresh.sql",
     checksum: "404c6ac5d3b9424db1a82eef2238924ac5f2ef36366c89fd4ed03b97ab60853d",
     verifier: "matching-feedback-recovery-baseline"

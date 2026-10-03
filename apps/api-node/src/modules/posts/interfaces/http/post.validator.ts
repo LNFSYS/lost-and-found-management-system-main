@@ -65,6 +65,21 @@ function validatePostShape(value: {
 
 export const idParamSchema = z.object({ id: uuid });
 export const mediaParamSchema = z.object({ postId: uuid, mediaId: uuid });
+export const matchParamSchema = z.object({ id: uuid, matchId: uuid });
+export const listMatchesQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(50).default(20)
+});
+const correlationKey = z.string().trim().min(8).max(128);
+export const matchFeedbackSchema = z.object({
+  value: z.enum(["USEFUL", "IRRELEVANT", "INCORRECT"]),
+  note: z.string().trim().max(500).nullable().optional(),
+  correlationKey
+});
+export const dismissMatchSchema = z.object({
+  reason: z.string().trim().max(500).nullable().optional(),
+  correlationKey
+});
 
 export const createPostSchema = z.object({
   type: postType,

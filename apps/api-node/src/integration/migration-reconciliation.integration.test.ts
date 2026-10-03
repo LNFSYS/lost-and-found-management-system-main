@@ -101,7 +101,7 @@ test("isolated MySQL: fresh/legacy migration reconciliation and runtime contract
       const data = await fixture(pool, true);
       const oldDir = await migrationDirectory(42);
       // Exact historical SQL from 6e3491b, not current SQL renamed to an audited alias.
-      await writeFile(path.join(oldDir, legacyClaimVersion), await readFile(new URL("../test/fixtures/040_peer_claim_conversations.sql", import.meta.url), "utf8"));
+      await writeFile(path.join(oldDir, legacyClaimVersion), (await readFile(new URL("../test/fixtures/040_peer_claim_conversations.sql", import.meta.url), "utf8")).replace(/\r\n/g, "\n"));
       await runMigrations({ directory: oldDir, pool: asMigrationPool(pool), log: silent });
       await runMigrations({ directory, pool: asMigrationPool(pool), log: silent });
       const [before] = await pool.query<RowDataPacket[]>("SELECT * FROM schema_migrations ORDER BY version");
