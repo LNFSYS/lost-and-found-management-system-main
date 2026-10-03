@@ -84,7 +84,7 @@ function MessageBubble({ message, own, user, onReplyQuestion }: { message: Claim
   </div>;
 }
 
-function DirectMessageDraft({ postId, viewer }: { postId: string; viewer?: { id: string; fullName: string } }) {
+function DirectMessageDraft({ postId, sourceFoundPostId, viewer }: { postId: string; sourceFoundPostId?: string; viewer?: { id: string; fullName: string } }) {
   const navigate = useNavigate();
   const [post, setPost] = useState<PostSummary | null>(null);
   const [loading, setLoading] = useState(true);
@@ -142,7 +142,7 @@ function DirectMessageDraft({ postId, viewer }: { postId: string; viewer?: { id:
     setError("");
     void (async () => {
       try {
-        const existing = await api.findConversationByPost(postId).catch(() => null);
+        const existing = sourceFoundPostId ? null : await api.findConversationByPost(postId).catch(() => null);
         if (!active) return;
         if (existing) {
           navigate(`/claims/${existing.id}`, { replace: true });
@@ -157,7 +157,7 @@ function DirectMessageDraft({ postId, viewer }: { postId: string; viewer?: { id:
       }
     })();
     return () => { active = false; };
-  }, [navigate, postId]);
+  }, [navigate, postId, sourceFoundPostId]);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -170,7 +170,7 @@ function DirectMessageDraft({ postId, viewer }: { postId: string; viewer?: { id:
       : { content, clientMessageId: crypto.randomUUID() };
     pendingMessage.current = retry;
     try {
-      const result = await api.createDirectMessage(post.id, content, retry.clientMessageId);
+      const result = await api.createDirectMessage(post.id, content, retry.clientMessageId, sourceFoundPostId);
       pendingMessage.current = null;
       navigate(`/claims/${result.claim.id}`, { replace: true });
     } catch (reason) {
@@ -525,7 +525,7 @@ export function ClaimsPage() {
         <ClaimList claims={visibleClaims} userId={user?.id} onSelect={(id) => navigate(`/claims/${id}`)} />
         {claimHasMore && <button className="claim-load-older claim-load-claims" type="button" disabled={loadingMoreClaims} onClick={() => void loadMoreClaims()}><RefreshCw className={loadingMoreClaims ? "is-spinning" : ""} /> {loadingMoreClaims ? "Đang tải..." : "Xem thêm"}</button>}
       </aside>
-      <DirectMessageDraft postId={composePostId} viewer={user ?? undefined} />
+      <DirectMessageDraft postId={composePostId} sourceFoundPostId={searchParams.get("sourceFoundPostId") ?? undefined} viewer={user ?? undefined} />
     </section>
   </main>;
 

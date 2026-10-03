@@ -187,7 +187,11 @@ export function createPostUseCases(options: PostDependencies) {
       calculatedAt: payload.calculatedAt,
       thresholds: payload.thresholds,
       weights: payload.weights,
-      results: payload.results.map(({ match, candidate }) => ({
+      total: payload.total,
+      page: payload.page,
+      pageSize: payload.pageSize,
+      hasMore: payload.hasMore,
+      results: payload.results.filter(({ candidate }) => !(candidate.type === "LOST" && candidate.userId === source.userId)).map(({ match, candidate }) => ({
         matchId: match.id,
         candidate: serializePost(candidate, viewer),
         totalScore: match.totalScore,
@@ -310,19 +314,21 @@ export function createPostUseCases(options: PostDependencies) {
       return serializeMatchingResult(source, payload, viewer);
     },
 
-    async recalculatePostMatches(postId: string, viewer: AccessTokenPayload) {
+    async recalculatePostMatches(postId: string, viewer: AccessTokenPayload, page = 1, pageSize = 20) {
       const source = await requireMatchAccess(postId, viewer);
-      const payload = await matchingService.runForPost(postId);
+      const payload = await matchingService.runForPost(postId, viewer.sub, page, pageSize);
       return serializeMatchingResult(source, payload, viewer);
     },
 
     async submitMatchFeedback(postId: string, matchId: string, viewer: AccessTokenPayload, input: { value: "USEFUL" | "IRRELEVANT" | "INCORRECT"; note?: string | null; correlationKey: string }) {
-      await requireMatchAccess(postId, viewer);
+      const source = await requireMatchAccess(postId, viewer);
+      if (source.userId !== viewer.sub) throw new AppError("forbidden", "Only the source owner can submit matching feedback");
       return matchingService.submitFeedback({ postId, matchId, userId: viewer.sub, ...input });
     },
 
     async dismissMatch(postId: string, matchId: string, viewer: AccessTokenPayload, input: { reason?: string | null; correlationKey: string }) {
-      await requireMatchAccess(postId, viewer);
+      const source = await requireMatchAccess(postId, viewer);
+      if (source.userId !== viewer.sub) throw new AppError("forbidden", "Only the source owner can dismiss matching suggestions");
       return matchingService.dismissSuggestion({ postId, matchId, userId: viewer.sub, ...input });
     },
 

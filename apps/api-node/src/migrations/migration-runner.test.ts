@@ -8,8 +8,18 @@ import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import { runMigrations } from "./migration-runner.js";
 import { legacyMigrationCompatibility } from "./legacy-migration-compatibility.js";
-import { migrationChecksums, pendingMigrationFiles, readMigrationFiles, validateMigrationState } from "./migration-state.js";
+import { checksumMatches, migrationChecksums, pendingMigrationFiles, readMigrationFiles, validateMigrationState } from "./migration-state.js";
 import { type MigrationPool, type LedgerRow, type AttemptRow } from "./migration-state.js";
+
+test("custody safety SQL retains the exact applied Aiven checksum", async () => {
+  const sql = await readFile(new URL("./054_custody_safety_contract.sql", import.meta.url), "utf8");
+  const checksum = "8032afbbd87f5d7c487d87e6964368e05d7b5a923436b8d0493f8dd6f9b72f86";
+  assert.equal(migrationChecksums(sql).normalized, checksum);
+  validateMigrationState([{ version: "054_custody_safety_contract.sql", sql, ...migrationChecksums(sql) }], {
+    ledger: [{ version: "054_custody_safety_contract.sql", checksum }],
+    attempts: [{ version: "054_custody_safety_contract.sql", checksum, status: "APPLIED" }]
+  });
+});
 
 async function withMigration(sql: string, run: (directory: string) => Promise<void>) {
   const directory = await mkdtemp(path.join(os.tmpdir(), "lnfs-migration-test-"));
@@ -84,7 +94,9 @@ test("accepts only the audited Aiven legacy records and maps superseded migratio
   assert.ok(!pending.includes("045_peer_claim_conversations.sql"));
   assert.ok(!pending.includes("049_realtime_claim_chat_contract.sql"));
   assert.ok(!pending.includes("050_notification_type_text_contract.sql"));
-  assert.deepEqual(new Set(matches.map((match) => match.version)), new Set(ledger.map((row) => row.version)));
+  const historicalOnly = ledger.filter(row => !files.some(file => file.version === row.version && checksumMatches(row.checksum, file)));
+  assert.deepEqual(new Set(matches.map((match) => match.version)), new Set(historicalOnly.map((row) => row.version)));
+  assert.equal(files.find(file => file.version === "054_matching_feedback_periodic_refresh.sql")?.normalized, "404c6ac5d3b9424db1a82eef2238924ac5f2ef36366c89fd4ed03b97ab60853d");
 });
 
 test("accepts verified legacy and canonical claim records together but rejects any other checksum", async () => {

@@ -13,6 +13,7 @@ import { createPostRepository } from "../modules/posts/infrastructure/post.repos
 import { createReturnFeedbackRepository } from "../modules/returns/infrastructure/return-feedback.repository.js";
 import { createReportRepository } from "../modules/reports/infrastructure/report.repository.js";
 import { createSystemConfigRepository } from "../modules/system-config/infrastructure/system-config.repository.js";
+import { createCustodyRequestRepository } from "../modules/warehouse/infrastructure/custody-request.repository.js";
 import { createWarehouseRepository } from "../modules/warehouse/infrastructure/warehouse.repository.js";
 import { runInTransaction } from "../shared/infrastructure/config/db.js";
 import { createTransactionRunner, type SqlTransactionRunner } from "../shared/infrastructure/transaction-context.js";
@@ -38,6 +39,7 @@ export function createPersistence(database: Pool) {
     systemConfigRepository: createSystemConfigRepository(database),
     userRepository: createUserRepository(database),
     warehouseRepository: createWarehouseRepository(database),
+    custodyRequestRepository: createCustodyRequestRepository(database),
   };
 }
 export type Persistence = ReturnType<typeof createPersistence>;

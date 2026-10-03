@@ -2,6 +2,7 @@ import { z } from "zod";
 
 const uuid = z.string().uuid();
 const nullableText = (max: number) => z.string().trim().max(max).nullable().optional();
+const optionalUuid = z.preprocess((value) => value === "" ? null : value, uuid.nullable().optional());
 
 export const warehouseStatusSchema = z.enum([
   "PENDING_APPROVAL",
@@ -52,4 +53,18 @@ export const updateWarehouseItemSchema = z.object({
   note: nullableText(1000)
 }).refine(atLeastOne, "Cần ít nhất một trường để cập nhật");
 
-export type { CreateWarehouseItemInput, ListWarehouseItemsQuery, UpdateWarehouseItemInput, WarehouseStatus } from "../../application/warehouse.dto.js";
+export const returnWarehouseItemSchema = z.object({
+  claimId: optionalUuid,
+  recipientId: optionalUuid,
+  receiverName: z.string().trim().min(2, "Họ và tên người nhận phải có từ 2 đến 150 ký tự.").max(150, "Họ và tên người nhận phải có từ 2 đến 150 ký tự."),
+  receiverIdentity: z.string().trim().min(3, "Mã thẻ SV / CMND / CCCD phải có từ 3 đến 100 ký tự.").max(100, "Mã thẻ SV / CMND / CCCD phải có từ 3 đến 100 ký tự."),
+  receiverPhone: z.string().trim().min(9, "Số điện thoại phải có từ 9 đến 20 ký tự.").max(20, "Số điện thoại phải có từ 9 đến 20 ký tự."),
+  proofImage: z.string().max(200, "Chỉ được gửi tối đa 5 ảnh bằng chứng.").refine(value => value.split("\n").length <= 5 && value.split("\n").every(id => uuid.safeParse(id).success), "Vui lòng tải lên từ 1 đến 5 ảnh bằng chứng hợp lệ."),
+  note: z.string().trim().max(1000, "Ghi chú bàn giao không được vượt quá 1000 ký tự.").nullable().optional()
+}).superRefine((value, context) => {
+  if (Boolean(value.claimId) !== Boolean(value.recipientId)) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ["claimId"], message: "claimId và recipientId phải được gửi cùng nhau hoặc cùng bỏ trống" });
+  }
+});
+
+export type { CreateWarehouseItemInput, ListWarehouseItemsQuery, UpdateWarehouseItemInput, ReturnWarehouseItemInput, WarehouseStatus } from "../../application/warehouse.dto.js";

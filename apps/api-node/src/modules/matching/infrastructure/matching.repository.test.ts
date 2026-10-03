@@ -24,15 +24,14 @@ async function captureQuery(run: () => Promise<unknown>) {
   }
 }
 
-test("stored matching results exclude inactive or deleted posts on both sides", async () => {
+test("saved matching history includes inactive posts but excludes deleted posts on both sides", async () => {
   const captured = await captureQuery(() => matchingRepository.listForPost("post-id", 0.45));
 
   assert.match(captured.query, /INNER JOIN posts lost_post/);
   assert.match(captured.query, /INNER JOIN posts found_post/);
   assert.match(captured.query, /lost_post\.deleted_at IS NULL/);
   assert.match(captured.query, /found_post\.deleted_at IS NULL/);
-  assert.match(captured.query, /lost_post\.status IN \('OPEN', 'MATCHED'\)/);
-  assert.match(captured.query, /found_post\.status IN \('OPEN', 'MATCHED'\)/);
+  assert.doesNotMatch(captured.query, /status IN/);
   assert.deepEqual(captured.values, ["", "post-id", "post-id", "post-id", 0.45, "", "post-id"]);
 });
 
@@ -62,4 +61,13 @@ test("dismissed matches stay excluded and equal scores have a stable tie breaker
   assert.match(query, /NOT EXISTS \(SELECT 1 FROM match_suggestion_dismissals/);
   assert.match(query, /ORDER BY mr.total_score DESC, mr.updated_at DESC, mr.id ASC/);
   assert.deepEqual(values, ["owner", "post", "post", "post", 0.45, "owner", "post"]);
+});
+
+test("worker completion, failure and heartbeat require the unexpired current lease", async () => {
+  const job = { postId: "post", requestedVersion: 1, correlationKey: "request", leaseToken: "worker-token" };
+  for (const run of [() => matchingRepository.completeRefreshJob(job), () => matchingRepository.failRefreshJob(job, "FAIL"), () => matchingRepository.renewRefreshJob(job, 15)]) {
+    const { query, values } = await captureQuery(run);
+    assert.match(query, /lease_token = \? AND lease_expires_at > UTC_TIMESTAMP\(6\)/);
+    assert.deepEqual(values?.slice(-2), [job.postId, job.leaseToken]);
+  }
 });

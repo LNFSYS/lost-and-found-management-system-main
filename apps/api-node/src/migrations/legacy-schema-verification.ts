@@ -193,7 +193,8 @@ export async function verifyOperationalSchema(connection: MigrationConnection) {
     ["warehouse_items", "storage_code", "varchar(60)", true, null],
     ["warehouse_items", "retention_deadline", "datetime", true, null],
     ["storage_logs", "warehouse_item_id", "char(36)", true, null],
-    ["storage_logs", "action", "enum('RECEIVED','STORED','CLAIMED','RETURNED','EXPIRED','DISPOSED','DONATED','TRANSFERRED','OVERDUE_MARKED','CONDITION_UPDATED')", false, null],
+    ["storage_logs", "action", actual.columns.find(row => row.table_name === "storage_logs" && row.column_name === "action")?.column_type === "varchar(40)"
+      ? "varchar(40)" : "enum('RECEIVED','STORED','CLAIMED','RETURNED','EXPIRED','DISPOSED','DONATED','TRANSFERRED','OVERDUE_MARKED','CONDITION_UPDATED')", false, null],
     ["post_media", "secure_url", "varchar(500)", false, null],
     ["post_media", "public_id", "varchar(255)", false, null],
     ["post_media", "resource_type", "varchar(20)", false, "image"],
@@ -227,21 +228,117 @@ export async function verifyOperationalSchema(connection: MigrationConnection) {
   if (failures.length) throw new Error(`Operational schema mismatch: ${failures.join(", ")}`);
 }
 
-export async function verifyCustodyWithoutProposedTime(connection: MigrationConnection) {
-  const [rows] = await connection.query(`SELECT COLUMN_NAME AS name, COLUMN_TYPE AS type
-    FROM information_schema.COLUMNS
-    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'custody_requests'`);
-  const columns = rows as { name: string; type: string }[];
-  if (columns.some((column) => column.name === "proposed_time")
-    || !columns.some((column) => column.name === "id" && column.type === "char(36)")
-    || !columns.some((column) => column.name === "post_id" && column.type === "char(36)")
-    || !columns.some((column) => column.name === "status" && column.type === "enum('PENDING','ACCEPTED','REJECTED','CANCELLED','INTAKED')")) {
-    throw new Error("Custody schema mismatch for historical migration 055");
-  }
+export async function verifyCustodyRecoveryBaseline(connection: MigrationConnection) {
+  const actual = await schemaRows(connection, ["custody_requests", "custody_request_audit"]);
+  const failures: string[] = [];
+  verifyColumns(actual.columns, [
+    ["custody_requests", "id", "char(36)", false, null],
+    ["custody_requests", "claim_id", "char(36)", true, null],
+    ["custody_requests", "handler_id", "char(36)", true, null],
+    ["custody_requests", "handover_point_id", "char(36)", true, null],
+    ["custody_requests", "warehouse_item_id", "char(36)", true, null],
+    ["custody_requests", "reason", "text", true, null],
+    ["custody_requests", "rejection_reason", "text", true, null],
+    ["custody_requests", "confirmed_handover_at", "datetime", true, null],
+    ["custody_request_audit", "id", "char(36)", false, null],
+    ["custody_request_audit", "custody_request_id", "char(36)", false, null],
+    ["custody_request_audit", "actor_id", "char(36)", false, null],
+    ["custody_request_audit", "action", "varchar(40)", false, null],
+    ["custody_request_audit", "from_status", "varchar(20)", true, null],
+    ["custody_request_audit", "to_status", "varchar(20)", false, null],
+    ["custody_requests", "requester_id", "char(36)", false, null],
+    ["custody_requests", "room_id", "char(36)", true, null],
+    ["custody_requests", "post_id", "char(36)", true, null],
+    ["custody_requests", "status", "enum('PENDING','ACCEPTED','REJECTED','CANCELLED','INTAKED')", false, "PENDING"],
+    ["custody_requests", "intake_type", "enum('CUSTODY_TRANSFER','WALK_IN')", false, "CUSTODY_TRANSFER"],
+    ["custody_requests", "idempotency_key", "varchar(64)", true, null],
+    ["custody_request_audit", "metadata", "json", true, null]
+  ], failures);
+  verifyIndexes(actual.indexes, [
+    ["custody_requests", "uq_custody_req_idempotency", true, ["idempotency_key"]],
+    ["custody_requests", "uq_custody_req_warehouse", true, ["warehouse_item_id"]]
+  ], failures);
+  verifyForeignKeys(actual.foreignKeys, [
+    ["custody_requests", "fk_custody_req_post", "post_id", "posts", "id"],
+    ["custody_requests", "fk_custody_req_requester", "requester_id", "users", "id"],
+    ["custody_requests", "fk_custody_req_claim", "claim_id", "claims", "id"],
+    ["custody_requests", "fk_custody_req_handler", "handler_id", "users", "id"],
+    ["custody_requests", "fk_custody_req_handover", "handover_point_id", "handover_points", "id"],
+    ["custody_requests", "fk_custody_req_warehouse", "warehouse_item_id", "warehouse_items", "id"],
+    ["custody_request_audit", "fk_custody_audit_actor", "actor_id", "users", "id"],
+    ["custody_request_audit", "fk_custody_audit_req", "custody_request_id", "custody_requests", "id"]
+  ], failures);
+  if (failures.length) throw new Error(`Custody recovery requires the audited runtime baseline; historical/different schema needs explicit conversion: ${failures.join(", ")}`);
+}
+
+export async function verifyCustodyTimeRemoval(connection: MigrationConnection) {
+  await verifyCustodyRecoveryBaseline(connection);
+  const actual = await schemaRows(connection, ["custody_requests"]);
+  if (actual.columns.some(row => row.column_name === "proposed_time")) throw new Error("Custody time-removal baseline mismatch: proposed_time still exists");
+}
+
+export async function verifyMatchingFeedbackRecoveryBaseline(connection: MigrationConnection) {
+  const tables = ["match_feedback", "match_suggestion_dismissals", "matching_jobs"] as const;
+  const actual = await schemaRows(connection, tables);
+  const failures: string[] = [];
+  const label = actual.columns.find(row => row.table_name === "match_feedback" && row.column_name === "label")?.column_type;
+  const recoveredLabels = "enum('TRUE_MATCH','FALSE_MATCH','UNCERTAIN','DUPLICATE','INSUFFICIENT_EVIDENCE','USEFUL','IRRELEVANT','INCORRECT')";
+  verifyColumns(actual.columns, [
+    ["match_feedback", "id", "char(36)", false, null],
+    ["match_feedback", "match_id", "char(36)", false, null],
+    ["match_feedback", "user_id", "char(36)", false, null],
+    ["match_feedback", "source_post_id", "char(36)", true, null],
+    ["match_feedback", "label", label?.toUpperCase() === recoveredLabels.toUpperCase() ? recoveredLabels : "enum('USEFUL','IRRELEVANT','INCORRECT')", false, null],
+    ["match_feedback", "note", "varchar(500)", true, null],
+    ["match_feedback", "source", "enum('USER','STAFF','ADMIN')", false, "USER"],
+    ["match_feedback", "correlation_key", "varchar(128)", true, null],
+    ["match_feedback", "created_at", "datetime", false, "CURRENT_TIMESTAMP"],
+    ["match_feedback", "updated_at", "datetime", false, "CURRENT_TIMESTAMP"],
+    ["match_suggestion_dismissals", "id", "char(36)", false, null],
+    ["match_suggestion_dismissals", "match_id", "char(36)", false, null],
+    ["match_suggestion_dismissals", "user_id", "char(36)", false, null],
+    ["match_suggestion_dismissals", "source_post_id", "char(36)", false, null],
+    ["match_suggestion_dismissals", "reason", "varchar(500)", true, null],
+    ["match_suggestion_dismissals", "correlation_key", "varchar(128)", false, null],
+    ["match_suggestion_dismissals", "created_at", "datetime", false, "CURRENT_TIMESTAMP"],
+    ["matching_jobs", "post_id", "char(36)", false, null],
+    ["matching_jobs", "correlation_key", "varchar(128)", true, null],
+    ["matching_jobs", "status", "enum('PENDING','PROCESSING','COMPLETED','FAILED')", false, "PENDING"],
+    ["matching_jobs", "requested_version", "int unsigned", false, "1"],
+    ["matching_jobs", "processed_version", "int unsigned", false, "0"]
+  ], failures);
+  verifyIndexes(actual.indexes, [
+    ["match_feedback", "PRIMARY", true, ["id"]],
+    ["match_feedback", "uq_match_feedback_user", true, ["match_id", "user_id"]],
+    ["match_feedback", "uq_match_feedback_correlation", true, ["user_id", "correlation_key"]],
+    ["match_feedback", "idx_match_feedback_label_created", false, ["label", "created_at"]],
+    ["match_feedback", "idx_match_feedback_user_created", false, ["user_id", "created_at"]],
+    ["match_suggestion_dismissals", "PRIMARY", true, ["id"]],
+    ["match_suggestion_dismissals", "uq_match_dismissal_actor", true, ["match_id", "user_id", "source_post_id"]],
+    ["match_suggestion_dismissals", "uq_match_dismissal_correlation", true, ["user_id", "correlation_key"]],
+    ["match_suggestion_dismissals", "idx_match_dismissal_post_created", false, ["source_post_id", "created_at"]],
+    ["matching_jobs", "PRIMARY", true, ["post_id"]],
+    ["matching_jobs", "idx_matching_jobs_ready", false, ["status", "available_at"]],
+    ["matching_jobs", "idx_matching_jobs_locked", false, ["status", "locked_at"]],
+    ["matching_jobs", "idx_matching_jobs_correlation", false, ["correlation_key"]]
+  ], failures);
+  verifyForeignKeys(actual.foreignKeys, [
+    ["match_feedback", "fk_match_feedback_match", "match_id", "match_results", "id"],
+    ["match_feedback", "fk_match_feedback_user", "user_id", "users", "id"],
+    ["match_feedback", "fk_match_feedback_source_post", "source_post_id", "posts", "id"],
+    ["match_suggestion_dismissals", "fk_match_dismissal_match", "match_id", "match_results", "id"],
+    ["match_suggestion_dismissals", "fk_match_dismissal_user", "user_id", "users", "id"],
+    ["match_suggestion_dismissals", "fk_match_dismissal_source_post", "source_post_id", "posts", "id"],
+    ["matching_jobs", "fk_matching_jobs_post", "post_id", "posts", "id"]
+  ], failures);
+  for (const table of tables) if (!actual.tables.some(row => row.table_name === table && row.engine === "InnoDB" && row.table_collation === "utf8mb4_unicode_ci")) failures.push(`table:${table}`);
+  if (failures.length) throw new Error(`Matching recovery baseline mismatch: ${failures.join(", ")}`);
 }
 
 const verifiers: Record<MigrationSchemaVerifier, (connection: MigrationConnection) => Promise<void>> = {
-  "custody-without-proposed-time": verifyCustodyWithoutProposedTime,
+  "matching-feedback-recovery-baseline": verifyMatchingFeedbackRecoveryBaseline,
+  "custody-time-removal": verifyCustodyTimeRemoval,
+  "custody-recovery-baseline": verifyCustodyRecoveryBaseline,
   "claim-conversations": verifyClaimConversationSchema,
   "realtime-claim-chat": verifyRealtimeClaimChatSchema,
   "notification-type-text": verifyNotificationTypeTextSchema

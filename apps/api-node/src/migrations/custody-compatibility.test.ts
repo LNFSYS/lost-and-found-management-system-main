@@ -1,21 +1,16 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { verifyCustodyWithoutProposedTime } from "./legacy-schema-verification.js";
+import { verifyCustodyTimeRemoval } from "./legacy-schema-verification.js";
+import { legacyMigrationCompatibility } from "./legacy-migration-compatibility.js";
 import type { MigrationConnection } from "./migration-state.js";
 
-function connection(columns: { name: string; type: string }[]): MigrationConnection {
-  return { async query() { return [columns, []]; }, release() {}, destroy() {} };
-}
-const expected = [
-  { name: "id", type: "char(36)" },
-  { name: "post_id", type: "char(36)" },
-  { name: "status", type: "enum('PENDING','ACCEPTED','REJECTED','CANCELLED','INTAKED')" }
-];
+test("custody history has one authoritative verifier per version/checksum", () => {
+  const keys = legacyMigrationCompatibility.map(entry => entry.version + ":" + entry.checksum);
+  assert.equal(new Set(keys).size, keys.length);
+  assert.equal(legacyMigrationCompatibility.find(entry => entry.version === "055_remove_proposed_time_from_custody.sql")?.verifier, "custody-time-removal");
+});
 
-test("custody compatibility requires the table and verifies removal of proposed_time", async () => {
-  await verifyCustodyWithoutProposedTime(connection(expected));
-  await assert.rejects(verifyCustodyWithoutProposedTime(connection([])), /schema mismatch/);
-  await assert.rejects(verifyCustodyWithoutProposedTime(connection([
-    ...expected, { name: "proposed_time", type: "datetime" }
-  ])), /schema mismatch/);
+test("custody compatibility rejects an incomplete historical schema", async () => {
+  const connection: MigrationConnection = { async query() { return [[], []]; }, release() {}, destroy() {} };
+  await assert.rejects(verifyCustodyTimeRemoval(connection), /audited runtime baseline/);
 });

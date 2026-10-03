@@ -5,7 +5,7 @@ import {
   scoreMatchCandidates,
   type MatchingConfig
 } from "../domain/matching.engine.js";
-import type { MatchFeedbackValue, MatchingRepository } from "./matching.repository.port.js";
+import type { MatchFeedbackValue, MatchingRefreshJob, MatchingRepository } from "./matching.repository.port.js";
 
 function isUnitInterval(value: number) {
   return Number.isFinite(value) && value >= 0 && value <= 1;
@@ -82,12 +82,12 @@ export function createMatchingUseCases(options: MatchingDependencies) {
     return matches.flatMap((match) => {
       const counterpartId = match.lostPostId === postId ? match.foundPostId : match.lostPostId;
       const candidate = postById.get(counterpartId);
-      return candidate ? [{ match, candidate }] : [];
+      return candidate && !(candidate.type === "LOST" && candidate.userId === viewerId) ? [{ match, candidate }] : [];
     });
   }
 
   const matchingService = {
-    async runForPost(postId: string) {
+    async runForPost(postId: string, viewerId?: string, page = 1, pageSize = 20, job?: MatchingRefreshJob) {
       const source = await matchingRepository.findCandidate(postId);
       if (!source) throw new AppError("conflict", "Bài đăng phải đang mở hoặc đã có gợi ý để tính matching");
       const [config, candidateLimit, candidateWindowDays] = await Promise.all([
@@ -98,8 +98,10 @@ export function createMatchingUseCases(options: MatchingDependencies) {
       const candidates = await matchingRepository.listOppositeCandidates(source, candidateLimit, candidateWindowDays);
       const matches = scoreMatchCandidates(source, candidates, config)
         .filter((match) => match.totalScore >= config.weakThreshold);
-      await matchingRepository.persistForSource(source, matches);
-      return this.getStoredResults(postId, config);
+      if (await matchingRepository.persistForSource(source, matches, job) === false) {
+        throw new AppError("conflict", "Matching refresh lease or source eligibility changed");
+      }
+      return matchingService.getStoredResults(postId, config, viewerId, page, pageSize);
     },
 
     async getStoredResults(postId: string, suppliedConfig?: MatchingConfig, viewerId?: string, page = 1, pageSize = 20) {
@@ -158,20 +160,31 @@ export function createMatchingUseCases(options: MatchingDependencies) {
 
     async runPeriodicRefresh(input: { intervalHours: number; batchSize: number; staleMinutes: number }) {
       const enqueued = await matchingRepository.enqueueEligibleRefresh(input.intervalHours, input.batchSize * 4);
-      const jobs = await matchingRepository.claimRefreshJobs(input.batchSize, input.staleMinutes);
+      let claimed = 0;
       let completed = 0;
       let failed = 0;
-      for (const job of jobs) {
+      // Claim just-in-time so queued batch entries do not age while another runs.
+      for (let index = 0; index < input.batchSize; index += 1) {
+        const [job] = await matchingRepository.claimRefreshJobs(1, input.staleMinutes);
+        if (!job) break;
+        claimed += 1;
+        let renewal: Promise<unknown> | null = null;
+        const timer = setInterval(() => {
+          if (!renewal) renewal = matchingRepository.renewRefreshJob(job, input.staleMinutes)
+            .catch(() => false).finally(() => { renewal = null; });
+        }, Math.max(1_000, input.staleMinutes * 30_000));
+        timer.unref();
         try {
-          await matchingService.runForPost(job.postId);
-          await matchingRepository.completeRefreshJob(job);
-          completed += 1;
+          await matchingService.runForPost(job.postId, undefined, 1, 20, job);
+          if (await matchingRepository.completeRefreshJob(job)) completed += 1;
         } catch {
-          await matchingRepository.failRefreshJob(job, "MATCH_REFRESH_FAILED");
-          failed += 1;
+          if (await matchingRepository.failRefreshJob(job, "MATCH_REFRESH_FAILED")) failed += 1;
+        } finally {
+          clearInterval(timer);
+          if (renewal) await renewal;
         }
       }
-      return { enqueued, claimed: jobs.length, completed, failed };
+      return { enqueued, claimed, completed, failed };
     },
 
     async listSummaries(postIds: string[]) {

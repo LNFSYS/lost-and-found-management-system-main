@@ -1,4 +1,4 @@
-import type { MatchingRepository } from "../application/matching.repository.port.js";
+import type { MatchingRefreshJob, MatchingRepository } from "../application/matching.repository.port.js";
 import { AppError } from "../../../shared/domain/app-error.js";
 
 export type { MatchingRepository } from "../application/matching.repository.port.js";
@@ -72,6 +72,8 @@ interface FeedbackRow extends RowDataPacket {
 }
 interface DismissalRow extends RowDataPacket { id: string; correlation_key: string; reason: string | null; created_at: Date | string; }
 interface RefreshJobRow extends RowDataPacket { post_id: string; requested_version: number; correlation_key: string | null; }
+const maxRefreshAttempts = 5;
+const currentLeaseWhere = "post_id = ? AND status = 'PROCESSING' AND lease_token = ? AND lease_expires_at > UTC_TIMESTAMP(6)";
 
 interface ConfigRow extends RowDataPacket {
   config_value: string;
@@ -265,8 +267,14 @@ export function createMatchingRepository(pool: SqlExecutor, withTransaction: Sql
       return rows.map(mapCandidate);
     },
 
-    async persistForSource(source: MatchCandidate, matches: ScoredMatch[]) {
-      await withTransaction(async (connection) => {
+    async persistForSource(source: MatchCandidate, matches: ScoredMatch[], job?: MatchingRefreshJob) {
+      return withTransaction(async (connection) => {
+        if (job) {
+          const [leases] = await connection.execute<RowDataPacket[]>(`SELECT post_id FROM matching_jobs WHERE ${currentLeaseWhere} FOR UPDATE`, [job.postId, job.leaseToken]);
+          if (!leases.length) return false;
+          const [posts] = await connection.execute<RowDataPacket[]>("SELECT id FROM posts WHERE id = ? AND deleted_at IS NULL AND status IN ('OPEN', 'MATCHED') FOR UPDATE", [source.id]);
+          if (!posts.length) return false;
+        }
         await sqlExecutor(connection).execute(
           `UPDATE match_results
          SET total_score = 0, text_score = 0, category_score = 0, location_score = 0,
@@ -285,10 +293,13 @@ export function createMatchingRepository(pool: SqlExecutor, withTransaction: Sql
                'penalties', JSON_ARRAY('Kết quả đã được tính lại.')
              ),
              updated_at = UTC_TIMESTAMP()
-         WHERE lost_post_id = ? OR found_post_id = ?`,
+           WHERE (lost_post_id = ? OR found_post_id = ?)
+             AND lost_post_id IN (SELECT id FROM posts WHERE type = 'LOST' AND status IN ('OPEN','MATCHED') AND deleted_at IS NULL)
+             AND found_post_id IN (SELECT id FROM posts WHERE type = 'FOUND' AND status IN ('OPEN','MATCHED') AND deleted_at IS NULL)`,
           [source.id, source.id]
         );
         for (const match of matches) await upsertResult(connection, source, match);
+        return true;
       });
     },
 
@@ -305,7 +316,7 @@ export function createMatchingRepository(pool: SqlExecutor, withTransaction: Sql
          ${activeMatchJoin}
         WHERE (mr.lost_post_id = ? OR mr.found_post_id = ?)
           AND mr.total_score >= ?
-          AND ${activeMatchWhere}
+          AND lost_post.deleted_at IS NULL AND found_post.deleted_at IS NULL
           AND NOT EXISTS (SELECT 1 FROM match_suggestion_dismissals md WHERE md.match_id = mr.id AND md.user_id = ? AND md.source_post_id = ?)
        ORDER BY mr.total_score DESC, mr.updated_at DESC, mr.id ASC`,
         [viewerId ?? "", postId, postId, postId, minimumScore, viewerId ?? "", postId]
@@ -378,6 +389,7 @@ export function createMatchingRepository(pool: SqlExecutor, withTransaction: Sql
            requested_version = IF(matching_jobs.status = 'PROCESSING', matching_jobs.requested_version, matching_jobs.processed_version + 1),
            status = IF(matching_jobs.status = 'PROCESSING', matching_jobs.status, 'PENDING'),
            available_at = IF(matching_jobs.status = 'PROCESSING', matching_jobs.available_at, UTC_TIMESTAMP()),
+           attempts = IF(matching_jobs.status = 'PROCESSING', matching_jobs.attempts, 0),
            last_error = IF(matching_jobs.status = 'PROCESSING', matching_jobs.last_error, NULL)`,
         [correlationKey, Math.max(1, Math.trunc(intervalHours))]
       );
@@ -387,20 +399,41 @@ export function createMatchingRepository(pool: SqlExecutor, withTransaction: Sql
     async claimRefreshJobs(limit: number, staleMinutes: number) {
       return withTransaction(async (connection) => {
         const db = sqlExecutor(connection);
-        await db.execute(`UPDATE matching_jobs SET status = 'PENDING', locked_at = NULL WHERE status = 'PROCESSING' AND locked_at < DATE_SUB(UTC_TIMESTAMP(), INTERVAL ? MINUTE)`, [Math.max(1, Math.trunc(staleMinutes))]);
+        await db.execute(`UPDATE matching_jobs SET status = 'FAILED', last_error = 'POST_INELIGIBLE', locked_at = NULL, lease_token = NULL, lease_expires_at = NULL
+          WHERE status IN ('PENDING', 'PROCESSING') AND NOT EXISTS (SELECT 1 FROM posts p WHERE p.id = matching_jobs.post_id AND p.deleted_at IS NULL AND p.status IN ('OPEN', 'MATCHED'))`);
+        await db.execute(`UPDATE matching_jobs SET status = IF(attempts >= ?, 'FAILED', 'PENDING'), last_error = 'LEASE_EXPIRED', locked_at = NULL, lease_token = NULL, lease_expires_at = NULL
+          WHERE status = 'PROCESSING' AND (lease_expires_at <= UTC_TIMESTAMP(6) OR (lease_expires_at IS NULL AND locked_at < DATE_SUB(UTC_TIMESTAMP(), INTERVAL ? MINUTE)))`, [maxRefreshAttempts, Math.max(1, Math.trunc(staleMinutes))]);
+        await db.execute("UPDATE matching_jobs SET status = 'FAILED', last_error = 'RETRY_EXHAUSTED' WHERE status = 'PENDING' AND attempts >= ?", [maxRefreshAttempts]);
         const safeLimit = Math.max(1, Math.min(100, Math.trunc(limit)));
-        const [rows] = await db.execute<RefreshJobRow[]>(`SELECT post_id, requested_version, correlation_key FROM matching_jobs WHERE status = 'PENDING' AND available_at <= UTC_TIMESTAMP() ORDER BY available_at, post_id LIMIT ${safeLimit} FOR UPDATE SKIP LOCKED`);
-        for (const row of rows) await db.execute("UPDATE matching_jobs SET status = 'PROCESSING', locked_at = UTC_TIMESTAMP(), attempts = attempts + 1 WHERE post_id = ?", [row.post_id]);
-        return rows.map((row) => ({ postId: row.post_id, requestedVersion: Number(row.requested_version), correlationKey: row.correlation_key ?? `job-${row.post_id}-${row.requested_version}` }));
+        const [rows] = await db.execute<RefreshJobRow[]>(`SELECT mj.post_id, mj.requested_version, mj.correlation_key FROM matching_jobs mj INNER JOIN posts p ON p.id = mj.post_id
+          WHERE mj.status = 'PENDING' AND mj.available_at <= UTC_TIMESTAMP() AND mj.attempts < ? AND p.deleted_at IS NULL AND p.status IN ('OPEN', 'MATCHED')
+          ORDER BY mj.available_at, mj.post_id LIMIT ${safeLimit} FOR UPDATE SKIP LOCKED`, [maxRefreshAttempts]);
+        const jobs: MatchingRefreshJob[] = [];
+        for (const row of rows) {
+          const leaseToken = id();
+          await db.execute("UPDATE matching_jobs SET status = 'PROCESSING', locked_at = UTC_TIMESTAMP(), lease_token = ?, lease_expires_at = DATE_ADD(UTC_TIMESTAMP(6), INTERVAL ? MINUTE), attempts = attempts + 1 WHERE post_id = ?", [leaseToken, Math.max(1, Math.trunc(staleMinutes)), row.post_id]);
+          jobs.push({ postId: row.post_id, requestedVersion: Number(row.requested_version), correlationKey: row.correlation_key ?? `job-${row.post_id}-${row.requested_version}`, leaseToken });
+        }
+        return jobs;
       });
     },
 
-    async completeRefreshJob(job) {
-      await pool.execute(`UPDATE matching_jobs SET processed_version = ?, status = IF(requested_version > ?, 'PENDING', 'COMPLETED'), locked_at = NULL, last_error = NULL, updated_at = UTC_TIMESTAMP() WHERE post_id = ? AND status = 'PROCESSING'`, [job.requestedVersion, job.requestedVersion, job.postId]);
+    async renewRefreshJob(job: MatchingRefreshJob, staleMinutes: number) {
+      const [result] = await pool.execute<ResultSetHeader>(`UPDATE matching_jobs SET locked_at = UTC_TIMESTAMP(), lease_expires_at = DATE_ADD(UTC_TIMESTAMP(6), INTERVAL ? MINUTE)
+        WHERE ${currentLeaseWhere}`, [Math.max(1, Math.trunc(staleMinutes)), job.postId, job.leaseToken]);
+      return result.affectedRows === 1;
     },
 
-    async failRefreshJob(job, errorCode: string) {
-      await pool.execute(`UPDATE matching_jobs SET status = 'PENDING', locked_at = NULL, last_error = ?, available_at = DATE_ADD(UTC_TIMESTAMP(), INTERVAL 15 MINUTE), updated_at = UTC_TIMESTAMP() WHERE post_id = ? AND status = 'PROCESSING'`, [errorCode.slice(0, 1000), job.postId]);
+    async completeRefreshJob(job: MatchingRefreshJob) {
+      const [result] = await pool.execute<ResultSetHeader>(`UPDATE matching_jobs SET processed_version = GREATEST(processed_version, ?), status = IF(requested_version > ?, 'PENDING', 'COMPLETED'), attempts = 0,
+        locked_at = NULL, lease_token = NULL, lease_expires_at = NULL, last_error = NULL, updated_at = UTC_TIMESTAMP() WHERE ${currentLeaseWhere}`, [job.requestedVersion, job.requestedVersion, job.postId, job.leaseToken]);
+      return result.affectedRows === 1;
+    },
+
+    async failRefreshJob(job: MatchingRefreshJob, errorCode: string) {
+      const [result] = await pool.execute<ResultSetHeader>(`UPDATE matching_jobs SET status = IF(attempts >= ? OR NOT EXISTS (SELECT 1 FROM posts p WHERE p.id = matching_jobs.post_id AND p.deleted_at IS NULL AND p.status IN ('OPEN', 'MATCHED')), 'FAILED', 'PENDING'),
+        locked_at = NULL, lease_token = NULL, lease_expires_at = NULL, last_error = ?, available_at = DATE_ADD(UTC_TIMESTAMP(), INTERVAL 15 MINUTE), updated_at = UTC_TIMESTAMP() WHERE ${currentLeaseWhere}`, [maxRefreshAttempts, errorCode.slice(0, 1000), job.postId, job.leaseToken]);
+      return result.affectedRows === 1;
     },
 
     async listSummaries(postIds: string[], minimumScore: number) {

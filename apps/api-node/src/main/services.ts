@@ -19,6 +19,7 @@ import { createReturnFeedbackUseCases } from "../modules/returns/application/ret
 import { createReportUseCases } from "../modules/reports/application/report.use-cases.js";
 import { createSystemConfigUseCases } from "../modules/system-config/application/system-config.use-cases.js";
 import { createWarehouseUseCases } from "../modules/warehouse/application/warehouse.use-cases.js";
+import { createCustodyRequestUseCases } from "../modules/warehouse/application/custody-request.use-cases.js";
 import { env } from "../shared/infrastructure/config/env.js";
 import { createCloudinaryPrivateMediaStorage } from "../shared/infrastructure/cloudinary-private-media-storage.js";
 import { createPrivateMediaStorage } from "../shared/infrastructure/private-media-storage.js";
@@ -30,7 +31,7 @@ export function createServices(persistence: Persistence, config: typeof env = en
     transaction, adminAuditRepository, adminCatalogRepository, adminReportingRepository,
     adminUserRepository, authRepository, claimRepository, matchingRepository,
     notificationRepository, notificationEmailRepository, postRepository, returnFeedbackRepository, reportRepository,
-    systemConfigRepository, userRepository, warehouseRepository
+    systemConfigRepository, userRepository, warehouseRepository, custodyRequestRepository
   } = persistence;
   const security = createAuthSecurity(config);
   const avatarStorage = createCloudinaryAvatarStorage({ config: config.cloudinary });
@@ -79,7 +80,15 @@ export function createServices(persistence: Persistence, config: typeof env = en
     transaction, idFactory: id, clock: () => new Date()
   });
   const adminCatalogService = createAdminCatalogUseCases({ adminCatalogRepository, id });
-  const warehouseService = createWarehouseUseCases({ warehouseRepository, withTransaction: transaction, id });
+  const realtimeService = createRealtimeUseCases({ claimRepository, id });
+  const custodyDelivery = { notificationRepository, notificationEmailQueue,
+    publishCustodyNotification: async (userId: string, notification: import("../modules/notifications/application/index.js").NotificationRecord) => {
+      realtimeService.publishNotification({ userId, notification, workflow: "CUSTODY" });
+    }
+  };
+  const proofStorage = createPrivateMediaStorage({ uploadDir: config.uploadDir, namespace: "warehouse-proof", invalidPathMessage: "Invalid proof path", notFoundMessage: "Proof not found" });
+  const warehouseService = createWarehouseUseCases({ warehouseRepository, custodyRequestRepository, proofStorage, ...custodyDelivery, withTransaction: transaction, id });
+  const custodyRequestService = createCustodyRequestUseCases({ custodyRequestRepository, warehouseRepository, ...custodyDelivery, withTransaction: transaction, id });
   const returnFeedbackService = createReturnFeedbackUseCases({
     repository: returnFeedbackRepository, adminAuditRepository, runInTransaction: transaction, id
   });
@@ -91,9 +100,8 @@ export function createServices(persistence: Persistence, config: typeof env = en
     postRepository, matchingRepository, matchingService,
     withTransaction: transaction, id, mediaStorage: postMediaStorage, logger: console
   });
-  const realtimeService = createRealtimeUseCases({ claimRepository, id });
   const claimService = createClaimUseCases({
-    claimRepository, matchingRepository, notificationRepository, notificationEmailQueue,
+    claimRepository, matchingRepository, notificationRepository, custodyRequestRepository, warehouseRepository, notificationEmailQueue,
     realtimeNotifier: realtimeService,
     withTransaction: transaction, id, mediaStorage: claimMediaStorage,
     hashIdempotencyPayload: security.hashToken, logger: console
@@ -105,7 +113,7 @@ export function createServices(persistence: Persistence, config: typeof env = en
   const geminiImageService = createImageAnalysisUseCases({ postRepository, analyzer: createGeminiImageAnalyzer(config.gemini) });
   return {
     notificationService, notificationEmailWorker, systemConfigService, adminUserService, adminReportingService,
-    adminCatalogService, warehouseService, returnFeedbackService, matchingService,
+    adminCatalogService, warehouseService, custodyRequestService, returnFeedbackService, matchingService,
     postService, claimService, realtimeService, reportService, authService, geminiImageService
   };
 }

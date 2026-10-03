@@ -60,7 +60,8 @@ export function createPostController({ postService, geminiImageService }: {
     },
 
     async recalculateMatches(request: Request, response: Response) {
-      response.json(await postService.recalculatePostMatches(routeId(request), request.auth!));
+      const query = listMatchesQuerySchema.parse(request.query);
+      response.json(await postService.recalculatePostMatches(routeId(request), request.auth!, query.page, query.pageSize));
     },
 
     async submitMatchFeedback(request: Request, response: Response) {

@@ -4,6 +4,7 @@ import {
 } from "./migration-state.js";
 import { legacyMigrationCompatibility } from "./legacy-migration-compatibility.js";
 import { verifyMigrationCompatibility } from "./legacy-schema-verification.js";
+import { matchingRecoverySupersession } from "./matching-recovery-supersession.js";
 
 export type { MigrationPool } from "./migration-state.js";
 
@@ -26,7 +27,13 @@ export async function runMigrations(input: {
     // Validate all history before even the first pending migration can auto-commit DDL.
     const compatibilityMatches = validateMigrationState(files, state, legacyMigrationCompatibility);
     await verifyMigrationCompatibility(connection, compatibilityMatches);
-    const pending = pendingMigrationFiles(files, state, compatibilityMatches);
+    for (const match of compatibilityMatches.filter(match => ["matching-feedback-recovery-baseline", "custody-time-removal"].includes(match.verifier))) {
+      log(`Recognized exact historical record ${match.version} by current-schema verification only; original SQL/data/configuration effects remain unavailable and unverified. No alias or replay.`);
+    }
+    const superseded = await matchingRecoverySupersession(connection, files, state.ledger);
+    const pending = pendingMigrationFiles(files, state, compatibilityMatches)
+      .filter(file => !superseded.some(entry => entry.version === file.version));
+    for (const entry of superseded) log(`Superseded ${entry.version} by verified ${entry.supersededBy}; ledger unchanged`);
     await connection.query(`CREATE TABLE IF NOT EXISTS schema_migrations (
       version VARCHAR(100) PRIMARY KEY, checksum CHAR(64) NOT NULL,
       applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP

@@ -91,3 +91,22 @@ test("match dismissal replay is idempotent and forged match identifiers are reje
     (error: unknown) => error instanceof Error && "code" in error && error.code === "not_found"
   );
 });
+
+test("owned LOST suggestions are removed before calculating pagination metadata", async () => {
+  const matches = Array.from({ length: 42 }, (_, index) => ({ id: `match-${index}`, lostPostId: `lost-${index}`, foundPostId: "source", updatedAt: "2026-10-03T00:00:00.000Z" }));
+  const service = createMatchingUseCases({
+    matchingRepository: {
+      getConfigNumber: async (_key: string, fallback: number) => fallback,
+      listForPost: async (_post: string, _score: number, viewer?: string) => { assert.equal(viewer, "owner"); return matches; }
+    } as unknown as MatchingRepository,
+    postRepository: { findVisibleByIds: async () => matches.map((match, index) => ({ id: match.lostPostId, type: "LOST", userId: index === 0 ? "owner" : "other" })) } as never,
+    idFactory: () => "fixture"
+  });
+  const result = await service.getStoredResults("source", undefined, "owner", 2, 20);
+  assert.equal(result.total, 41);
+  assert.equal(result.page, 2);
+  assert.equal(result.pageSize, 20);
+  assert.equal(result.hasMore, true);
+  assert.equal(result.results.length, 20);
+  assert.equal(result.results[0].candidate.id, "lost-21");
+});

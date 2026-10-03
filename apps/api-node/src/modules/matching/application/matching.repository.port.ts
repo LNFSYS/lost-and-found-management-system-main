@@ -13,13 +13,13 @@ export interface MatchFeedbackRecord {
   createdAt: string;
   updatedAt: string;
 }
-export interface MatchingRefreshJob { postId: string; requestedVersion: number; correlationKey: string; }
+export interface MatchingRefreshJob { postId: string; requestedVersion: number; correlationKey: string; leaseToken: string; }
 
 export interface MatchingRepository {
   getConfigNumber(key: string, fallback: number): Promise<number>;
   findCandidate(postId: string): Promise<MatchCandidate | null>;
   listOppositeCandidates(source: MatchCandidate, candidateLimit: number, candidateWindowDays: number): Promise<MatchCandidate[]>;
-  persistForSource(source: MatchCandidate, matches: ScoredMatch[]): Promise<void>;
+  persistForSource(source: MatchCandidate, matches: ScoredMatch[], job?: MatchingRefreshJob): Promise<boolean | void>;
   listForPost(postId: string, minimumScore: number, viewerId?: string): Promise<{
     id: string;
     lostPostId: string;
@@ -46,8 +46,9 @@ export interface MatchingRepository {
   saveDismissal(input: { id: string; matchId: string; userId: string; sourcePostId: string; reason: string | null; correlationKey: string }): Promise<{ id: string; correlationKey: string; reason: string | null; createdAt: string }>;
   enqueueEligibleRefresh(intervalHours: number, limit: number): Promise<number>;
   claimRefreshJobs(limit: number, staleMinutes: number): Promise<MatchingRefreshJob[]>;
-  completeRefreshJob(job: MatchingRefreshJob): Promise<void>;
-  failRefreshJob(job: MatchingRefreshJob, errorCode: string): Promise<void>;
+  renewRefreshJob(job: MatchingRefreshJob, staleMinutes: number): Promise<boolean>;
+  completeRefreshJob(job: MatchingRefreshJob): Promise<boolean>;
+  failRefreshJob(job: MatchingRefreshJob, errorCode: string): Promise<boolean>;
   listSummaries(postIds: string[], minimumScore: number): Promise<Map<string, {
     candidateCount: number;
     suggestionCount: number;
