@@ -82,6 +82,13 @@ export const env = {
     workerPollSeconds: boundedNumber("NOTIFICATION_EMAIL_WORKER_POLL_SECONDS", 30, 5, 300),
     workerEnabled: bool("NOTIFICATION_EMAIL_WORKER_ENABLED", true)
   },
+  matchingRefresh: {
+    enabled: bool("MATCHING_REFRESH_ENABLED", true),
+    pollSeconds: boundedNumber("MATCHING_REFRESH_POLL_SECONDS", 300, 30, 3_600),
+    intervalHours: boundedNumber("MATCHING_REFRESH_INTERVAL_HOURS", 6, 1, 168),
+    batchSize: boundedNumber("MATCHING_REFRESH_BATCH_SIZE", 20, 1, 100),
+    staleMinutes: boundedNumber("MATCHING_REFRESH_STALE_MINUTES", 15, 5, 120)
+  },
   gemini: {
     apiKey: process.env.GEMINI_API_KEY?.trim() || null,
     model: process.env.GEMINI_MODEL?.trim() || "gemini-3.5-flash-lite",

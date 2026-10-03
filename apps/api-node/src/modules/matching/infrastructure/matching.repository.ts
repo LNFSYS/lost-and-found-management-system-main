@@ -1,4 +1,5 @@
 import type { MatchingRepository } from "../application/matching.repository.port.js";
+import { AppError } from "../../../shared/domain/app-error.js";
 
 export type { MatchingRepository } from "../application/matching.repository.port.js";
 
@@ -6,7 +7,7 @@ import type { TransactionContext } from "../../../shared/application/transaction
 
 import { sqlExecutor, type SqlExecutor, type SqlTransactionRunner } from "../../../shared/infrastructure/transaction-context.js";
 
-import type { PoolConnection, RowDataPacket } from "mysql2/promise";
+import type { PoolConnection, ResultSetHeader, RowDataPacket } from "mysql2/promise";
 
 import { id } from "../../../shared/infrastructure/security.js";
 
@@ -54,7 +55,23 @@ interface MatchResultRow extends RowDataPacket {
   is_notified: number;
   created_at: Date | string;
   updated_at: Date | string;
+  feedback_id?: string | null;
+  feedback_user_id?: string | null;
+  feedback_source_post_id?: string | null;
+  feedback_label?: "USEFUL" | "IRRELEVANT" | "INCORRECT" | null;
+  feedback_note?: string | null;
+  feedback_correlation_key?: string | null;
+  feedback_created_at?: Date | string | null;
+  feedback_updated_at?: Date | string | null;
 }
+
+interface FeedbackRow extends RowDataPacket {
+  id: string; match_id: string; user_id: string; source_post_id: string;
+  label: "USEFUL" | "IRRELEVANT" | "INCORRECT"; note: string | null; correlation_key: string;
+  created_at: Date | string; updated_at: Date | string;
+}
+interface DismissalRow extends RowDataPacket { id: string; correlation_key: string; reason: string | null; created_at: Date | string; }
+interface RefreshJobRow extends RowDataPacket { post_id: string; requested_version: number; correlation_key: string | null; }
 
 interface ConfigRow extends RowDataPacket {
   config_value: string;
@@ -122,8 +139,23 @@ function mapResult(row: MatchResultRow) {
     explanation: parseExplanation(row.explanation_json),
     isNotified: row.is_notified === 1,
     createdAt: iso(row.created_at)!,
-    updatedAt: iso(row.updated_at)!
+    updatedAt: iso(row.updated_at)!,
+    feedback: row.feedback_id ? {
+      id: row.feedback_id,
+      matchId: row.id,
+      userId: row.feedback_user_id!,
+      sourcePostId: row.feedback_source_post_id!,
+      value: row.feedback_label!,
+      note: row.feedback_note ?? null,
+      correlationKey: row.feedback_correlation_key!,
+      createdAt: iso(row.feedback_created_at ?? null)!,
+      updatedAt: iso(row.feedback_updated_at ?? null)!
+    } : null
   };
+}
+
+function mapFeedback(row: FeedbackRow) {
+  return { id: row.id, matchId: row.match_id, userId: row.user_id, sourcePostId: row.source_post_id, value: row.label, note: row.note, correlationKey: row.correlation_key, createdAt: iso(row.created_at)!, updatedAt: iso(row.updated_at)! };
 }
 
 const candidateSelect = `SELECT
@@ -260,17 +292,115 @@ export function createMatchingRepository(pool: SqlExecutor, withTransaction: Sql
       });
     },
 
-    async listForPost(postId: string, minimumScore: number) {
+    async listForPost(postId: string, minimumScore: number, viewerId?: string) {
       const [rows] = await pool.execute<MatchResultRow[]>(
-        `${resultSelect}
-       ${activeMatchJoin}
-       WHERE (mr.lost_post_id = ? OR mr.found_post_id = ?)
-         AND mr.total_score >= ?
-         AND ${activeMatchWhere}
-       ORDER BY mr.total_score DESC, mr.updated_at DESC`,
-        [postId, postId, minimumScore]
+        `SELECT mr.id, mr.lost_post_id, mr.found_post_id, mr.total_score, mr.text_score,
+          mr.category_score, mr.location_score, mr.time_score, mr.image_score, mr.ocr_score,
+          mr.score_tier, mr.matcher_version, mr.explanation_json, mr.is_notified, mr.created_at, mr.updated_at,
+          mf.id AS feedback_id, mf.user_id AS feedback_user_id, mf.source_post_id AS feedback_source_post_id,
+          mf.label AS feedback_label, mf.note AS feedback_note, mf.correlation_key AS feedback_correlation_key,
+          mf.created_at AS feedback_created_at, mf.updated_at AS feedback_updated_at
+         FROM match_results mr
+         LEFT JOIN match_feedback mf ON mf.match_id = mr.id AND mf.user_id = ? AND mf.source_post_id = ?
+         ${activeMatchJoin}
+        WHERE (mr.lost_post_id = ? OR mr.found_post_id = ?)
+          AND mr.total_score >= ?
+          AND ${activeMatchWhere}
+          AND NOT EXISTS (SELECT 1 FROM match_suggestion_dismissals md WHERE md.match_id = mr.id AND md.user_id = ? AND md.source_post_id = ?)
+       ORDER BY mr.total_score DESC, mr.updated_at DESC, mr.id ASC`,
+        [viewerId ?? "", postId, postId, postId, minimumScore, viewerId ?? "", postId]
       );
       return rows.map(mapResult);
+    },
+
+    async findMatchForPost(matchId: string, postId: string) {
+      const [rows] = await pool.execute<Array<RowDataPacket & { id: string; lost_post_id: string; found_post_id: string }>>(
+        `SELECT mr.id, mr.lost_post_id, mr.found_post_id FROM match_results mr
+         ${activeMatchJoin}
+         WHERE mr.id = ? AND (mr.lost_post_id = ? OR mr.found_post_id = ?) AND ${activeMatchWhere} LIMIT 1`,
+        [matchId, postId, postId]
+      );
+      const row = rows[0];
+      return row ? { id: row.id, lostPostId: row.lost_post_id, foundPostId: row.found_post_id } : null;
+    },
+
+    async findFeedback(matchId: string, userId: string) {
+      const [rows] = await pool.execute<FeedbackRow[]>("SELECT * FROM match_feedback WHERE match_id = ? AND user_id = ? LIMIT 1", [matchId, userId]);
+      return rows[0] ? mapFeedback(rows[0]) : null;
+    },
+
+    async saveFeedback(input) {
+      await pool.execute(
+        `INSERT INTO match_feedback (id, match_id, user_id, source_post_id, label, note, source, correlation_key)
+         VALUES (?, ?, ?, ?, ?, ?, 'USER', ?) ON DUPLICATE KEY UPDATE id = id`,
+        [input.id, input.matchId, input.userId, input.sourcePostId, input.value, input.note, input.correlationKey]
+      );
+      const [rows] = await pool.execute<FeedbackRow[]>("SELECT * FROM match_feedback WHERE match_id = ? AND user_id = ? LIMIT 1", [input.matchId, input.userId]);
+      if (!rows[0]) throw new AppError("conflict", "Correlation key already used for another match");
+      return mapFeedback(rows[0]);
+    },
+
+    async findDismissal(matchId: string, userId: string, sourcePostId: string) {
+      const [rows] = await pool.execute<DismissalRow[]>("SELECT id, correlation_key, reason, created_at FROM match_suggestion_dismissals WHERE match_id = ? AND user_id = ? AND source_post_id = ? LIMIT 1", [matchId, userId, sourcePostId]);
+      const row = rows[0];
+      return row ? { id: row.id, correlationKey: row.correlation_key, reason: row.reason, createdAt: iso(row.created_at)! } : null;
+    },
+
+    async saveDismissal(input) {
+      await pool.execute(
+        `INSERT INTO match_suggestion_dismissals (id, match_id, user_id, source_post_id, reason, correlation_key)
+         VALUES (?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE id = id`,
+        [input.id, input.matchId, input.userId, input.sourcePostId, input.reason, input.correlationKey]
+      );
+      const [rows] = await pool.execute<DismissalRow[]>("SELECT id, correlation_key, reason, created_at FROM match_suggestion_dismissals WHERE match_id = ? AND user_id = ? AND source_post_id = ? LIMIT 1", [input.matchId, input.userId, input.sourcePostId]);
+      const row = rows[0];
+      if (!row) throw new AppError("conflict", "Correlation key already used for another match");
+      return { id: row.id, correlationKey: row.correlation_key, reason: row.reason, createdAt: iso(row.created_at)! };
+    },
+
+    async enqueueEligibleRefresh(intervalHours: number, limit: number) {
+      const correlationKey = `periodic-${id()}`;
+      const safeLimit = Math.max(1, Math.min(2_000, Math.trunc(limit)));
+      const [result] = await pool.execute<ResultSetHeader>(
+        `INSERT INTO matching_jobs (post_id, correlation_key, status, requested_version, processed_version, available_at)
+         SELECT p.id, ?, 'PENDING', 1, 0, UTC_TIMESTAMP()
+         FROM posts p
+         LEFT JOIN matching_jobs mj ON mj.post_id = p.id
+         LEFT JOIN match_results mr ON mr.lost_post_id = p.id OR mr.found_post_id = p.id
+         WHERE p.deleted_at IS NULL AND p.status IN ('OPEN', 'MATCHED')
+           AND (mj.post_id IS NULL OR mj.status = 'COMPLETED')
+         GROUP BY p.id, p.created_at, mj.updated_at, mj.status
+         HAVING GREATEST(COALESCE(MAX(mr.updated_at), p.created_at), COALESCE(mj.updated_at, p.created_at)) <= DATE_SUB(UTC_TIMESTAMP(), INTERVAL ? HOUR)
+         ORDER BY p.id
+         LIMIT ${safeLimit}
+         ON DUPLICATE KEY UPDATE
+           correlation_key = IF(matching_jobs.status = 'PROCESSING', matching_jobs.correlation_key, VALUES(correlation_key)),
+           requested_version = IF(matching_jobs.status = 'PROCESSING', matching_jobs.requested_version, matching_jobs.processed_version + 1),
+           status = IF(matching_jobs.status = 'PROCESSING', matching_jobs.status, 'PENDING'),
+           available_at = IF(matching_jobs.status = 'PROCESSING', matching_jobs.available_at, UTC_TIMESTAMP()),
+           last_error = IF(matching_jobs.status = 'PROCESSING', matching_jobs.last_error, NULL)`,
+        [correlationKey, Math.max(1, Math.trunc(intervalHours))]
+      );
+      return result.affectedRows;
+    },
+
+    async claimRefreshJobs(limit: number, staleMinutes: number) {
+      return withTransaction(async (connection) => {
+        const db = sqlExecutor(connection);
+        await db.execute(`UPDATE matching_jobs SET status = 'PENDING', locked_at = NULL WHERE status = 'PROCESSING' AND locked_at < DATE_SUB(UTC_TIMESTAMP(), INTERVAL ? MINUTE)`, [Math.max(1, Math.trunc(staleMinutes))]);
+        const safeLimit = Math.max(1, Math.min(100, Math.trunc(limit)));
+        const [rows] = await db.execute<RefreshJobRow[]>(`SELECT post_id, requested_version, correlation_key FROM matching_jobs WHERE status = 'PENDING' AND available_at <= UTC_TIMESTAMP() ORDER BY available_at, post_id LIMIT ${safeLimit} FOR UPDATE SKIP LOCKED`);
+        for (const row of rows) await db.execute("UPDATE matching_jobs SET status = 'PROCESSING', locked_at = UTC_TIMESTAMP(), attempts = attempts + 1 WHERE post_id = ?", [row.post_id]);
+        return rows.map((row) => ({ postId: row.post_id, requestedVersion: Number(row.requested_version), correlationKey: row.correlation_key ?? `job-${row.post_id}-${row.requested_version}` }));
+      });
+    },
+
+    async completeRefreshJob(job) {
+      await pool.execute(`UPDATE matching_jobs SET processed_version = ?, status = IF(requested_version > ?, 'PENDING', 'COMPLETED'), locked_at = NULL, last_error = NULL, updated_at = UTC_TIMESTAMP() WHERE post_id = ? AND status = 'PROCESSING'`, [job.requestedVersion, job.requestedVersion, job.postId]);
+    },
+
+    async failRefreshJob(job, errorCode: string) {
+      await pool.execute(`UPDATE matching_jobs SET status = 'PENDING', locked_at = NULL, last_error = ?, available_at = DATE_ADD(UTC_TIMESTAMP(), INTERVAL 15 MINUTE), updated_at = UTC_TIMESTAMP() WHERE post_id = ? AND status = 'PROCESSING'`, [errorCode.slice(0, 1000), job.postId]);
     },
 
     async listSummaries(postIds: string[], minimumScore: number) {

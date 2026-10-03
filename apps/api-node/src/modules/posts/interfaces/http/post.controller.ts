@@ -5,10 +5,14 @@ import type { PostUseCases } from "../../application/post.use-cases.js";
 import {
   analyzePostImageSchema,
   createPostSchema,
+  dismissMatchSchema,
   idParamSchema,
+  listMatchesQuerySchema,
   listOwnPostsQuerySchema,
   listPostsQuerySchema,
   mediaParamSchema,
+  matchFeedbackSchema,
+  matchParamSchema,
   updatePostSchema,
   uploadMediaSchema
 } from "./post.validator.js";
@@ -51,11 +55,22 @@ export function createPostController({ postService, geminiImageService }: {
     },
 
     async listMatches(request: Request, response: Response) {
-      response.json(await postService.listPostMatches(routeId(request), request.auth!));
+      const query = listMatchesQuerySchema.parse(request.query);
+      response.json(await postService.listPostMatches(routeId(request), request.auth!, query.page, query.pageSize));
     },
 
     async recalculateMatches(request: Request, response: Response) {
       response.json(await postService.recalculatePostMatches(routeId(request), request.auth!));
+    },
+
+    async submitMatchFeedback(request: Request, response: Response) {
+      const params = matchParamSchema.parse(request.params);
+      response.status(201).json(await postService.submitMatchFeedback(params.id, params.matchId, request.auth!, matchFeedbackSchema.parse(request.body)));
+    },
+
+    async dismissMatch(request: Request, response: Response) {
+      const params = matchParamSchema.parse(request.params);
+      response.status(201).json(await postService.dismissMatch(params.id, params.matchId, request.auth!, dismissMatchSchema.parse(request.body)));
     },
 
     async createPost(request: Request, response: Response) {

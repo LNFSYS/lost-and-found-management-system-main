@@ -1,12 +1,26 @@
 import type { TransactionContext } from "../../../shared/application/transaction.js";
 import type { MatchCandidate, MatchExplanation, MatchTier, ScoredMatch } from "../domain/matching.engine.js";
 
+export type MatchFeedbackValue = "USEFUL" | "IRRELEVANT" | "INCORRECT";
+export interface MatchFeedbackRecord {
+  id: string;
+  matchId: string;
+  userId: string;
+  sourcePostId: string;
+  value: MatchFeedbackValue;
+  note: string | null;
+  correlationKey: string;
+  createdAt: string;
+  updatedAt: string;
+}
+export interface MatchingRefreshJob { postId: string; requestedVersion: number; correlationKey: string; }
+
 export interface MatchingRepository {
   getConfigNumber(key: string, fallback: number): Promise<number>;
   findCandidate(postId: string): Promise<MatchCandidate | null>;
   listOppositeCandidates(source: MatchCandidate, candidateLimit: number, candidateWindowDays: number): Promise<MatchCandidate[]>;
   persistForSource(source: MatchCandidate, matches: ScoredMatch[]): Promise<void>;
-  listForPost(postId: string, minimumScore: number): Promise<{
+  listForPost(postId: string, minimumScore: number, viewerId?: string): Promise<{
     id: string;
     lostPostId: string;
     foundPostId: string;
@@ -23,7 +37,17 @@ export interface MatchingRepository {
     isNotified: boolean;
     createdAt: string;
     updatedAt: string;
+    feedback: MatchFeedbackRecord | null;
   }[]>;
+  findMatchForPost(matchId: string, postId: string): Promise<{ id: string; lostPostId: string; foundPostId: string } | null>;
+  findFeedback(matchId: string, userId: string): Promise<MatchFeedbackRecord | null>;
+  saveFeedback(input: { id: string; matchId: string; userId: string; sourcePostId: string; value: MatchFeedbackValue; note: string | null; correlationKey: string }): Promise<MatchFeedbackRecord>;
+  findDismissal(matchId: string, userId: string, sourcePostId: string): Promise<{ id: string; correlationKey: string; reason: string | null; createdAt: string } | null>;
+  saveDismissal(input: { id: string; matchId: string; userId: string; sourcePostId: string; reason: string | null; correlationKey: string }): Promise<{ id: string; correlationKey: string; reason: string | null; createdAt: string }>;
+  enqueueEligibleRefresh(intervalHours: number, limit: number): Promise<number>;
+  claimRefreshJobs(limit: number, staleMinutes: number): Promise<MatchingRefreshJob[]>;
+  completeRefreshJob(job: MatchingRefreshJob): Promise<void>;
+  failRefreshJob(job: MatchingRefreshJob, errorCode: string): Promise<void>;
   listSummaries(postIds: string[], minimumScore: number): Promise<Map<string, {
     candidateCount: number;
     suggestionCount: number;

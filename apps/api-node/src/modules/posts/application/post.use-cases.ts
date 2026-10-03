@@ -202,7 +202,8 @@ export function createPostUseCases(options: PostDependencies) {
         },
         explanation: visibleExplanation(candidate, match.explanation),
         matcherVersion: match.matcherVersion,
-        calculatedAt: match.updatedAt
+        calculatedAt: match.updatedAt,
+        feedback: match.feedback
       }))
     };
   }
@@ -303,9 +304,9 @@ export function createPostUseCases(options: PostDependencies) {
       return serializePost(updated, viewer);
     },
 
-    async listPostMatches(postId: string, viewer: AccessTokenPayload) {
+    async listPostMatches(postId: string, viewer: AccessTokenPayload, page = 1, pageSize = 20) {
       const source = await requireMatchAccess(postId, viewer);
-      const payload = await matchingService.getStoredResults(postId);
+      const payload = await matchingService.getStoredResults(postId, undefined, viewer.sub, page, pageSize);
       return serializeMatchingResult(source, payload, viewer);
     },
 
@@ -313,6 +314,16 @@ export function createPostUseCases(options: PostDependencies) {
       const source = await requireMatchAccess(postId, viewer);
       const payload = await matchingService.runForPost(postId);
       return serializeMatchingResult(source, payload, viewer);
+    },
+
+    async submitMatchFeedback(postId: string, matchId: string, viewer: AccessTokenPayload, input: { value: "USEFUL" | "IRRELEVANT" | "INCORRECT"; note?: string | null; correlationKey: string }) {
+      await requireMatchAccess(postId, viewer);
+      return matchingService.submitFeedback({ postId, matchId, userId: viewer.sub, ...input });
+    },
+
+    async dismissMatch(postId: string, matchId: string, viewer: AccessTokenPayload, input: { reason?: string | null; correlationKey: string }) {
+      await requireMatchAccess(postId, viewer);
+      return matchingService.dismissSuggestion({ postId, matchId, userId: viewer.sub, ...input });
     },
 
     async softDeletePost(postId: string, ownerId: string) {

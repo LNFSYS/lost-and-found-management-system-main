@@ -33,7 +33,7 @@ test("stored matching results exclude inactive or deleted posts on both sides", 
   assert.match(captured.query, /found_post\.deleted_at IS NULL/);
   assert.match(captured.query, /lost_post\.status IN \('OPEN', 'MATCHED'\)/);
   assert.match(captured.query, /found_post\.status IN \('OPEN', 'MATCHED'\)/);
-  assert.deepEqual(captured.values, ["post-id", "post-id", 0.45]);
+  assert.deepEqual(captured.values, ["", "post-id", "post-id", "post-id", 0.45, "", "post-id"]);
 });
 
 test("my-post matching summaries count only active LOST and FOUND pairs", async () => {
@@ -44,4 +44,22 @@ test("my-post matching summaries count only active LOST and FOUND pairs", async 
   assert.equal((captured.query.match(/lost_post\.status IN \('OPEN', 'MATCHED'\)/g) ?? []).length, 2);
   assert.equal((captured.query.match(/found_post\.status IN \('OPEN', 'MATCHED'\)/g) ?? []).length, 2);
   assert.deepEqual(captured.values, [0.45, "post-a", "post-b", 0.45, "post-a", "post-b", 0.45]);
+});
+
+test("feedback and dismissal reject correlation key collisions with a controlled conflict", async () => {
+  const common = { id: "record", matchId: "match", userId: "user", sourcePostId: "post", correlationKey: "reused-key" };
+  for (const write of [
+    () => matchingRepository.saveFeedback({ ...common, value: "USEFUL", note: null }),
+    () => matchingRepository.saveDismissal({ ...common, reason: null })
+  ]) {
+    await assert.rejects(captureQuery(write), (error: unknown) =>
+      error instanceof Error && "code" in error && error.code === "conflict");
+  }
+});
+
+test("dismissed matches stay excluded and equal scores have a stable tie breaker", async () => {
+  const { query, values } = await captureQuery(() => matchingRepository.listForPost("post", 0.45, "owner"));
+  assert.match(query, /NOT EXISTS \(SELECT 1 FROM match_suggestion_dismissals/);
+  assert.match(query, /ORDER BY mr.total_score DESC, mr.updated_at DESC, mr.id ASC/);
+  assert.deepEqual(values, ["owner", "post", "post", "post", 0.45, "owner", "post"]);
 });
