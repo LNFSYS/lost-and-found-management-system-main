@@ -36,6 +36,7 @@ Base: dev@03c7bda (PR #77). Matching code is reviewed through PR #79.
 - Full Playwright: 36/36 pass. Pagination/recalculate browser regression and desktop/mobile screenshots were inspected; no horizontal overflow. Browser cases mock API and are not provider/production acceptance tests.
 - UC catalogue checker: 168 total = 97 Implemented + 8 Partial + 63 Planned. UC-098/099/100 retain Partial pending reviewed merge/manual QA.
 - PR-target CI now includes dev; remote matrix MySQL 8.0/8.4 and merge result remain gates to check before merge.
+- Test script globs are quoted so Linux shells do not truncate recursive test discovery. Before this correction, remote CI ran only 66 tests including integration, omitting nested module/shared tests despite a green result.
 - No shared Aiven migration/data correction, SMTP/Gemini call or remote API/Web deployment was performed. Temporary database/preview processes were stopped after verification.
 
 ## Linked Requirements
