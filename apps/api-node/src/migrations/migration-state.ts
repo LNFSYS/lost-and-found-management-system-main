@@ -11,7 +11,7 @@ export interface MigrationPool { getConnection(): Promise<MigrationConnection>; 
 export interface MigrationFile { version: string; sql: string; raw: string; normalized: string; }
 export interface LedgerRow { version: string; checksum: string; }
 export interface AttemptRow extends LedgerRow { status: string; }
-export type MigrationSchemaVerifier = "claim-conversations" | "realtime-claim-chat" | "notification-type-text";
+export type MigrationSchemaVerifier = "claim-conversations" | "realtime-claim-chat" | "notification-type-text" | "custody-without-proposed-time";
 export interface MigrationCompatibilityEntry {
   version: string;
   checksum: string;

@@ -227,7 +227,21 @@ export async function verifyOperationalSchema(connection: MigrationConnection) {
   if (failures.length) throw new Error(`Operational schema mismatch: ${failures.join(", ")}`);
 }
 
+export async function verifyCustodyWithoutProposedTime(connection: MigrationConnection) {
+  const [rows] = await connection.query(`SELECT COLUMN_NAME AS name, COLUMN_TYPE AS type
+    FROM information_schema.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'custody_requests'`);
+  const columns = rows as { name: string; type: string }[];
+  if (columns.some((column) => column.name === "proposed_time")
+    || !columns.some((column) => column.name === "id" && column.type === "char(36)")
+    || !columns.some((column) => column.name === "post_id" && column.type === "char(36)")
+    || !columns.some((column) => column.name === "status" && column.type === "enum('PENDING','ACCEPTED','REJECTED','CANCELLED','INTAKED')")) {
+    throw new Error("Custody schema mismatch for historical migration 055");
+  }
+}
+
 const verifiers: Record<MigrationSchemaVerifier, (connection: MigrationConnection) => Promise<void>> = {
+  "custody-without-proposed-time": verifyCustodyWithoutProposedTime,
   "claim-conversations": verifyClaimConversationSchema,
   "realtime-claim-chat": verifyRealtimeClaimChatSchema,
   "notification-type-text": verifyNotificationTypeTextSchema
