@@ -4,7 +4,7 @@ Cập nhật: **04/10/2026**
 
 ## 1. Phạm vi và trạng thái
 
-Tài liệu này quy định cách LNFS chuyển các sự kiện nghiệp vụ đã commit thành thông báo in-app, PWA push và email. Đây là **target policy, trạng thái Planned** cho notification delivery; email OTP đăng ký và reset password hiện có không phải bằng chứng rằng luồng email nghiệp vụ bên dưới đã hoàn thành.
+Tài liệu này quy định cách LNFS chuyển các sự kiện nghiệp vụ đã commit thành thông báo in-app, PWA push và email. Toàn bộ ma trận kênh/sự kiện là **target policy**; runtime hiện tại ở mức **Partial**, gồm preference/outbox, claim/chat/custody producer và worker có unit/SQL evidence. Các producer/PWA và real-provider acceptance còn thiếu được giữ rõ bên dưới. OTP đăng ký/reset password không phải bằng chứng hoàn thành toàn bộ notification delivery.
 
 Node.js là owner duy nhất của notification event, preference, outbox và delivery state. Client không được tự quyết định rằng một email đã gửi thành công.
 
@@ -84,11 +84,13 @@ Node.js là owner duy nhất của notification event, preference, outbox và de
 
 | Business rules | Requirements | Use cases |
 | --- | --- | --- |
-| BR-47–BR-52 | FR-NOTIFY-01–FR-NOTIFY-04, NFR-MAIL-01–NFR-MAIL-02 | UC-097, UC-123–UC-125, UC-147, UC-150, UC-168 và các UC nguồn trong ma trận sự kiện |
+| BR-47–BR-52, BR-67 | FR-NOTIFY-01–FR-NOTIFY-06, NFR-MAIL-01–NFR-MAIL-02 | UC-097, UC-123–UC-125, UC-147, UC-150, UC-168 và các UC nguồn trong ma trận sự kiện |
 ## Runtime implementation (Story notification email)
 
 The Node.js notification module now owns optional email preferences and a MySQL-backed transactional outbox (`052_notification_email_delivery.sql`). Chat and claim transactions enqueue only a notification identifier and recipient/entity metadata; private message and evidence content is never stored in the outbox. `GET/PUT /api/notifications/preferences` are authenticated and scoped to the token subject.
 
 The API process runs the bounded worker when `NOTIFICATION_EMAIL_WORKER_ENABLED=true`; a standalone worker entrypoint is also available. The worker re-checks account status, verified email, entity access, preference, quiet hours, and unread state immediately before SMTP delivery. It coalesces pending chat rows for a room, keeps digest categories separate, includes an authenticated deep link in both HTML and text, uses stable correlation identifiers, redacted error codes, and bounded retry. OTP and password-reset delivery remains owned by Auth and is not routed through this optional queue.
 
-Migration 052 is applied to the target database and API/unit build evidence is present. Remaining evidence is a real-provider acceptance run, isolated end-to-end worker execution, and confirmation of provider/adapter idempotency behavior. Because the current SMTP transport cannot guarantee exactly-once delivery, UC-168 remains Partial until the limitation is accepted by the PO or a deduplicating provider adapter is supplied.
+Migration 052 is applied to the target database. On 4 October the full isolated SQL suite passed, including a slow-send two-worker scenario with a 3-second lease, no second send during the 4-second mocked SMTP call, and cancellation/fencing of expired processing rows. Unit tests cover heartbeat cleanup/loss, explicit NOT_SENT retry, unknown outcome and failed post-send acknowledgement. This is real MySQL worker evidence with a mock transport, not a real SMTP-provider delivery receipt. Current counts and commands: [dev audit fixes](dev-main-audit-fixes.md).
+
+Remaining acceptance covers the real provider, full producer/PWA matrix and provider/adapter idempotency behavior. UC-168 remains Partial: current SMTP cannot guarantee exactly-once; conservative uncertainty cancellation may lose an optional email. Stop/drain all older API and standalone email workers before enabling this version, and never automatically requeue uncertain CANCELLED rows without independent delivery evidence.

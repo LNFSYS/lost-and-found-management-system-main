@@ -1,7 +1,7 @@
 # Matching Feedback and Periodic Refresh
 
 Scope: UC-098, UC-099, UC-100. UC-097 new-match notifications are excluded. No new UC is introduced.
-Base: dev@03c7bda (PR #77). Matching code is reviewed through PR #79.
+Updated 4 October 2026. Matching was merged into `dev` by PR #79 (`5ab9f0d`); source-owner pagination correction is recorded in `2bd63cc`. These local audit commits are not a remote application deployment. Current verification: [dev audit fixes](dev-main-audit-fixes.md).
 
 ## Runtime Contract
 
@@ -22,8 +22,8 @@ Base: dev@03c7bda (PR #77). Matching code is reviewed through PR #79.
 - Original-054 history: skip 054 using the original ledger/checksum; preserve applied_at and schema history.
 - Dev-with-057 but no 054 record: require exact reviewed 054/057 source checksums, the applied 057 checksum, no incomplete attempts and the full feedback/dismissal/job schema verifier. Report 054 as superseded by 057 in a read-only plan; do not replay label conversion or write fake APPLIED rows.
 - Drifted schema/unknown checksum blocks DDL. Historical custody-time 055 remains separately schema-verified; it is not replaced by a weaker duplicate verifier.
-- 060_matching_refresh_leases.sql adds lease_token and lease_expires_at with schema existence checks. It is NEW and has NOT been applied to Aiven by this work.
-- Before shared rollout: read npm run migrate:preflight, confirm endpoint/database, take a recoverable backup and apply through npm run migrate. Do not re-run 054/059 manually, modify checksums or erase attempt history.
+- 060_matching_refresh_leases.sql adds lease_token and lease_expires_at with schema existence checks. It was applied to Aiven `defaultdb`, MySQL 8.4.8, on 3 October 2026; the rollout receipt was verified at 14:57:12 UTC. The encrypted 61-table/3,500-row backup was restored and rehearsed in isolation; old history, business row fingerprints and foreign keys were preserved.
+- Read-only `npm run migrate:preflight` on 4 October reports 56 source migrations, 59 applied entries, 26 applied attempts and no pending migrations. Historical 053 scope and unavailable original custody-time 055 warnings remain intentional. Do not re-run 054/059/060 manually, modify checksums or erase attempt history. Future shared DDL still requires endpoint confirmation, recoverable backup and isolated rehearsal.
 - Until 060 exists with the correct types, the refresh worker pauses with MATCHING_LEASE_SCHEMA_REQUIRED and checks again on later polls. Existing API/business workflows are not blocked by this worker gate.
 
 ## Verification on 3 October 2026
@@ -34,10 +34,17 @@ Base: dev@03c7bda (PR #77). Matching code is reviewed through PR #79.
 - New real HTTP checks cover 25 results/page 2, metadata, owner-scoped recalculate after dismissal, feedback persistence/replay, opposite-owner isolation, private-signal redaction and Staff/Admin write denial.
 - New SQL checks cover fresh/original-054/dev-057 upgrades, unchanged history/timestamps/legacy labels, repeat migration, drift rejection, two concurrent connections, stale completion/failure/heartbeat/persistence rejection, closed jobs and five-attempt exhaustion.
 - Full Playwright: 36/36 pass. Pagination/recalculate browser regression and desktop/mobile screenshots were inspected; no horizontal overflow. Browser cases mock API and are not provider/production acceptance tests.
-- UC catalogue checker: 168 total = 97 Implemented + 8 Partial + 63 Planned. UC-098/099/100 retain Partial pending reviewed merge/manual QA.
-- PR-target CI now includes dev; remote matrix MySQL 8.0/8.4 and merge result remain gates to check before merge.
+- Historical UC catalogue checker: 168 total = 97 Implemented + 8 Partial + 63 Planned. UC-098/099/100 remain Partial for manual role/privacy QA and operational acceptance, not because PR #79 is unmerged. Current catalogue totals are in [uc.md](uc.md).
+- PR-target CI includes dev. The merged baseline `5ab9f0d` passed the [MySQL 8.0/8.4 matrix and browser/build checks](https://github.com/LNFSYS/lost-and-found-management-system-main/actions/runs/37123734681). That run does not validate the later local audit commits; their remote CI is still a release gate.
 - Test script globs are quoted so Linux shells do not truncate recursive test discovery. Before this correction, remote CI ran only 66 tests including integration, omitting nested module/shared tests despite a green result.
-- No shared Aiven migration/data correction, SMTP/Gemini call or remote API/Web deployment was performed. Temporary database/preview processes were stopped after verification.
+- The initial branch review did not apply shared DDL or call SMTP/Gemini. The later authorized 060 database rollout is recorded above and in [database recovery](database-warehouse-recovery.md); it is not a remote API/Web deployment. Temporary review database/preview processes were stopped after verification.
+
+## Verification on 4 October 2026
+
+- Normal `npm test`: API 274 passed, 0 failed, five database suites skipped deliberately; architecture and Web type checks passed. No force-exit flag was used.
+- Full isolated MySQL 9.3 integration: 31 passed, 0 failed, 0 skipped. Owner/Staff/Admin `pageSize=1` HTTP checks exclude the source owner's LOST before pagination and preserve permitted inactive results.
+- Full Playwright: 39 passed, 0 failed; API/Web production builds passed. Browser API calls are mocked; real SQL/HTTP contracts are covered separately.
+- Shared Aiven access in this audit was read-only preflight. No new migration is needed for the four audit fixes. Manual role/privacy QA and remote CI for the new commits remain separate gates.
 
 ## Linked Requirements
 

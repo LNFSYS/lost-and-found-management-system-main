@@ -1,6 +1,6 @@
 # Warehouse Retention and Status Rules
 
-Updated 2 October 2026. These are LNFS project defaults, **not an approved university retention/disposition policy**. Rules implemented on `feat/lnfs-55` are not automatically Implemented on `dev`.
+Updated 4 October 2026. These are LNFS project defaults, **not an approved university retention/disposition policy**. The custody safety baseline is integrated into `dev`; local follow-up fixes and release limits are in [dev audit fixes](dev-main-audit-fixes.md). Runtime guards alone do not complete every catalogue actor goal.
 
 ## Retention
 
@@ -34,7 +34,7 @@ Request and acceptance leave the Finder holding the item. Only Staff physical in
 | RECEIVED | Staff physically received the item at the counter; condition, actor, receipt time and custody log exist. Not yet necessarily shelved. |
 | STORED | Staff recorded a non-empty storage code/location and condition. |
 | CLAIMED | Reserved for an existing, consented, human-verified claimant; canonical reserve endpoint only. Not an arbitrary PATCH value. |
-| RETURNED | Canonical Staff return: verified actual recipient, private proof IDs, authorized completion and audit. Resolves linked posts and enables participant feedback. |
+| RETURNED | Canonical Staff return: verified actual recipient identity/contact, private proof IDs, authorized completion and audit. Resolves linked posts. Feedback opens only for real linked online claim/Finder participants; offline recipients need no account or invented claim. |
 | EXPIRED | Explicit Staff marking only after actual deadline, without active claim/appointment/dispute/hold. Scheduler does not set it. |
 | DISPOSED | Admin-approved disposal, separate requester/approver, rechecked eligibility and private supporting proof at execution. |
 | DONATED | Same guarded execution; property must be suitable for donation. Campaign workflow remains a separate planned goal. |
@@ -52,6 +52,7 @@ EXPIRED property is still physically retained until disposition. Canonical retur
 - Finder can cancel their own PENDING/ACCEPTED request; Staff can accept/reject/intake/cancel according to role and state. Unrelated users cannot read details/audit.
 - Generic PATCH cannot assign CLAIMED, RETURNED, DISPOSED, DONATED or TRANSFERRED. Admin controls legal hold and disposition request/approval; another Admin approves. Staff/Admin execute only an item-bound approved action, with current retention, case, dispute, hold and proof checks in the transaction. Denied execution attempts are logged without private evidence. A canonical return excludes only its own completing claim/appointment from active-case blockers; competing cases and pending disputes still block return.
 - Offline walk-in return records the recipient name, contact, identity and private proof without requiring an account or inventing a claim. Active online claims/disputes still block unlinked return. Only a real linked participant-based completed return authorizes feedback.
+- After physical intake, Staff/Admin can separately verify a consented claimant in person with explicit confirmation and a 10-1000 character rationale (BR-65). Check item/claim/recipient linkage, other reservations, active competing claims/appointments, disputes and legal hold. Append independent Staff audit without rewriting Finder identity or decisions. Finder cannot override that Staff custody decision; intake alone never accepts ownership.
 
 ## Proof and Delivery
 
@@ -66,8 +67,8 @@ EXPIRED property is still physically retained until disposition. Canonical retur
 
 ## Traceability and Rollout
 
-BR-53–BR-60; FR-CUSTODY-02, FR-WAREHOUSE-03/04, FR-MATCH-05, FR-NOTIFY-05, FR-STAFF-02; existing UC-026–031, UC-040/042, UC-051–060, UC-141–158, UC-168. Bug fixes do not introduce new UC IDs.
+BR-53–BR-60, BR-65–BR-67; FR-CUSTODY-02, FR-VERIFY-03, FR-WAREHOUSE-03/04/05, FR-MATCH-05, FR-NOTIFY-05/06, FR-STAFF-02; existing UC-026–031, UC-040/042, UC-051–060, UC-114, UC-141–158, UC-168. Bug fixes do not introduce new UC IDs.
 
-Canonical `053_custody_requests.sql`, additive `054_custody_safety_contract.sql` and forward recovery migrations 056–058 were applied to Aiven on 2026-10-02 after encrypted backup, isolated restore/migration rehearsal and explicit user authorization. Historical 053 is not an alias. Exact historical matching 054 and custody-time 055 ledger records are recognized only with verified current schema; their unavailable original SQL/data/configuration effects remain unverified. No applied checksum/history was rewritten. See [database recovery](database-warehouse-recovery.md) for evidence and unresolved physical-link reviews.
+Canonical `053_custody_requests.sql`, additive `054_custody_safety_contract.sql`, recovery 056–058 and direct-recipient 059 are applied on Aiven. Matching lease migration 060 was applied on 3 October after backup and isolated rehearsal; read-only preflight on 4 October reports no pending migrations. Historical 053 is not an alias. Exact original matching 054 is recovered and immutable; original custody-time 055 effects remain unverified despite schema checks. No applied checksum/history was rewritten. No new migration is needed for the four follow-up fixes. See [database recovery](database-warehouse-recovery.md) for rollout evidence and unresolved physical-link reviews.
 
-Evidence and limitations: [LNFS-55-SAFETY-VERIFICATION.md](LNFS-55-SAFETY-VERIFICATION.md).
+Historical evidence: [LNFS-55-SAFETY-VERIFICATION.md](LNFS-55-SAFETY-VERIFICATION.md). Current verification and release gates: [dev audit fixes](dev-main-audit-fixes.md), including stopping/draining older email workers before the lease/quarantine policy rollout.

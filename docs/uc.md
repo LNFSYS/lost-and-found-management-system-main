@@ -1,10 +1,10 @@
 # 3. Business Use Case Catalogue - FPTU Lost & Found System (LNFS)
 
-Mappings reconciled on 3 October 2026 against `origin/dev` (`03c7bda`, including PR #77). UC-098 to UC-100 remain Partial while the matching branch is under review; their branch evidence is in [matching-feedback-review.md](matching-feedback-review.md). Warehouse release gates remain in [LNFS-55-SAFETY-VERIFICATION.md](LNFS-55-SAFETY-VERIFICATION.md). `Implemented` requires active runtime evidence on `dev`; schema or migration-only evidence is not sufficient. `Partial` means part of the actor goal exists, while `Planned` means no complete runtime flow is available.
+Mappings reconciled on 4 October 2026 against merged `dev` baseline `5ab9f0d` (PR #79) and the local audit fixes documented in [dev-main-audit-fixes.md](dev-main-audit-fixes.md). UC-098 to UC-100 remain Partial for manual role/privacy QA and operational acceptance, not an unmerged branch. UC-114 covers explicit post-intake Staff approval only; custody UC-141 to UC-147 now record Partial runtime evidence with remaining acceptance gaps. Warehouse release history remains in [LNFS-55-SAFETY-VERIFICATION.md](LNFS-55-SAFETY-VERIFICATION.md). `Implemented` requires active runtime evidence; schema or migration-only evidence is not sufficient. `Partial` means part of the actor goal exists, while `Planned` means no complete runtime flow is available. Local fixes are not a remote deployment.
 
 - **Implemented:** 97 use cases
-- **Partial:** 8 use cases
-- **Planned:** 63 use cases
+- **Partial:** 16 use cases
+- **Planned:** 55 use cases
 - **Total:** 168 business use cases
 
 `Claimant` means the owner of the LOST post. `Finder` means the owner of the matched FOUND post. PWA, mobile browser, and a future native application are delivery channels, not business use cases, and are therefore excluded from this catalogue.
@@ -18,7 +18,7 @@ The retained 21 September snapshot (not a fresh author audit) contains 73 commit
 | Quan | Authentication; Web post workflows; matching and Gemini draft; handover points; cross-cutting security, database, Cloudinary, CI, and Clean Architecture hardening across the implemented modules. | `1cd77ce`, `a60d420`, `4d6841b`, `d91ac91`, `489cdc9`, `d5d50ea`, `1f18578`, `949cdc1` |
 | Khoa | Profile/activity baseline; category/area/building administration; warehouse operations; claim/private-room/evidence/notification flow; moderation and dashboard baseline. | `97c9c72`, `a83b9eb`, `6e3491b`, `fb0d877`, `51dfb3a` |
 | Dat | Post/private-media API baseline; user and role administration; system configuration; return feedback and reputation. | `a630fad`, `89cc72b`, `696afef`, `c0be32f` |
-| Luong | No UC from Luong is integrated into `dev` yet. Guided verification questions and human-decision code exists on `origin/feat/lnfs-53`, but it still targets the pre-refactor layout. | `6c6fe92` (not an ancestor of `dev`) |
+| Luong | The retained September audit found guided-question work on `origin/feat/lnfs-53`; that historical commit was not an ancestor of the audited dev snapshot. Current guided verification and the local post-intake Staff verification are recorded separately below; the September attribution is not a current runtime-status claim. | Historical `6c6fe92`; local custody verification `497e846` |
 
 ### Remaining Work Allocation
 
@@ -26,7 +26,7 @@ Completed UC work above is not reassigned. The 71 Partial/Planned UCs in the ret
 
 | Assignee | Remaining UC IDs | Count | Main responsibility |
 | --- | --- | ---: | --- |
-| Luong | UC-106 to UC-118; UC-126 to UC-133 | 21 | Port guided verification into Clean Architecture, complete multiple-claimant handling, and implement appointment negotiation. |
+| Luong | UC-106 to UC-118; UC-126 to UC-133 | 21 | Complete guided verification acceptance gaps, broader Staff escalation decisions, multiple-claimant handling and appointment negotiation. |
 | Quan | UC-097 to UC-105; UC-134 to UC-140; UC-163, UC-164, UC-166, UC-167 | 20 | Matching feedback/model operations, direct-handover completion, audit/moderation visibility, and the end-to-end item journey projection. |
 | Khoa | UC-119 to UC-125; UC-141 to UC-146; UC-168 | 14 | User-report lifecycle, realtime/private communication extensions, Staff custody transfer/intake, and notification delivery preferences. |
 | Dat | UC-147 to UC-162 | 16 | Custody notifications, overdue handling, legal holds, disposition orders, evidence, and donation campaigns. |
@@ -78,7 +78,7 @@ Completed UC work above is not reassigned. The 71 Partial/Planned UCs in the ret
 
 **Commit evidence:** Quan implemented and hardened persisted matching, scoring, access control, and explanations in `4d6841b` and `489cdc9`.
 
-**Runtime evidence:** UC-098 to UC-100 have actor-scoped feedback/dismissal, paginated HTTP results and a fenced, bounded refresh worker on the matching branch. Regression coverage includes real HTTP contracts and isolated SQL upgrade/concurrency scenarios. Full manual role/privacy QA, production rollout and merge evidence remain separate gates. See [matching review](matching-feedback-review.md). UC-097 notifications remain outside this scope; no new UC ID is introduced.
+**Runtime evidence:** UC-098 to UC-100 have actor-scoped feedback/dismissal, paginated HTTP results and a fenced, bounded refresh worker merged into `dev` by PR #79. Migration 060 is applied on Aiven; code/test and rollout evidence are in [matching review](matching-feedback-review.md). Source-owner filtering before pagination is additionally covered for owner/Staff/Admin in local `2bd63cc`. Full manual role/privacy QA, operational acceptance and remote CI for the follow-up commits remain separate gates. UC-097 notifications remain outside this scope; no new UC ID is introduced.
 
 | ID | Use Case | Actors | Use Case Description | Status |
 | --- | --- | --- | --- | --- |
@@ -110,9 +110,9 @@ Completed UC work above is not reassigned. The 71 Partial/Planned UCs in the ret
 
 ### 3.6 Claims & Ownership Verification
 
-**Commit evidence:** Khoa implemented the claim lifecycle and participant-isolated rooms in `6e3491b` and `fb0d877`; Quan hardened claim integrity and ported the active runtime to modular Clean Architecture. Luong implemented guided-question work in `6c6fe92`, but that commit exists only on `origin/feat/lnfs-53` and is not merged into `dev`.
+**Commit evidence:** Khoa implemented the claim lifecycle and participant-isolated rooms in `6e3491b` and `fb0d877`; Quan hardened claim integrity and ported the active runtime to modular Clean Architecture. Luong's historical guided-question work is recorded in `6c6fe92`; that commit's ancestry does not mean the current guided templates/human-decision runtime is absent. Local `497e846` adds explicit Staff verification after physical intake without rewriting Finder identity or earlier decisions.
 
-**Remaining work:** UC-106 to UC-118 are assigned to Luong, beginning by porting the useful parts of `6c6fe92` into the current claims module.
+**Remaining work:** UC-106 to UC-118 remain assigned to Luong for the full guided-question/multiple-claimant goals. UC-114 is Partial: post-intake Staff approval exists; general escalation rejection/more-information handling and full role/privacy acceptance still need work. No automatic ownership decision is made on intake.
 
 | ID | Use Case | Actors | Use Case Description | Status |
 | --- | --- | --- | --- | --- |
@@ -193,6 +193,8 @@ Completed UC work above is not reassigned. The 71 Partial/Planned UCs in the ret
 
 **Remaining work:** UC-141 to UC-146 are assigned to Khoa; UC-147 is assigned to Dat.
 
+**Runtime evidence:** owned FOUND requests, active-point selection, Staff queue/accept/reject/cancel/intake, single physical receipt and transactional lifecycle notifications are integrated into `dev`, with real SQL/HTTP and desktop/mobile browser regressions. These seven UCs are Partial rather than Planned; full manual acceptance remains open. UC-142 supports point selection and informational office hours, not proposed-time/holiday-aware scheduling; UC-147 does not claim the entire notification/provider matrix is complete.
+
 | ID | Use Case | Actors | Use Case Description | Status |
 | --- | --- | --- | --- | --- |
 | UC-049 | View active handover points | Guest / Authenticated User | Retrieve handover points that are currently available for public use. | Implemented |
@@ -204,13 +206,13 @@ Completed UC work above is not reassigned. The 71 Partial/Planned UCs in the ret
 | UC-055 | Confirm a warehouse return | Staff / Admin | Return retained RECEIVED/STORED/CLAIMED/EXPIRED property after verifying the actual recipient, recording identity/contact and private proof, and checking reservations, competing cases and legal hold. Online claims require explicit Finder or post-intake Staff verification; offline return creates no synthetic claim or feedback participant. | Implemented |
 | UC-056 | View warehouse storage logs | Staff / Admin | View the immutable action history for a warehouse item. | Implemented |
 | UC-057 | Calculate item retention deadline | System | Calculate and store the retention deadline from the receiving time and configured category policy. | Implemented |
-| UC-141 | Request transfer to staff custody | Finder | Ask to transfer a found item to an official handover point when direct return is unsuitable. | Planned |
-| UC-142 | Select staff intake point and time | Finder, Staff | Select an active handover point and proposed intake time for a custody transfer. | Planned |
-| UC-143 | List custody transfer requests | Staff, Admin | View pending, accepted, rejected, cancelled, and completed transfer requests. | Planned |
-| UC-144 | Accept a custody transfer request | Staff, Admin | Accept a valid transfer request and assign its intake point and handler. | Planned |
-| UC-145 | Reject or cancel a custody transfer request | Finder, Staff, Admin | Reject or cancel a transfer with a reason before the item is received into custody. | Planned |
-| UC-146 | Confirm staff intake | Staff | Confirm physical receipt, create a RECEIVED warehouse record and mark the custody request INTAKED without resolving the post or deciding ownership. | Planned |
-| UC-147 | Receive custody status notifications | Finder, Claimant | Receive updates when a custody transfer is accepted, received, moved, or released. | Planned |
+| UC-141 | Request transfer to staff custody | Finder | Ask to transfer an owned active FOUND item to an official handover point when direct return is unsuitable; request alone does not change physical custody. | Partial |
+| UC-142 | Select staff intake point and time | Finder, Staff | Select an active handover point and view office hours. Proposed-time and holiday-aware scheduling remain pending. | Partial |
+| UC-143 | List custody transfer requests | Staff, Admin | View server-paginated pending, accepted, rejected, cancelled and intaked requests with authorized details. | Partial |
+| UC-144 | Accept a custody transfer request | Staff, Admin | Accept a valid transfer request and record its intake point and handler without claiming physical receipt. | Partial |
+| UC-145 | Reject or cancel a custody transfer request | Finder, Staff, Admin | Reject or cancel a transfer with a reason before receipt, restoring escalation projections while retaining audit history. | Partial |
+| UC-146 | Confirm staff intake | Staff | Confirm physical receipt, create a RECEIVED warehouse record and mark the custody request INTAKED without resolving the post or deciding ownership. | Partial |
+| UC-147 | Receive custody status notifications | Finder, Claimant | Receive authorized transactional request/intake/return updates; full movement/release/provider acceptance remains pending. | Partial |
 
 ### 3.10 Feedback & Reputation
 
@@ -357,8 +359,8 @@ Completed UC work above is not reassigned. The 71 Partial/Planned UCs in the ret
 | --- | --- | --- | --- | --- |
 | UC-168 | Manage notification delivery preferences | Authenticated User | Configure optional in-app, PWA push, immediate email, delayed-unread email, digest, and quiet-hour preferences by event category while mandatory security delivery remains enabled. | Partial |
 
-### Branch safety evidence (not status upgrades)
+### Integrated Safety Evidence and Remaining Gates
 
-`feat/lnfs-55` adds guards and regression evidence for UC-026–031, UC-040/042, UC-051–057, UC-058–060, UC-141–147, UC-150–155/158 and UC-168. No new actor goal is introduced by these fixes, so no new UC ID is allocated. Custody request, claim, warehouse and post states are separate: request/accept do not change the physical custodian; intake does not resolve a post or reject a claim. Only verified completed return resolves the linked posts and authorizes existing participant feedback.
+The custody safety work originally developed on `feat/lnfs-55` is integrated into `dev`, covering UC-026–031, UC-040/042, UC-051–057, UC-058–060, UC-141–147, UC-150–155/158 and UC-168. Follow-up commits add Staff verification, retained EXPIRED return, slow-SMTP fencing and source-owner pagination. No new actor goal or UC ID is introduced. Custody request, claim, warehouse and post states remain separate: request/accept do not change the physical custodian; intake does not resolve a post or decide ownership. A separate Staff verification records an explicit decision; canonical completed return resolves linked posts and authorizes only real participant feedback. Offline recipients need no account or invented claim.
 
-Full Admin disposition-order/evidence screens, all overdue task categories, provider/manual QA and shared DB rollout remain incomplete. Do not mark these Planned UCs Implemented based on this branch alone. Recompute totals with `node scripts/check-uc-catalogue.mjs`; it reads UC rows rather than an assumed fixed catalogue size.
+Full Admin disposition-order/evidence screens, all overdue task categories and provider/manual QA remain incomplete. Shared schema through 060 is applied; that does not complete those actor goals or deploy remote API/Web. Recompute totals with `node scripts/check-uc-catalogue.mjs`; it reads UC rows rather than an assumed fixed catalogue size. Current evidence and remaining rollout gates: [dev audit fixes](dev-main-audit-fixes.md).

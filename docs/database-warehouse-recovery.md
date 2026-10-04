@@ -2,19 +2,19 @@
 
 ## Scope and History
 
-**3 October 2026 update:** the matching branch recovered the exact original `054_matching_feedback_periodic_refresh.sql`, normalized SHA256 `404c6ac5d3b9424db1a82eef2238924ac5f2ef36366c89fd4ed03b97ab60853d`. The 2 October unavailable-source statements below are retained as historical recovery context, not the current status of matching 054. Its original SQL is immutable. A database with the original applied record skips it; a database with reviewed 057 but no 054 record uses schema-verified, read-only supersession without inventing history or converting legacy labels. New worker lease fields belong to `060_matching_refresh_leases.sql`. This update does not apply 060 on Aiven or deploy API/Web. Original custody-time 055 remains unavailable.
+**4 October 2026 status:** the exact original `054_matching_feedback_periodic_refresh.sql` has been recovered, normalized SHA256 `404c6ac5d3b9424db1a82eef2238924ac5f2ef36366c89fd4ed03b97ab60853d`, and is immutable. A database with its original applied record skips it; reviewed 057-only history uses schema-verified, read-only supersession without inventing history or converting legacy labels. Migration 059 is already applied; 060 was applied on 3 October after backup and isolated rehearsal. Read-only preflight on 4 October reports no pending migrations. Original custody-time 055 remains unavailable. See the current rollout record below; older unavailable-source statements refer to the 2 October snapshot only.
 
-This is forward recovery on `feat/lnfs-55`, not a reconstruction of missing applied SQL.
+The original forward recovery was developed on `feat/lnfs-55` and is now integrated into `dev`; it is not a reconstruction of missing applied SQL.
 The user authorized creating and applying the missing runtime schema on Aiven on 2026-10-02.
 
-The shared ledger already contains these unavailable source files:
+The 2 October shared-ledger snapshot contained these unavailable source files:
 
 | Ledger version | Recorded checksum | Recovery evidence |
 | --- | --- | --- |
 | `054_matching_feedback_periodic_refresh.sql` | `404c6ac5d3b9424db1a82eef2238924ac5f2ef36366c89fd4ed03b97ab60853d` | Exact ledger/attempt plus verified matching tables, columns, labels, indexes and foreign keys |
 | `055_remove_proposed_time_from_custody.sql` | `97d256de30d11e39472fd6b69c7680e4272b3caa74e544841726c0030ee71c10` | Exact ledger/attempt plus current custody baseline and absence of `proposed_time` |
 
-Their original data/configuration effects remain **unverified**. Compatibility recognizes only those exact records and observed schemas; it does not alias, replay, delete, rename or rewrite ledger rows. Unknown checksums, incomplete attempts and schema drift still stop migration before DDL. No claim is made that periodic refresh/feedback APIs are implemented on this branch merely because tables exist.
+At that snapshot their original data/configuration effects were **unverified**. Matching 054's exact SQL is now recovered; custody-time 055's effects remain unverified. Compatibility recognizes only exact records and observed schemas; it does not alias, replay, delete, rename or rewrite ledger rows. Unknown checksums, incomplete attempts and schema drift still stop migration before DDL. Matching feedback/refresh runtime is now present in `dev` with separate code/test evidence in [matching review](matching-feedback-review.md), not inferred from table presence.
 
 ## Forward Migrations
 
@@ -61,4 +61,12 @@ Executed on 2026-10-02:
 - Maintenance schema probe: `ready: true`, missing objects: none. A real maintenance tick passed after a preview found 0 overdue reminders and 0 expired proofs; no notification/media deletion was triggered by that smoke test. Existing API `/api/ready` returned ready.
 - Verification: root tests 213 passed / 0 failed / 4 DB suites skipped; architecture 173 production files / 0 violations; full isolated integration 24 passed before final storage-link addition, and final recovery suite 5 passed after that addition; API build passed. No E2E/provider/manual QA or remote application deployment is claimed by this recovery.
 
-The Aiven **database** deployment is complete. Local code/doc changes remain uncommitted/unpushed on `feat/lnfs-55`; this does not deploy remote API/web services or change dev/main UC status.
+## Current Rollout Record (4 October 2026)
+
+- The warehouse recovery and matching feature are integrated into `dev` through `5ab9f0d` (PR #79). Their earlier branch/uncommitted statements are historical, not current rollout status. Four follow-up audit fixes are local commits, not yet pushed in this audit.
+- `059_direct_return_recipient.sql` was applied on 2 October 2026 at 07:15:32 UTC. It supports identity/contact records for direct offline recipients without creating an account or synthetic claim. Do not apply it again.
+- `060_matching_refresh_leases.sql` was applied on 3 October; receipt verification at 14:57:12 UTC confirms `char(36)` token, `datetime(6)` expiry, unchanged old history, valid foreign keys and a ready worker schema. The encrypted backup contains 61 tables/3,500 rows; isolated MySQL 9.3 restore/repeat-run rehearsal preserved business row fingerprints. The later runtime receipt at 15:03:34 UTC recorded API readiness and 26 refresh completions since apply.
+- Restricted receipt: `C:/Users/ADMIN/.codex/backups/lnfs-matching-060-20261003-eab6fb501f59410f8dc0071f088d0683/060-rollout.json`. Backup and separate key remain outside Git; the key is not part of the delivery artifact.
+- Read-only `npm run migrate:preflight` on 4 October 2026: 56 source migrations, 59 applied entries, 26 applied attempts, no pending/superseded migrations. Only the historical 053 scope and unavailable original custody-time 055 warnings remain. No ledger checksum/timestamp was modified.
+- No new migration or shared data correction was run for the four audit fixes. The two LOST-linked custody records still require physical-source review; this rollout does not resolve them. Database readiness does not certify remote application deployment or every UC.
+- Current tests and release limits: [dev audit fixes](dev-main-audit-fixes.md). SQL integration ran on isolated MySQL 9.3, not the shared Aiven service.
