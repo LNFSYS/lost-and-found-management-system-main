@@ -14,6 +14,7 @@ import {
   X
 } from "lucide-react";
 import { type ChangeEvent, type FormEvent, useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { useAuth } from "../context/auth-context";
 import { api, type ProfileActivitySummary, type ReturnFeedbackEligibility } from "../services/api";
 
@@ -237,6 +238,7 @@ export function ProfilePage() {
           >
             {editing ? <X size={17} /> : <PencilLine size={17} />} {editing ? "Hủy" : "Chỉnh sửa"}
           </button>
+          <Link className="secondary-button" to="/notification-preferences"><Mail size={17} /> Email thông báo</Link>
         </div>
       </article>
 

@@ -11,6 +11,7 @@ import type { ResultSetHeader, RowDataPacket } from "mysql2";
 import type { PoolConnection } from "mysql2/promise";
 
 import { id } from "../../../shared/infrastructure/security.js";
+import { AppError } from "../../../shared/domain/app-error.js";
 
 type Queryable = Pick<PoolConnection, "execute"> | TransactionContext;
 
@@ -351,12 +352,18 @@ FROM claim_audit_events`;
 export function createClaimRepository(pool: SqlExecutor) {
 
   const claimRepository = {
+    async linkSourceFoundPost(claimId: string, postId: string, db: TransactionContext) {
+      const [rows] = await sqlExecutor(db).execute<RowDataPacket[]>("SELECT source_found_post_id FROM claims WHERE id = ? FOR UPDATE", [claimId]);
+      if (!rows[0] || (rows[0].source_found_post_id && rows[0].source_found_post_id !== postId)) throw new AppError("conflict", "Conversation already linked to another physical item");
+      await sqlExecutor(db).execute("UPDATE claims SET source_found_post_id = ? WHERE id = ?", [postId,claimId]);
+    },
     async findClaimablePostForUpdate(postId: string, connection: Queryable) {
       const [rows] = await sqlExecutor(connection).execute<ClaimablePostRow[]>(
         `SELECT id, user_id AS owner_id, type
        FROM posts
        WHERE id = ? AND deleted_at IS NULL
          AND status IN ('OPEN', 'MATCHED')
+         AND NOT EXISTS (SELECT 1 FROM warehouse_items wi WHERE wi.post_id = posts.id AND wi.deleted_at IS NULL AND wi.status IN ('RETURNED','DISPOSED','DONATED','TRANSFERRED'))
        LIMIT 1 FOR UPDATE`,
         [postId]
       );
@@ -464,7 +471,7 @@ export function createClaimRepository(pool: SqlExecutor) {
         `SELECT found.id AS found_post_id, category.name_normalized AS category_name,
           parent.name_normalized AS parent_category_name
          FROM claims c
-         INNER JOIN posts found ON found.id = c.post_id
+         INNER JOIN posts found ON found.id = COALESCE(c.source_found_post_id,c.post_id) AND found.type = 'FOUND' AND found.deleted_at IS NULL
          INNER JOIN item_categories category ON category.id = found.category_id
          LEFT JOIN item_categories parent ON parent.id = category.parent_id
          WHERE c.id = ? LIMIT 1`,
@@ -487,7 +494,7 @@ export function createClaimRepository(pool: SqlExecutor) {
            WHERE media.post_id = found.id AND media.media_kind = 'ITEM'
            ORDER BY media.sort_order ASC, media.created_at ASC, media.id ASC LIMIT 1) AS media_id
          FROM claims c
-         INNER JOIN posts found ON found.id = c.post_id
+         INNER JOIN posts found ON found.id = COALESCE(c.source_found_post_id,c.post_id) AND found.type = 'FOUND' AND found.deleted_at IS NULL
          LEFT JOIN item_categories category ON category.id = found.category_id
          LEFT JOIN campus_areas area ON area.id = found.area_id
          LEFT JOIN campus_buildings building ON building.id = found.building_id
@@ -749,7 +756,7 @@ export function createClaimRepository(pool: SqlExecutor) {
     async listVerificationAuditEvents(claimId: string, queryable: Queryable = pool) {
       const actions = [
         "CONVERSATION_OPENED", "QUESTION_SENT", "ANSWER_SUBMITTED", "MORE_INFO_REQUESTED", "VERIFICATION_ACCEPTED",
-        "VERIFICATION_DECLINED", "CUSTODY_ESCALATED", "VERIFICATION_DECISION_CORRECTED"
+        "VERIFICATION_DECLINED", "CUSTODY_ESCALATED", "VERIFICATION_DECISION_CORRECTED", "STAFF_CUSTODY_VERIFIED"
       ];
       const placeholders = actions.map(() => "?").join(", ");
       const [rows] = await sqlExecutor(queryable).execute<ClaimAuditRow[]>(

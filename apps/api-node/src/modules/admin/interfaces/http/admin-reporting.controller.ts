@@ -22,6 +22,10 @@ export function createAdminReportingController({ adminReportingService }: {
       response.json(await adminReportingService.listReports(listModerationReportsQuerySchema.parse(request.query)));
     },
 
+    async getReportDetail(request: Request, response: Response) {
+      response.json(await adminReportingService.getReportDetail(routeId(request)));
+    },
+
     async reviewReport(request: Request, response: Response) {
       response.json(await adminReportingService.reviewReport(actorId(request), routeId(request), reviewModerationReportSchema.parse(request.body)));
     },

@@ -7,7 +7,7 @@ import { ensureStoredFileExists, removeStoredFileIfPresent } from "./media-stora
 
 export function createPrivateMediaStorage(options: {
   uploadDir: string;
-  namespace: "post-media" | "claim-evidence";
+  namespace: "post-media" | "claim-evidence" | "warehouse-proof";
   invalidPathMessage: string;
   notFoundMessage: string;
 }): PrivateMediaStorage {

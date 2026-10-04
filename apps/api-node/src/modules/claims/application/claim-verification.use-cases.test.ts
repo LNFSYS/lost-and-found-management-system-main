@@ -1,12 +1,29 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createTestClaimUseCases } from "../../../test/use-case-fixtures.js";
+import { createTestClaimUseCases, notificationRepository } from "../../../test/use-case-fixtures.js";
 import type { ClaimAuditEventRecord, ClaimRepository, ClaimStatus, FinderDecision, VerificationQuestionRecord } from "./claim.repository.port.js";
+import type { CustodyRequestRepository } from "../../warehouse/application/custody-request.repository.port.js";
+import type { WarehouseRepository } from "../../warehouse/application/index.js";
+import type { NotificationRepository } from "../../notifications/application/notification.repository.port.js";
 
 const claimId = "11111111-1111-4111-8111-111111111111";
 const claimantId = "22222222-2222-4222-8222-222222222222";
 const finderId = "33333333-3333-4333-8333-333333333333";
 const roomId = "44444444-4444-4444-8444-444444444444";
+
+// Verification decisions now persist an in-app notification in the same transaction.
+// Keep this focused harness self-contained while individual notification tests assert the payload.
+notificationRepository.create = async (input) => ({
+  id: "99999999-9999-4999-8999-999999999999",
+  type: input.type,
+  title: input.title,
+  body: input.body ?? null,
+  entityType: input.entityType ?? null,
+  entityId: input.entityId ?? null,
+  isRead: false,
+  readAt: null,
+  createdAt: "2026-09-18T01:00:00.000Z"
+});
 
 function claim(status: ClaimStatus, finderDecision: FinderDecision = "ACCEPTED") {
   return {
@@ -127,6 +144,14 @@ function commonRepository(overrides: Partial<ClaimRepository> = {}) {
   } as unknown as ClaimRepository;
   return { repository, audits, status: () => currentStatus };
 }
+
+test("Finder cannot correct or impersonate a Staff custody verification decision", async () => {
+  const eventId = "staff-decision";
+  const harness = commonRepository({ findByIdForUpdate: async () => claim("ACCEPTED"), listVerificationAuditEvents: async () => [{ id: eventId, claimId, actorId: "staff", action: "STAFF_CUSTODY_VERIFIED", fromStatus: "CONVERSATION_OPEN", toStatus: "ACCEPTED", metadata: { decision: "VERIFY_FOR_CUSTODY_RETURN" }, createdAt: "2026-10-04T00:00:00Z" }] });
+  const service = createTestClaimUseCases({ claimRepository: harness.repository });
+  await assert.rejects(service.decideVerification(claimId, finderId, { decision: "DECLINE", reason: "Try to override Staff", idempotencyKey: "finder-override", correctsEventId: eventId }), error => (error as { code: string }).code === "conflict");
+  assert.equal(harness.audits.length, 0);
+});
 
 test("Finder verification is authoritative, appointment-eligible and idempotent", async () => {
   const questions = [answeredQuestion("case-accessory"), answeredQuestion("loss-context")];
@@ -298,4 +323,105 @@ test("an authorized correction appends a correction event instead of replacing h
   assert.equal(harness.audits[0]?.action, "VERIFICATION_ACCEPTED");
   assert.equal(harness.audits[1]?.action, "VERIFICATION_DECISION_CORRECTED");
   assert.equal(harness.audits[1]?.metadata?.correctsEventId, originalDecision.id);
+});
+
+test("custody escalation creates one pending request without accepting or rejecting the claim", async () => {
+  let currentStatus: ClaimStatus = "CONVERSATION_OPEN";
+  let currentFinderDecision: FinderDecision = "ACCEPTED";
+  let roomEscalation: { id: string; claimId: string; escalatedAt: string | null; escalatedBy: string | null; escalationReason: string | null; createdAt: string } = {
+    id: roomId, claimId, escalatedAt: null, escalatedBy: null, escalationReason: null, createdAt: "2026-09-18T00:00:00.000Z"
+  };
+  let claimTransitions = 0;
+  const custodyRequests: Array<Record<string, unknown>> = [];
+  const custodyAudits: Array<Record<string, unknown>> = [];
+  const notifications: Array<Record<string, unknown>> = [];
+  const decisionMessages: string[] = [];
+  const harness = commonRepository({
+    listVerificationQuestions: async () => [],
+    findById: async () => claim(currentStatus, currentFinderDecision),
+    findByIdForUpdate: async () => claim(currentStatus, currentFinderDecision),
+    findRoomByClaim: async () => roomEscalation,
+    updateFinderDecision: async (input) => {
+      claimTransitions += 1;
+      currentStatus = input.status;
+      currentFinderDecision = input.finderDecision;
+    },
+    createMessage: async (input) => {
+      decisionMessages.push(input.content);
+      return {
+        id: "custody-system-message", roomId, sender: { id: finderId, fullName: "Finder" },
+        clientMessageId: input.clientMessageId ?? null, content: input.content, messageType: "SYSTEM",
+        isRead: false, readAt: null, createdAt: "2026-09-18T02:00:00.000Z"
+      };
+    },
+    markRoomEscalated: async (input) => {
+      roomEscalation = { ...roomEscalation, escalatedAt: "2026-09-18T02:00:00.000Z", escalatedBy: input.actorId, escalationReason: input.reason };
+    }
+  });
+  const custodyRequestRepository = {
+    notificationRecipients: async () => [claimantId],
+    isStaff: async () => false,
+    lockEligiblePost: async () => true,
+    findActiveByPostId: async () => null,
+    hasWarehouseItem: async () => false,
+    findPendingByClaimId: async () => null,
+    createRequest: async (input: Record<string, unknown>) => { custodyRequests.push(input); },
+    writeAudit: async (input: Record<string, unknown>) => { custodyAudits.push(input); }
+  } as unknown as CustodyRequestRepository;
+  const notificationPort = {
+    create: async (input: Record<string, unknown>) => {
+      notifications.push(input);
+      return {
+        id: "notification-custody", type: input.type, title: input.title, body: input.body,
+        entityType: input.entityType, entityId: input.entityId, isRead: false, readAt: null,
+        createdAt: "2026-09-18T02:00:00.000Z"
+      };
+    }
+  } as unknown as NotificationRepository;
+  const activeHandoverPoints = {
+    findHandoverPointById: async (id: string) => id
+  } as unknown as WarehouseRepository;
+  const service = createTestClaimUseCases({
+    claimRepository: harness.repository,
+    custodyRequestRepository,
+    warehouseRepository: activeHandoverPoints,
+    notificationRepository: notificationPort
+  });
+  const input = {
+    decision: "ESCALATE_TO_CUSTODY" as const,
+    reason: "Finder cannot keep the item safely",
+    handoverPointId: "66666666-6666-4666-8666-666666666666",
+    idempotencyKey: "custody-escalation-1"
+  };
+
+  const first = await service.decideVerification(claimId, finderId, input);
+  const replay = await service.decideVerification(claimId, finderId, input);
+  await assert.rejects(service.decideVerification(claimId, finderId, {
+    ...input,
+    idempotencyKey: "custody-escalation-duplicate"
+  }), (error: unknown) => error instanceof Error && "code" in error && error.code === "conflict");
+
+  assert.equal(first.claim.status, "CONVERSATION_OPEN");
+  assert.equal(first.claim.finderDecision, "ACCEPTED");
+  assert.equal(first.verification.status, "CONVERSATION_OPEN");
+  assert.equal(first.verification.appointmentEligible, false);
+  assert.equal(first.verification.roomEscalation?.reason, input.reason);
+  assert.equal(replay.claim.status, "CONVERSATION_OPEN");
+  assert.equal(claimTransitions, 0);
+  assert.equal(custodyRequests.length, 1);
+  assert.equal(custodyRequests[0]?.claimId, claimId);
+  assert.equal(custodyRequests[0]?.requesterId, finderId);
+  assert.equal(custodyRequests[0]?.handoverPointId, input.handoverPointId);
+  assert.equal(custodyRequests[0]?.idempotencyKey, input.idempotencyKey);
+  assert.equal(custodyAudits.length, 1);
+  assert.equal(custodyAudits[0]?.action, "CREATED");
+  assert.equal(custodyAudits[0]?.fromStatus, null);
+  assert.equal(custodyAudits[0]?.toStatus, "PENDING");
+  assert.equal(notifications.length, 1);
+  assert.equal(notifications[0]?.type, "CUSTODY_REQUEST_CREATED");
+  assert.equal(harness.audits[0]?.action, "CUSTODY_ESCALATED");
+  assert.equal(harness.audits[0]?.fromStatus, "CONVERSATION_OPEN");
+  assert.equal(harness.audits[0]?.toStatus, "CONVERSATION_OPEN");
+  assert.equal(decisionMessages.length, 1);
+  assert.match(decisionMessages[0] ?? "", /chờ Staff xử lý/);
 });

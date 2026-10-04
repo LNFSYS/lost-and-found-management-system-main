@@ -8,9 +8,12 @@ import { createUserRepository } from "../modules/auth/infrastructure/user.reposi
 import { createClaimRepository } from "../modules/claims/infrastructure/claim.repository.js";
 import { createMatchingRepository } from "../modules/matching/infrastructure/matching.repository.js";
 import { createNotificationRepository } from "../modules/notifications/infrastructure/notification.repository.js";
+import { createNotificationEmailRepository } from "../modules/notifications/infrastructure/notification-email.repository.js";
 import { createPostRepository } from "../modules/posts/infrastructure/post.repository.js";
 import { createReturnFeedbackRepository } from "../modules/returns/infrastructure/return-feedback.repository.js";
+import { createReportRepository } from "../modules/reports/infrastructure/report.repository.js";
 import { createSystemConfigRepository } from "../modules/system-config/infrastructure/system-config.repository.js";
+import { createCustodyRequestRepository } from "../modules/warehouse/infrastructure/custody-request.repository.js";
 import { createWarehouseRepository } from "../modules/warehouse/infrastructure/warehouse.repository.js";
 import { runInTransaction } from "../shared/infrastructure/config/db.js";
 import { createTransactionRunner, type SqlTransactionRunner } from "../shared/infrastructure/transaction-context.js";
@@ -29,11 +32,14 @@ export function createPersistence(database: Pool) {
     claimRepository: createClaimRepository(database),
     matchingRepository: createMatchingRepository(database, sqlTransaction),
     notificationRepository: createNotificationRepository(database),
+    notificationEmailRepository: createNotificationEmailRepository(database),
     postRepository: createPostRepository(database),
     returnFeedbackRepository: createReturnFeedbackRepository(database),
+    reportRepository: createReportRepository(database),
     systemConfigRepository: createSystemConfigRepository(database),
     userRepository: createUserRepository(database),
     warehouseRepository: createWarehouseRepository(database),
+    custodyRequestRepository: createCustodyRequestRepository(database),
   };
 }
 export type Persistence = ReturnType<typeof createPersistence>;

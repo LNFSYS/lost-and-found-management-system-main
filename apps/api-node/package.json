@@ -5,13 +5,16 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/main/server.ts",
+    "worker:notification-email": "tsx src/main/notification-email-worker.ts",
     "start": "node dist/main/server.js",
     "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\"",
     "build": "npm run clean && tsc -p tsconfig.json",
-    "test": "tsx --import ./src/test/setup-env.ts --test src/**/*.test.ts",
-    "test:db-integration": "tsx --import ./src/test/setup-env.ts --test src/integration/*.integration.test.ts",
+    "test": "tsx --import ./src/test/setup-env.ts --test \"src/**/*.test.ts\"",
+    "test:db-integration": "tsx --import ./src/test/setup-env.ts --test \"src/integration/*.integration.test.ts\"",
     "migrate": "tsx src/migrations/run-migrations.ts",
     "migrate:preflight": "tsx src/migrations/run-migration-preflight.ts",
+    "migrate:review-custody-links": "tsx src/migrations/run-custody-link-recovery.ts",
+    "migrate:repair-claim-participants": "tsx src/migrations/repair-claim-participants.ts",
     "migrate:reconcile-claim": "tsx src/migrations/run-reconciliation.ts"
   },
   "dependencies": {
@@ -20,13 +23,13 @@
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
-    "express": "^4.21.2",
+    "express": "^4.22.3",
     "express-rate-limit": "^7.5.0",
     "helmet": "^8.0.0",
     "jsonwebtoken": "^9.0.2",
-    "multer": "^2.2.0",
+    "multer": "^2.4.0",
     "mysql2": "^3.11.5",
-    "nodemailer": "^9.0.5",
+    "nodemailer": "^10.0.14",
     "zod": "^3.24.1"
   },
   "devDependencies": {

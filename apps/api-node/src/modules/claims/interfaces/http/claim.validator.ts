@@ -55,8 +55,13 @@ export const answerVerificationQuestionSchema = z.object({
 export const verificationDecisionSchema = z.object({
   decision: z.enum(["VERIFY_FOR_MEETUP", "REQUEST_MORE_INFO", "DECLINE", "ESCALATE_TO_CUSTODY"]),
   reason: z.string().trim().min(3).max(1000),
+  handoverPointId: uuid.optional(),
   correctsEventId: uuid.optional(),
   idempotencyKey: safeKey
+}).superRefine((input, context) => {
+  if (input.decision === "ESCALATE_TO_CUSTODY" && !input.handoverPointId) {
+    context.addIssue({ code: "custom", path: ["handoverPointId"], message: "Chọn điểm quầy nhận bàn giao" });
+  }
 });
 
 export const createMessageSchema = z.object({
@@ -66,6 +71,7 @@ export const createMessageSchema = z.object({
 
 export const createDirectMessageSchema = z.object({
   postId: uuid,
+  sourceFoundPostId: uuid.optional(),
   content: z.string().trim().min(1).max(5000),
   clientMessageId: safeKey.optional()
 });

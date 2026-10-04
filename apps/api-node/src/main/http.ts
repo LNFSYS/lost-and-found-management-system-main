@@ -16,11 +16,14 @@ import { createRealtimeController } from "../modules/realtime/interfaces/http/re
 import { createRealtimeRoutes } from "../modules/realtime/interfaces/http/realtime.routes.js";
 import { createReturnFeedbackController } from "../modules/returns/interfaces/http/return-feedback.controller.js";
 import { createReturnRoutes } from "../modules/returns/interfaces/http/return.routes.js";
+import { createReportController } from "../modules/reports/interfaces/http/report.controller.js";
+import { createReportRoutes } from "../modules/reports/interfaces/http/report.routes.js";
 import { createAdminConfigRoutes } from "../modules/system-config/interfaces/http/admin-config.routes.js";
 import { createConfigRoutes } from "../modules/system-config/interfaces/http/config.routes.js";
 import { createSystemConfigController } from "../modules/system-config/interfaces/http/system-config.controller.js";
 import { createStaffRoutes } from "../modules/warehouse/interfaces/http/staff.routes.js";
 import { createWarehouseController } from "../modules/warehouse/interfaces/http/warehouse.controller.js";
+import { createCustodyRequestController } from "../modules/warehouse/interfaces/http/custody-request.controller.js";
 import type { AccessTokenPayload } from "../shared/domain/auth.js";
 import { env } from "../shared/infrastructure/config/env.js";
 import { refreshCookieOptions } from "../shared/interfaces/http/auth-cookie.js";
@@ -38,8 +41,10 @@ export function createHttpRoutes(services: ApplicationServices) {
   const postController = createPostController({ postService: services.postService, geminiImageService: services.geminiImageService });
   const realtimeController = createRealtimeController({ realtimeService: services.realtimeService });
   const returnFeedbackController = createReturnFeedbackController({ returnFeedbackService: services.returnFeedbackService });
+  const reportController = createReportController({ reportService: services.reportService });
   const systemConfigController = createSystemConfigController({ systemConfigService: services.systemConfigService });
   const warehouseController = createWarehouseController({ warehouseService: services.warehouseService });
+  const custodyRequestController = createCustodyRequestController({ custodyRequestService: services.custodyRequestService });
   return {
     adminRoutes: createAdminRoutes({ adminCatalogController, adminReportingController, adminUserController, auth }),
     handoverRoutes: createHandoverRoutes({ adminCatalogController }),
@@ -49,8 +54,9 @@ export function createHttpRoutes(services: ApplicationServices) {
     postRoutes: createPostRoutes({ postController, auth }),
     realtimeRoutes: createRealtimeRoutes({ realtimeController, auth }),
     returnRoutes: createReturnRoutes({ returnFeedbackController, auth }),
+    reportRoutes: createReportRoutes({ controller: reportController, auth }),
     adminConfigRoutes: createAdminConfigRoutes({ systemConfigController, auth }),
     configRoutes: createConfigRoutes({ systemConfigController }),
-    staffRoutes: createStaffRoutes({ warehouseController, auth }),
+    staffRoutes: createStaffRoutes({ warehouseController, custodyRequestController, auth }),
   };
 }

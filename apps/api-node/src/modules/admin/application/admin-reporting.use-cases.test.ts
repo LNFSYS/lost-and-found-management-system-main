@@ -14,6 +14,8 @@ function makeReport(overrides: Partial<ModerationReportRecord> = {}): Moderation
     reporter: overrides.reporter ?? { id: "reporter-id", fullName: "Reporter", email: "reporter@example.com" },
     entityType: overrides.entityType ?? "POST",
     entityId: overrides.entityId ?? "post-id",
+    sourceType: overrides.sourceType ?? "POST",
+    sourceId: overrides.sourceId ?? "post-id",
     reason: overrides.reason ?? "Spam",
     details: overrides.details ?? "DROP TABLE reports; <script>alert(1)</script>",
     status: overrides.status ?? "PENDING",
@@ -74,6 +76,7 @@ function fakeRepository(seedReports: ModerationReportRecord[] = [], options: { a
       const report = reports.get(reportId);
       return report ? { ...report } : null;
     },
+    async listReportAuditHistory() { return []; },
     async lockReport(reportId) {
       const report = reports.get(reportId);
       return report ? locked(report) : null;
@@ -176,6 +179,45 @@ test("review report applies moderation action and records actor/reason without r
   assert.match(JSON.stringify(auditRecords[0]), /post-id/);
   assert.equal(JSON.stringify(auditRecords).includes("DROP TABLE"), false);
   assert.equal(JSON.stringify(auditRecords).includes("<script>"), false);
+});
+
+test("claim report can be resolved without mutating an unrelated post or user", async () => {
+  const report = makeReport({
+    entityType: "CLAIM",
+    entityId: "claim-id",
+    sourceType: "CLAIM",
+    sourceId: "claim-id",
+    entity: { type: "CLAIM", title: "Claim cần kiểm tra", status: "ACCEPTED", ownerName: "Finder", referenceId: "claim-id" }
+  });
+  const state = fakeRepository([report]);
+  const auditRecords: unknown[] = [];
+
+  const reviewed = await serviceFor(state.repository, auditRecords).reviewReport("admin-id", report.id, {
+    actionType: "RESOLVE_REPORT",
+    reason: "Đã kiểm tra thủ công và xử lý nghiệp vụ liên quan"
+  });
+
+  assert.equal(reviewed.status, "REVIEWED");
+  assert.equal(state.actions.length, 1);
+  assert.deepEqual(
+    (({ targetType, targetId }) => ({ targetType, targetId }))(state.actions[0] as { targetType: string; targetId: string }),
+    { targetType: "REPORT", targetId: report.id }
+  );
+  assert.equal(state.targets.get("post-id")?.status, "OPEN");
+  assert.equal(state.targets.get("user-id")?.status, "ACTIVE");
+  assert.match(JSON.stringify(auditRecords), /MODERATION_REPORT_REVIEWED/);
+});
+
+test("admin report detail returns permitted context and audit history", async () => {
+  const state = fakeRepository([makeReport()]);
+  state.repository.listReportAuditHistory = async () => [{
+    id: "event-id", actorId: "reporter-id", actorName: "Reporter", action: "SUBMITTED", note: null,
+    createdAt: "2026-09-02T00:00:00.000Z"
+  }];
+  const detail = await serviceFor(state.repository).getReportDetail("report-id");
+  assert.equal(detail.entity.title, "Lost card");
+  assert.equal(detail.auditHistory[0]?.action, "SUBMITTED");
+  assert.equal(JSON.stringify(detail).includes("passwordHash"), false);
 });
 
 test("review report rejects concurrent moderation of an already handled report", async () => {

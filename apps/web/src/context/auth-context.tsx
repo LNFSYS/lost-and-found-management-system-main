@@ -4,7 +4,7 @@ import { api, refreshSession, type CurrentUser } from "../services/api";
 interface AuthContextValue {
   user: CurrentUser | null;
   ready: boolean;
-  login(email: string, password: string): Promise<void>;
+  login(email: string, password: string): Promise<CurrentUser>;
   logout(): Promise<void>;
   refreshUser(): Promise<void>;
   updateProfile(input: { fullName?: string; studentCode?: string | null; phoneNumber?: string | null }): Promise<void>;
@@ -18,7 +18,11 @@ export function AuthProvider({ children }: PropsWithChildren) {
   useEffect(() => { void refreshSession().then((session) => setUser(session?.user ?? null)).finally(() => setReady(true)); }, []);
   const value = useMemo<AuthContextValue>(() => ({
     user, ready,
-    async login(email, password) { setUser(await api.login(email, password)); },
+    async login(email, password) {
+      const authenticatedUser = await api.login(email, password);
+      setUser(authenticatedUser);
+      return authenticatedUser;
+    },
     async logout() {
       try {
         await api.logout();

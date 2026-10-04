@@ -84,6 +84,39 @@ export async function exerciseHttpRuntime(pool: Pool) {
     const match = matches.results.find((item: { candidate: { id: string } }) => item.candidate.id === found.id);
     assert.ok(match && match.totalScore >= matches.thresholds.suggestion);
     assert.equal(match.candidate.description, null);
+    const extraFoundIds: string[] = [];
+    for (let index = 0; index < 24; index += 1) {
+      const id = randomUUID();
+      extraFoundIds.push(id);
+      await pool.execute(`INSERT INTO posts (id,user_id,type,title,title_normalized,description,description_normalized,category_id,area_id,lost_found_at)
+        SELECT ?,user_id,type,title,title_normalized,description,description_normalized,category_id,area_id,lost_found_at FROM posts WHERE id = ?`, [id, found.id]);
+      await pool.execute(`INSERT INTO match_results (id,lost_post_id,found_post_id,total_score,text_score,category_score,location_score,time_score,image_score,ocr_score,score_tier,matcher_version,explanation_json)
+        SELECT ?,lost_post_id,?,total_score,text_score,category_score,location_score,time_score,image_score,ocr_score,score_tier,matcher_version,explanation_json FROM match_results WHERE id = ?`, [randomUUID(), id, match.matchId]);
+    }
+    const pageTwo = await (await request(`/posts/${lost.id}/matches?page=2&pageSize=20`, 200, tokens.owner)).json();
+    assert.equal(pageTwo.total, 25);
+    assert.equal(pageTwo.page, 2);
+    assert.equal(pageTwo.pageSize, 20);
+    assert.equal(pageTwo.hasMore, false);
+    assert.equal(pageTwo.results.length, 5);
+    const hidden = pageTwo.results.find((item: { candidate: { id: string } }) => extraFoundIds.includes(item.candidate.id));
+    assert.ok(hidden);
+    const feedbackInput = { value: "USEFUL", correlationKey: randomUUID() };
+    await request(`/posts/${lost.id}/matches/${match.matchId}/feedback`, 403, tokens.staff, "POST", feedbackInput);
+    await request(`/posts/${lost.id}/matches/${hidden.matchId}/dismiss`, 403, tokens.admin, "POST", { correlationKey: randomUUID() });
+    await request(`/posts/${lost.id}/matches/${match.matchId}/feedback`, 201, tokens.owner, "POST", feedbackInput);
+    await request(`/posts/${lost.id}/matches/${match.matchId}/feedback`, 201, tokens.owner, "POST", feedbackInput);
+    await request(`/posts/${lost.id}/matches/${hidden.matchId}/dismiss`, 201, tokens.owner, "POST", { correlationKey: randomUUID() });
+    const recalculated = await (await request(`/posts/${lost.id}/matches/recalculate?page=2&pageSize=20`, 200, tokens.owner, "POST")).json();
+    assert.equal(recalculated.total, 24);
+    assert.equal(recalculated.page, 2);
+    assert.equal(recalculated.pageSize, 20);
+    assert.equal(recalculated.hasMore, false);
+    const all = await (await request(`/posts/${lost.id}/matches?pageSize=50`, 200, tokens.owner)).json();
+    assert.ok(!all.results.some((item: { matchId: string }) => item.matchId === hidden.matchId));
+    assert.equal(all.results.find((item: { matchId: string }) => item.matchId === match.matchId)?.feedback?.value, "USEFUL");
+    const finderView = await (await request(`/posts/${hidden.candidate.id}/matches`, 200, tokens.finder)).json();
+    assert.ok(finderView.results.some((item: { matchId: string }) => item.matchId === hidden.matchId));
     await request(`/posts/${lost.id}/matches`, 403, tokens.outsider);
     await request(`/posts/${lost.id}`, 404, tokens.outsider, "PATCH", { title: "Unauthorized" });
 

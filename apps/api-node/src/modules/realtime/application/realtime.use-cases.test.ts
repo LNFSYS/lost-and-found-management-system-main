@@ -15,6 +15,27 @@ function responseSink() {
   };
 }
 
+test("shutdown ends SSE streams and prevents an authorized in-flight connection from reopening", async () => {
+  let next = 0;
+  let release!: () => void;
+  const service = createRealtimeUseCases({
+    id: () => `shutdown-${++next}`,
+    claimRepository: { async findRoomForParticipant() {
+      await new Promise<void>(resolve => { release = resolve; });
+      return { id: "claim", roomId: "room" } as never;
+    } }
+  });
+  const sink = responseSink();
+  await service.connect({ userId: "user", response: sink.response });
+  const pending = service.connect({ userId: "user", roomIds: ["room"], response: responseSink().response });
+  service.stop();
+  service.stop();
+  release();
+  await assert.rejects(pending, (error: unknown) => (error as { code?: string }).code === "unavailable");
+  assert.equal(sink.response.destroyed, true);
+  assert.deepEqual(service.stats(), { connections: 0, notificationSubscriptions: 0, roomSubscriptions: 0 });
+});
+
 test("realtime connection deduplicates room subscriptions and cleans up on disconnect", async () => {
   const service = createRealtimeUseCases({
     id: () => "connection-a",

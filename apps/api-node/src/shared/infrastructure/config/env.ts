@@ -39,6 +39,12 @@ function bool(name: string, fallback: boolean): boolean {
   return parseBooleanEnv(process.env[name], fallback, name);
 }
 
+function boundedNumber(name: string, fallback: number, minimum: number, maximum: number): number {
+  const value = number(name, fallback);
+  if (value < minimum || value > maximum) throw new Error(`${name} must be between ${minimum} and ${maximum}`);
+  return value;
+}
+
 export const env = {
   nodeEnv: process.env.NODE_ENV ?? "development",
   port: number("API_PORT", 3001),
@@ -69,6 +75,19 @@ export const env = {
     user: required("SMTP_USER"),
     pass: required("SMTP_PASS"),
     from: required("SMTP_FROM")
+  },
+  notificationEmail: {
+    chatDelayMinutes: boundedNumber("NOTIFICATION_EMAIL_CHAT_DELAY_MINUTES", 7, 5, 10),
+    digestDelayMinutes: boundedNumber("NOTIFICATION_EMAIL_DIGEST_DELAY_MINUTES", 60, 15, 1_440),
+    workerPollSeconds: boundedNumber("NOTIFICATION_EMAIL_WORKER_POLL_SECONDS", 30, 5, 300),
+    workerEnabled: bool("NOTIFICATION_EMAIL_WORKER_ENABLED", true)
+  },
+  matchingRefresh: {
+    enabled: bool("MATCHING_REFRESH_ENABLED", true),
+    pollSeconds: boundedNumber("MATCHING_REFRESH_POLL_SECONDS", 300, 30, 3_600),
+    intervalHours: boundedNumber("MATCHING_REFRESH_INTERVAL_HOURS", 6, 1, 168),
+    batchSize: boundedNumber("MATCHING_REFRESH_BATCH_SIZE", 20, 1, 100),
+    staleMinutes: boundedNumber("MATCHING_REFRESH_STALE_MINUTES", 15, 5, 120)
   },
   gemini: {
     apiKey: process.env.GEMINI_API_KEY?.trim() || null,

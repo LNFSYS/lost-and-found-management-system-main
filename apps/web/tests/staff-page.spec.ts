@@ -59,6 +59,8 @@ function dashboard() {
 }
 
 async function prepare(page: Page, calls: { created?: unknown; patched?: unknown }) {
+  await page.route("**/api/staff/warehouse-items/*/return-claim-reviews", route => route.fulfill({ json: { claims: [] } }));
+  await page.route(/\/api\/staff\/custody-requests(?:\?.*)?$/, route => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ items: [], total: 0, page: 1, pageSize: 20, counts: { PENDING: 0, ACCEPTED: 0, INTAKED: 0, REJECTED: 0, CANCELLED: 0 } }) }));
   await page.route("**/api/auth/refresh", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(staffSession) }));
   await page.route("**/api/staff/warehouse-items/catalog", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(catalog) }));
   await page.route(/\/api\/staff\/warehouse-items(?:\?.*)?$/, async (route) => {
@@ -107,36 +109,221 @@ test("staff can see warehouse counts and receive an item with condition notes", 
   await prepare(page, calls);
   await page.goto("/staff");
 
-  await expect(page.getByRole("heading", { name: "Kho nội bộ" })).toBeVisible();
-  await expect(page.getByText("Ví da màu nâu")).toBeVisible();
-  await expect(page.locator(".warehouse-counts").getByText("Quầy dịch vụ")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Tiếp nhận & Quản lý Custody" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Hàng đợi Custody" })).toHaveAttribute("aria-selected", "true");
+  await page.getByRole("button", { name: "Tiếp nhận Walk-in (Tại quầy)", exact: true }).click();
 
-  const receive = page.locator(".warehouse-receive-panel");
+  const receive = page.locator(".custody-modal");
   await receive.getByLabel("Tên vật phẩm").fill("Thẻ sinh viên");
   await receive.getByLabel("Tình trạng khi nhận").fill("Nguyên vẹn");
   await receive.getByLabel("Danh mục").selectOption("cat-card");
-  await receive.getByRole("button", { name: "Tiếp nhận" }).click();
+  await receive.getByRole("button", { name: "Tạo hồ sơ kho (Walk-in)" }).click();
 
-  await expect(page.getByText("Đã tiếp nhận vật phẩm")).toBeVisible();
+  await expect(page.getByText("Đã tiếp nhận vật phẩm thành công (Walk-in)", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Đã hiểu & Đóng" }).click();
+  await page.getByRole("button", { name: "Kho tài sản", exact: true }).click();
+  await expect(page.getByText("Ví da màu nâu", { exact: true })).toBeVisible();
   expect(calls.created?.itemName).toBe("Thẻ sinh viên");
   expect(calls.created?.conditionNotes).toBe("Nguyên vẹn");
   expect(calls.created?.handoverPointId).toBe("hp-1");
 });
+
+for (const width of [1440, 390]) {
+  test(`Staff verifies a custody claim in the return modal at ${width}px`, async ({ page }, testInfo) => {
+    await page.setViewportSize({ width, height: 950 });
+    await prepare(page, {});
+    const claim = { claimId: "claim-online", recipientId: "owner", fullName: "Nguyễn An", description: "Ví có chi tiết riêng bên trong", status: "CONVERSATION_OPEN", verified: false };
+    await page.route("**/api/staff/warehouse-items/*/return-claim-reviews", route => route.fulfill({ json: { claims: [claim] } }));
+    let verified = false;
+    await page.route("**/api/staff/warehouse-items/*/verify-claim", route => {
+      const input = route.request().postDataJSON();
+      expect(input.claimId).toBe(claim.claimId);
+      expect(input.recipientId).toBe(claim.recipientId);
+      expect(input.verified).toBe(true);
+      expect(input.reason.length).toBeGreaterThanOrEqual(10);
+      verified = true;
+      return route.fulfill({ json: { claims: [{ ...claim, verified: true, status: "ACCEPTED" }] } });
+    });
+    await page.goto("/staff");
+    await page.getByRole("button", { name: "Kho tài sản", exact: true }).click();
+    await page.getByRole("button", { name: "Trả cho chủ sở hữu", exact: true }).click();
+    const modal = page.locator(".custody-modal");
+    await modal.getByLabel("Liên kết claim trực tuyến (không bắt buộc)").selectOption(claim.claimId);
+    await modal.getByRole("button", { name: "Xác minh claim tại quầy", exact: true }).click();
+    await expect(modal.locator("#return-claimReviewReason-error")).toBeVisible();
+    expect(verified).toBe(false);
+    await modal.getByLabel("Nội dung đối chiếu").fill("Đã đối chiếu đặc điểm riêng và giấy tờ tại quầy");
+    await modal.getByLabel("Tôi đã đối chiếu quyền sở hữu tại quầy").check();
+    await modal.getByRole("button", { name: "Xác minh claim tại quầy", exact: true }).click();
+    await expect(modal.getByRole("button", { name: "Xác minh claim tại quầy", exact: true })).toHaveCount(0);
+    expect(verified).toBe(true);
+    await expect(modal.getByLabel("Liên kết claim trực tuyến (không bắt buộc)")).toContainText("Đã xác minh");
+    await expect(modal.getByLabel(/^Họ và tên người nhận/)).toHaveValue(claim.fullName);
+    await page.screenshot({ path: testInfo.outputPath(`custody-verified-${width}.png`) });
+    expect(await modal.evaluate(el => el.scrollWidth <= el.clientWidth + 1)).toBeTruthy();
+    const submit = modal.getByRole("button", { name: "Xác nhận Đã trả hàng" });
+    await submit.scrollIntoViewIfNeeded();
+    expect(await submit.evaluate(el => el.getBoundingClientRect().left >= el.parentElement!.getBoundingClientRect().left)).toBeTruthy();
+  });
+}
 
 test("staff can open storage logs and update item state", async ({ page }) => {
   const calls: { patched?: any } = {};
   await prepare(page, calls);
   await page.goto("/staff");
 
-  await page.getByRole("button", { name: "Chọn" }).click();
+  await page.getByRole("button", { name: "Kho tài sản", exact: true }).click();
+  await page.getByRole("button", { name: "Chi tiết & Nhật ký" }).click();
   const detail = page.locator(".warehouse-detail-panel");
-  await expect(detail.getByText("Đã tiếp nhận -> Đang lưu kho")).toBeVisible();
-  await detail.getByLabel("Mã lưu kho").fill("A1-04");
-  await detail.getByLabel("Ghi chú nhật ký").fill("Move to shelf");
-  await detail.getByRole("button", { name: "Lưu trạng thái" }).click();
+  await expect(detail.getByText("Move to shelf", { exact: false })).toBeVisible();
+  await detail.getByRole("button", { name: "Cập nhật trạng thái" }).click();
+  const update = page.locator(".custody-modal");
+  await update.getByLabel("Trạng thái").selectOption("STORED");
+  await update.getByLabel("Mã vị trí lưu kho").fill("A1-04");
+  await update.getByLabel("Ghi chú").fill("Move to shelf");
+  await update.getByRole("button", { name: "Lưu trạng thái mới" }).click();
 
-  await expect(page.getByText("Đã cập nhật trạng thái kho")).toBeVisible();
+  await expect(page.getByText("Đã cập nhật trạng thái vật phẩm kho thành công", { exact: true })).toBeVisible();
   expect(calls.patched?.status).toBe("STORED");
   expect(calls.patched?.storageCode).toBe("A1-04");
   expect(calls.patched?.note).toBe("Move to shelf");
 });
+
+for (const viewport of [{ width: 1440, height: 1000 }, { width: 390, height: 844 }]) {
+  test(`warehouse return shows field errors before submitting at ${viewport.width}px`, async ({ page }, testInfo) => {
+    await page.setViewportSize(viewport);
+    await prepare(page, {});
+    await page.route("**/api/staff/warehouse-items/*/return-recipients", route => route.fulfill({ json: { recipients: [] } }));
+    let returnRequests = 0;
+    await page.route("**/api/staff/warehouse-items/*/return", route => {
+      returnRequests++;
+      return route.fulfill({ json: item });
+    });
+    await page.goto("/staff");
+    await page.getByRole("button", { name: "Kho tài sản", exact: true }).click();
+    await page.getByRole("button", { name: "Trả cho chủ sở hữu", exact: true }).click();
+    const modal = page.locator(".custody-modal");
+    const phone = modal.getByLabel(/^Số điện thoại/);
+    await phone.fill("0359");
+    await phone.blur();
+    await expect(modal.locator("#return-receiverPhone-error")).toHaveText("Số điện thoại phải có từ 9 đến 20 ký tự.");
+    await expect(phone).toHaveAttribute("aria-invalid", "true");
+    await modal.getByRole("button", { name: "Xác nhận Đã trả hàng" }).click();
+    await expect(modal.locator("#return-receiverName-error")).toBeVisible();
+    await expect(modal.locator("#return-receiverIdentity-error")).toBeVisible();
+    await expect(modal.locator("#return-proofImage-error")).toBeVisible();
+    await expect(modal.locator("#return-verified-error")).toBeVisible();
+    expect(returnRequests).toBe(0);
+    await phone.fill("0359123456");
+    await expect(phone).toHaveAttribute("aria-invalid", "false");
+    await expect(modal.locator("#return-receiverPhone-error")).toHaveCount(0);
+    await page.screenshot({ path: testInfo.outputPath(`return-errors-${viewport.width}.png`) });
+    expect(await modal.evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBeTruthy();
+  });
+
+  test(`staff server pagination and filtering at ${viewport.width}px`, async ({ page }, testInfo) => {
+    await page.setViewportSize(viewport);
+    await prepare(page, {});
+    const queries: string[] = [];
+    await page.route(/\/api\/staff\/custody-requests(?:\?.*)?$/, route => {
+      const url = new URL(route.request().url());
+      queries.push(url.search);
+      const pageNumber = Number(url.searchParams.get("page") ?? 1);
+      const status = url.searchParams.get("status") ?? "PENDING";
+      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ page: pageNumber, pageSize: 20, total: 21,
+        counts: { PENDING: 20, ACCEPTED: 1, INTAKED: 0, REJECTED: 0, CANCELLED: 0 },
+        items: [{ id: `request-${pageNumber}`, postId: "post-1", post: { id: "post-1", title: `Item page ${pageNumber}` }, claimId: null, roomId: null,
+          status, intakeType: "CUSTODY_TRANSFER", reason: "Fixture", requester: { id: "finder-1", fullName: "Finder" }, handler: null,
+          handoverPoint: catalog.handoverPoints[0], confirmedHandoverAt: null, warehouseItemId: null, rejectionReason: null,
+          createdAt: "2026-10-01T09:00:00Z", updatedAt: "2026-10-01T09:00:00Z" }] }) });
+    });
+    await page.goto("/staff");
+    await expect(page.getByText("Item page 1", { exact: true })).toBeVisible();
+    await page.getByRole("navigation", { name: "Phân trang" }).getByRole("button", { name: "Sau", exact: true }).click();
+    await expect(page.getByText("Item page 2", { exact: true })).toBeVisible();
+    expect(queries.some(query => new URLSearchParams(query).get("page") === "2")).toBeTruthy();
+    await page.getByRole("button", { name: "Chờ bàn giao (1)", exact: true }).click();
+    await expect(page.getByText("Item page 1", { exact: true })).toBeVisible();
+    expect(queries.some(query => new URLSearchParams(query).get("status") === "ACCEPTED" && new URLSearchParams(query).get("page") === "1")).toBeTruthy();
+    await page.evaluate(() => window.scrollTo(0, 0));
+    const headerBox = await page.locator(".admin-workspace-bar").boundingBox();
+    const headingBox = await page.getByRole("heading", { name: "Tiếp nhận & Quản lý Custody" }).boundingBox();
+    expect(headingBox!.y).toBeGreaterThanOrEqual(headerBox!.y + headerBox!.height);
+    await page.screenshot({ path: testInfo.outputPath(`staff-${viewport.width}.png`), fullPage: true });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBeTruthy();
+    await page.getByRole("button", { name: "Kho tài sản", exact: true }).click();
+    await expect(page.getByText("Ví da màu nâu", { exact: true })).toBeVisible();
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.screenshot({ path: testInfo.outputPath(`warehouse-${viewport.width}.png`), fullPage: true });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBeTruthy();
+    const warehouseQueries: string[] = [];
+    await page.route(/\/api\/staff\/warehouse-items(?:\?.*)?$/, route => {
+      const url = new URL(route.request().url());
+      warehouseQueries.push(url.search);
+      const pageNumber = Number(url.searchParams.get("page") ?? 1);
+      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ...dashboard(), total: 13, page: pageNumber,
+        items: [{ ...item, id: `item-page-${pageNumber}`, itemName: `Warehouse page ${pageNumber}` }] }) });
+    });
+    await page.getByRole("button", { name: "Lọc", exact: true }).click();
+    await expect(page.getByText("Warehouse page 1", { exact: true })).toBeVisible();
+    await page.getByRole("navigation", { name: "Phân trang" }).getByRole("button", { name: "Sau", exact: true }).click();
+    await expect(page.getByText("Warehouse page 2", { exact: true })).toBeVisible();
+    expect(warehouseQueries.some(query => new URLSearchParams(query).get("page") === "2")).toBeTruthy();
+    await page.getByRole("combobox", { name: "Trạng thái", exact: true }).selectOption("STORED");
+    await page.getByRole("button", { name: "Lọc", exact: true }).click();
+    await expect(page.getByText("Warehouse page 1", { exact: true })).toBeVisible();
+    expect(warehouseQueries.some(query => new URLSearchParams(query).get("status") === "STORED" && new URLSearchParams(query).get("page") === "1")).toBeTruthy();
+  });
+}
+
+for (const status of ["RECEIVED", "EXPIRED"]) {
+test(`warehouse ${status} return retains server field errors and can retry an in-person return`, async ({ page }) => {
+  await prepare(page, {});
+  await page.route(/\/api\/staff\/warehouse-items(?:\?.*)?$/, route => route.fulfill({ json: { ...dashboard(), items: [{ ...item, status }] } }));
+  await page.route("**/api/staff/warehouse-items/*/return-recipients", route => route.fulfill({ json: { recipients: [] } }));
+  const pageErrors: string[] = [];
+  page.on("pageerror", error => pageErrors.push(error.message));
+  const proofId = "00000000-0000-4000-8000-000000000000";
+  const image = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a5n8AAAAASUVORK5CYII=", "base64");
+  let uploads = 0;
+  await page.route("**/api/staff/warehouse-items/upload-proof", route => {
+    uploads++;
+    return route.fulfill({ json: { id: proofId } });
+  });
+  await page.route("**/api/staff/warehouse-proofs/*", route => route.fulfill({ contentType: "image/png", body: image }));
+  let attempts = 0;
+  await page.route("**/api/staff/warehouse-items/*/return", route => {
+    const payload = route.request().postDataJSON();
+    expect(payload.claimId).toBeNull();
+    expect(payload.recipientId).toBeNull();
+    expect(payload.proofImage).toBe(proofId);
+    attempts++;
+    return attempts === 1
+      ? route.fulfill({ status: 422, json: { message: "Dữ liệu nhập chưa hợp lệ", errors: { receiverPhone: ["Vui lòng kiểm tra lại số điện thoại người nhận."] } } })
+      : route.fulfill({ json: { ...item, status: "RETURNED" } });
+  });
+  await page.goto("/staff");
+  await page.getByRole("button", { name: "Kho tài sản", exact: true }).click();
+  await page.getByRole("button", { name: "Trả cho chủ sở hữu", exact: true }).click();
+  const modal = page.locator(".custody-modal");
+  await modal.getByLabel(/^Họ và tên người nhận/).fill("Nguyễn An");
+  await modal.getByLabel(/^Số điện thoại/).fill("0359123456");
+  await modal.getByLabel(/^Mã thẻ SV/).fill("DE123456");
+  await modal.getByRole("checkbox").check();
+  const upload = modal.getByLabel("Ảnh bằng chứng bàn giao", { exact: true });
+  await upload.setInputFiles(Array.from({ length: 6 }, (_, index) => ({ name: `proof-${index}.png`, mimeType: "image/png", buffer: image })));
+  await expect(modal.locator("#return-proofImage-error")).toHaveText("Chỉ được tải lên tối đa 5 ảnh bằng chứng.");
+  expect(uploads).toBe(0);
+  await upload.setInputFiles({ name: "proof.png", mimeType: "image/png", buffer: image });
+  await expect(modal.getByText("1 ảnh đã lưu riêng tư", { exact: true })).toBeVisible();
+  await modal.getByRole("button", { name: "Xác nhận Đã trả hàng" }).click();
+  await expect(modal.locator("#return-receiverPhone-error")).toHaveText("Vui lòng kiểm tra lại số điện thoại người nhận.");
+  await expect(modal.getByLabel(/^Họ và tên người nhận/)).toHaveValue("Nguyễn An");
+  await modal.getByLabel(/^Số điện thoại/).fill("0359123457");
+  await modal.getByRole("button", { name: "Xác nhận Đã trả hàng" }).click();
+  await expect(page.getByText("Đã hoàn tất trả hàng cho chủ sở hữu!", { exact: true })).toBeVisible();
+  await expect(modal).toHaveCount(0);
+  expect(attempts).toBe(2);
+  expect(pageErrors).toEqual([]);
+});
+}

@@ -100,7 +100,7 @@ Matching là gợi ý. Không có auto ownership verification, auto claim accept
 2. Finder chọn guided question theo category hoặc viết câu hỏi an toàn.
 3. Câu hỏi tập trung vào phụ kiện, dấu xước, nội dung màn hình, bốn số cuối serial hoặc chi tiết chỉ chủ sở hữu biết.
 4. Owner trả lời nhưng không xem trước private answer của Finder.
-5. Finder chọn `NEED_MORE_INFO`, final `ACCEPTED`, `REJECTED`, hoặc custody escalation (`REJECTED` + room escalation metadata).
+5. Finder chọn `NEED_MORE_INFO`, final `ACCEPTED`, `REJECTED`, hoặc custody escalation. Trên `feat/lnfs-55`, escalation giữ nguyên claim status và tạo custody request + room/audit projection; intake không resolve post. Xem [warehouse rules](warehouse-retention-and-status-rules.md).
 6. Claim/evidence chỉ hiển thị cho claimant, post owner và reviewer có quyền.
 
 Staff không xem routine conversation mặc định; chỉ truy cập case đã escalate, có reason, permission, minimum data và audit.

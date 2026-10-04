@@ -46,6 +46,8 @@ const catalog = {
 async function prepare(page: Page, calls: { created?: any; uploaded?: boolean; deleted?: boolean }) {
   await page.route("**/api/auth/refresh", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(session) }));
   await page.route("**/api/admin/catalog", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(catalog) }));
+  await page.route(/\/api\/admin\/(?:users|configs|reports)(?:\?.*)?$/, (route) => route.fulfill({ json: { items: [], total: 0, page: 1, pageSize: 10 } }));
+  await page.route(/\/api\/admin\/dashboard\/kpis(?:\?.*)?$/, (route) => route.fulfill({ json: { filters: { days: 30 }, totals: { posts: 0, claims: 0, appointments: 0, returns: 0 }, snapshot: { openPosts: 0, custodyItems: 0, unresolvedReports: 0 }, trends: [], statusBreakdown: { posts: [], claims: [], appointments: [], custody: [], reports: [] } } }));
   await page.route("**/api/admin/handover-points", async (route) => {
     calls.created = route.request().postDataJSON();
     await route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify({ ...point, id: "new-point", activeAppointments: 0 }) });

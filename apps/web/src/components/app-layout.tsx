@@ -1,4 +1,4 @@
-import { Files, FileUser, Home, LayoutDashboard, LogOut, MessageCircle, ShieldCheck, UserRound } from "lucide-react";
+import { Files, FileUser, Home, LayoutDashboard, LogOut, MessageCircle, UserRound } from "lucide-react";
 import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "../context/auth-context";
 import { useNetworkStatus } from "../hooks/use-network-status";
@@ -9,6 +9,7 @@ export function AppLayout() {
   const { online } = useNetworkStatus();
   const location = useLocation();
   const isAdmin = user?.roles.includes("ADMIN");
+  const hasAdminWorkspace = user?.roles.some(role => role === "STAFF" || role === "ADMIN");
   const viewingOwnMatch = /^\/posts\/[^/]+\/matches$/.test(location.pathname);
   return <div className="app-shell">
     <header className="topbar">
@@ -18,8 +19,7 @@ export function AppLayout() {
         <NavLink to="/posts" end><Files size={18} /> Bài đăng</NavLink>
         <NavLink to="/my-posts" className={({ isActive }) => isActive || viewingOwnMatch ? "active" : undefined}><FileUser size={18} /> Bài của tôi</NavLink>
         <NavLink to="/profile"><UserRound size={18} /> Hồ sơ</NavLink>
-        {isAdmin && <NavLink to="/admin"><LayoutDashboard size={18} /> Quản trị</NavLink>}
-        {user?.roles.some((role) => role === "STAFF" || role === "ADMIN") && <NavLink to="/staff"><ShieldCheck size={18} /> Khu vực nội bộ</NavLink>}
+        {hasAdminWorkspace && <NavLink to={isAdmin ? "/admin" : "/admin/staff"} title="Chuyển sang quản trị"><LayoutDashboard size={18} /> Quản trị</NavLink>}
         <NavLink to="/claims"><MessageCircle size={18} /> Trao đổi riêng</NavLink>
       </nav>
       <div className="topbar-actions"><NotificationCenter /><button className="icon-text-button" onClick={() => { void logout().catch(() => undefined); }}><LogOut size={18} /> Đăng xuất</button></div>

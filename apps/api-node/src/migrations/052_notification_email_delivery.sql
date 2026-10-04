@@ -1,0 +1,41 @@
+CREATE TABLE notification_email_preferences (
+  user_id CHAR(36) NOT NULL,
+  chat_mode ENUM('IMMEDIATE', 'DELAYED_UNREAD', 'DIGEST', 'DISABLED') NOT NULL DEFAULT 'DELAYED_UNREAD',
+  claim_mode ENUM('IMMEDIATE', 'DELAYED_UNREAD', 'DIGEST', 'DISABLED') NOT NULL DEFAULT 'IMMEDIATE',
+  quiet_hours_start TIME NULL,
+  quiet_hours_end TIME NULL,
+  timezone VARCHAR(64) NOT NULL DEFAULT 'Asia/Ho_Chi_Minh',
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (user_id),
+  CONSTRAINT fk_notification_email_preferences_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE notification_email_outbox (
+  id CHAR(36) NOT NULL,
+  notification_id CHAR(36) NOT NULL,
+  recipient_user_id CHAR(36) NOT NULL,
+  event_type VARCHAR(40) NOT NULL,
+  entity_type VARCHAR(40) NOT NULL,
+  entity_id CHAR(36) NULL,
+  room_id CHAR(36) NULL,
+  delivery_mode ENUM('IMMEDIATE', 'DELAYED_UNREAD', 'DIGEST') NOT NULL,
+  idempotency_key VARCHAR(191) NOT NULL,
+  status ENUM('PENDING', 'PROCESSING', 'SENT', 'CANCELLED') NOT NULL DEFAULT 'PENDING',
+  due_at DATETIME NOT NULL,
+  attempt_count INT UNSIGNED NOT NULL DEFAULT 0,
+  lease_token CHAR(36) NULL,
+  lease_expires_at DATETIME NULL,
+  last_error_code VARCHAR(80) NULL,
+  sent_at DATETIME NULL,
+  cancelled_at DATETIME NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_notification_email_outbox_notification (notification_id),
+  UNIQUE KEY uq_notification_email_outbox_idempotency (idempotency_key),
+  KEY idx_notification_email_outbox_due (status, due_at, lease_expires_at),
+  KEY idx_notification_email_outbox_coalesce (recipient_user_id, event_type, room_id, delivery_mode, status, due_at),
+  CONSTRAINT fk_notification_email_outbox_notification FOREIGN KEY (notification_id) REFERENCES notifications(id) ON DELETE CASCADE,
+  CONSTRAINT fk_notification_email_outbox_recipient FOREIGN KEY (recipient_user_id) REFERENCES users(id) ON DELETE CASCADE,
+  CONSTRAINT fk_notification_email_outbox_room FOREIGN KEY (room_id) REFERENCES chat_rooms(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

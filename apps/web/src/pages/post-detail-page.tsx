@@ -1,5 +1,5 @@
-import { ArrowLeft, ArrowRight, CalendarClock, Clock3, Eye, LockKeyhole, MapPin, MessageCircle, PackageCheck, ScanSearch, Tag, UserRound } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { ArrowLeft, ArrowRight, CalendarClock, CheckCircle2, Clock3, Eye, FileWarning, LoaderCircle, LockKeyhole, MapPin, MessageCircle, PackageCheck, ScanSearch, Tag, UserRound, X } from "lucide-react";
+import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useNetworkStatus } from "../hooks/use-network-status";
 import { useStaleDataNotice } from "../hooks/use-stale-data-notice";
@@ -26,6 +26,51 @@ export function PostDetailPage() {
   const { online } = useNetworkStatus();
   const { stale, clearStale } = useStaleDataNotice(useCallback((path) => path.startsWith(`/posts/${postId}`), [postId]));
 
+  const [custodyModalOpen, setCustodyModalOpen] = useState(false);
+  const [handoverPoints, setHandoverPoints] = useState<Array<{ id: string; name: string; address?: string | null }>>([]);
+  const [selectedHpId, setSelectedHpId] = useState("");
+  const [custodyReason, setCustodyReason] = useState("");
+  const [submittingCustody, setSubmittingCustody] = useState(false);
+  const [custodyNotice, setCustodyNotice] = useState("");
+  const [custodyError, setCustodyError] = useState("");
+
+  const openCustodyModal = useCallback(async () => {
+    setCustodyError("");
+    try {
+      const res = await api.listPublicHandoverPoints();
+      setHandoverPoints(res.handoverPoints);
+      if (res.handoverPoints.length > 0) {
+        setSelectedHpId(res.handoverPoints[0].id);
+      }
+      setCustodyModalOpen(true);
+    } catch (err) {
+      setCustodyError(err instanceof Error ? err.message : "Không thể tải danh sách điểm bàn giao");
+    }
+  }, []);
+
+  async function submitCustodyRequest(e: FormEvent) {
+    e.preventDefault();
+    if (!post || !selectedHpId) return;
+    setSubmittingCustody(true);
+    setCustodyError("");
+    setCustodyNotice("");
+    try {
+      await api.createCustodyRequest({
+        postId: post.id,
+        handoverPointId: selectedHpId,
+        reason: custodyReason || "Bàn giao vật phẩm bài nhặt được cho quầy Staff",
+        intakeType: "CUSTODY_TRANSFER"
+      });
+      setCustodyNotice("Đã gửi Yêu cầu Bàn giao cho Staff thành công! Hãy mang tài sản đến quầy theo lịch hẹn.");
+      setCustodyModalOpen(false);
+      setCustodyReason("");
+    } catch (err) {
+      setCustodyError(err instanceof Error ? err.message : "Không thể gửi yêu cầu bàn giao");
+    } finally {
+      setSubmittingCustody(false);
+    }
+  }
+
   useEffect(() => {
     let active = true;
     setLoading(true);
@@ -37,6 +82,20 @@ export function PostDetailPage() {
         if (!active) return;
         setPost(value);
         if (online) clearStale();
+        if (value.type === "FOUND" && value.canEdit) {
+          try {
+            const res = await api.getMyCustodyRequestByPost(value.id);
+            if (active && res.request) {
+              if (res.request.status === "INTAKED") {
+                setCustodyNotice("Vật phẩm đã được tiếp nhận và lưu kho bởi Staff.");
+              } else {
+                setCustodyNotice("Đã gửi Yêu cầu Bàn giao cho Staff thành công! Hãy mang tài sản đến quầy theo lịch hẹn.");
+              }
+            }
+          } catch {
+            // ignore
+          }
+        }
         if (!value.category?.id) return;
         setRelatedLoading(true);
         try {
@@ -80,7 +139,7 @@ export function PostDetailPage() {
   return <main className="post-detail-page">
     <div className="post-detail-topline">
       <Link className="post-detail-back" to="/posts"><ArrowLeft /> Quay lại bài đăng</Link>
-      {post.canEdit && <Link className="post-detail-matches" to={`/posts/${post.id}/matches`}><ScanSearch /> Xem phân tích matching</Link>}
+      <div className="post-detail-actions">{post.canEdit && <Link className="post-detail-matches" to={`/posts/${post.id}/matches`}><ScanSearch /> Xem phân tích matching</Link>}{!post.canEdit && <Link className="post-detail-matches" to={`/reports?targetType=POST&targetId=${post.id}`}><FileWarning /> Báo cáo bài đăng</Link>}</div>
     </div>
     {(!online || stale) && <div className="pwa-data-state" role="status">
       <strong>{online ? "Đang hiển thị dữ liệu lưu tạm" : "Bạn đang offline"}</strong>
@@ -104,6 +163,33 @@ export function PostDetailPage() {
 
         <section className="post-detail-description"><p className="eyebrow">Mô tả nhận dạng</p><h2>Thông tin vật phẩm</h2><p>{post.description ?? "Người đăng giữ riêng các dấu hiệu nhận dạng. Thông tin này chỉ hỗ trợ quá trình xác minh phù hợp."}</p></section>
 
+        {/* Finder Transfer to Custody Action Banner */}
+        {post.type === "FOUND" && post.canEdit && (
+          <div className="post-custody-banner" style={{ margin: "1.25rem 0", padding: "1rem 1.25rem", borderRadius: "12px", background: custodyNotice ? "rgba(34, 197, 94, 0.08)" : "rgba(59, 130, 246, 0.08)", border: custodyNotice ? "1px solid rgba(34, 197, 94, 0.3)" : "1px solid rgba(59, 130, 246, 0.2)" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "0.75rem" }}>
+              <div>
+                <strong style={{ display: "block", color: custodyNotice ? "#15803d" : "#1e40af", fontSize: "0.95rem" }}>
+                  {custodyNotice ? (custodyNotice.includes("lưu kho") ? "✅ Đã bàn giao vào kho Staff" : "✅ Đã gửi Yêu cầu Bàn giao Custody") : "📦 Gửi đồ vào Quầy Lost & Found (Custody)"}
+                </strong>
+                <span style={{ fontSize: "0.85rem", color: "#4b5563" }}>
+                  {custodyNotice ? custodyNotice : "Bạn có thể mang tài sản đến gửi tại Quầy Staff để nhân viên lưu kho & quản lý an toàn."}
+                </span>
+              </div>
+              {!custodyNotice && (
+                <button
+                  type="button"
+                  className="primary-button"
+                  style={{ padding: "0.5rem 1rem", fontSize: "0.875rem" }}
+                  onClick={openCustodyModal}
+                >
+                  <PackageCheck size={16} /> Gửi vào kho Staff
+                </button>
+              )}
+            </div>
+            {custodyError && <p style={{ margin: "0.5rem 0 0", color: "#dc2626", fontSize: "0.85rem" }}>{custodyError}</p>}
+          </div>
+        )}
+
         {!post.canEdit && ["OPEN", "MATCHED"].includes(post.status) && <div className="post-detail-claim"><button className="post-claim-button post-claim-button--detail" type="button" onClick={claimAndChat}><MessageCircle /> Nhắn tin với người đăng</button><p>Nếu đã từng nhắn, hệ thống sẽ mở lại toàn bộ lịch sử; nếu chưa, cuộc trò chuyện chỉ được lưu sau tin nhắn đầu tiên.</p></div>}
 
         {post.handoverPoint && <section className="post-handover"><span><PackageCheck /></span><div><p className="eyebrow">Điểm bàn giao</p><h2>{post.handoverPoint.name}</h2><p>{post.handoverPoint.address ?? "Địa chỉ đang được cập nhật"}</p></div></section>}
@@ -111,6 +197,53 @@ export function PostDetailPage() {
         <footer className="post-detail-owner"><span><UserRound /></span><div><small>Người đăng</small><strong>{post.owner.fullName}</strong><p><Clock3 /> Bài được tạo lúc {formatDate(post.createdAt)}</p></div></footer>
       </section>
     </div>
+
+    {/* Modal Custody Transfer Request */}
+    {custodyModalOpen && (
+      <div className="custody-modal-overlay" onClick={() => setCustodyModalOpen(false)}>
+        <div className="custody-modal" onClick={(e) => e.stopPropagation()}>
+          <div className="custody-modal__header">
+            <span className="modal-badge modal-badge--blue"><PackageCheck size={20} /></span>
+            <div>
+              <h3>Yêu cầu Bàn giao cho Quầy Staff (Custody)</h3>
+              <p>Chuyển giao vật phẩm bài đăng <strong>{post.title}</strong> cho nhân viên lưu kho.</p>
+              <p className="custody-hours-note">Giờ làm việc Phòng DVSV: thứ Hai–thứ Sáu, buổi sáng 08:00/08:15–12:00 và buổi chiều 13:30–17:00, trừ ngày nghỉ lễ.</p>
+            </div>
+            <button type="button" className="close-btn" onClick={() => setCustodyModalOpen(false)}><X size={18} /></button>
+          </div>
+
+          <form className="admin-form modal-form" onSubmit={submitCustodyRequest}>
+            <label className="input-field">
+              <span>Điểm quầy nhận bàn giao <strong className="required-star">*</strong></span>
+              <select value={selectedHpId} onChange={(e) => setSelectedHpId(e.target.value)} required>
+                <option value="">-- Chọn điểm quầy bàn giao --</option>
+                {handoverPoints.map((point) => (
+                  <option key={point.id} value={point.id}>{point.name} - {point.address}</option>
+                ))}
+              </select>
+            </label>
+
+            <label className="input-field">
+              <span>Ghi chú / Lời nhắn cho Staff</span>
+              <textarea
+                value={custodyReason}
+                onChange={(e) => setCustodyReason(e.target.value)}
+                rows={2}
+                placeholder="Ví dụ: Tôi sẽ mang chìa khóa đến quầy vào giờ ra ra chơi 10h sáng..."
+              />
+            </label>
+
+            <div className="custody-modal-actions">
+              <button className="primary-button" disabled={submittingCustody || !selectedHpId}>
+                {submittingCustody ? <LoaderCircle className="spin-icon" size={17} /> : <CheckCircle2 size={17} />}
+                <span>Gửi Yêu cầu Bàn giao</span>
+              </button>
+              <button type="button" className="secondary-button" onClick={() => setCustodyModalOpen(false)}>Đóng</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    )}
 
     <section className="related-posts" aria-labelledby="related-posts-title">
       <header>
