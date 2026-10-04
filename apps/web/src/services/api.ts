@@ -573,6 +573,7 @@ export interface ClaimRecord {
   participants?: ClaimParticipant[];
   room?: { id: string } | null;
   canSend?: boolean;
+  contactPhoto?: { required: boolean; approved: boolean; postId: string; questions: string[] } | null;
   item?: {
     postId: string;
     title: string;
@@ -879,12 +880,17 @@ export const api = {
   },
   findConversationByPost,
   getClaim: (claimId: string, signal?: AbortSignal) => raw<ClaimRecord>(`/claims/${claimId}`, { signal }),
-  createClaim: (payload: ({ postId: string } | { lostPostId: string; foundPostId: string }) & { description?: string; requestKey?: string }) => {
+  createClaim: (payload: ({ postId: string } | { lostPostId: string; foundPostId: string }) & { description?: string; requestKey?: string; contactCheckId?: string }) => {
     const requestKey = payload.requestKey ?? crypto.randomUUID();
     return raw<ClaimRecord & { idempotent: boolean }>("/claims", { method: "POST", headers: { "Idempotency-Key": requestKey }, body: JSON.stringify({ ...payload, requestKey: undefined }) });
   },
-  createDirectMessage: (postId: string, content: string, clientMessageId: string = crypto.randomUUID(), sourceFoundPostId?: string) =>
-    raw<{ claim: ClaimRecord; message: ClaimMessage }>("/claims/direct-messages", { method: "POST", headers: { "Idempotency-Key": clientMessageId }, body: JSON.stringify({ postId, content, sourceFoundPostId }) }),
+  createDirectMessage: (postId: string, content: string, clientMessageId: string = crypto.randomUUID(), sourceFoundPostId?: string, contactCheckId?: string) =>
+    raw<{ claim: ClaimRecord; message: ClaimMessage }>("/claims/direct-messages", { method: "POST", headers: { "Idempotency-Key": clientMessageId }, body: JSON.stringify({ postId, content, sourceFoundPostId, contactCheckId }) }),
+  checkLostContactPhoto: (postId: string, file: File) => {
+    const form = new FormData(); form.append("postId",postId); form.append("file",file);
+    return raw<{ checkId: string | null; approved: boolean; score: number; expiresAt: string | null }>("/claims/contact-photo-checks", { method: "POST", body: form });
+  },
+  attachContactPhoto: (claimId: string, contactCheckId: string) => raw<ClaimRecord>(`/claims/${claimId}/contact-photo`, { method: "POST", body: JSON.stringify({ contactCheckId }) }),
   decideClaim: (claimId: string, decision: "ACCEPT" | "DECLINE" | "REQUEST_MORE_INFO", note: string, idempotencyKey: string = crypto.randomUUID()) => raw<ClaimRecord>(`/claims/${claimId}/decision`, { method: "POST", headers: { "Idempotency-Key": idempotencyKey }, body: JSON.stringify({ decision, note }) }),
   withdrawClaim: (claimId: string, idempotencyKey: string = crypto.randomUUID()) => raw<ClaimRecord>(`/claims/${claimId}/withdraw`, { method: "POST", headers: { "Idempotency-Key": idempotencyKey } }),
   listClaimRooms: () => raw<ClaimRoomsResponse>("/claims/rooms"),

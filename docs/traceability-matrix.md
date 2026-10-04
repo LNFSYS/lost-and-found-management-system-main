@@ -59,8 +59,8 @@ Nguồn status là code/test hiện tại. Mỗi dòng liên kết business rule
 Catalogue [uc.md](uc.md); totals computed from catalogue rows with `node scripts/check-uc-catalogue.mjs` (168 IDs):
 
 - 97 Implemented in the dev catalogue.
-- 16 Partial, including UC-098–UC-100, UC-114, UC-141–UC-147 and UC-168.
-- 55 Planned.
+- 17 Partial, including UC-098–UC-100, UC-106, UC-114, UC-141–UC-147 and UC-168.
+- 54 Planned.
 
 UC-M01–UC-M12 là nhóm mobile target lịch sử, chưa thuộc catalogue 168 business UC cho tới khi team phê duyệt ID mapping. Khi đưa Native Mobile vào SRS, cần tạo mapping chính thức, không tự trùng ID.
 
@@ -98,6 +98,7 @@ See [warehouse rules](warehouse-retention-and-status-rules.md) for project defau
 | BR-66 | FR-WAREHOUSE-05 | UC-055, UC-148 | warehouse-policy.ts, canonical returnItem and Staff action; warehouse-return.test.ts, custody-safety.integration.test.ts and RECEIVED/EXPIRED browser return cases. Terminal disposition and legal hold remain blocking. |
 | BR-67 | FR-NOTIFY-06 | UC-168, UC-147 | notification-email.worker.ts, repository and SMTP adapter; heartbeat/uncertainty unit tests and real SQL two-worker delivery test. CANCELLED uncertainty codes deliberately favor no duplicate over guaranteed optional delivery. |
 | BR-54, BR-68 | FR-CUSTODY-01, FR-WAREHOUSE-06 | UC-051, UC-052, UC-056, UC-144, UC-146 | custody-request.use-cases.ts; intake-evidence.ts; warehouse-intake.repository.ts; 061_warehouse_intake_evidence.sql; warehouse-intake-dialog.tsx; warehouse-images.tsx; intake-evidence.test.ts; custody-safety.integration.test.ts; staff-page.spec.ts. Shared DB migration/manual acceptance remain pending; see warehouse-intake-evidence.md. |
+| BR-69 | FR-CHAT-02 | UC-034, UC-040, UC-042, UC-044, UC-106 | contact-photo.use-cases.ts; contact-photo.repository.ts; contact-photo-scoring.ts; claim.use-cases.ts/routes; 062_lost_contact_photo_checks.sql; lost-contact-photo-gate.tsx; claims-page.tsx; contact-photo.use-cases.test.ts; custody-safety.integration.test.ts; lost-contact-photo.spec.ts. Score only gates communication, not ownership/return. Shared DB and real-provider/manual acceptance remain pending. |
 | BR-61 | FR-MATCH-06, FR-MATCH-07 | UC-026, UC-028 | Source-owner filtering occurs in buildStoredResults before totals/slicing; serializer only maps/redacts. matching.use-cases.test.ts and custody-safety.integration.test.ts cover pageSize=1 for owner/Staff/Admin and keep inactive permitted history/viewer feedback scope. |
 | BR-64 | NFR-DATA-01–02 | UC-098–UC-100 | matching-recovery-supersession.ts, migration runner/preflight, immutable 054/057, additive 060; matching-refresh.integration.test.ts verifies three upgrade paths, ledger/timestamps/legacy labels and schema drift |
 

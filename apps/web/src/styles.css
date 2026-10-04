@@ -8448,6 +8448,7 @@ textarea {
   .claim-message { max-width: 88%; }
   .chat-question-panel { margin: 0 0 25px; }
   .claim-message-form { padding-inline: 12px; }
+  .claim-message-form > .input-row { grid-template-columns: minmax(0, 1fr) auto; }
   .claim-workspace-state { min-height: 360px; }
   .decision-modal-backdrop, .evidence-modal-backdrop { padding: 10px; }
   .decision-modal > footer { display: grid; grid-template-columns: 1fr 1fr; }

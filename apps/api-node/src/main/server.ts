@@ -23,7 +23,7 @@ const notificationWorkerTimer = env.notificationEmail.workerEnabled
 if (env.notificationEmail.workerEnabled) void notificationEmailTask.tick();
 const warehouseMaintenance = createWarehouseMaintenanceTask({
   checkSchema: () => checkWarehouseMaintenanceSchema(pool),
-  runOnce: () => services.warehouseService.runMaintenance(),
+  runOnce: async () => { await services.warehouseService.runMaintenance(); await services.claimService.cleanupContactPhotos(); },
   logger: console
 });
 const warehouseMaintenanceTimer = setInterval(() => { void warehouseMaintenance.tick(); }, 60_000);

@@ -29,6 +29,7 @@ import type {
   VerificationDecisionInput
 } from "./claim.dto.js";
 import type { ClaimRepository, ClaimStatus } from "./claim.repository.port.js";
+import type { ContactPhotoUseCases } from "./contact-photo.use-cases.js";
 
 type WorkflowNotificationKind = "CLAIM" | "CHAT" | "APPOINTMENT" | "RETURN" | "CUSTODY";
 
@@ -37,6 +38,7 @@ function claimNotFound() {
 }
 
 export interface ClaimDependencies {
+  contactPhotos?: ContactPhotoUseCases;
   claimRepository: ClaimRepository;
   matchingRepository: MatchingRepository;
   notificationRepository: NotificationRepository;
@@ -178,11 +180,13 @@ export function createClaimUseCases(options: ClaimDependencies) {
     const exactLocation = itemContext
       ? itemContext.handoverPointName ?? itemContext.customLocation ?? itemContext.buildingName ?? itemContext.roomText ?? itemContext.areaName
       : null;
+    const contactPhoto = await options.contactPhotos?.state(claimId,userId) ?? null;
     return {
       ...serializeClaim(claim),
       participants,
       room: claim.roomId ? { id: claim.roomId } : null,
-      canSend: canUseRoom(claim.status, participant.consentStatus),
+      canSend: canUseRoom(claim.status, participant.consentStatus) && (!contactPhoto?.required || contactPhoto.approved),
+      contactPhoto,
       item: itemContext ? {
         postId: itemContext.foundPostId,
         title: itemContext.title,
@@ -256,6 +260,21 @@ export function createClaimUseCases(options: ClaimDependencies) {
   }
 
   const claimService = {
+    async cleanupContactPhotos() { await options.contactPhotos?.cleanupExpired(); },
+    async checkContactPhoto(postId: string, actorId: string, file: ImageUpload) {
+      if (!options.contactPhotos) throw new AppError("unavailable", "Kiểm tra ảnh liên hệ chưa sẵn sàng");
+      return options.contactPhotos.analyze(postId,actorId,file);
+    },
+    async attachContactPhoto(claimId: string, actorId: string, checkId: string) {
+      if (!options.contactPhotos) throw new AppError("unavailable", "Kiểm tra ảnh liên hệ chưa sẵn sàng");
+      await withTransaction(async db => {
+        const claim = await claimRepository.findByIdForUpdate(claimId,db);
+        const participant = claim ? await claimRepository.findParticipant(claimId,actorId,db) : null;
+        if (!claim || !participant || !canUseRoom(claim.status,participant.consentStatus)) throw claimNotFound();
+        await options.contactPhotos!.attach(checkId,claim.foundPostId,actorId,claimId,db);
+      });
+      return details(claimId,actorId);
+    },
     async createClaim(requesterId: string, input: CreateClaimInput) {
       const result = await withTransaction(async (connection) => {
         const requestedPostId = input.postId ?? input.foundPostId;
@@ -275,18 +294,19 @@ export function createClaimUseCases(options: ClaimDependencies) {
         let foundPostId: string;
         let claimClaimantId: string;
         let finderId: string;
+        let isLostContact = false;
 
         if (input.postId) {
           const post = await claimRepository.findClaimablePostForUpdate(input.postId, connection);
           if (!post) throw new AppError("conflict", "Bài viết không còn mở để claim");
           foundPostId = post.id;
           if (post.type === "LOST") {
-            claimClaimantId = post.ownerId;
-            finderId = requesterId;
-          } else {
-            claimClaimantId = requesterId;
-            finderId = post.ownerId;
+            isLostContact = true;
           }
+          // Store direct requests by requester/post; the repository resolves
+          // ownership roles separately for LOST conversations.
+          claimClaimantId = requesterId;
+          finderId = post.ownerId;
         } else {
           if (!input.lostPostId || !input.foundPostId) {
             throw new AppError("invalid_input", "Cần đầy đủ cặp bài viết matching");
@@ -305,7 +325,13 @@ export function createClaimUseCases(options: ClaimDependencies) {
         if (finderId === claimClaimantId) throw new AppError("conflict", "Bạn không thể tạo conversation với chính mình");
 
         const existing = await claimRepository.findByFoundPostForClaimant(foundPostId, claimClaimantId, connection);
+        if (isLostContact) {
+          if (!options.contactPhotos) throw new AppError("unavailable", "Kiểm tra ảnh liên hệ chưa sẵn sàng");
+          await options.contactPhotos.requireEligible(input.contactCheckId,foundPostId,requesterId,connection,existing?.id);
+        }
         if (existing) {
+          if (!await claimRepository.findParticipant(existing.id,requesterId,connection)) throw claimNotFound();
+          if (isLostContact) await options.contactPhotos!.attach(input.contactCheckId,foundPostId,requesterId,existing.id,connection);
           if (input.postId && existing.status === "PENDING") {
             await claimRepository.updateFinderDecision({
               claimId: existing.id,
@@ -336,6 +362,7 @@ export function createClaimUseCases(options: ClaimDependencies) {
         }, connection);
         await claimRepository.addParticipant({ claimId, userId: claimClaimantId, role: "CLAIMANT", consentStatus: "ACCEPTED" }, connection);
         await claimRepository.addParticipant({ claimId, userId: finderId, role: "FINDER", consentStatus: input.postId ? "ACCEPTED" : "PENDING" }, connection);
+        if (isLostContact) await options.contactPhotos!.attach(input.contactCheckId,foundPostId,requesterId,claimId,connection);
         if (input.postId) await claimRepository.createRoom(claimId, connection);
         const toStatus = input.postId ? "CONVERSATION_OPEN" : "PENDING";
         await claimRepository.writeAudit({ claimId, actorId: requesterId, action: "CLAIM_CREATED", toStatus }, connection);
@@ -384,6 +411,10 @@ export function createClaimUseCases(options: ClaimDependencies) {
         if (claimantId === finderId) throw new AppError("conflict", "Bạn không thể nhắn tin với chính mình");
 
         const existing = await claimRepository.findByFoundPostForClaimant(post.id, claimantId, connection);
+        if (post.type === "LOST") {
+          if (!options.contactPhotos) throw new AppError("unavailable", "Kiểm tra ảnh liên hệ chưa sẵn sàng");
+          await options.contactPhotos.requireEligible(input.contactCheckId,post.id,requesterId,connection,existing?.id);
+        }
         let claim: StoredClaim;
         let roomId: string;
 
@@ -421,6 +452,7 @@ export function createClaimUseCases(options: ClaimDependencies) {
         }
 
         if (input.sourceFoundPostId) await claimRepository.linkSourceFoundPost(claim.id, input.sourceFoundPostId, connection);
+        if (post.type === "LOST") await options.contactPhotos!.attach(input.contactCheckId,post.id,requesterId,claim.id,connection);
         const participant = await claimRepository.findParticipant(claim.id, requesterId, connection);
         if (!participant || !canUseRoom(claim.status, participant.consentStatus)) throw claimNotFound();
 
@@ -538,6 +570,7 @@ export function createClaimUseCases(options: ClaimDependencies) {
         const room = claim ? await claimRepository.findRoomByClaim(claimId, connection) : null;
         if (!claim || !participant || participant.role !== "FINDER" || claim.finderId !== finderId
           || !canUseRoom(claim.status, participant.consentStatus)) throw claimNotFound();
+        await options.contactPhotos?.requireSender(claimId,finderId,connection);
 
         const existing = await claimRepository.findAuditByIdempotencyKey(claimId, finderId, input.idempotencyKey, connection);
         if (ensureIdempotentReplay(existing, fingerprint)) return;
@@ -622,6 +655,7 @@ export function createClaimUseCases(options: ClaimDependencies) {
         const room = claim ? await claimRepository.findRoomByClaim(claimId, connection) : null;
         if (!claim || !participant || participant.role !== "CLAIMANT" || claim.claimantId !== claimantId
           || !canUseRoom(claim.status, participant.consentStatus)) throw claimNotFound();
+        await options.contactPhotos?.requireSender(claimId,claimantId,connection);
         const existing = await claimRepository.findAuditByIdempotencyKey(claimId, claimantId, input.idempotencyKey, connection);
         if (ensureIdempotentReplay(existing, fingerprint)) return;
         if (!canSubmitVerificationDecision(claim.status)) {
@@ -686,6 +720,9 @@ export function createClaimUseCases(options: ClaimDependencies) {
         const participant = claim ? await claimRepository.findParticipant(claimId, finderId, connection) : null;
         const room = claim ? await claimRepository.findRoomByClaim(claimId, connection) : null;
         if (!claim || !participant || participant.role !== "FINDER" || claim.finderId !== finderId) throw claimNotFound();
+        if (input.decision === "VERIFY_FOR_MEETUP" || input.decision === "REQUEST_MORE_INFO") {
+          await options.contactPhotos?.requireSender(claimId,finderId,connection);
+        }
         const existing = await claimRepository.findAuditByIdempotencyKey(claimId, finderId, input.idempotencyKey, connection);
         if (ensureIdempotentReplay(existing, fingerprint)) return;
 
@@ -1042,6 +1079,7 @@ export function createClaimUseCases(options: ClaimDependencies) {
         const participant = lockedClaim ? await claimRepository.findParticipant(claimId, userId, connection) : null;
         const lockedRoom = lockedClaim ? await claimRepository.findRoomByClaim(claimId, connection) : null;
         if (!lockedClaim || !lockedRoom || !participant || !canUseRoom(lockedClaim.status, participant.consentStatus) || lockedRoom.id !== room.id) throw claimNotFound();
+        await options.contactPhotos?.requireSender(claimId,userId,connection);
         
         // Auto-detect verification answer from message content
         if (input.content.includes("✏️ Câu trả lời:") && participant.role === "CLAIMANT") {

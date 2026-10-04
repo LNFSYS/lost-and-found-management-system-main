@@ -5,6 +5,7 @@ import { ClaimEvidencePanel } from "../components/claim-evidence-panel";
 import { ClaimItemPanel } from "../components/claim-item-panel";
 import { ClaimVerificationPanel } from "../components/claim-verification-panel";
 import { ClaimVerificationQuestionModal } from "../components/claim-verification-question-modal";
+import { LostContactPhotoGate } from "../components/lost-contact-photo-gate";
 import { useAuth } from "../context/auth-context";
 import {
   api, type ClaimEvidence, type ClaimMessage, type ClaimRecord, type ClaimStatus, type PostSummary, type VerificationTemplatesResponse,
@@ -90,6 +91,7 @@ function DirectMessageDraft({ postId, sourceFoundPostId, viewer }: { postId: str
   const [loading, setLoading] = useState(true);
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
+  const [contactCheckId, setContactCheckId] = useState<string | null>(null);
   const [error, setError] = useState("");
   const pendingMessage = useRef<{ content: string; clientMessageId: string } | null>(null);
   const draftClaim = useMemo<ClaimRecord | null>(() => {
@@ -140,6 +142,8 @@ function DirectMessageDraft({ postId, sourceFoundPostId, viewer }: { postId: str
     let active = true;
     setLoading(true);
     setError("");
+    setContactCheckId(null);
+    pendingMessage.current = null;
     void (async () => {
       try {
         const existing = sourceFoundPostId ? null : await api.findConversationByPost(postId).catch(() => null);
@@ -163,6 +167,7 @@ function DirectMessageDraft({ postId, sourceFoundPostId, viewer }: { postId: str
     event.preventDefault();
     const content = draft.trim();
     if (!content || !post) return;
+    if (post.type === "LOST" && !contactCheckId) { setError("Cần kiểm tra ảnh trên 60% trước khi gửi tin nhắn."); return; }
     setSending(true);
     setError("");
     const retry = pendingMessage.current?.content === content
@@ -170,7 +175,7 @@ function DirectMessageDraft({ postId, sourceFoundPostId, viewer }: { postId: str
       : { content, clientMessageId: crypto.randomUUID() };
     pendingMessage.current = retry;
     try {
-      const result = await api.createDirectMessage(post.id, content, retry.clientMessageId, sourceFoundPostId);
+      const result = await api.createDirectMessage(post.id, content, retry.clientMessageId, sourceFoundPostId, contactCheckId ?? undefined);
       pendingMessage.current = null;
       navigate(`/claims/${result.claim.id}`, { replace: true });
     } catch (reason) {
@@ -181,7 +186,7 @@ function DirectMessageDraft({ postId, sourceFoundPostId, viewer }: { postId: str
   }
 
   if (loading) return <section className="claim-workspace-state"><RefreshCw className="is-spinning" /><h2>Đang mở khung soạn tin nhắn...</h2></section>;
-  if (error || !post) return <section className="claim-workspace-state"><AlertTriangle /><h2>Không mở được khung tin nhắn</h2><p>{error || "Bài đăng không tồn tại hoặc bạn không có quyền xem."}</p></section>;
+  if (!post) return <section className="claim-workspace-state"><AlertTriangle /><h2>Không mở được khung tin nhắn</h2><p>{error || "Bài đăng không tồn tại hoặc bạn không có quyền xem."}</p></section>;
   if (post.canEdit || !["OPEN", "MATCHED"].includes(post.status)) return <section className="claim-workspace-state"><AlertTriangle /><h2>Không thể nhắn tin cho bài đăng này</h2></section>;
 
   if (!draftClaim) return null;
@@ -192,6 +197,8 @@ function DirectMessageDraft({ postId, sourceFoundPostId, viewer }: { postId: str
         <div><strong>{counterpartName(draftClaim, viewer?.id)}</strong><span><i /> Đang hoạt động</span><small>{claimTitle(draftClaim)}</small></div>
       </header>
       <div className="claim-chat-scroll">
+        {post.type === "LOST" && <LostContactPhotoGate key={post.id} postId={post.id} onReady={setContactCheckId} />}
+        {error && <p className="field-error contact-draft-error" role="alert">{error}</p>}
         <div className="claim-private-banner"><MessageCircle /><div><strong>Cuộc trò chuyện chưa được lưu</strong><span>Chỉ khi bạn gửi tin nhắn đầu tiên, cuộc trò chuyện mới xuất hiện trong danh sách.</span></div></div>
         <div className="claim-messages"><div className="claim-messages__empty"><MessageCircle /><span>Chưa có tin nhắn.</span></div></div>
       </div>
@@ -199,7 +206,7 @@ function DirectMessageDraft({ postId, sourceFoundPostId, viewer }: { postId: str
         <div className="input-row">
           <div className="message-attachment" aria-hidden="true" />
           <textarea aria-label="Tin nhắn riêng" value={draft} onChange={(event) => setDraft(event.target.value)} maxLength={5000} placeholder="Nhập tin nhắn hoặc câu hỏi..." />
-          <div className="message-actions"><button type="submit" disabled={sending || !draft.trim()} title="Gửi tin nhắn"><Send /></button></div>
+          <div className="message-actions"><button type="submit" disabled={sending || !draft.trim() || (post.type === "LOST" && !contactCheckId)} title="Gửi tin nhắn"><Send /></button></div>
         </div>
       </form>
     </section>
@@ -549,12 +556,19 @@ export function ClaimsPage() {
                 <div className="claim-header-actions"><Link to={`/reports?targetType=CLAIM&targetId=${claim.id}`} title="Báo cáo claim"><FileWarning /></Link>{claim.claimantId === user?.id && ["PENDING", "CONVERSATION_OPEN", "NEED_MORE_INFO"].includes(claim.status) && <button type="button" className="claim-close-button" disabled={withdrawing} onClick={() => void withdraw()} title="Đóng claim"><X /></button>}</div>
               </header>
 
-              {!claim.canSend ? claim.finderId === user?.id && claim.status === "PENDING" ? <section className="claim-open-decision">
+              {!claim.canSend ? claim.contactPhoto?.required && !claim.contactPhoto.approved ? <div className="claim-chat-scroll"><LostContactPhotoGate key={claim.id} postId={claim.contactPhoto.postId} onReady={checkId => {
+                if (checkId) void api.attachContactPhoto(claim.id,checkId).then(() => {
+                  if (selectedClaimId.current === claim.id) return loadClaimRoom(claim.id);
+                }).catch(reason => {
+                  if (selectedClaimId.current === claim.id) setError(reason instanceof Error ? reason.message : "Không thể xác nhận ảnh liên hệ");
+                });
+              }} /></div> : claim.finderId === user?.id && claim.status === "PENDING" ? <section className="claim-open-decision">
                 <div><Clock3 /><strong>Mở conversation xác minh</strong></div>
                 <textarea value={openingReason} onChange={(event) => setOpeningReason(event.target.value)} minLength={3} maxLength={1000} placeholder="Lý do quyết định" />
                 <div><button type="button" disabled={openingConversation || !openingReason.trim()} onClick={() => void decideConversation("ACCEPT")}><MessageCircle /> Mở conversation</button><button type="button" disabled={openingConversation || !openingReason.trim()} onClick={() => void decideConversation("REQUEST_MORE_INFO")}><Clock3 /> Yêu cầu bổ sung</button><button type="button" className="danger" disabled={openingConversation || !openingReason.trim()} onClick={() => void decideConversation("DECLINE")}><X /> Từ chối</button></div>
               </section> : <div className="claim-pending"><Clock3 /><strong>{claim.status === "ACCEPTED" ? "Finder đã đưa ra quyết định" : claim.status === "NEED_MORE_INFO" ? "Finder đã yêu cầu thêm thông tin" : claim.finderDecision === "DECLINED" ? "Claim đã bị từ chối" : "Đang chờ Finder mở conversation"}</strong></div> : <>
                 <div className="claim-chat-scroll">
+                  {claim.contactPhoto?.questions.length ? <details className="contact-questions" open><summary>Câu hỏi đối chiếu vật phẩm</summary><ul>{claim.contactPhoto.questions.map(question => <li key={question}>{question}</li>)}</ul></details> : null}
                   <div className="claim-messages">
                     {messageCursor && <button className="claim-load-older" type="button" disabled={loadingOlder} onClick={() => void loadOlderMessages()}><RefreshCw className={loadingOlder ? "is-spinning" : ""} /> {loadingOlder ? "Đang tải..." : "Tin nhắn cũ hơn"}</button>}
                     {messages.length ? messages.map((message) => <MessageBubble key={message.id} message={message} own={message.sender.id === user?.id} user={user ?? undefined} onReplyQuestion={handleReplyQuestion} />) : <div className="claim-messages__empty"><MessageCircle /><span>Chưa có tin nhắn.</span></div>}

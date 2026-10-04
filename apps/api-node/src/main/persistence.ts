@@ -6,6 +6,7 @@ import { createAdminUserRepository } from "../modules/admin/infrastructure/admin
 import { createAuthRepository } from "../modules/auth/infrastructure/auth.repository.js";
 import { createUserRepository } from "../modules/auth/infrastructure/user.repository.js";
 import { createClaimRepository } from "../modules/claims/infrastructure/claim.repository.js";
+import { createContactPhotoRepository } from "../modules/claims/infrastructure/contact-photo.repository.js";
 import { createMatchingRepository } from "../modules/matching/infrastructure/matching.repository.js";
 import { createNotificationRepository } from "../modules/notifications/infrastructure/notification.repository.js";
 import { createNotificationEmailRepository } from "../modules/notifications/infrastructure/notification-email.repository.js";
@@ -30,6 +31,7 @@ export function createPersistence(database: Pool) {
     adminUserRepository: createAdminUserRepository(database),
     authRepository: createAuthRepository(database),
     claimRepository: createClaimRepository(database),
+    contactPhotoRepository: createContactPhotoRepository(database),
     matchingRepository: createMatchingRepository(database, sqlTransaction),
     notificationRepository: createNotificationRepository(database),
     notificationEmailRepository: createNotificationEmailRepository(database),

@@ -1,10 +1,10 @@
 # 3. Business Use Case Catalogue - FPTU Lost & Found System (LNFS)
 
-Mappings reconciled on 4 October 2026 against merged `dev` baseline `5ab9f0d` (PR #79) and the local audit fixes documented in [dev-main-audit-fixes.md](dev-main-audit-fixes.md). UC-098 to UC-100 remain Partial for manual role/privacy QA and operational acceptance, not an unmerged branch. UC-114 covers explicit post-intake Staff approval only; custody UC-141 to UC-147 now record Partial runtime evidence with remaining acceptance gaps. Warehouse release history remains in [LNFS-55-SAFETY-VERIFICATION.md](LNFS-55-SAFETY-VERIFICATION.md). `Implemented` requires active runtime evidence; schema or migration-only evidence is not sufficient. `Partial` means part of the actor goal exists, while `Planned` means no complete runtime flow is available. Local fixes are not a remote deployment.
+Mappings reconciled on 4 October 2026 against merged `dev` baseline `fd122e6` and local physical-intake/contact-photo follow-ups documented in [warehouse-intake-evidence.md](warehouse-intake-evidence.md) and [lost-contact-photo-rules.md](lost-contact-photo-rules.md). Earlier audit fixes remain documented in [dev-main-audit-fixes.md](dev-main-audit-fixes.md). UC-098 to UC-100 remain Partial for manual role/privacy QA and operational acceptance. UC-106 has a limited safe LOST-question runtime slice; UC-114 covers post-intake Staff approval only. Custody UC-141 to UC-147 retain remaining acceptance gaps. Warehouse release history remains in [LNFS-55-SAFETY-VERIFICATION.md](LNFS-55-SAFETY-VERIFICATION.md). `Implemented` requires active runtime evidence, not schema presence alone; no existing Implemented status certifies deployment of new extensions. Additive migrations 061/062 and manual/provider acceptance remain pending on the shared DB.
 
 - **Implemented:** 97 use cases
-- **Partial:** 16 use cases
-- **Planned:** 55 use cases
+- **Partial:** 17 use cases
+- **Planned:** 54 use cases
 - **Total:** 168 business use cases
 
 `Claimant` means the owner of the LOST post. `Finder` means the owner of the matched FOUND post. PWA, mobile browser, and a future native application are delivery channels, not business use cases, and are therefore excluded from this catalogue.
@@ -118,14 +118,14 @@ Completed UC work above is not reassigned. The 71 Partial/Planned UCs in the ret
 | --- | --- | --- | --- | --- |
 | UC-032 | View my claim requests | Claimant / Finder | List claim requests in which the signed-in user is an authorized participant. | Implemented |
 | UC-033 | View claim request details | Claimant / Finder | View one authorized claim, its current state, participants, related posts, and allowed actions. | Implemented |
-| UC-034 | Create a claim request | Claimant | Request a private exchange for a persisted and eligible LOST-FOUND match while preventing self-claims and duplicate requests. | Implemented |
+| UC-034 | Create a claim request | Claimant / Finder | Request an exchange for an eligible post or LOST-FOUND match while preventing self-claims and duplicates. Direct non-owner LOST contact requires a server-approved photo above 60%. | Implemented |
 | UC-035 | Accept a claim request | Finder | Accept the claimant's request, grant participant consent, and open the private exchange room. | Implemented |
 | UC-036 | Request more claim information | Finder | Ask the claimant for more information and open the private room for direct clarification. | Implemented |
 | UC-037 | Decline a claim request | Finder | Reject a pending claim request and store the decision and optional reason in the audit trail. | Implemented |
 | UC-038 | Withdraw a claim request | Claimant | Cancel an owned claim when its current state permits withdrawal. | Implemented |
 | UC-039 | View private claim rooms | Claimant / Finder | List private rooms belonging to claims in which the signed-in user is a participant. | Implemented |
-| UC-040 | Open a private claim room | Claimant / Finder | Enter an authorized claim room after the Finder's consent has opened the conversation. | Implemented |
-| UC-106 | View guided verification questions | Finder | View suggested questions based on the item category without revealing expected private answers. | Planned |
+| UC-040 | Open a private claim room | Claimant / Finder | Enter an authorized consented room. Direct non-owner LOST contact additionally needs a server-approved photo above 60%; communication approval never verifies ownership. | Implemented |
+| UC-106 | View guided verification questions | Finder | View safe existing category prompts in a photo-approved LOST conversation without revealing expected answers. Full guided-question actor acceptance remains pending. | Partial |
 | UC-107 | Ask a guided verification question | Finder | Send a structured verification question to a claimant in the private conversation. | Partial |
 | UC-108 | Answer a guided verification question | Claimant | Answer a verification question without seeing the finder-defined expected answer. | Planned |
 | UC-109 | Review private claim evidence | Finder | Review claimant answers and protected evidence before deciding the next claim state. | Partial |
@@ -148,7 +148,7 @@ Completed UC work above is not reassigned. The 71 Partial/Planned UCs in the ret
 | ID | Use Case | Actors | Use Case Description | Status |
 | --- | --- | --- | --- | --- |
 | UC-041 | View direct messages | Claimant / Finder | Retrieve cursor-paginated text messages from an authorized private claim room. | Implemented |
-| UC-042 | Send a direct message | Claimant / Finder | Send an idempotent text message directly to the other claim participant through the private REST room. | Implemented |
+| UC-042 | Send a direct message | Claimant / Finder | Send an idempotent private text message. For non-owner LOST senders the server also enforces the contact-photo gate, including legacy rooms. | Implemented |
 | UC-043 | View claim evidence | Claimant / Finder | List private evidence belonging to an authorized claim room. | Implemented |
 | UC-044 | Upload claim evidence | Claimant / Finder | Validate and upload a private evidence image to an authorized claim room. | Implemented |
 | UC-045 | View protected claim evidence | Claimant / Finder | Retrieve an evidence image only after participant and room authorization. | Implemented |

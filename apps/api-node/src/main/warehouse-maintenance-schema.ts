@@ -7,6 +7,7 @@ export const warehouseMaintenanceColumns = {
   warehouse_private_proofs: ["id", "storage_ref", "attached_at", "created_at"],
   warehouse_intake_sessions: ["id", "actor_id", "warehouse_item_id", "created_at"],
   warehouse_intake_images: ["id", "intake_id", "storage_ref", "created_at"],
+  lost_contact_photo_checks: ["id", "claim_id", "storage_ref", "expires_at"],
   claims: ["id", "post_id", "source_found_post_id"],
   claim_participants: ["claim_id", "user_id", "consent_status"],
   users: ["id", "status"],
