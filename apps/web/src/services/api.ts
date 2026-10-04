@@ -263,6 +263,32 @@ export interface WarehouseItem {
   createdAt: string;
   updatedAt: string;
   logCount: number;
+  receivedQuantity?: number | null;
+  accessories?: string | null;
+  thumbnail?: { id: string; provenance: WarehouseImage["provenance"] } | null;
+}
+export interface WarehouseImage {
+  id: string;
+  provenance: "SOURCE_POST" | "INTAKE" | "RETURN";
+  uploaderId: string;
+  uploadedAt: string;
+  capturedAt: string | null;
+  postId: string | null;
+  intakeKey: string | null;
+  returnId: string | null;
+  url: string;
+}
+export interface IntakeEvidencePayload {
+  physicalReviewConfirmed: true;
+  intakeKey: string;
+  intakeImageIds: string[];
+  receivedQuantity: number;
+  accessories: string;
+}
+export interface CustodyIntakeContext {
+  request: CustodyRequest;
+  post: { title: string; description: string | null; categoryId: string | null; areaId: string | null; buildingId: string | null; roomText: string | null; finderUserId: string; finderName: string | null; finderContact: string | null };
+  images: WarehouseImage[];
 }
 export interface WarehouseStorageLog {
   id: string;
@@ -293,7 +319,7 @@ export interface WarehouseFilters {
   page?: number;
   pageSize?: number;
 }
-export interface CreateWarehouseItemPayload {
+export interface CreateWarehouseItemPayload extends IntakeEvidencePayload {
   postId?: string | null;
   handoverPointId: string;
   itemName: string;
@@ -341,7 +367,7 @@ export interface CustodyRequest {
   warehouseItemId: string | null;
   createdAt: string;
   updatedAt: string;
-  post: { id: string; title: string | null } | null;
+  post: { id: string; title: string | null; thumbnailId?: string | null } | null;
 }
 export interface CustodyRequestAuditEntry {
   id: string;
@@ -390,7 +416,7 @@ export interface RejectCustodyRequestPayload {
 export interface CancelCustodyRequestPayload {
   reason?: string | null;
 }
-export interface IntakeCustodyRequestPayload {
+export interface IntakeCustodyRequestPayload extends IntakeEvidencePayload, Partial<Pick<CreateWarehouseItemPayload, "itemName" | "description" | "categoryId" | "areaId" | "buildingId" | "roomText" | "finderName" | "finderContact">> {
   conditionNotes: string;
   storageCode?: string | null;
   confirmedHandoverAt?: string | null;
@@ -962,6 +988,17 @@ export const api = {
     return raw<{ id: string; url: string }>("/staff/warehouse-items/upload-proof", { method: "POST", body: form });
   },
   getWarehouseProof: (id: string) => mediaBlob(`/staff/warehouse-proofs/${id}`),
+  getWarehouseImage: (id: string, provenance: WarehouseImage["provenance"]) => mediaBlob(`/staff/warehouse-images/${id}?provenance=${provenance}`),
+  getWarehouseImages: (id: string) => raw<{ images: WarehouseImage[] }>(`/staff/warehouse-items/${id}/images`),
+  getCustodyIntakeContext: (id: string) => raw<CustodyIntakeContext>(`/staff/custody-requests/${id}/intake-context`),
+  uploadIntakeImage: (file: File, intakeKey: string, custodyRequestId?: string) => {
+    const form = new FormData();
+    form.append("file", file);
+    form.append("intakeKey", intakeKey);
+    if (custodyRequestId) form.append("custodyRequestId", custodyRequestId);
+    return raw<{ id: string; url: string }>("/staff/warehouse-intake-images", { method: "POST", body: form });
+  },
+  deleteIntakeImage: (id: string, intakeKey: string) => raw<{ removed: boolean }>(`/staff/warehouse-intake-images/${id}`, { method: "DELETE", body: JSON.stringify({ intakeKey }) }),
   getWarehouseReturnRecipients: (id: string) => raw<{ recipients: Array<{ claimId: string; recipientId: string; fullName: string }> }>(`/staff/warehouse-items/${id}/return-recipients`),
   getWarehouseReturnClaimReviews: (id: string) => raw<{ claims: Array<{ claimId: string; recipientId: string; fullName: string; description: string | null; status: string; verified: boolean }> }>(`/staff/warehouse-items/${id}/return-claim-reviews`),
   verifyWarehouseClaim: (id: string, payload: { claimId: string; recipientId: string; verified: boolean; reason: string }) => raw<{ claims: Array<{ claimId: string; recipientId: string; fullName: string; description: string | null; status: string; verified: boolean }> }>(`/staff/warehouse-items/${id}/verify-claim`, { method: "POST", body: JSON.stringify(payload) }),

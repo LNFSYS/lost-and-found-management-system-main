@@ -14,6 +14,8 @@ import type {
   WarehouseStatus
 } from "./warehouse.dto.js";
 import type { StorageLogAction, WarehouseRepository } from "./warehouse.repository.port.js";
+import { intakeFingerprint, prepareIntakeEvidence, serializeWarehouseImage, validateIntakeEvidence } from "./intake-evidence.js";
+import type { WarehouseImageProvenance } from "./intake-evidence.dto.js";
 
 function clean(value: string | null | undefined) {
   const next = value?.trim();
@@ -28,6 +30,7 @@ export interface WarehouseDependencies extends CustodyNotifications {
   warehouseRepository: WarehouseRepository;
   custodyRequestRepository: CustodyRequestRepository;
   proofStorage: PrivateMediaStorage;
+  sourceMediaStorage?: PrivateMediaStorage;
   withTransaction: TransactionRunner;
   id: () => string;
 }
@@ -87,6 +90,7 @@ export function createWarehouseUseCases(options: WarehouseDependencies) {
 
     async createItem(input: CreateWarehouseItemInput, actorId: string) {
       await staff(actorId);
+      validateIntakeEvidence(input);
       if (!await warehouseRepository.findHandoverPointById(input.handoverPointId)) throw new AppError("not_found", "Không tìm thấy điểm bàn giao");
       if (input.postId && !await warehouseRepository.findPostById(input.postId)) throw new AppError("not_found", "Không tìm thấy bài đăng liên quan");
       if (input.categoryId && !await warehouseRepository.findCategoryNames(input.categoryId)) throw new AppError("not_found", "Không tìm thấy danh mục vật phẩm");
@@ -103,7 +107,10 @@ export function createWarehouseUseCases(options: WarehouseDependencies) {
         storageCode = await warehouseRepository.generateNextStorageCode();
       }
 
-      await withTransaction(async (connection) => {
+      const payload = intakeFingerprint({ ...input, accessories: input.accessories.trim(), intakeImageIds: [...input.intakeImageIds].sort(), receivedAt: input.receivedAt?.toISOString() });
+      const savedItemId = await withTransaction(async (connection) => {
+        const replay = await prepareIntakeEvidence(warehouseRepository, input, actorId, null, payload, connection);
+        if (replay) return replay;
         if (input.postId && (!await warehouseRepository.lockFoundPost(input.postId, connection) || await warehouseRepository.hasItemForPost(input.postId, connection))) {
           throw new AppError("conflict", "Bài FOUND không hợp lệ hoặc đã được tiếp nhận");
         }
@@ -138,11 +145,73 @@ export function createWarehouseUseCases(options: WarehouseDependencies) {
           storageCode,
           note: "Đã tiếp nhận vật phẩm"
         }, connection);
+        await warehouseRepository.completeIntakeSession({ id: input.intakeKey, itemId: warehouseItemId, requestPayload: payload,
+          sourceSnapshot: input.postId ? await warehouseRepository.getPostInfoForIntake(input.postId, connection) : null,
+          quantity: input.receivedQuantity, accessories: input.accessories.trim() }, connection);
+        return warehouseItemId;
       });
 
-      const item = await warehouseRepository.findItemById(warehouseItemId);
+      const item = await warehouseRepository.findItemById(savedItemId);
       if (!item) throw new AppError("internal", "Không thể đọc lại vật phẩm vừa tạo");
       return item;
+    },
+
+    async uploadIntakeImage(input: { intakeKey: string; custodyRequestId?: string | undefined; capturedAt?: Date | undefined }, file: ImageUpload, actorId: string) {
+      await staff(actorId);
+      const image = validateImageUpload(file);
+      if (image.bytes > 5 * 1024 * 1024) throw new AppError("payload_too_large", "Ảnh tiếp nhận không được vượt quá 5 MB");
+      if (input.capturedAt) ensureNotFuture(input.capturedAt);
+      if (input.custodyRequestId) {
+        const request = await custodyRequestRepository.findById(input.custodyRequestId);
+        if (!request || !["PENDING", "ACCEPTED"].includes(request.status)) throw new AppError("conflict", "Yêu cầu không còn chờ tiếp nhận");
+      }
+      const imageId = id();
+      const saved = await proofStorage.save(actorId, imageId, image.extension, file.buffer);
+      try {
+        await withTransaction(async db => {
+          await warehouseRepository.openIntakeSession(input.intakeKey, actorId, input.custodyRequestId ?? null, db);
+          const session = await warehouseRepository.lockIntakeSession(input.intakeKey, db);
+          if (!session || session.actorId !== actorId || session.custodyRequestId !== (input.custodyRequestId ?? null) || session.warehouseItemId || Date.parse(session.createdAt) < Date.now() - 72 * 3600000) throw new AppError("conflict", "Phiên tiếp nhận không còn cho phép thêm ảnh");
+          if ((await warehouseRepository.listIntakeImages(input.intakeKey, db)).length >= 5) throw new AppError("invalid_input", "Chỉ được tải tối đa 5 ảnh tiếp nhận");
+          await warehouseRepository.createIntakeImage({ id: imageId, intakeKey: input.intakeKey, actorId, storageRef: saved.secureUrl,
+            format: image.format, bytes: image.bytes, capturedAt: input.capturedAt ?? null }, db);
+        });
+      } catch (error) { await proofStorage.remove(saved.secureUrl).catch(() => undefined); throw error; }
+      return { id: imageId, url: `/staff/warehouse-images/${imageId}?provenance=INTAKE` };
+    },
+
+    async deleteIntakeImage(intakeKey: string, imageId: string, actorId: string) {
+      await staff(actorId);
+      const storageRef = await withTransaction(async db => {
+        const session = await warehouseRepository.lockIntakeSession(intakeKey, db);
+        if (!session || session.actorId !== actorId || session.warehouseItemId) throw new AppError("conflict", "Không thể xóa ảnh của phiên tiếp nhận này");
+        const image = (await warehouseRepository.listIntakeImages(intakeKey, db)).find(image => image.id === imageId);
+        if (!image) throw new AppError("not_found", "Không tìm thấy ảnh tiếp nhận");
+        // Keep the reference until the file removal succeeds so a retry can clean up.
+        await proofStorage.remove(image.storageRef);
+        await warehouseRepository.deleteDraftIntakeImage(imageId, db);
+        return image.storageRef;
+      });
+      return { removed: Boolean(storageRef) };
+    },
+
+    async listImages(itemId: string, actorId: string) {
+      await staff(actorId);
+      if (!await warehouseRepository.findItemById(itemId)) throw new AppError("not_found", "Không tìm thấy vật phẩm");
+      return { images: (await warehouseRepository.listItemImages(itemId)).map(serializeWarehouseImage) };
+    },
+
+    async getImage(imageId: string, provenance: WarehouseImageProvenance, actorId: string) {
+      await staff(actorId);
+      const image = await warehouseRepository.findWarehouseImage(imageId, provenance);
+      if (!image) throw new AppError("not_found", "Không tìm thấy ảnh vật phẩm");
+      if (provenance === "INTAKE") {
+        const session = image.intakeKey ? await withTransaction(db => warehouseRepository.lockIntakeSession(image.intakeKey!, db)) : null;
+        if (!session || (!session.warehouseItemId && (session.actorId !== actorId || Date.parse(image.uploadedAt) < Date.now() - 72 * 3600000))) throw new AppError("not_found", "Không tìm thấy ảnh vật phẩm");
+      }
+      const storage = provenance === "SOURCE_POST" ? options.sourceMediaStorage : proofStorage;
+      if (!storage) throw new AppError("unavailable", "Kho ảnh chưa sẵn sàng");
+      return storage.resolve(image.storageRef, image.format);
     },
 
     async updateItem(itemId: string, input: UpdateWarehouseItemInput, actorId: string) {
@@ -414,6 +483,13 @@ export function createWarehouseUseCases(options: WarehouseDependencies) {
         for (const proof of await warehouseRepository.listExpiredProofs(db)) {
           await proofStorage.remove(proof.storageRef);
           await warehouseRepository.deleteUnusedProof(proof.id, db);
+        }
+        for (const key of await warehouseRepository.listExpiredIntakeSessions(db)) {
+          for (const image of await warehouseRepository.listIntakeImages(key, db)) {
+            await proofStorage.remove(image.storageRef);
+            await warehouseRepository.deleteDraftIntakeImage(image.id, db);
+          }
+          await warehouseRepository.deleteExpiredIntakeSession(key, db);
         }
         return pending;
       });

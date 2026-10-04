@@ -5,6 +5,8 @@ export const warehouseMaintenanceColumns = {
   custody_requests: ["id", "post_id", "claim_id", "requester_id", "status", "warehouse_item_id", "request_payload"],
   warehouse_items: ["id", "status", "deleted_at", "retention_deadline", "legal_hold", "reserved_claim_id"],
   warehouse_private_proofs: ["id", "storage_ref", "attached_at", "created_at"],
+  warehouse_intake_sessions: ["id", "actor_id", "warehouse_item_id", "created_at"],
+  warehouse_intake_images: ["id", "intake_id", "storage_ref", "created_at"],
   claims: ["id", "post_id", "source_found_post_id"],
   claim_participants: ["claim_id", "user_id", "consent_status"],
   users: ["id", "status"],

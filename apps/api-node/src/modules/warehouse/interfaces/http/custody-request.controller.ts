@@ -28,6 +28,10 @@ export function createCustodyRequestController({ custodyRequestService }: {
     async getRequest(request: Request, response: Response) {
       response.json(await custodyRequestService.getRequest(routeId(request), actorId(request)));
     },
+    async getIntakeContext(request: Request, response: Response) {
+      response.setHeader("Cache-Control", "private, no-store");
+      response.json(await custodyRequestService.getIntakeContext(routeId(request), actorId(request)));
+    },
 
     async getMyRequestByPost(request: Request, response: Response) {
       const postId = request.params.postId;

@@ -43,6 +43,10 @@ export function createStaffRoutes({ warehouseController, custodyRequestControlle
   staffRoutes.get("/warehouse-items/catalog", (req, res, next) => warehouseController.getCatalog(req, res).catch(next));
   staffRoutes.get("/warehouse-items", (req, res, next) => warehouseController.listItems(req, res).catch(next));
   staffRoutes.post("/warehouse-items", (req, res, next) => warehouseController.createItem(req, res).catch(next));
+  staffRoutes.post("/warehouse-intake-images", uploadProofMiddleware, (req, res, next) => warehouseController.uploadIntakeImage(req, res).catch(next));
+  staffRoutes.delete("/warehouse-intake-images/:id", (req, res, next) => warehouseController.deleteIntakeImage(req, res).catch(next));
+  staffRoutes.get("/warehouse-images/:id", (req, res, next) => warehouseController.getImage(req, res).catch(next));
+  staffRoutes.get("/warehouse-items/:id/images", (req, res, next) => warehouseController.listImages(req, res).catch(next));
   staffRoutes.post("/warehouse-items/upload-proof", uploadProofMiddleware, (req, res, next) => warehouseController.uploadProof(req, res).catch(next));
   staffRoutes.get("/warehouse-proofs/:id", (req, res, next) => warehouseController.getProof(req, res).catch(next));
   staffRoutes.post("/warehouse-items/:id/reserve", (req, res, next) => warehouseController.reserveItem(req, res).catch(next));
@@ -60,6 +64,7 @@ export function createStaffRoutes({ warehouseController, custodyRequestControlle
 
   // Custody request management
   staffRoutes.get("/custody-requests", (req, res, next) => custodyRequestController.listRequests(req, res).catch(next));
+  staffRoutes.get("/custody-requests/:id/intake-context", (req, res, next) => custodyRequestController.getIntakeContext(req, res).catch(next));
   staffRoutes.patch("/custody-requests/:id/accept", (req, res, next) => custodyRequestController.acceptRequest(req, res).catch(next));
   staffRoutes.patch("/custody-requests/:id/reject", (req, res, next) => custodyRequestController.rejectRequest(req, res).catch(next));
   staffRoutes.post("/custody-requests/:id/intake", (req, res, next) => custodyRequestController.confirmIntake(req, res).catch(next));

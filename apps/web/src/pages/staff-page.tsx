@@ -31,7 +31,6 @@ import {
 import {
   api,
   ApiError,
-  type CreateWarehouseItemPayload,
   type CustodyRequest,
   type CustodyRequestListResponse,
   type CustodyRequestStatus,
@@ -39,8 +38,12 @@ import {
   type WarehouseDashboard,
   type WarehouseItem,
   type WarehouseStatus,
-  type WarehouseStorageLog
+  type WarehouseStorageLog,
+  type WarehouseImage
 } from "../services/api";
+
+import { WarehouseIntakeDialog } from "../components/warehouse-intake-dialog";
+import { WarehouseImageGallery, WarehouseImageView } from "../components/warehouse-images";
 
 type StaffTab = "custody" | "warehouse" | "dashboard" | "logs";
 type PendingAction = "" | "load" | "create" | "update" | "logs" | "custody" | "custody-action";
@@ -78,24 +81,8 @@ const custodyStatusLabels: Record<CustodyRequestStatus, { label: string; icon: R
   INTAKED: { label: "Đã tiếp nhận", icon: <CheckCircle2 size={14} /> }
 };
 
-const emptyCreateForm = {
-  handoverPointId: "",
-  itemName: "",
-  description: "",
-  categoryId: "",
-  areaId: "",
-  buildingId: "",
-  roomText: "",
-  finderName: "",
-  finderContact: "",
-  conditionNotes: "",
-  storageCode: "",
-  receivedAt: ""
-};
-
 const emptyFilters = { q: "", status: "", handoverPointId: "" };
 const emptyRejectForm = { reason: "" };
-const emptyIntakeForm = { conditionNotes: "", storageCode: "", confirmedHandoverAt: "" };
 
 function messageOf(reason: unknown, fallback: string) {
   return reason instanceof Error ? reason.message : fallback;
@@ -192,32 +179,8 @@ function CustodyQueueTab({
   const [intakeModal, setIntakeModal] = useState<CustodyRequest | null>(null);
   const [walkInModalOpen, setWalkInModalOpen] = useState(false);
   const [rejectForm, setRejectForm] = useState(emptyRejectForm);
-  const [intakeForm, setIntakeForm] = useState(emptyIntakeForm);
-  const [createForm, setCreateForm] = useState(emptyCreateForm);
   const [statusFilter, updateStatusFilter] = useState<string>("ALL");
   function setStatusFilter(status: string) { updateStatusFilter(status); void onRefreshCustody(status, 1); }
-
-  const allCategories = useMemo(() => {
-    if (!catalog?.categories) return [];
-    return [...catalog.categories].sort((a, b) => a.name.localeCompare(b.name, "vi"));
-  }, [catalog]);
-
-  const availableBuildings = useMemo(() => {
-    if (!catalog?.buildings) return [];
-    if (!createForm.areaId) return catalog.buildings;
-    const filtered = catalog.buildings.filter((item) => item.areaId === createForm.areaId);
-    return filtered.length > 0 ? filtered : catalog.buildings;
-  }, [catalog, createForm.areaId]);
-
-  // Default handover point selection
-  useEffect(() => {
-    if (catalog?.handoverPoints.length) {
-      setCreateForm((prev) => ({
-        ...prev,
-        handoverPointId: prev.handoverPointId || catalog.handoverPoints[0]?.id || ""
-      }));
-    }
-  }, [catalog]);
 
   const filteredRequests = useMemo(() => {
     if (!custodyData?.items) return [];
@@ -225,38 +188,6 @@ function CustodyQueueTab({
   }, [custodyData, statusFilter]);
 
   const [createdWalkInItem, setCreatedWalkInItem] = useState<WarehouseItem | null>(null);
-
-  async function submitWalkIn(event: FormEvent) {
-    event.preventDefault();
-    setPendingAction("create");
-    onError("");
-    onNotice("");
-    try {
-      const payload: CreateWarehouseItemPayload = {
-        handoverPointId: createForm.handoverPointId,
-        itemName: createForm.itemName,
-        description: clean(createForm.description),
-        categoryId: clean(createForm.categoryId),
-        areaId: clean(createForm.areaId),
-        buildingId: clean(createForm.buildingId),
-        roomText: clean(createForm.roomText),
-        finderName: clean(createForm.finderName),
-        finderContact: clean(createForm.finderContact),
-        conditionNotes: createForm.conditionNotes,
-        receivedAt: createForm.receivedAt ? new Date(createForm.receivedAt).toISOString() : undefined
-      };
-      const created = await api.createWarehouseItem(payload);
-      setCreatedWalkInItem(created);
-      onNotice("Đã tiếp nhận vật phẩm thành công (Walk-in)");
-      setCreateForm({ ...emptyCreateForm, handoverPointId: createForm.handoverPointId });
-      setWalkInModalOpen(false);
-      await onRefreshCustody();
-    } catch (reason) {
-      onError(messageOf(reason, "Không thể tiếp nhận vật phẩm"));
-    } finally {
-      setPendingAction("");
-    }
-  }
 
   async function submitReject(event: FormEvent) {
     event.preventDefault();
@@ -276,54 +207,6 @@ function CustodyQueueTab({
       setPendingAction("");
     }
   }
-
-  async function submitCancel(requestId: string) {
-    setPendingAction("custody-action");
-    onError("");
-    onNotice("");
-    try {
-      await api.cancelCustodyRequest(requestId, { reason: "Hủy bởi nhân viên" });
-      onNotice("Đã hủy yêu cầu custody");
-      await onRefreshCustody();
-    } catch (reason) {
-      onError(messageOf(reason, "Không thể hủy yêu cầu"));
-    } finally {
-      setPendingAction("");
-    }
-  }
-
-  async function submitIntake(event: FormEvent) {
-    event.preventDefault();
-    if (!intakeModal) return;
-    setPendingAction("custody-action");
-    onError("");
-    onNotice("");
-    try {
-      await api.confirmCustodyIntake(intakeModal.id, {
-        conditionNotes: intakeForm.conditionNotes,
-        storageCode: clean(intakeForm.storageCode),
-        confirmedHandoverAt: intakeForm.confirmedHandoverAt ? new Date(intakeForm.confirmedHandoverAt).toISOString() : null
-      });
-      onNotice("Đã tiếp nhận thực tế. Vật phẩm ở trạng thái Đã tiếp nhận, chưa lưu kho.");
-      setIntakeModal(null);
-      setIntakeForm(emptyIntakeForm);
-      await onRefreshCustody();
-    } catch (reason) {
-      onError(messageOf(reason, "Không thể xác nhận bàn giao"));
-    } finally {
-      setPendingAction("");
-    }
-  }
-
-function currentLocalTime() {
-  const date = new Date();
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  const hours = String(date.getHours()).padStart(2, "0");
-  const minutes = String(date.getMinutes()).padStart(2, "0");
-  return `${year}-${month}-${day}T${hours}:${minutes}`;
-}
 
   return (
     <>
@@ -400,6 +283,7 @@ function currentLocalTime() {
 
                 <div className="custody-request-card__body">
                   <div className="custody-item-preview">
+                    <WarehouseImageView image={request.post?.thumbnailId ? { id: request.post.thumbnailId, provenance: "SOURCE_POST" } : null} />
                     <h3>{request.post?.title ?? "Bàn giao vật phẩm tìm thấy"}</h3>
                     {request.reason && <p className="custody-reason">"{request.reason}"</p>}
                   </div>
@@ -446,7 +330,7 @@ function currentLocalTime() {
                       <button
                         type="button"
                         className="primary-button custody-action-btn"
-                        onClick={() => { setIntakeForm(emptyIntakeForm); setIntakeModal(request); }}
+                        onClick={() => setIntakeModal(request)}
                         disabled={Boolean(pendingAction)}
                       >
                         <PackageCheck size={16} /> Tiếp nhận vật phẩm
@@ -467,7 +351,7 @@ function currentLocalTime() {
                       <button
                         type="button"
                         className="primary-button custody-action-btn custody-action-btn--success"
-                        onClick={() => { setIntakeForm(emptyIntakeForm); setIntakeModal(request); }}
+                        onClick={() => setIntakeModal(request)}
                         disabled={Boolean(pendingAction)}
                       >
                         <PackageCheck size={16} /> Tiếp nhận vật phẩm
@@ -497,112 +381,12 @@ function currentLocalTime() {
         </div>
       </section>
 
-      {/* Modal Walk-in Receive Form */}
-      {walkInModalOpen && (
-        <div className="custody-modal-overlay" onClick={() => setWalkInModalOpen(false)}>
-          <div className="custody-modal custody-modal--lg" onClick={(e) => e.stopPropagation()}>
-            <div className="custody-modal__header">
-              <span className="modal-badge modal-badge--blue"><ClipboardCheck size={20} /></span>
-              <div>
-                <h3>Tiếp nhận trực tiếp (Walk-in / Tại quầy)</h3>
-                <p>Nhập kho tài sản trực tiếp do người nhặt đem tới bàn tiếp nhận mà không qua yêu cầu trực tuyến.</p>
-              </div>
-              <button type="button" className="close-btn" onClick={() => setWalkInModalOpen(false)}><X size={18} /></button>
-            </div>
-
-            <form className="admin-form modal-form" onSubmit={submitWalkIn}>
-              <label className="input-field">
-                <span>Điểm bàn giao <strong className="required-star">*</strong></span>
-                <select value={createForm.handoverPointId} onChange={(event) => setCreateForm({ ...createForm, handoverPointId: event.target.value })} required>
-                  <option value="">Chọn điểm bàn giao</option>
-                  {catalog?.handoverPoints.map((point) => (
-                    <option key={point.id} value={point.id}>{point.name} - {point.address}</option>
-                  ))}
-                </select>
-              </label>
-
-              <label className="input-field">
-                <span>Tên vật phẩm <strong className="required-star">*</strong></span>
-                <input value={createForm.itemName} onChange={(event) => setCreateForm({ ...createForm, itemName: event.target.value })} placeholder="Ví dụ: Ví da màu nâu, Chìa khóa xe..." required />
-              </label>
-
-              <label className="input-field">
-                <span>Danh mục</span>
-                <select value={createForm.categoryId} onChange={(event) => setCreateForm({ ...createForm, categoryId: event.target.value })}>
-                  <option value="">-- Chọn danh mục --</option>
-                  {allCategories.map((category) => (
-                    <option key={category.id} value={category.id}>
-                      {category.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <label className="input-field">
-                <span>Mô tả chi tiết</span>
-                <textarea value={createForm.description} onChange={(event) => setCreateForm({ ...createForm, description: event.target.value })} rows={2} placeholder="Mô tả đặc điểm nhận dạng, nhãn hiệu, màu sắc..." />
-              </label>
-
-              <label className="input-field">
-                <span>Tình trạng khi nhận <strong className="required-star">*</strong></span>
-                <textarea value={createForm.conditionNotes} onChange={(event) => setCreateForm({ ...createForm, conditionNotes: event.target.value })} rows={2} placeholder="Vết trầy xước, phụ kiện kèm theo..." required />
-              </label>
-
-              <div className="warehouse-form-pair">
-                <label className="input-field">
-                  <span>Khu vực</span>
-                  <select value={createForm.areaId} onChange={(event) => setCreateForm({ ...createForm, areaId: event.target.value, buildingId: "" })}>
-                    <option value="">-- Chọn khu vực --</option>
-                    {catalog?.areas.map((area) => (
-                      <option key={area.id} value={area.id}>{area.name}</option>
-                    ))}
-                  </select>
-                </label>
-
-                <label className="input-field">
-                  <span>Tòa nhà / Địa điểm</span>
-                  <select value={createForm.buildingId} onChange={(event) => setCreateForm({ ...createForm, buildingId: event.target.value })}>
-                    <option value="">-- Chọn tòa nhà / địa điểm --</option>
-                    {availableBuildings.map((building) => (
-                      <option key={building.id} value={building.id}>{building.name}</option>
-                    ))}
-                  </select>
-                </label>
-              </div>
-
-              <label className="input-field">
-                <span>Vị trí nhặt được</span>
-                <input value={createForm.roomText} onChange={(event) => setCreateForm({ ...createForm, roomText: event.target.value })} placeholder="Sảnh tầng 1, Phòng 203..." />
-              </label>
-
-              <div className="warehouse-form-pair">
-                <label className="input-field">
-                  <span>Người bàn giao</span>
-                  <input value={createForm.finderName} onChange={(event) => setCreateForm({ ...createForm, finderName: event.target.value })} placeholder="Họ và tên" />
-                </label>
-
-                <label className="input-field">
-                  <span>Liên hệ người giao</span>
-                  <input value={createForm.finderContact} onChange={(event) => setCreateForm({ ...createForm, finderContact: event.target.value })} placeholder="Số điện thoại / Email" />
-                </label>
-              </div>
-
-              <label className="input-field">
-                <span>Thời gian nhận thực tế</span>
-                <input type="datetime-local" max={currentLocalTime()} value={createForm.receivedAt} onChange={(event) => setCreateForm({ ...createForm, receivedAt: event.target.value })} />
-              </label>
-
-              <div className="custody-modal-actions">
-                <button className="primary-button" disabled={pendingAction === "create"}>
-                  {pendingAction === "create" ? <LoaderCircle className="spin-icon" size={17} /> : <ClipboardCheck size={17} />}
-                  <span>Tạo hồ sơ kho (Walk-in)</span>
-                </button>
-                <button type="button" className="secondary-button" onClick={() => setWalkInModalOpen(false)}>Hủy</button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      {walkInModalOpen && <WarehouseIntakeDialog catalog={catalog} onClose={() => setWalkInModalOpen(false)} onReceived={async item => {
+        setCreatedWalkInItem(item ?? null);
+        setWalkInModalOpen(false);
+        onNotice("Đã tiếp nhận thực tế, chưa lưu kho.");
+        await onRefreshCustody();
+      }} />}
 
       {/* Walk-in Intake Success Modal */}
       {createdWalkInItem && (
@@ -672,42 +456,11 @@ function currentLocalTime() {
         </div>
       )}
 
-      {/* Intake Physical Handoff Modal */}
-      {intakeModal && (
-        <div className="custody-modal-overlay" onClick={() => setIntakeModal(null)}>
-          <div className="custody-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="custody-modal__header">
-              <span className="modal-badge modal-badge--green"><PackageCheck size={18} /></span>
-              <div>
-                <h3>Xác nhận tiếp nhận</h3>
-                <p>Yêu cầu <strong>#{intakeModal.id.slice(0, 8)}</strong> - Người bàn giao: <strong>{intakeModal.requester.fullName}</strong></p>
-              </div>
-              <button type="button" className="close-btn" onClick={() => setIntakeModal(null)}><X size={18} /></button>
-            </div>
-
-            <form className="admin-form modal-form" onSubmit={submitIntake}>
-              <label className="input-field">
-                <span>Tình trạng vật phẩm kiểm tra thực tế <strong className="required-star">*</strong></span>
-                <textarea value={intakeForm.conditionNotes} onChange={(e) => setIntakeForm({ ...intakeForm, conditionNotes: e.target.value })} rows={3} placeholder="Ghi rõ tình trạng thực tế khi nhận: hoạt động, vết xước, phụ kiện kèm theo..." required />
-              </label>
-
-              <label className="input-field">
-                <span>Thời gian bàn giao thực tế</span>
-                <input type="datetime-local" max={currentLocalTime()} value={intakeForm.confirmedHandoverAt} onChange={(e) => setIntakeForm({ ...intakeForm, confirmedHandoverAt: e.target.value })} />
-                <small className="field-hint">Để trống nếu tính theo thời gian hiện tại.</small>
-              </label>
-
-              <div className="custody-modal-actions">
-                <button className="primary-button primary-button--success" disabled={pendingAction === "custody-action"}>
-                  {pendingAction === "custody-action" ? <LoaderCircle className="spin-icon" size={17} /> : <PackageCheck size={17} />}
-                  <span>Xác nhận tiếp nhận</span>
-                </button>
-                <button type="button" className="secondary-button" onClick={() => setIntakeModal(null)}>Hủy</button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      {intakeModal && <WarehouseIntakeDialog request={intakeModal} catalog={catalog} onClose={() => setIntakeModal(null)} onReceived={async () => {
+        setIntakeModal(null);
+        onNotice("Đã tiếp nhận thực tế. Vật phẩm ở trạng thái Đã tiếp nhận, chưa lưu kho.");
+        await onRefreshCustody();
+      }} />}
     </>
   );
 }
@@ -738,6 +491,15 @@ function WarehouseInventoryTab({
   const [filters, setFilters] = useState(emptyFilters);
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [logs, setLogs] = useState<WarehouseStorageLog[]>([]);
+  const [itemImages, setItemImages] = useState<WarehouseImage[]>([]);
+  const [imagesError, setImagesError] = useState("");
+  useEffect(() => {
+    let active = true;
+    setItemImages([]); setImagesError("");
+    if (selectedItemId) void api.getWarehouseImages(selectedItemId).then(value => { if (active) setItemImages(value.images ?? []); })
+      .catch(reason => { if (active) setImagesError(messageOf(reason, "Không thể tải ảnh vật phẩm")); });
+    return () => { active = false; };
+  }, [selectedItemId]);
   const [updateModalOpen, setUpdateModalOpen] = useState(false);
   const [returnTargetItem, setReturnTargetItem] = useState<WarehouseItem | null>(null);
   const [returnRecipients, setReturnRecipients] = useState<Array<{ claimId: string; recipientId: string; fullName: string; description: string | null; verified: boolean }>>([]);
@@ -1049,6 +811,7 @@ function WarehouseInventoryTab({
                   </div>
                 </div>
 
+                <WarehouseImageView image={item.thumbnail} />
                 <h2>{item.itemName}</h2>
                 <p>{item.description || "Không có mô tả chi tiết."}</p>
 
@@ -1100,12 +863,16 @@ function WarehouseInventoryTab({
 
                 <h3>{selectedItem.itemName}</h3>
                 <p className="summary-desc">{selectedItem.description || "Không có mô tả thêm."}</p>
+                <WarehouseImageGallery images={itemImages} />
+                {imagesError && <p className="field-error" role="alert">{imagesError}</p>}
 
                 <div className="item-detail-grid">
                   <div><strong>Hạn lưu giữ:</strong> {formatDate(selectedItem.retentionDeadline)}</div>
                   <div><strong>Tiếp nhận lúc:</strong> {formatDateTime(selectedItem.receivedAt)}</div>
                   {selectedItem.handoverPoint && <div><strong>Điểm bàn giao:</strong> {selectedItem.handoverPoint.name}</div>}
                   {selectedItem.conditionNotes && <div><strong>Tình trạng nhận:</strong> {selectedItem.conditionNotes}</div>}
+                  <div><strong>Số lượng thực nhận:</strong> {selectedItem.receivedQuantity ?? "Hồ sơ cũ chưa ghi nhận"}</div>
+                  <div><strong>Phụ kiện thực nhận:</strong> {selectedItem.accessories ?? "Hồ sơ cũ chưa ghi nhận"}</div>
                 </div>
 
                 <div className="summary-action-bar">

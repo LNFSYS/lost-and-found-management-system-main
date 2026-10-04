@@ -18,7 +18,7 @@ export interface CustodyRequest {
   warehouseItemId: string | null;
   createdAt: string;
   updatedAt: string;
-  post: { id: string; title: string | null } | null;
+  post: { id: string; title: string | null; thumbnailId?: string | null } | null;
 }
 
 export interface CustodyRequestLock {

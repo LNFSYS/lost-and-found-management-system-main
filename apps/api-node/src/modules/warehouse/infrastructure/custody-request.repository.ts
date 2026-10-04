@@ -35,6 +35,7 @@ interface CustodyRequestRow extends RowDataPacket {
   created_at: Date | string;
   updated_at: Date | string;
   post_title: string | null;
+  post_thumbnail_id: string | null;
 }
 
 interface CustodyRequestLockRow extends RowDataPacket {
@@ -76,7 +77,8 @@ const requestSelect = `SELECT cr.id, cr.claim_id, cr.room_id, cr.post_id,
   cr.handover_point_id, hp.name AS handover_point_name, hp.address AS handover_point_address,
   cr.confirmed_handover_at, cr.warehouse_item_id,
   cr.created_at, cr.updated_at,
-  p.title AS post_title
+  p.title AS post_title,
+  (SELECT pm.id FROM post_media pm WHERE pm.post_id = p.id AND pm.media_kind = 'ITEM' ORDER BY pm.sort_order,pm.id LIMIT 1) AS post_thumbnail_id
   FROM custody_requests cr
   INNER JOIN users ru ON ru.id = cr.requester_id
   LEFT JOIN users hu ON hu.id = cr.handler_id
@@ -103,7 +105,7 @@ function mapRequest(row: CustodyRequestRow): CustodyRequest {
     warehouseItemId: row.warehouse_item_id,
     createdAt: iso(row.created_at) ?? "",
     updatedAt: iso(row.updated_at) ?? "",
-    post: row.post_id ? { id: row.post_id, title: row.post_title } : null
+    post: row.post_id ? { id: row.post_id, title: row.post_title, thumbnailId: row.post_thumbnail_id ?? null } : null
   };
 }
 

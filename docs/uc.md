@@ -193,14 +193,14 @@ Completed UC work above is not reassigned. The 71 Partial/Planned UCs in the ret
 
 **Remaining work:** UC-141 to UC-146 are assigned to Khoa; UC-147 is assigned to Dat.
 
-**Runtime evidence:** owned FOUND requests, active-point selection, Staff queue/accept/reject/cancel/intake, single physical receipt and transactional lifecycle notifications are integrated into `dev`, with real SQL/HTTP and desktop/mobile browser regressions. These seven UCs are Partial rather than Planned; full manual acceptance remains open. UC-142 supports point selection and informational office hours, not proposed-time/holiday-aware scheduling; UC-147 does not claim the entire notification/provider matrix is complete.
+**Runtime evidence:** owned FOUND requests queue physical intake without pre-approval. The new reconciliation flow keeps source data separate, requires Staff intake photos and observations and creates one RECEIVED item only at confirmation. Legacy ACCEPTED requests remain receivable; accept is a compatibility API, not a required UI step. Additive migration 061 is required for the new evidence contract. These seven UCs remain Partial; manual acceptance and shared-DB rollout are separate. UC-142 is point/office-hours selection, not holiday-aware scheduling. See [intake evidence](warehouse-intake-evidence.md).
 
 | ID | Use Case | Actors | Use Case Description | Status |
 | --- | --- | --- | --- | --- |
 | UC-049 | View active handover points | Guest / Authenticated User | Retrieve handover points that are currently available for public use. | Implemented |
 | UC-050 | View warehouse reference data | Staff / Admin | Retrieve categories, campus locations, handover points, and item counts used by warehouse operations. | Implemented |
 | UC-051 | Browse warehouse items | Staff / Admin | List and filter warehouse custody records. | Implemented |
-| UC-052 | Receive a warehouse item | Staff / Admin | Create a custody record, validate its storage location, assign the initial state, and record the receiving action. | Implemented |
+| UC-052 | Receive a warehouse item | Staff / Admin | Receive an account-free walk-in with condition, quantity, accessories and 1-5 private Staff intake photos. Review optional image-analysis suggestions and explicitly confirm actual receipt to create one RECEIVED item; source/claim is not required. | Implemented |
 | UC-053 | Update warehouse item details | Staff / Admin | Update permitted warehouse information such as location, condition notes, and storage code. | Implemented |
 | UC-054 | Move an item to stored state | Staff / Admin | Apply the valid warehouse state transition from received to stored and append a storage log. | Implemented |
 | UC-055 | Confirm a warehouse return | Staff / Admin | Return retained RECEIVED/STORED/CLAIMED/EXPIRED property after verifying the actual recipient, recording identity/contact and private proof, and checking reservations, competing cases and legal hold. Online claims require explicit Finder or post-intake Staff verification; offline return creates no synthetic claim or feedback participant. | Implemented |
@@ -209,9 +209,9 @@ Completed UC work above is not reassigned. The 71 Partial/Planned UCs in the ret
 | UC-141 | Request transfer to staff custody | Finder | Ask to transfer an owned active FOUND item to an official handover point when direct return is unsuitable; request alone does not change physical custody. | Partial |
 | UC-142 | Select staff intake point and time | Finder, Staff | Select an active handover point and view office hours. Proposed-time and holiday-aware scheduling remain pending. | Partial |
 | UC-143 | List custody transfer requests | Staff, Admin | View server-paginated pending, accepted, rejected, cancelled and intaked requests with authorized details. | Partial |
-| UC-144 | Accept a custody transfer request | Staff, Admin | Accept a valid transfer request and record its intake point and handler without claiming physical receipt. | Partial |
+| UC-144 | Review a custody transfer request | Staff, Admin | Open authorized source information/photos for reconciliation without creating custody or requiring pre-approval. The historical accept API is compatibility-only. | Partial |
 | UC-145 | Reject or cancel a custody transfer request | Finder, Staff, Admin | Reject or cancel a transfer with a reason before receipt, restoring escalation projections while retaining audit history. | Partial |
-| UC-146 | Confirm staff intake | Staff | Confirm physical receipt, create a RECEIVED warehouse record and mark the custody request INTAKED without resolving the post or deciding ownership. | Partial |
+| UC-146 | Confirm staff intake | Staff | Confirm physical receipt from PENDING or legacy ACCEPTED with Staff-uploaded condition photos, quantity/accessories and independent observations. Create one RECEIVED item and mark INTAKED; preserve original post/Finder/claim and exact replay history. | Partial |
 | UC-147 | Receive custody status notifications | Finder, Claimant | Receive authorized transactional request/intake/return updates; full movement/release/provider acceptance remains pending. | Partial |
 
 ### 3.10 Feedback & Reputation

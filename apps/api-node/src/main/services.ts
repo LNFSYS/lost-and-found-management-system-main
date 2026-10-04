@@ -87,7 +87,7 @@ export function createServices(persistence: Persistence, config: typeof env = en
     }
   };
   const proofStorage = createPrivateMediaStorage({ uploadDir: config.uploadDir, namespace: "warehouse-proof", invalidPathMessage: "Invalid proof path", notFoundMessage: "Proof not found" });
-  const warehouseService = createWarehouseUseCases({ warehouseRepository, custodyRequestRepository, proofStorage, ...custodyDelivery, withTransaction: transaction, id });
+  const warehouseService = createWarehouseUseCases({ warehouseRepository, custodyRequestRepository, proofStorage, sourceMediaStorage: postMediaStorage, ...custodyDelivery, withTransaction: transaction, id });
   const custodyRequestService = createCustodyRequestUseCases({ custodyRequestRepository, warehouseRepository, ...custodyDelivery, withTransaction: transaction, id });
   const returnFeedbackService = createReturnFeedbackUseCases({
     repository: returnFeedbackRepository, adminAuditRepository, runInTransaction: transaction, id

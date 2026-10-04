@@ -55,6 +55,12 @@ test("isolated MySQL custody: authorization, concurrency, lifecycle, proof and n
     const delivery = { notificationRepository: p.notificationRepository, notificationEmailQueue: queue };
     const custody = createCustodyRequestUseCases({ custodyRequestRepository: p.custodyRequestRepository, warehouseRepository: p.warehouseRepository, ...delivery, withTransaction: p.transaction, id: randomUUID });
     const warehouse = createWarehouseUseCases({ warehouseRepository: p.warehouseRepository, custodyRequestRepository: p.custodyRequestRepository, proofStorage: createPrivateMediaStorage({ uploadDir, namespace: "warehouse-proof", invalidPathMessage: "Invalid", notFoundMessage: "Missing" }), ...delivery, withTransaction: p.transaction, id: randomUUID });
+    async function evidence(custodyRequestId?: string) {
+      const intakeKey = randomUUID();
+      const buffer = Buffer.from([0xff,0xd8,0xff,0xe0]);
+      const image = await warehouse.uploadIntakeImage({ intakeKey, ...(custodyRequestId ? { custodyRequestId } : {}) }, { buffer, size: buffer.length, mimetype: "image/jpeg" }, ids.staff);
+      return { intakeKey, intakeImageIds: [image.id], receivedQuantity: 1, accessories: "No accessories", physicalReviewConfirmed: true as const };
+    }
     const input = { postId: ids.found, claimId: ids.claim, roomId: ids.room, handoverPointId: point, reason: "Private note never belongs in notifications", idempotencyKey: "a".repeat(190) };
     await t.test("rejects forged, empty, LOST and cross-user idempotent requests", async () => {
       await assert.rejects(custody.createRequest(input, ids.outsider));
@@ -76,14 +82,38 @@ test("isolated MySQL custody: authorization, concurrency, lifecycle, proof and n
     const next = await custody.createRequest({ ...input, idempotencyKey: "new-request-key" },ids.finder);
     assert.equal(next.request.status, "PENDING");
     assert.equal((await custody.createRequest({ ...input, idempotencyKey: "new-request-key" },ids.finder)).request.id, next.request.id);
-    await assert.rejects(custody.confirmIntake(next.request.id,{ conditionNotes: "Good", confirmedHandoverAt: new Date(Date.now()+3600000) },ids.staff));
+    const intakeEvidence = await evidence(next.request.id);
+    await t.test("opening reconciliation is read-only and forged/source evidence cannot confirm receipt", async () => {
+      const sourceImageId = randomUUID();
+      await pool.execute("INSERT INTO post_media (id,post_id,secure_url,public_id,resource_type,format,bytes,media_kind) VALUES (?,?,?,'source','image','jpg',4,'ITEM')", [sourceImageId,ids.found,"private://source-test"]);
+      const context = await custody.getIntakeContext(next.request.id,ids.staff);
+      assert.equal(context.images[0]?.provenance,"SOURCE_POST");
+      assert.equal(context.post.description,"Fixture keys");
+      const [unreceived] = await pool.query<RowDataPacket[]>("SELECT id FROM warehouse_items WHERE post_id = ?", [ids.found]);
+      assert.equal(unreceived.length,0);
+      await assert.rejects(custody.getIntakeContext(next.request.id,ids.outsider));
+      await assert.rejects(custody.confirmIntake(next.request.id,{ ...intakeEvidence, intakeImageIds: [sourceImageId], conditionNotes: "Good" },ids.staff));
+      await assert.rejects(custody.confirmIntake(next.request.id,{ ...intakeEvidence, conditionNotes: "Good" },ids.approver));
+      await assert.rejects(custody.confirmIntake(next.request.id,{ ...intakeEvidence, intakeImageIds: [], conditionNotes: "Good" },ids.staff));
+    });
+    await assert.rejects(custody.confirmIntake(next.request.id,{ ...intakeEvidence, conditionNotes: "Good", confirmedHandoverAt: new Date(Date.now()+3600000) },ids.staff));
     const receivedAt = new Date(Date.now()-60000);
-    const [intake,retry] = await Promise.all([custody.confirmIntake(next.request.id,{ conditionNotes: "Good", confirmedHandoverAt: receivedAt },ids.staff),custody.confirmIntake(next.request.id,{ conditionNotes: "Good", confirmedHandoverAt: receivedAt },ids.staff)]);
+    const intakePayload = { ...intakeEvidence, itemName: "Keys reconciled", description: "Observed at intake", conditionNotes: "Good", confirmedHandoverAt: receivedAt };
+    const [intake,retry] = await Promise.all([custody.confirmIntake(next.request.id,intakePayload,ids.staff),custody.confirmIntake(next.request.id,intakePayload,ids.staff)]);
+    await assert.rejects(custody.confirmIntake(next.request.id,{ ...intakePayload, accessories: "Changed" },ids.staff));
     assert.equal(intake?.warehouseItemId,retry?.warehouseItemId);
     const itemId = intake!.warehouseItemId!;
     const [items] = await pool.query<RowDataPacket[]>("SELECT * FROM warehouse_items WHERE post_id = ?", [ids.found]);
     assert.equal(items.length,1);
     assert.equal(items[0].status,"RECEIVED");
+    assert.equal(items[0].item_name,"Keys reconciled");
+    assert.equal((await custody.getIntakeContext(next.request.id,ids.staff)).post.description,"Fixture keys");
+    const receiptItem = await p.warehouseRepository.findItemById(itemId);
+    assert.equal(receiptItem?.receivedQuantity,1);
+    assert.equal(receiptItem?.accessories,"No accessories");
+    assert.equal(receiptItem?.thumbnail?.provenance,"INTAKE");
+    assert.deepEqual((await warehouse.listImages(itemId,ids.staff)).images.map(image => image.provenance).sort(),["INTAKE","SOURCE_POST"]);
+    await assert.rejects(warehouse.listImages(itemId,ids.outsider));
     assert.equal((items[0].retention_deadline.getTime()-items[0].received_at.getTime())/86400000,120);
     const [post] = await pool.query<RowDataPacket[]>("SELECT status FROM posts WHERE id = ?", [ids.found]);
     assert.equal(post[0].status,"OPEN");
@@ -137,7 +167,7 @@ test("isolated MySQL custody: authorization, concurrency, lifecycle, proof and n
     assert.ok(messages.every(n => !String(n.body).includes(input.reason)));
     assert.ok(messages.filter(n => n.event_type).every(n => n.event_type === "CUSTODY"));
     await t.test("an expired undisposed walk-in can be returned with private evidence, but not under legal hold", async () => {
-      const expired = await warehouse.createItem({ itemName: "Expired fixture", handoverPointId: point, conditionNotes: "Good", receivedAt: new Date(Date.now()-200*86400000) },ids.staff);
+      const expired = await warehouse.createItem({ ...await evidence(), itemName: "Expired fixture", handoverPointId: point, conditionNotes: "Good", receivedAt: new Date(Date.now()-200*86400000) },ids.staff);
       await warehouse.updateItem(expired.id,{ status: "EXPIRED" },ids.staff);
       await assert.rejects(warehouse.updateItem(expired.id,{ status: "RETURNED" },ids.staff));
       const proof = await warehouse.uploadProof(expired.id,{ buffer: Buffer.from([0xff,0xd8,0xff,0xe0]), size: 4, mimetype: "image/jpeg" },ids.staff);
@@ -151,7 +181,7 @@ test("isolated MySQL custody: authorization, concurrency, lifecycle, proof and n
     });
     await t.test("disposition requires separate Admin approval and rechecks legal hold, retention and disputes", async () => {
       await pool.execute("INSERT INTO user_roles (user_id,role_code) VALUES (?,'ADMIN')", [ids.finder]);
-      const record = await warehouse.createItem({ itemName: "Unclaimed fixture", handoverPointId: point, conditionNotes: "Good", receivedAt: new Date(Date.now()-200*86400000) },ids.staff);
+      const record = await warehouse.createItem({ ...await evidence(), itemName: "Unclaimed fixture", handoverPointId: point, conditionNotes: "Good", receivedAt: new Date(Date.now()-200*86400000) },ids.staff);
       await assert.rejects(warehouse.legalHold(record.id,true,"test hold",ids.staff));
       const approval = await warehouse.requestDisposition(record.id,"DONATED","No claim after retention",ids.approver);
       await assert.rejects(warehouse.executeDisposition(approval.approvalId,ids.staff));
@@ -179,7 +209,7 @@ test("isolated MySQL custody: authorization, concurrency, lifecycle, proof and n
       await warehouse.executeDisposition(approval.approvalId,ids.staff,[proof.id]);
       await warehouse.executeDisposition(approval.approvalId,ids.staff);
       assert.equal((await p.warehouseRepository.findItemById(record.id))?.status,"DONATED");
-      const fresh = await warehouse.createItem({ itemName: "Fresh", handoverPointId: point, conditionNotes: "Good" },ids.staff);
+      const fresh = await warehouse.createItem({ ...await evidence(), itemName: "Fresh", handoverPointId: point, conditionNotes: "Good" },ids.staff);
       const freshApproval = await warehouse.requestDisposition(fresh.id,"DISPOSED","Fresh fixture",ids.approver);
       await warehouse.approveDisposition(freshApproval.approvalId,ids.finder);
       await assert.rejects(warehouse.executeDisposition(freshApproval.approvalId,ids.staff));
@@ -234,7 +264,7 @@ test("isolated MySQL custody: authorization, concurrency, lifecycle, proof and n
       assert.equal(failed.length,0);
       const request = await custody.createRequest({ postId: found, handoverPointId: point, idempotencyKey: input.idempotencyKey },ids.outsider);
       await custody.acceptRequest(request.request.id,{ handoverPointId: point },ids.staff);
-      const intake = await custody.confirmIntake(request.request.id,{ conditionNotes: "Good", confirmedHandoverAt: new Date(Date.now()-200*86400000) },ids.staff);
+      const intake = await custody.confirmIntake(request.request.id,{ ...await evidence(request.request.id), conditionNotes: "Good", confirmedHandoverAt: new Date(Date.now()-200*86400000) },ids.staff);
       const proof = await warehouse.uploadProof(intake!.warehouseItemId!,{ buffer: Buffer.from([0xff,0xd8,0xff,0xe0]), size: 4, mimetype: "image/jpeg" },ids.staff);
       await pool.execute("UPDATE warehouse_private_proofs SET created_at = UTC_TIMESTAMP() - INTERVAL 4 DAY WHERE id = ?", [proof.id]);
       await warehouse.runMaintenance();
