@@ -6,6 +6,7 @@ import { createAuthSecurity } from "../modules/auth/infrastructure/auth-security
 import { createCloudinaryAvatarStorage } from "../modules/auth/infrastructure/cloudinary-avatar-storage.js";
 import { createEmailDelivery } from "../modules/auth/infrastructure/email.service.js";
 import { createClaimUseCases } from "../modules/claims/application/claim.use-cases.js";
+import { createContactPhotoUseCases } from "../modules/claims/application/contact-photo.use-cases.js";
 import { createMatchingUseCases } from "../modules/matching/application/matching.use-cases.js";
 import { createNotificationUseCases } from "../modules/notifications/application/notification.use-cases.js";
 import { createNotificationEmailQueue } from "../modules/notifications/application/notification-email.queue.js";
@@ -101,6 +102,9 @@ export function createServices(persistence: Persistence, config: typeof env = en
     withTransaction: transaction, id, mediaStorage: postMediaStorage, logger: console
   });
   const claimService = createClaimUseCases({
+    contactPhotos: createContactPhotoUseCases({ repository: persistence.contactPhotoRepository, claims: claimRepository, matching: matchingRepository,
+      imageAnalysis: createImageAnalysisUseCases({ postRepository, analyzer: createGeminiImageAnalyzer(config.gemini) }),
+      authorizeTarget: postId => postService.getPost(postId), mediaStorage: claimMediaStorage, transaction, id }),
     claimRepository, matchingRepository, notificationRepository, custodyRequestRepository, warehouseRepository, notificationEmailQueue,
     realtimeNotifier: realtimeService,
     withTransaction: transaction, id, mediaStorage: claimMediaStorage,

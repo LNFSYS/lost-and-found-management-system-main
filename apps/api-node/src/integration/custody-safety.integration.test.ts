@@ -22,6 +22,8 @@ import { env } from "../shared/infrastructure/config/env.js";
 import { once } from "node:events";
 import type { AddressInfo } from "node:net";
 import { preflightMigrations } from "../migrations/migration-preflight.js";
+import { createContactPhotoUseCases } from "../modules/claims/application/contact-photo.use-cases.js";
+import { createClaimUseCases } from "../modules/claims/application/claim.use-cases.js";
 
 after(async () => { await defaultPool.end(); });
 
@@ -214,7 +216,7 @@ test("isolated MySQL custody: authorization, concurrency, lifecycle, proof and n
       await warehouse.approveDisposition(freshApproval.approvalId,ids.finder);
       await assert.rejects(warehouse.executeDisposition(freshApproval.approvalId,ids.staff));
     });
-    await t.test("real HTTP matching keeps inactive history, hides own LOST and preserves history on refresh", async () => {
+    await t.test("real HTTP matching keeps inactive history, hides own LOST and preserves history on refresh", async httpTest => {
       const source = randomUUID(), ownLost = randomUUID(), inactive = randomUUID(), deleted = randomUUID(), hidden = randomUUID();
       await pool.execute("INSERT INTO posts (id,user_id,type,title,title_normalized,description,description_normalized) VALUES (?,?,'FOUND','Fixture','fixture','Fixture','fixture')", [source,ids.finder]);
       await pool.execute("UPDATE posts SET category_id = ? WHERE id = ?", [categoryId,source]);
@@ -223,8 +225,17 @@ test("isolated MySQL custody: authorization, concurrency, lifecycle, proof and n
         await pool.execute("INSERT INTO match_results (id,lost_post_id,found_post_id,total_score) VALUES (?,?,?,0.7)", [randomUUID(),post,source]);
       }
       const services = createServices(p,{ ...env, uploadDir });
+      const contactPhotos = createContactPhotoUseCases({ repository: p.contactPhotoRepository, claims: p.claimRepository, matching: p.matchingRepository,
+        authorizeTarget: postId => services.postService.getPost(postId), transaction: p.transaction, id: randomUUID,
+        mediaStorage: createPrivateMediaStorage({ uploadDir, namespace: "claim-evidence", invalidPathMessage: "Invalid", notFoundMessage: "Missing" }),
+        imageAnalysis: { analyzePostImages: async () => ({ title: "Keys", description: "Fixture", suggestedCategory: { id: categoryId, name: "Chìa khóa", parentId: null },
+          visualAttributes: [], visibleText: [], confidence: .95, model: "isolated-fixture", assistedBy: "fixture", warnings: [], imageCount: 1 }) } });
+      const gatedClaims = createClaimUseCases({ claimRepository: p.claimRepository, matchingRepository: p.matchingRepository, notificationRepository: p.notificationRepository,
+        warehouseRepository: p.warehouseRepository, custodyRequestRepository: p.custodyRequestRepository, contactPhotos,
+        withTransaction: p.transaction, id: randomUUID, hashIdempotencyPayload: createAuthSecurity(env).hashToken,
+        mediaStorage: createPrivateMediaStorage({ uploadDir, namespace: "claim-evidence", invalidPathMessage: "Invalid", notFoundMessage: "Missing" }), logger: { warn() {} } });
       const token = createAuthSecurity(env).signAccessToken({ sub: ids.finder, email: `${ids.finder}@example.invalid`, roles: ["STUDENT","ADMIN"], sessionVersion: 0 });
-      const server = createApp({ services, checkReadiness: async () => {} }).listen(0,"127.0.0.1");
+      const server = createApp({ services: { ...services, claimService: gatedClaims }, checkReadiness: async () => {} }).listen(0,"127.0.0.1");
       await once(server,"listening");
       try {
         const response = await fetch(`http://127.0.0.1:${(server.address() as AddressInfo).port}/api/posts/${source}/matches`,{ headers: { Authorization: `Bearer ${token}` } });
@@ -247,12 +258,56 @@ test("isolated MySQL custody: authorization, concurrency, lifecycle, proof and n
         assert.equal(direct,null);
         const targetLost = randomUUID();
         await pool.execute("INSERT INTO posts (id,user_id,type,title,title_normalized,description,description_normalized,category_id) VALUES (?,?,'LOST','Keys','keys','Fixture','fixture',?)", [targetLost,ids.owner,categoryId]);
-        const conversation = await services.claimService.createDirectMessage(ids.finder,{ postId: targetLost, content: "Synthetic message", sourceFoundPostId: source });
-        const context = await p.claimRepository.findVerificationContext(conversation.claim.id);
+        await httpTest.test("real HTTP photo gate binds the sender and keeps ownership verification separate", async () => {
+          const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}/api`;
+          const headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
+          const message = { postId: targetLost, content: "Synthetic message", sourceFoundPostId: source, clientMessageId: randomUUID() };
+          const blocked = await fetch(`${base}/claims/direct-messages`,{ method: "POST", headers, body: JSON.stringify({ ...message, approved: true, score: 1 }) });
+          assert.equal(blocked.status,409);
+          const [before] = await pool.query<RowDataPacket[]>("SELECT id FROM claims WHERE post_id = ?", [targetLost]);
+          assert.equal(before.length,0);
+          const form = new FormData(); form.set("postId",targetLost); form.set("file",new Blob([new Uint8Array([0xff,0xd8,0xff,0xe0])],{ type: "image/jpeg" }),"fixture.jpg");
+          const check = await fetch(`${base}/claims/contact-photo-checks`,{ method: "POST", headers: { Authorization: `Bearer ${token}` }, body: form });
+          assert.equal(check.status,200);
+          const approval = await check.json() as { checkId: string; approved: boolean; score: number };
+          assert.equal(approval.approved,true); assert.ok(approval.score > .6);
+          await assert.rejects(gatedClaims.createDirectMessage(ids.outsider,{ postId: targetLost, content: "Forged", contactCheckId: approval.checkId }));
+          const created = await fetch(`${base}/claims/direct-messages`,{ method: "POST", headers, body: JSON.stringify({ ...message, contactCheckId: approval.checkId }) });
+          assert.equal(created.status,201);
+          const conversation = await created.json() as { claim: { id: string; status: string; contactPhoto: { approved: boolean; questions: string[] }; appointmentEligible: boolean } };
+          assert.equal(conversation.claim.status,"CONVERSATION_OPEN");
+          assert.equal(conversation.claim.appointmentEligible,false);
+          assert.equal(conversation.claim.contactPhoto.approved,true);
+          assert.ok(conversation.claim.contactPhoto.questions.length > 0);
+          await gatedClaims.createDirectMessage(ids.finder,{ ...message, contactCheckId: approval.checkId });
+          const [proof] = await pool.query<RowDataPacket[]>("SELECT evidence_type,description FROM claim_evidence WHERE claim_id = ?", [conversation.claim.id]);
+          assert.equal(proof.length,1); assert.equal(proof[0].evidence_type,"PHOTO");
+          const [events] = await pool.query<RowDataPacket[]>("SELECT action FROM claim_audit_events WHERE claim_id = ?", [conversation.claim.id]);
+          assert.equal(events.filter(e => e.action === "CONTACT_PHOTO_MATCHED").length,1);
+          assert.equal(events.some(e => e.action === "VERIFICATION_ACCEPTED" || e.action === "STAFF_CUSTODY_VERIFIED"),false);
+          const [messages] = await pool.query<RowDataPacket[]>("SELECT m.id FROM chat_messages m JOIN chat_rooms r ON r.id = m.room_id WHERE r.claim_id = ?", [conversation.claim.id]);
+          assert.equal(messages.length,1);
+          const legacy = randomUUID(), legacyRoom = randomUUID();
+          await pool.execute("INSERT INTO claims (id,post_id,claimant_id,status,finder_decision) VALUES (?,?,?,'CONVERSATION_OPEN','ACCEPTED')", [legacy,ids.lost,ids.outsider]);
+          await pool.execute("INSERT INTO claim_participants (claim_id,user_id,participant_role,consent_status) VALUES (?,?,'CLAIMANT','ACCEPTED'), (?,?,'FINDER','ACCEPTED')", [legacy,ids.outsider,legacy,ids.owner]);
+          await pool.execute("INSERT INTO chat_rooms (id,claim_id) VALUES (?,?)", [legacyRoom,legacy]);
+          assert.equal((await gatedClaims.getClaim(legacy,ids.outsider)).canSend,false);
+          await assert.rejects(gatedClaims.sendMessage(legacy,ids.outsider,{ content: "Legacy bypass" }));
+          assert.equal((await gatedClaims.getClaim(legacy,ids.owner)).canSend,true);
+          const context = await p.claimRepository.findVerificationContext(conversation.claim.id);
+          assert.equal(context?.foundPostId,source);
+        });
+        const conversation = (await gatedClaims.listClaims(ids.finder,{ page: 1, pageSize: 50 })).items.find(c => c.foundPostId === targetLost)!;
+        const context = await p.claimRepository.findVerificationContext(conversation.id);
         assert.equal(context?.foundPostId,source);
-        assert.equal(conversation.claim.finderId,ids.finder);
-        assert.equal(conversation.claim.claimantId,ids.owner);
-      } finally { server.close(); await once(server,"close"); }
+        assert.equal(conversation.finderId,ids.finder);
+        assert.equal(conversation.claimantId,ids.owner);
+      } finally {
+        await new Promise<void>((resolve,reject) => {
+          server.close(error => error ? reject(error) : resolve());
+          server.closeAllConnections();
+        });
+      }
     });
     await t.test("outbox failure rolls back business event and reminders never mutate warehouse state", async () => {
       const found = randomUUID();

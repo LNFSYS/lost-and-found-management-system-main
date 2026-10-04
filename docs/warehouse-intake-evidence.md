@@ -23,6 +23,10 @@ Photos document what was physically received and its condition. They do not waiv
 
 Run checksum preflight, back up and rehearse the additive `061_warehouse_intake_evidence.sql` on an isolated database before applying it to the shared DB. No previously applied migration or ledger checksum is edited. This task's isolated tests do not establish that Aiven has 061.
 
+The accompanying LOST contact-photo work also needs `062_lost_contact_photo_checks.sql`; deploy both additive migrations before starting the updated API. Maintenance intentionally pauses if either required schema is missing. See [contact-photo rules](lost-contact-photo-rules.md). Historical preflight evidence through 060 predates these changes and cannot certify this rollout.
+
+The 4 October read-only shared-DB preflight passed and listed exactly 061/062 as pending. Neither was applied by this task.
+
 Automated evidence: intake-evidence.test.ts (missing/forged/stale/cross-actor/replay/privacy guards), custody-safety.integration.test.ts (fresh migrated MySQL, concurrent physical receipt, original source preservation, return/hold/dispute regressions), staff-page.spec.ts (walk-in, PENDING/legacy receipt, manual fallback and responsive form).
 
 Manual role/privacy QA, physical inventory reconciliation, representative real photos/Gemini output, multi-instance media durability and Jira/PR acceptance remain open. No Done/accepted claim is made by this document.

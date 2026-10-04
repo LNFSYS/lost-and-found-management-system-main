@@ -1,4 +1,5 @@
 import type { Request, Response } from "express";
+import { z } from "zod";
 import { HttpError } from "../../../../shared/interfaces/http/http-error.js";
 import type { ClaimUseCases } from "../../application/claim.use-cases.js";
 import {
@@ -28,6 +29,15 @@ export function createClaimController({ claimService }: {
     return value || undefined;
   }
   const claimController = {
+    async checkContactPhoto(request: Request, response: Response) {
+      if (!request.file) throw new HttpError(400, "Cần tải một ảnh vật phẩm trước khi liên hệ LOST");
+      const { postId } = z.object({ postId: z.string().uuid() }).parse(request.body);
+      response.json(await claimService.checkContactPhoto(postId,request.auth!.sub,request.file));
+    },
+    async attachContactPhoto(request: Request, response: Response) {
+      const { contactCheckId } = z.object({ contactCheckId: z.string().uuid() }).parse(request.body);
+      response.json(await claimService.attachContactPhoto(claimId(request),request.auth!.sub,contactCheckId));
+    },
     async listClaims(request: Request, response: Response) {
       response.json(await claimService.listClaims(request.auth!.sub, listClaimsQuerySchema.parse(request.query)));
     },
