@@ -13,7 +13,6 @@ import {
   FolderTree,
   Handshake,
   Layers3,
-  LogOut,
   MapPin,
   MapPinned,
   PencilLine,
@@ -27,11 +26,10 @@ import {
   UsersRound,
   X
 } from "lucide-react";
-import { useNavigate } from "react-router-dom";
-import { useAuth } from "../context/auth-context";
+import { useSearchParams } from "react-router-dom";
+import { selectedAdminTab, type AdminTab } from "../components/admin-layout";
 import { api, type AdminAccessRole, type AdminArea, type AdminBuilding, type AdminCatalog, type AdminCategory, type AdminDashboardKpis, type AdminHandoverPoint, type AdminHandoverPointPayload, type AdminModerationReport, type AdminModerationReportDetail, type AdminReportEntityType, type AdminReportStatus, type AdminUser, type AdminUserStatus, type ConfigHistoryEntry, type ConfigValueType, type ModerationActionType, type SystemConfig } from "../services/api";
 
-type AdminTab = "operations" | "moderation" | "users" | "configs" | "categories" | "locations" | "handover";
 type PendingAction = "" | "load" | "users" | "user" | "user-toggle" | "configs" | "config" | "config-history" | "reports" | "review" | "kpis" | "export" | "category" | "area" | "building" | "handover" | "toggle" | "delete";
 
 const emptyCategoryForm = { name: "", parentId: "", isActive: true };
@@ -159,8 +157,11 @@ function HandoverMapPicker({ imageUrl, x, y, onChange }: { imageUrl: string; x: 
 }
 
 export function AdminPage() {
-  const { user, logout } = useAuth();
-  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeTab = selectedAdminTab(searchParams.get("tab"));
+  function setActiveTab(tab: AdminTab) {
+    setSearchParams(previous => { const next = new URLSearchParams(previous); next.set("tab", tab); return next; });
+  }
   const [catalog, setCatalog] = useState<AdminCatalog | null>(null);
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [userTotal, setUserTotal] = useState(0);
@@ -169,7 +170,6 @@ export function AdminPage() {
   const [reports, setReports] = useState<AdminModerationReport[]>([]);
   const [reportTotal, setReportTotal] = useState(0);
   const [kpis, setKpis] = useState<AdminDashboardKpis | null>(null);
-  const [activeTab, setActiveTab] = useState<AdminTab>("operations");
   const [pendingAction, setPendingAction] = useState<PendingAction>("load");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -721,31 +721,9 @@ export function AdminPage() {
     void runAction("delete", () => api.deleteAdminHandoverPoint(point.id), "Đã xóa điểm bàn giao");
   }
 
-  if (pendingAction === "load" && !catalog) return <main className="center-state">Đang tải bảng quản trị...</main>;
+  if (pendingAction === "load" && !catalog) return <section className="center-state">Đang tải bảng quản trị...</section>;
 
-  return <div className="admin-console">
-    <aside className="admin-sidebar">
-      <div className="admin-sidebar__brand">
-        <span className="brand-mark" aria-hidden="true"><i>F</i><i>P</i><i>T</i></span>
-        <span><strong>LNFS Admin</strong><small>Trung tâm quản trị</small></span>
-      </div>
-      <nav className="admin-tabs" aria-label="Chức năng quản trị">
-        <button type="button" className={activeTab === "operations" ? "active" : ""} onClick={() => setActiveTab("operations")}><ShieldCheck size={18} /><span>Vận hành</span></button>
-        <button type="button" className={activeTab === "moderation" ? "active" : ""} onClick={() => setActiveTab("moderation")}><FileText size={18} /><span>Moderation</span></button>
-        <button type="button" className={activeTab === "users" ? "active" : ""} onClick={() => setActiveTab("users")}><UsersRound size={18} /><span>Người dùng</span></button>
-        <button type="button" className={activeTab === "configs" ? "active" : ""} onClick={() => setActiveTab("configs")}><Settings2 size={18} /><span>Cấu hình</span></button>
-        <button type="button" className={activeTab === "categories" ? "active" : ""} onClick={() => setActiveTab("categories")}><FolderTree size={18} /><span>Danh mục</span></button>
-        <button type="button" className={activeTab === "locations" ? "active" : ""} onClick={() => setActiveTab("locations")}><MapPinned size={18} /><span>Khu vực</span></button>
-        <button type="button" className={activeTab === "handover" ? "active" : ""} onClick={() => setActiveTab("handover")}><Handshake size={18} /><span>Điểm bàn giao</span></button>
-      </nav>
-      <div className="admin-sidebar__account">
-        <span>{user?.fullName.slice(0, 1).toUpperCase()}</span>
-        <div><strong>{user?.fullName}</strong><small>{user?.email}</small></div>
-        <button type="button" title="Đăng xuất" aria-label="Đăng xuất" onClick={() => void logout().finally(() => navigate("/login", { replace: true }))}><LogOut size={18} /></button>
-      </div>
-    </aside>
-    <main className="admin-main">
-    <section className="admin-page">
+  return <section className="admin-page">
     <header className="admin-hero">
       <div>
         <p className="eyebrow">ADMIN OPERATIONS</p>
@@ -1275,7 +1253,5 @@ export function AdminPage() {
         {!catalog?.handoverPoints.length && <div className="admin-empty"><MapPinned size={28} /><strong>Chưa có điểm bàn giao</strong><span>Tạo điểm đầu tiên và đặt marker trên bản đồ campus.</span></div>}
       </section>
     </div>}
-    </section>
-    </main>
-  </div>;
+  </section>;
 }

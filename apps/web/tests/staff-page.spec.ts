@@ -246,7 +246,7 @@ for (const viewport of [{ width: 1440, height: 1000 }, { width: 390, height: 844
     await expect(page.getByText("Item page 1", { exact: true })).toBeVisible();
     expect(queries.some(query => new URLSearchParams(query).get("status") === "ACCEPTED" && new URLSearchParams(query).get("page") === "1")).toBeTruthy();
     await page.evaluate(() => window.scrollTo(0, 0));
-    const headerBox = await page.locator(".topbar").boundingBox();
+    const headerBox = await page.locator(".admin-workspace-bar").boundingBox();
     const headingBox = await page.getByRole("heading", { name: "Tiếp nhận & Quản lý Custody" }).boundingBox();
     expect(headingBox!.y).toBeGreaterThanOrEqual(headerBox!.y + headerBox!.height);
     await page.screenshot({ path: testInfo.outputPath(`staff-${viewport.width}.png`), fullPage: true });

@@ -79,6 +79,8 @@ Requirements target bao phủ Web Application, PWA và Native Mobile. Status bê
 | FR-ADMIN-02 | Admin quản lý user, moderation, report, export, config và dashboard toàn hệ thống. | UC-062–UC-068, UC-082–UC-085, UC-087–UC-096, UC-165 | P1 | Implemented cho scope hiện tại; KPI snapshot đã tách contract |
 | FR-AUDIT-01 | Sensitive state transition và admin action lưu actor, action, before/after, lý do và timestamp. | UC-056, UC-090, UC-163, UC-164, UC-166 | P1 | Partial |
 
+Điều hướng quản trị (4 October 2026): `/admin` dùng chung sidebar với khu vực nội bộ `/admin/staff`; `/staff` chuyển tiếp và giữ query/hash của liên kết cũ. Admin thấy các chức năng quản trị và nội bộ; Staff chỉ thấy nội bộ, không tải API quản trị riêng. Nút “Giao diện người dùng” chuyển sang `/home`; menu phía người dùng có “Quản trị” cho Staff/Admin để quay lại, không đổi tài khoản hoặc quyền. Tab quản trị được giữ trong query `tab` khi tải lại trang. Đây là thay đổi điều hướng của FR-STAFF-01/FR-ADMIN-01/FR-ADMIN-02, không thêm BR/FR/UC hoặc nâng trạng thái UC.
+
 ### 2.6 PWA và Native Mobile
 
 | ID | Requirement | UC | Priority | Status |

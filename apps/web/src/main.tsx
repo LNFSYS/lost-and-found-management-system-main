@@ -1,9 +1,10 @@
 import React, { lazy, Suspense } from "react";
 import ReactDOM from "react-dom/client";
-import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { AppLayout } from "./components/app-layout";
+import { AdminLayout } from "./components/admin-layout";
 import { RouteGuard } from "./components/route-guard";
-import { AuthProvider } from "./context/auth-context";
+import { AuthProvider, useAuth } from "./context/auth-context";
 import { ForgotPasswordPage, ResetPasswordPage } from "./pages/forgot-password-page";
 import { AdminPage } from "./pages/admin-page";
 import { LoginPage } from "./pages/login-page";
@@ -27,6 +28,16 @@ const HomePage = lazy(async () => {
   return { default: module.HomePage };
 });
 
+function AdminHome() {
+  const { user } = useAuth();
+  return user?.roles.includes("ADMIN") ? <AdminPage /> : <Navigate to="/admin/staff" replace />;
+}
+
+function StaffRedirect() {
+  const location = useLocation();
+  return <Navigate to={`/admin/staff${location.search}${location.hash}`} replace />;
+}
+
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <BrowserRouter>
@@ -37,8 +48,12 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
           <Route path="/forgot-password" element={<ForgotPasswordPage />} />
           <Route path="/reset-password" element={<ResetPasswordPage />} />
           <Route element={<RouteGuard />}>
-            <Route element={<RouteGuard roles={["ADMIN"]} />}>
-              <Route path="/admin" element={<AdminPage />} />
+            <Route element={<RouteGuard roles={["STAFF", "ADMIN"]} />}>
+              <Route element={<AdminLayout />}>
+                <Route path="/admin" element={<AdminHome />} />
+                <Route path="/admin/staff" element={<StaffPage />} />
+              </Route>
+              <Route path="/staff" element={<StaffRedirect />} />
             </Route>
             <Route element={<AppLayout />}>
               <Route path="/home" element={<Suspense fallback={<main className="center-state">Đang mở hành trình...</main>}><HomePage /></Suspense>} />
@@ -52,9 +67,6 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
               <Route path="/claims" element={<ClaimsPage />} />
               <Route path="/claims/:claimId" element={<ClaimsPage />} />
               <Route path="/reports" element={<ReportsPage />} />
-              <Route element={<RouteGuard roles={["STAFF", "ADMIN"]} />}>
-                <Route path="/staff" element={<StaffPage />} />
-              </Route>
             </Route>
           </Route>
           <Route path="*" element={<Navigate to="/home" replace />} />
