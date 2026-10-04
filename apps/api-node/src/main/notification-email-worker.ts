@@ -1,33 +1,27 @@
 import { env } from "../shared/infrastructure/config/env.js";
 import { services } from "./runtime.js";
 import { notificationEmailWorkerError } from "./notification-email-worker-error.js";
+import { pool } from "./database.js";
+import { createBackgroundTask, createShutdownHandler } from "./background-task.js";
 
-let running = false;
-async function tick() {
-  if (running) return;
-  running = true;
-  try {
-    await services.notificationEmailWorker.runOnce();
-  } catch (error) {
+const emailTask = createBackgroundTask(
+  () => services.notificationEmailWorker.runOnce(),
+  error => {
     // The application worker must never reveal SMTP/provider payloads in logs.
     console.warn("notification_email_worker_tick_failed", notificationEmailWorkerError(error));
-  } finally {
-    running = false;
   }
-}
-
-if (!env.notificationEmail.workerEnabled) process.exitCode = 0;
-else {
-  void tick();
-}
+);
 const timer = env.notificationEmail.workerEnabled
-  ? setInterval(() => { void tick(); }, env.notificationEmail.workerPollSeconds * 1_000)
+  ? setInterval(() => { void emailTask.tick(); }, env.notificationEmail.workerPollSeconds * 1_000)
   : null;
 
-async function shutdown() {
+const shutdown = createShutdownHandler(async () => {
   if (timer) clearInterval(timer);
-  const { pool } = await import("./database.js");
+  const drained = await Promise.allSettled([emailTask.stop(), services.notificationEmailWorker.stop()]);
   await pool.end();
-}
-process.once("SIGINT", () => { void shutdown(); });
-process.once("SIGTERM", () => { void shutdown(); });
+  if (drained.some(result => result.status === "rejected")) throw new Error("Email drain failed");
+});
+process.on("SIGINT", shutdown);
+process.on("SIGTERM", shutdown);
+if (env.notificationEmail.workerEnabled) void emailTask.tick();
+else void shutdown();

@@ -120,6 +120,8 @@ export function createNotificationEmailWorker(options: {
   const now = options.now ?? (() => new Date());
   const maxAttempts = options.maxAttempts ?? 5;
   const leaseSeconds = options.leaseSeconds ?? 60;
+  let stopped = false;
+  let running: Promise<{ sent: number; skipped: number; deferred: number; failed: number }> | null = null;
 
   async function processLeased(item: Awaited<ReturnType<NotificationEmailRepository["claimDue"]>>[number], leaseToken: string, leaseLost: () => boolean) {
     // claimDue reserves the primary row; attach every eligible sibling to its lease.
@@ -201,22 +203,33 @@ export function createNotificationEmailWorker(options: {
     finally { clearInterval(timer); await heartbeat; }
   }
 
+  async function processBatch(limit: number) {
+    const results = [];
+    const safeLimit = Math.min(100, Math.max(1, Math.trunc(limit)));
+    for (let index = 0; index < safeLimit; index += 1) {
+      if (stopped) break;
+      const leaseToken = options.id();
+      const due = await options.repository.claimDue({ limit: 1, leaseToken, leaseSeconds });
+      if (!due[0]) break;
+      results.push(await processOne(due[0], leaseToken));
+    }
+    return results.reduce((summary, result) => ({
+      sent: summary.sent + (result.sent ?? 0),
+      skipped: summary.skipped + (result.skipped ?? 0),
+      deferred: summary.deferred + (result.deferred ?? 0),
+      failed: summary.failed + (result.failed ?? 0)
+    }), { sent: 0, skipped: 0, deferred: 0, failed: 0 });
+  }
+
   return {
-    async runOnce(limit = 20) {
-      const results = [];
-      const safeLimit = Math.min(100, Math.max(1, Math.trunc(limit)));
-      for (let index = 0; index < safeLimit; index += 1) {
-        const leaseToken = options.id();
-        const due = await options.repository.claimDue({ limit: 1, leaseToken, leaseSeconds });
-        if (!due[0]) break;
-        results.push(await processOne(due[0], leaseToken));
-      }
-      return results.reduce((summary, result) => ({
-        sent: summary.sent + (result.sent ?? 0),
-        skipped: summary.skipped + (result.skipped ?? 0),
-        deferred: summary.deferred + (result.deferred ?? 0),
-        failed: summary.failed + (result.failed ?? 0)
-      }), { sent: 0, skipped: 0, deferred: 0, failed: 0 });
+    runOnce(limit = 20) {
+      if (stopped) return Promise.resolve({ sent: 0, skipped: 0, deferred: 0, failed: 0 });
+      if (!running) running = processBatch(limit).finally(() => { running = null; });
+      return running;
+    },
+    async stop() {
+      stopped = true;
+      await running;
     }
   };
 }

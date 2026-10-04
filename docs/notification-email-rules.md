@@ -67,6 +67,7 @@ Node.js là owner duy nhất của notification event, preference, outbox và de
 - Only explicit `NOT_SENT` delivery errors may re-enter bounded retry. Unknown transport failures and accepted sends whose DB acknowledgement fails never retry automatically. Token/expiry fences prevent stale acknowledgement, defer or retry from reviving a cancelled row.
 - SMTP bounds are DNS 10s, connection 15s, greeting 15s and socket idle 30s. These are stage/idle timeouts, not a guarantee of total send duration. See [Nodemailer SMTP options](https://nodemailer.com/smtp).
 - Rollout must stop/drain every older API/standalone email worker before starting this version. An older worker can still reclaim expired processing rows; do not run mixed reclaim policies. Do not automatically requeue uncertain CANCELLED rows without independent provider evidence that no delivery occurred.
+- On SIGINT/SIGTERM, both entrypoints stop polling and claiming additional outbox items, wait for the current SMTP attempt, DB acknowledgement/cancellation and lease heartbeat, then close the pool. Repeated signals share the same shutdown. The API also drains active HTTP requests and schema checks; it ends SSE subscriptions and rejects late SSE connections so streams cannot prevent shutdown. A disabled standalone worker closes its unused pool and exits naturally. Forced termination cannot provide these guarantees; deployment grace must allow the drain to complete.
 - Template phải versioned; payload outbox lưu dữ liệu tối thiểu và không lưu private message/evidence để tiện render email.
 
 ## 8. Acceptance và negative tests
@@ -79,6 +80,7 @@ Node.js là owner duy nhất của notification event, preference, outbox và de
 - Preference optional được tôn trọng; security email bắt buộc không bị tắt nhầm.
 - Email không lộ private evidence, OCR, expected answer, contact, vị trí chính xác hoặc token.
 - Lỗi SMTP/provider không rollback claim, appointment, custody, return hoặc feedback.
+- Child-process regressions exercise both actual entrypoints with slow success/uncertain SMTP, repeated signals and a disabled worker. A real loopback HTTP request finishes before pool closure; schema checks and post-send DB writes remain usable throughout the drain. Processes must exit without force-exit.
 
 ## 9. Traceability
 

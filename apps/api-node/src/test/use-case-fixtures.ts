@@ -88,7 +88,7 @@ export function createTestCustodyRequestUseCases(overrides: Partial<import("../m
 export const custodyRequestService = {} as any; // Fake it for now since we just need it to compile
 export const testServices = {
   notificationService,
-  notificationEmailWorker: { runOnce: async () => ({ sent: 0, skipped: 0, deferred: 0, failed: 0 }) },
+  notificationEmailWorker: { runOnce: async () => ({ sent: 0, skipped: 0, deferred: 0, failed: 0 }), stop: async () => undefined },
   systemConfigService, adminUserService, adminReportingService, adminCatalogService, warehouseService, returnFeedbackService,
   reportService, matchingService, postService, claimService, realtimeService, authService, geminiImageService,
   custodyRequestService

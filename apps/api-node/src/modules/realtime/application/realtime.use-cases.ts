@@ -32,6 +32,7 @@ export function createRealtimeUseCases({ claimRepository, id }: {
   const connections = new Map<string, RealtimeConnection>();
   const connectionsByUser = new Map<string, Set<string>>();
   const roomsByUser = new Map<string, Map<string, Set<string>>>();
+  let stopped = false;
 
   function subscribe(connection: RealtimeConnection, roomId: string) {
     connection.rooms.add(roomId);
@@ -93,6 +94,7 @@ export function createRealtimeUseCases({ claimRepository, id }: {
       const roomIds = [...new Set(input.roomIds ?? [])];
       const connection: RealtimeConnection = { id: id(), userId: input.userId, rooms: new Set(), deliveredEventIds: new Set(), response: input.response };
       const authorizedRoomIds = input.authorized ? roomIds : await authorizeRooms(input.userId, roomIds);
+      if (stopped) throw new AppError("unavailable", "Realtime service is shutting down");
       for (const roomId of authorizedRoomIds) subscribe(connection, roomId);
       connections.set(connection.id, connection);
       const userConnections = connectionsByUser.get(input.userId) ?? new Set<string>();
@@ -137,6 +139,14 @@ export function createRealtimeUseCases({ claimRepository, id }: {
 
     disconnect(connectionId: string) {
       cleanup(connectionId);
+    },
+
+    stop() {
+      stopped = true;
+      for (const connection of connections.values()) {
+        connection.response.end();
+        cleanup(connection.id);
+      }
     },
 
     stats() {
