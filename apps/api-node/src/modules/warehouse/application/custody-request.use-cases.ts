@@ -110,6 +110,7 @@ export function createCustodyRequestUseCases(options: CustodyRequestDependencies
       return close(requestId, "REJECTED", input.reason, actorId);
     },
     async cancelRequest(requestId: string, input: CancelCustodyRequestInput, actorId: string) {
+      if (!clean(input.reason)) throw new AppError("bad_request", "Cần lý do hủy yêu cầu");
       return close(requestId, "CANCELLED", input.reason, actorId);
     },
     async confirmIntake(requestId: string, input: IntakeCustodyRequestInput, actorId: string) {
@@ -121,8 +122,9 @@ export function createCustodyRequestUseCases(options: CustodyRequestDependencies
         const lock = await repo.lockForUpdate(requestId, db);
         if (!lock) throw new AppError("not_found", "Không tìm thấy yêu cầu");
         if (lock.status === "INTAKED" && lock.warehouseItemId) return [];
-        if (!canTransitionCustodyStatus(lock.status, "INTAKED")) throw new AppError("conflict", "Yêu cầu phải được duyệt trước khi tiếp nhận");
+        if (!canTransitionCustodyStatus(lock.status, "INTAKED")) throw new AppError("conflict", "Yêu cầu không còn chờ tiếp nhận");
         if (!lock.postId || !await repo.lockEligiblePost(lock.postId, lock.requesterId, db)) throw new AppError("conflict", "Bài FOUND không hợp lệ cho intake");
+        if (lock.claimId && !await repo.validateClaimLink(lock.postId, lock.requesterId, lock.claimId, lock.roomId, db)) throw new AppError("conflict", "Claim/phòng trao đổi không thuộc vật phẩm của Finder");
         if (await repo.hasWarehouseItem(lock.postId, db)) throw new AppError("conflict", "Vật phẩm đã có hồ sơ kho");
         if (!lock.handoverPointId || !await warehouse.findHandoverPointById(lock.handoverPointId)) throw new AppError("conflict", "Điểm bàn giao không hoạt động");
         const post = await warehouse.getPostInfoForIntake(lock.postId, db);

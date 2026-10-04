@@ -366,7 +366,7 @@ export interface CustodyRequestDetailResponse {
   audit: CustodyRequestAuditEntry[];
 }
 export interface CustodyRequestFilters {
-  status?: CustodyRequestStatus | "";
+  status?: CustodyRequestStatus | "AWAITING_INTAKE" | "";
   page?: number;
   pageSize?: number;
 }

@@ -18,7 +18,8 @@ export function custodyNotifications(options: CustodyNotifications, repository: 
         const canReadCustody = userId === input.requesterId || await repository.isStaff(userId, db);
         const notification = await options.notificationRepository.create({ userId,
           type: input.event === "CREATED" ? "CUSTODY_REQUEST_CREATED" : input.event === "OVERDUE" ? "CUSTODY_OVERDUE" : "CUSTODY_UPDATED",
-          title: `Custody: ${input.event}`, body: "Yêu cầu bàn giao vật phẩm đã được cập nhật. Đăng nhập để xem chi tiết.",
+          title: input.event === "CREATED" ? "Custody: chờ tiếp nhận" : `Custody: ${input.event}`,
+          body: input.event === "CREATED" ? "Yêu cầu đã vào hàng đợi. Mang vật phẩm đến điểm bàn giao trong giờ làm việc; không cần chờ duyệt." : input.event === "INTAKED" ? "Staff đã tiếp nhận vật phẩm thực tế. Tiếp nhận không phải xác minh quyền sở hữu." : "Yêu cầu bàn giao vật phẩm đã được cập nhật. Đăng nhập để xem chi tiết.",
           entityType: canReadCustody ? "CUSTODY_REQUEST" : input.claimId ? "CLAIM" : "POST", entityId: canReadCustody ? input.id : input.claimId ?? input.postId, dedupeKey: `custody:${input.id}:${input.event}:${userId}`
         }, db);
         if (!notification) continue;

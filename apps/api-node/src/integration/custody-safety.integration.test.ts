@@ -74,7 +74,7 @@ test("isolated MySQL custody: authorization, concurrency, lifecycle, proof and n
       assert.equal(rows[0].escalated_at,null);
     });
     const next = await custody.createRequest({ ...input, idempotencyKey: "new-request-key" },ids.finder);
-    await custody.acceptRequest(next.request.id,{ handoverPointId: point },ids.staff);
+    assert.equal(next.request.status, "PENDING");
     assert.equal((await custody.createRequest({ ...input, idempotencyKey: "new-request-key" },ids.finder)).request.id, next.request.id);
     await assert.rejects(custody.confirmIntake(next.request.id,{ conditionNotes: "Good", confirmedHandoverAt: new Date(Date.now()+3600000) },ids.staff));
     const receivedAt = new Date(Date.now()-60000);
@@ -83,6 +83,7 @@ test("isolated MySQL custody: authorization, concurrency, lifecycle, proof and n
     const itemId = intake!.warehouseItemId!;
     const [items] = await pool.query<RowDataPacket[]>("SELECT * FROM warehouse_items WHERE post_id = ?", [ids.found]);
     assert.equal(items.length,1);
+    assert.equal(items[0].status,"RECEIVED");
     assert.equal((items[0].retention_deadline.getTime()-items[0].received_at.getTime())/86400000,120);
     const [post] = await pool.query<RowDataPacket[]>("SELECT status FROM posts WHERE id = ?", [ids.found]);
     assert.equal(post[0].status,"OPEN");
