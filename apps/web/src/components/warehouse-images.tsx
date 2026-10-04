@@ -19,9 +19,9 @@ export function WarehouseImageView({ image, caption = false }: { image?: Pick<Wa
   }, [image?.id, image?.provenance]);
   useEffect(() => {
     if (!expanded) return;
-    const close = (event: KeyboardEvent) => { if (event.key === "Escape") setExpanded(false); };
-    window.addEventListener("keydown", close);
-    return () => window.removeEventListener("keydown", close);
+    const close = (event: KeyboardEvent) => { if (event.key === "Escape") { event.stopPropagation(); setExpanded(false); } };
+    window.addEventListener("keydown", close, true);
+    return () => window.removeEventListener("keydown", close, true);
   }, [expanded]);
   return <>
     <button type="button" className="warehouse-image" disabled={!url} onClick={() => setExpanded(true)} title="Xem ảnh vật phẩm" aria-label="Xem ảnh vật phẩm">
