@@ -75,14 +75,18 @@ export function createMatchingUseCases(options: MatchingDependencies) {
   }
 
   async function buildStoredResults(postId: string, config: MatchingConfig, viewerId?: string) {
-    const matches = await matchingRepository.listForPost(postId, config.weakThreshold, viewerId);
+    const [source, matches] = await Promise.all([
+      postRepository.findVisibleById(postId),
+      matchingRepository.listForPost(postId, config.weakThreshold, viewerId)
+    ]);
+    if (!source) throw new AppError("not_found", "Không tìm thấy bài đăng nguồn");
     const counterpartIds = matches.map((match) => match.lostPostId === postId ? match.foundPostId : match.lostPostId);
     const posts = await postRepository.findVisibleByIds(counterpartIds);
     const postById = new Map(posts.map((post) => [post.id, post]));
     return matches.flatMap((match) => {
       const counterpartId = match.lostPostId === postId ? match.foundPostId : match.lostPostId;
       const candidate = postById.get(counterpartId);
-      return candidate && !(candidate.type === "LOST" && candidate.userId === viewerId) ? [{ match, candidate }] : [];
+      return candidate && !(candidate.type === "LOST" && candidate.userId === source.userId) ? [{ match, candidate }] : [];
     });
   }
 

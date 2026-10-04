@@ -191,7 +191,7 @@ export function createPostUseCases(options: PostDependencies) {
       page: payload.page,
       pageSize: payload.pageSize,
       hasMore: payload.hasMore,
-      results: payload.results.filter(({ candidate }) => !(candidate.type === "LOST" && candidate.userId === source.userId)).map(({ match, candidate }) => ({
+      results: payload.results.map(({ match, candidate }) => ({
         matchId: match.id,
         candidate: serializePost(candidate, viewer),
         totalScore: match.totalScore,

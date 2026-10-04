@@ -99,7 +99,7 @@ test("owned LOST suggestions are removed before calculating pagination metadata"
       getConfigNumber: async (_key: string, fallback: number) => fallback,
       listForPost: async (_post: string, _score: number, viewer?: string) => { assert.equal(viewer, "owner"); return matches; }
     } as unknown as MatchingRepository,
-    postRepository: { findVisibleByIds: async () => matches.map((match, index) => ({ id: match.lostPostId, type: "LOST", userId: index === 0 ? "owner" : "other" })) } as never,
+    postRepository: { findVisibleById: async () => ({ id: "source", userId: "owner", type: "FOUND" }), findVisibleByIds: async () => matches.map((match, index) => ({ id: match.lostPostId, type: "LOST", userId: index === 0 ? "owner" : "other" })) } as never,
     idFactory: () => "fixture"
   });
   const result = await service.getStoredResults("source", undefined, "owner", 2, 20);
@@ -110,3 +110,22 @@ test("owned LOST suggestions are removed before calculating pagination metadata"
   assert.equal(result.results.length, 20);
   assert.equal(result.results[0].candidate.id, "lost-21");
 });
+
+for (const viewer of ["owner", "staff", "admin"]) {
+  test(`matching filters source-owner LOST before pageSize=1 for ${viewer}, while keeping viewer feedback scope`, async () => {
+    const matches = [{ id: "self", lostPostId: "owner-lost", foundPostId: "source", updatedAt: "2026-10-04T00:00:00Z" }, { id: "other", lostPostId: "staff-lost", foundPostId: "source", updatedAt: "2026-10-04T00:00:00Z" }];
+    const service = createMatchingUseCases({
+      matchingRepository: { getConfigNumber: async (_key: string, fallback: number) => fallback, listForPost: async (_source: string, _score: number, actor?: string) => { assert.equal(actor,viewer); return matches; } } as unknown as MatchingRepository,
+      postRepository: { findVisibleById: async () => ({ id: "source", userId: "owner", type: "FOUND" }), findVisibleByIds: async () => [{ id: "owner-lost", userId: "owner", type: "LOST" }, { id: "staff-lost", userId: "staff", type: "LOST", status: "RESOLVED" }] } as never,
+      idFactory: () => "fixture"
+    });
+    const first = await service.getStoredResults("source", undefined, viewer, 1, 1);
+    assert.equal(first.total,1);
+    assert.equal(first.hasMore,false);
+    assert.equal(first.results[0].candidate.id,"staff-lost");
+    const next = await service.getStoredResults("source", undefined, viewer, 2, 1);
+    assert.equal(next.total,1);
+    assert.equal(next.hasMore,false);
+    assert.deepEqual(next.results,[]);
+  });
+}

@@ -6,7 +6,7 @@ Base: dev@03c7bda (PR #77). Matching code is reviewed through PR #79.
 ## Runtime Contract
 
 - GET /api/posts/:id/matches?page=1&pageSize=20 and POST /api/posts/:id/matches/recalculate with the same query return total, page, pageSize, hasMore, stable score/date/id order, private-signal redaction and actor-scoped saved feedback/dismissals.
-- Recalculate preserves viewer scope; an owner-dismissed suggestion never automatically resurfaces. Own LOST candidates are removed before pagination; permitted inactive history remains readable, deleted/hidden data stays guarded.
+- Recalculate preserves viewer scope; an owner-dismissed suggestion never automatically resurfaces. LOST candidates belonging to the source owner are removed before totals/pagination for owner, Staff and Admin alike. Viewer-scoped feedback/dismissals remain separate; serialization only maps/redacts the already filtered page. Permitted inactive history remains readable; deleted/hidden data stays guarded.
 - Only the source owner can write feedback/dismissal. Staff/Admin can inspect/recalculate without rating on the owner's behalf. Pair eligibility remains required for writes.
 - Feedback: USEFUL / IRRELEVANT / INCORRECT, optional note up to 500 characters and correlationKey 8-128 characters. Dismissal uses the same key contract and optional reason. Exact replay returns the original record; conflicting/reused keys return 409.
 - Feedback/dismissal do not create claims, decide ownership, change appointments, close posts or complete custody.

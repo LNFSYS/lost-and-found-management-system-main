@@ -201,6 +201,15 @@ test("isolated MySQL custody: authorization, concurrency, lifecycle, proof and n
         const payload = await response.json() as { results: Array<{ candidate: { id: string; status: string; } }> };
         assert.deepEqual(payload.results.map(result => result.candidate.id),[inactive]);
         assert.equal(payload.results[0].candidate.status,"RESOLVED");
+        for (const [userId,role] of [[ids.finder,"ADMIN"],[ids.staff,"STAFF"],[ids.approver,"ADMIN"]]) {
+          const reviewToken = createAuthSecurity(env).signAccessToken({ sub: userId, email: `${userId}@example.invalid`, roles: [role as "STAFF" | "ADMIN"], sessionVersion: 0 });
+          const review = await fetch(`http://127.0.0.1:${(server.address() as AddressInfo).port}/api/posts/${source}/matches?page=1&pageSize=1`,{ headers: { Authorization: `Bearer ${reviewToken}` } });
+          assert.equal(review.status,200);
+          const page = await review.json() as { total: number; hasMore: boolean; results: Array<{ candidate: { id: string } }> };
+          assert.equal(page.total,1);
+          assert.equal(page.hasMore,false);
+          assert.deepEqual(page.results.map(result => result.candidate.id),[inactive]);
+        }
         await services.matchingService.runForPost(source);
         assert.ok((await p.matchingRepository.listForPost(source,0.45)).some(match => match.lostPostId === inactive));
         const direct = await services.claimService.createDirectMessage(ids.owner,{ postId: ownLost, content: "Test", sourceFoundPostId: source }).catch(() => null);
