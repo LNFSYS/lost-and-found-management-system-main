@@ -120,19 +120,6 @@ export function createClaimUseCases(options: ClaimDependencies) {
     return claimRepository.createRoom(claimId, queryable);
   }
 
-  async function repairLegacyDirectClaim(claimId: string) {
-    const claim = await claimRepository.findById(claimId);
-    if (!claim || claim.lostPostId !== null || claim.status !== "PENDING") return;
-    await withTransaction(async (connection) => {
-      const lockedClaim = await claimRepository.findByIdForUpdate(claimId, connection);
-      if (!lockedClaim || lockedClaim.lostPostId !== null || lockedClaim.status !== "PENDING") return;
-      await claimRepository.updateFinderDecision({ claimId, status: "CONVERSATION_OPEN", finderDecision: "ACCEPTED" }, connection);
-      await claimRepository.updateParticipantConsent(claimId, lockedClaim.claimantId, "ACCEPTED", connection);
-      await claimRepository.updateParticipantConsent(claimId, lockedClaim.finderId, "ACCEPTED", connection);
-      if (!await claimRepository.findRoomByClaim(claimId, connection)) await claimRepository.createRoom(claimId, connection);
-    });
-  }
-
   function counterpartId(claim: StoredClaim, userId: string) {
     if (claim.claimantId === userId) return claim.finderId;
     if (claim.finderId === userId) return claim.claimantId;
@@ -332,18 +319,6 @@ export function createClaimUseCases(options: ClaimDependencies) {
         if (existing) {
           if (!await claimRepository.findParticipant(existing.id,requesterId,connection)) throw claimNotFound();
           if (isLostContact) await options.contactPhotos!.attach(input.contactCheckId,foundPostId,requesterId,existing.id,connection);
-          if (input.postId && existing.status === "PENDING") {
-            await claimRepository.updateFinderDecision({
-              claimId: existing.id,
-              status: "CONVERSATION_OPEN",
-              finderDecision: "ACCEPTED"
-            }, connection);
-            await claimRepository.updateParticipantConsent(existing.id, existing.claimantId, "ACCEPTED", connection);
-            await claimRepository.updateParticipantConsent(existing.id, existing.finderId, "ACCEPTED", connection);
-            if (!await claimRepository.findRoomByClaim(existing.id, connection)) {
-              await claimRepository.createRoom(existing.id, connection);
-            }
-          }
           return { claim: existing, idempotent: true };
         }
 
@@ -417,14 +392,10 @@ export function createClaimUseCases(options: ClaimDependencies) {
         let roomId: string;
 
         if (existing) {
-          if (existing.status === "PENDING") {
-            await claimRepository.updateFinderDecision({
-              claimId: existing.id,
-              status: "CONVERSATION_OPEN",
-              finderDecision: "ACCEPTED"
-            }, connection);
-            await claimRepository.updateParticipantConsent(existing.id, existing.claimantId, "ACCEPTED", connection);
-            await claimRepository.updateParticipantConsent(existing.id, existing.finderId, "ACCEPTED", connection);
+          const participant = await claimRepository.findParticipant(existing.id, requesterId, connection);
+          if (!participant) throw claimNotFound();
+          if (!canUseRoom(existing.status, participant.consentStatus)) {
+            throw new AppError("conflict", "Cuộc trao đổi chưa được đồng ý hoặc đã kết thúc; không thể tự mở lại");
           }
           roomId = (await openRoomIfNeeded(existing.id, connection)).id;
           const refreshed = await claimRepository.findByIdForUpdate(existing.id, connection);
@@ -507,12 +478,10 @@ export function createClaimUseCases(options: ClaimDependencies) {
     },
 
     async getClaim(claimId: string, userId: string) {
-      await repairLegacyDirectClaim(claimId);
       return details(claimId, userId);
     },
 
     async getVerificationTemplates(claimId: string, finderId: string) {
-      await repairLegacyDirectClaim(claimId);
       const claim = await claimRepository.findById(claimId);
       const participant = claim ? await claimRepository.findParticipant(claimId, finderId) : null;
       const denialReason = !claim
@@ -546,7 +515,6 @@ export function createClaimUseCases(options: ClaimDependencies) {
     },
 
     async getVerification(claimId: string, userId: string) {
-      await repairLegacyDirectClaim(claimId);
       return verificationDetails(claimId, userId);
     },
 
