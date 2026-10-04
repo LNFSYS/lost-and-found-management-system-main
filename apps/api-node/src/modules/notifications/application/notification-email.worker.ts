@@ -121,7 +121,7 @@ export function createNotificationEmailWorker(options: {
   const maxAttempts = options.maxAttempts ?? 5;
   const leaseSeconds = options.leaseSeconds ?? 60;
 
-  async function processOne(item: Awaited<ReturnType<NotificationEmailRepository["claimDue"]>>[number], leaseToken: string) {
+  async function processLeased(item: Awaited<ReturnType<NotificationEmailRepository["claimDue"]>>[number], leaseToken: string, leaseLost: () => boolean) {
     // claimDue reserves the primary row; attach every eligible sibling to its lease.
     await options.repository.claimCoalesced({ item, leaseToken, leaseSeconds });
     const leased = await options.repository.listLease(leaseToken);
@@ -146,6 +146,7 @@ export function createNotificationEmailWorker(options: {
     const distinctEntities = new Set(eligible.map((entry) => entry.entityId).filter(Boolean)).size;
     const content = genericContent(eligible.length, eligible[0]!.entityId, options.frontendUrl, item.eventType,
       item.deliveryMode === "DIGEST" && distinctEntities > 1, eligible[0]!.entityType);
+    if (leaseLost() || !await options.repository.renewLease(leaseToken, leaseSeconds)) return { sent: 0, skipped: leased.length };
     try {
       await options.emailDelivery.send({
         to: eligible[0]!.email,
@@ -153,12 +154,10 @@ export function createNotificationEmailWorker(options: {
         // Stable across retry; SMTP adapters expose this to providers as Message-ID/header.
         idempotencyKey: eligible[0]!.idempotencyKey
       });
-      await options.repository.markSent(leaseToken);
-      return { sent: eligible.length };
     } catch (error) {
       const attempt = Math.max(...leased.map((entry) => entry.attemptCount));
       const errorCode = safeErrorCode(error);
-      if (error instanceof NotificationEmailDeliveryError && error.deliveryState === "UNKNOWN") {
+      if (!(error instanceof NotificationEmailDeliveryError) || error.deliveryState !== "NOT_SENT") {
         // A transport timeout can happen after the SMTP server accepted DATA. Retrying
         // would create a duplicate, so the outbox is closed and observed for review.
         await options.repository.cancelLease(leaseToken, errorCode);
@@ -171,6 +170,35 @@ export function createNotificationEmailWorker(options: {
       options.logger.warn(JSON.stringify({ event: "notification_email_delivery_failed", eventType: item.eventType, attempt, errorCode, deliveryCount: leased.length }));
       return { sent: 0, failed: leased.length };
     }
+    try {
+      await options.repository.markSent(leaseToken);
+    } catch (error) {
+      // Delivery succeeded; failure to record the acknowledgement is not a safe retry.
+      const errorCode = safeErrorCode(error);
+      options.logger.warn(JSON.stringify({ event: "notification_email_ack_uncertain", errorCode, deliveryCount: eligible.length }));
+      await options.repository.cancelLease(leaseToken, "SMTP_ACK_NOT_RECORDED");
+    }
+    return { sent: eligible.length };
+  }
+
+  async function processOne(item: Awaited<ReturnType<NotificationEmailRepository["claimDue"]>>[number], leaseToken: string) {
+    let lost = false;
+    let heartbeat: Promise<void> | null = null;
+    async function renew() {
+      try { if (!await options.repository.renewLease(leaseToken, leaseSeconds)) lost = true; }
+      catch (error) {
+        lost = true;
+        options.logger.warn(JSON.stringify({ event: "notification_email_lease_lost", errorCode: safeErrorCode(error) }));
+      }
+    }
+    await renew();
+    if (lost) return { sent: 0, skipped: 1 };
+    const timer = setInterval(() => {
+      if (!lost && !heartbeat) heartbeat = renew().finally(() => { heartbeat = null; });
+    }, Math.max(10, Math.floor(leaseSeconds * 1000 / 3)));
+    timer.unref();
+    try { return await processLeased(item, leaseToken, () => lost); }
+    finally { clearInterval(timer); await heartbeat; }
   }
 
   return {

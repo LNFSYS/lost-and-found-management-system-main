@@ -144,10 +144,16 @@ export function createNotificationEmailRepository(pool: SqlExecutor) {
 
     async claimDue(input: { limit: number; leaseToken: string; leaseSeconds: number; }) {
       const safeLimit = Math.min(100, Math.max(1, Math.trunc(input.limit)));
+      // SMTP may already have accepted an expired worker's message. Never reclaim
+      // PROCESSING deliveries without a provider-side idempotency contract.
+      await pool.execute(
+        `UPDATE notification_email_outbox SET status = 'CANCELLED', cancelled_at = UTC_TIMESTAMP(),
+          last_error_code = 'SMTP_LEASE_EXPIRED_UNCERTAIN', lease_token = NULL, lease_expires_at = NULL
+         WHERE status = 'PROCESSING' AND (lease_expires_at IS NULL OR lease_expires_at <= UTC_TIMESTAMP())`
+      );
       const [candidates] = await pool.execute<OutboxRow[]>(
         `SELECT ${outboxColumns} FROM notification_email_outbox o
-         WHERE (o.status = 'PENDING' AND o.due_at <= UTC_TIMESTAMP())
-            OR (o.status = 'PROCESSING' AND o.lease_expires_at < UTC_TIMESTAMP())
+         WHERE o.status = 'PENDING' AND o.due_at <= UTC_TIMESTAMP()
          ORDER BY o.due_at ASC, o.created_at ASC LIMIT ${safeLimit}`
       );
       const claimed: NotificationEmailOutboxItem[] = [];
@@ -155,8 +161,7 @@ export function createNotificationEmailRepository(pool: SqlExecutor) {
         const [result] = await pool.execute<ResultSetHeader>(
           `UPDATE notification_email_outbox SET status = 'PROCESSING', lease_token = ?,
             lease_expires_at = DATE_ADD(UTC_TIMESTAMP(), INTERVAL ? SECOND), attempt_count = attempt_count + 1
-           WHERE id = ? AND ((status = 'PENDING' AND due_at <= UTC_TIMESTAMP())
-             OR (status = 'PROCESSING' AND lease_expires_at < UTC_TIMESTAMP()))`,
+           WHERE id = ? AND status = 'PENDING' AND due_at <= UTC_TIMESTAMP()`,
           [input.leaseToken, input.leaseSeconds, candidate.id]
         );
         if (result.affectedRows) claimed.push({ ...mapOutbox(candidate), attemptCount: Number(candidate.attempt_count) + 1 });
@@ -198,7 +203,7 @@ export function createNotificationEmailRepository(pool: SqlExecutor) {
          FROM notification_email_outbox o
          INNER JOIN notifications n ON n.id = o.notification_id
          INNER JOIN users u ON u.id = o.recipient_user_id
-         WHERE o.status = 'PROCESSING' AND o.lease_token = ?`,
+         WHERE o.status = 'PROCESSING' AND o.lease_token = ? AND o.lease_expires_at > UTC_TIMESTAMP()`,
         [leaseToken]
       );
       return rows.map((row) => ({
@@ -211,10 +216,19 @@ export function createNotificationEmailRepository(pool: SqlExecutor) {
       }));
     },
 
+    async renewLease(leaseToken, leaseSeconds) {
+      const [result] = await pool.execute<ResultSetHeader>(
+        `UPDATE notification_email_outbox SET lease_expires_at = DATE_ADD(UTC_TIMESTAMP(), INTERVAL ? SECOND)
+         WHERE status = 'PROCESSING' AND lease_token = ? AND lease_expires_at > UTC_TIMESTAMP()`,
+        [leaseSeconds, leaseToken]
+      );
+      return result.affectedRows > 0;
+    },
+
     async markSent(leaseToken: string) {
       await pool.execute(
         `UPDATE notification_email_outbox SET status = 'SENT', sent_at = UTC_TIMESTAMP(), lease_token = NULL, lease_expires_at = NULL
-         WHERE status = 'PROCESSING' AND lease_token = ?`,
+         WHERE status = 'PROCESSING' AND lease_token = ? AND lease_expires_at > UTC_TIMESTAMP()`,
         [leaseToken]
       );
     },
@@ -231,7 +245,7 @@ export function createNotificationEmailRepository(pool: SqlExecutor) {
     async deferLease(leaseToken: string, dueAt: Date) {
       await pool.execute(
         `UPDATE notification_email_outbox SET status = 'PENDING', due_at = ?, lease_token = NULL, lease_expires_at = NULL
-         WHERE status = 'PROCESSING' AND lease_token = ?`,
+         WHERE status = 'PROCESSING' AND lease_token = ? AND lease_expires_at > UTC_TIMESTAMP()`,
         [dueAt, leaseToken]
       );
     },
@@ -239,7 +253,7 @@ export function createNotificationEmailRepository(pool: SqlExecutor) {
     async releaseLeaseForRetry(input: { leaseToken: string; dueAt: Date; errorCode: string; }) {
       await pool.execute(
         `UPDATE notification_email_outbox SET status = 'PENDING', due_at = ?, last_error_code = ?,
-          lease_token = NULL, lease_expires_at = NULL WHERE status = 'PROCESSING' AND lease_token = ?`,
+          lease_token = NULL, lease_expires_at = NULL WHERE status = 'PROCESSING' AND lease_token = ? AND lease_expires_at > UTC_TIMESTAMP()`,
         [input.dueAt, input.errorCode, input.leaseToken]
       );
     }

@@ -45,6 +45,7 @@ export interface NotificationEmailRepository {
   claimDue(input: { limit: number; leaseToken: string; leaseSeconds: number; }): Promise<NotificationEmailOutboxItem[]>;
   claimCoalesced(input: { item: NotificationEmailOutboxItem; leaseToken: string; leaseSeconds: number; }): Promise<void>;
   listLease(leaseToken: string): Promise<LeasedNotificationEmail[]>;
+  renewLease(leaseToken: string, leaseSeconds: number): Promise<boolean>;
   markSent(leaseToken: string): Promise<void>;
   cancelLease(leaseToken: string, errorCode?: string): Promise<void>;
   deferLease(leaseToken: string, dueAt: Date): Promise<void>;

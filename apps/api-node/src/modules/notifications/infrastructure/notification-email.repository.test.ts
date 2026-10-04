@@ -26,3 +26,20 @@ test("digest coalescing keeps event categories separate", async () => {
   assert.match(update.sql, /recipient_user_id = \? AND event_type = \?/);
   assert.deepEqual(update.params, ["lease-a", 60, "user-a", "CLAIM"]);
 });
+
+test("expired PROCESSING emails are quarantined, never reclaimed or revived by stale workers", async () => {
+  const calls: string[] = [];
+  const executor = { execute: async (sql: string) => { calls.push(sql); return [sql.includes("SELECT") ? [] : { affectedRows: 0 }, []] as never; } } as unknown as SqlExecutor;
+  const repository = createNotificationEmailRepository(executor);
+  assert.deepEqual(await repository.claimDue({ limit: 1, leaseToken: "new", leaseSeconds: 60 }), []);
+  assert.match(calls[0], /SMTP_LEASE_EXPIRED_UNCERTAIN/);
+  assert.match(calls[0], /status = 'CANCELLED'/);
+  assert.doesNotMatch(calls[1], /OR .*PROCESSING/);
+  assert.equal(await repository.renewLease("old", 60), false);
+  await repository.markSent("old");
+  await repository.releaseLeaseForRetry({ leaseToken: "old", dueAt: new Date(), errorCode: "EAUTH" });
+  for (const sql of calls.slice(2)) {
+    assert.match(sql, /lease_token = \?/);
+    assert.match(sql, /lease_expires_at > UTC_TIMESTAMP\(\)/);
+  }
+});

@@ -12,6 +12,7 @@ import type { MigrationPool } from "../migrations/migration-state.js";
 import { createCustodyRequestUseCases } from "../modules/warehouse/application/custody-request.use-cases.js";
 import { createWarehouseUseCases } from "../modules/warehouse/application/warehouse.use-cases.js";
 import { createNotificationEmailQueue } from "../modules/notifications/application/notification-email.queue.js";
+import { createNotificationEmailWorker } from "../modules/notifications/application/notification-email.worker.js";
 import { createPrivateMediaStorage } from "../shared/infrastructure/private-media-storage.js";
 import { createServices } from "../main/services.js";
 import { createApp } from "../main/app.js";
@@ -233,6 +234,42 @@ test("isolated MySQL custody: authorization, concurrency, lifecycle, proof and n
       const [notifications] = await pool.query<RowDataPacket[]>("SELECT user_id,COUNT(*) AS total FROM notifications WHERE type = 'CUSTODY_OVERDUE' AND entity_id = ? GROUP BY user_id", [request.request.id]);
       assert.ok(notifications.length > 0);
       assert.ok(notifications.every(row => Number(row.total) === 1));
+    });
+    await t.test("two email workers cannot reclaim a slow or expired SMTP attempt", async () => {
+      await pool.execute("UPDATE notification_email_outbox SET status = 'CANCELLED'");
+      const enqueue = async () => {
+        const outboxId = randomUUID();
+        await p.transaction(async db => {
+          const n = await p.notificationRepository.create({ userId: ids.owner, type: "CUSTODY_UPDATED", title: "Fixture", entityType: "POST", entityId: ids.found },db);
+          await p.notificationEmailRepository.enqueue({ id: outboxId, notificationId: n!.id, recipientUserId: ids.owner, eventType: "CUSTODY", entityType: "POST", entityId: ids.found, roomId: null, deliveryMode: "IMMEDIATE", idempotencyKey: outboxId, dueAt: new Date(Date.now()-1000) },db);
+        });
+        return outboxId;
+      };
+      const outboxId = await enqueue();
+      let sends = 0;
+      let start!: () => void, finish!: () => void;
+      const started = new Promise<void>(resolve => { start = resolve; });
+      const blocked = new Promise<void>(resolve => { finish = resolve; });
+      const options = { repository: p.notificationEmailRepository, emailDelivery: { send: async () => { sends++; start(); await blocked; return {}; } }, id: randomUUID, frontendUrl: "https://lnfs.example.invalid", logger: { warn() {} }, leaseSeconds: 3 };
+      const first = createNotificationEmailWorker(options).runOnce(1);
+      try {
+        await started;
+        await new Promise(resolve => setTimeout(resolve,4000));
+        await createNotificationEmailWorker(options).runOnce(1);
+        assert.equal(sends,1);
+      } finally { finish(); await first; }
+      const [sent] = await pool.query<RowDataPacket[]>("SELECT status FROM notification_email_outbox WHERE id = ?", [outboxId]);
+      assert.equal(sent[0].status,"SENT");
+      const expiredId = await enqueue(), oldToken = randomUUID();
+      await p.notificationEmailRepository.claimDue({ limit: 1, leaseToken: oldToken, leaseSeconds: 3 });
+      await pool.execute("UPDATE notification_email_outbox SET lease_expires_at = UTC_TIMESTAMP() - INTERVAL 1 SECOND WHERE id = ?", [expiredId]);
+      assert.deepEqual(await p.notificationEmailRepository.claimDue({ limit: 1, leaseToken: randomUUID(), leaseSeconds: 3 }),[]);
+      assert.equal(await p.notificationEmailRepository.renewLease(oldToken,3),false);
+      await p.notificationEmailRepository.markSent(oldToken);
+      await p.notificationEmailRepository.releaseLeaseForRetry({ leaseToken: oldToken, dueAt: new Date(), errorCode: "EAUTH" });
+      const [expired] = await pool.query<RowDataPacket[]>("SELECT status,last_error_code FROM notification_email_outbox WHERE id = ?", [expiredId]);
+      assert.equal(expired[0].status,"CANCELLED");
+      assert.equal(expired[0].last_error_code,"SMTP_LEASE_EXPIRED_UNCERTAIN");
     });
     await t.test("recovered legacy 053 is not an alias and unknown checksums stay blocked", async () => {
       const version = "053_custody_and_guarded_disposition.sql";

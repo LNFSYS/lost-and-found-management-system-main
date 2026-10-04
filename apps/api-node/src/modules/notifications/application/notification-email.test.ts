@@ -49,6 +49,7 @@ function repository(overrides: Partial<NotificationEmailRepository> = {}) {
     claimDue: async () => [],
     claimCoalesced: async () => undefined,
     listLease: async () => [],
+    renewLease: async () => true,
     markSent: async () => undefined,
     cancelLease: async () => undefined,
     deferLease: async () => undefined,
@@ -237,4 +238,54 @@ test("uncertain SMTP timeout is closed without retry to avoid duplicate delivery
   await worker.runOnce();
   assert.equal(cancelledWith, "ETIMEDOUT");
   assert.equal(retryReleased, false);
+});
+
+function deliveryFixture(overrides: Partial<NotificationEmailRepository> = {}) {
+  const item = { id: "leased-email", notificationId: notification.id, recipientUserId: "user-a", eventType: "CLAIM" as const, entityType: "CLAIM", entityId: notification.entityId, roomId: null, deliveryMode: "IMMEDIATE" as const, idempotencyKey: "stable-email", attemptCount: 1 };
+  let claimed = false;
+  return repository({
+    claimDue: async () => { if (claimed) return []; claimed = true; return [item]; },
+    listLease: async () => [{ ...item, email: "verified@example.com", emailVerified: true, accountActive: true, notificationUnread: true, entityAccessible: true }],
+    ...overrides
+  });
+}
+
+for (const failure of ["known rejection", "unclassified transport error", "ack write failure"]) {
+  test(`email ${failure} never retries an uncertain send`, async () => {
+    let released = false, cancelled = false, sent = 0;
+    const worker = createNotificationEmailWorker({
+      repository: deliveryFixture({
+        markSent: async () => { if (failure === "ack write failure") throw new Error("DB unavailable after send"); },
+        cancelLease: async () => { cancelled = true; },
+        releaseLeaseForRetry: async () => { released = true; }
+      }),
+      emailDelivery: { send: async () => { sent++; if (failure === "known rejection") throw new NotificationEmailDeliveryError("Rejected", "NOT_SENT", "EAUTH"); if (failure === "unclassified transport error") throw new Error("Unknown send result"); return {}; } },
+      id: () => "lease", frontendUrl: "https://lnfs.example", logger: { warn() {} }
+    });
+    await worker.runOnce();
+    assert.equal(sent, 1);
+    assert.equal(released, failure === "known rejection");
+    assert.equal(cancelled, failure !== "known rejection");
+  });
+}
+
+test("lost lease during eligibility checks does not start SMTP delivery", async () => {
+  let renewals = 0, sends = 0;
+  const worker = createNotificationEmailWorker({ repository: deliveryFixture({ renewLease: async () => ++renewals === 1 }), emailDelivery: { send: async () => { sends++; return {}; } }, id: () => "lease", frontendUrl: "https://lnfs.example", logger: { warn() {} } });
+  await worker.runOnce();
+  assert.equal(sends, 0);
+});
+
+test("heartbeat protects slow delivery and is stopped after send", async () => {
+  let renewals = 0;
+  const worker = createNotificationEmailWorker({
+    repository: deliveryFixture({ renewLease: async () => { renewals++; return true; } }),
+    emailDelivery: { send: async () => { await new Promise(resolve => setTimeout(resolve, 180)); return {}; } },
+    leaseSeconds: 0.12, id: () => "lease", frontendUrl: "https://lnfs.example", logger: { warn() {} }
+  });
+  await worker.runOnce();
+  assert.ok(renewals > 2);
+  const final = renewals;
+  await new Promise(resolve => setTimeout(resolve, 100));
+  assert.equal(renewals, final);
 });

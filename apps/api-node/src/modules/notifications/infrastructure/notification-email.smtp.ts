@@ -7,6 +7,7 @@ export function createSmtpNotificationEmailDelivery(options: {
 }): NotificationEmailDelivery {
   const transport = nodemailer.createTransport({
     host: options.smtp.host, port: options.smtp.port, secure: options.smtp.secure,
+    connectionTimeout: 15_000, greetingTimeout: 15_000, socketTimeout: 30_000, dnsTimeout: 10_000,
     auth: { user: options.smtp.user, pass: options.smtp.pass }
   });
   return {
@@ -26,7 +27,7 @@ export function createSmtpNotificationEmailDelivery(options: {
       } catch (error) {
         const providerCode = typeof (error as { code?: unknown })?.code === "string"
           ? (error as { code: string }).code : undefined;
-        const uncertain = new Set(["ETIMEDOUT", "ESOCKET", "ECONNRESET", "EPIPE"]).has(providerCode ?? "");
+        const uncertain = !new Set(["EAUTH", "EDNS", "EENVELOPE", "EMESSAGE"]).has(providerCode ?? "");
         throw new NotificationEmailDeliveryError(
           uncertain ? "SMTP provider response is uncertain" : "SMTP provider rejected delivery",
           uncertain ? "UNKNOWN" : "NOT_SENT",

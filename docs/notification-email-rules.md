@@ -1,6 +1,6 @@
 # Quy tắc gửi thông báo email LNFS
 
-Cập nhật: **21/09/2026**
+Cập nhật: **04/10/2026**
 
 ## 1. Phạm vi và trạng thái
 
@@ -63,6 +63,10 @@ Node.js là owner duy nhất của notification event, preference, outbox và de
 - Tin nhắn chat trong cùng room được coalesce thành một email trong cửa sổ chờ; mở room hoặc mark-read sẽ hủy email chưa gửi.
 - Retry dùng bounded exponential backoff với jitter; permanent failure dừng retry và được quan sát qua structured log/metric.
 - Stable `Message-ID`/idempotency headers are correlation values, not proof of provider deduplication. Known SMTP failures are retried with bounded backoff; when transport times out after the provider may have accepted the message, the outbox item is marked uncertain/quarantined and is not retried, avoiding a second send at the cost of possible non-delivery. Exactly-once requires a provider/adapter idempotency contract that the current SMTP transport does not expose.
+- Worker renews its live lease every one-third of the lease period and checks it before SMTP. Expired `PROCESSING` rows are `CANCELLED` with `SMTP_LEASE_EXPIRED_UNCERTAIN`, not reclaimed by another worker. This also conservatively cancels a crashed pre-send attempt; in-app notification is still available.
+- Only explicit `NOT_SENT` delivery errors may re-enter bounded retry. Unknown transport failures and accepted sends whose DB acknowledgement fails never retry automatically. Token/expiry fences prevent stale acknowledgement, defer or retry from reviving a cancelled row.
+- SMTP bounds are DNS 10s, connection 15s, greeting 15s and socket idle 30s. These are stage/idle timeouts, not a guarantee of total send duration. See [Nodemailer SMTP options](https://nodemailer.com/smtp).
+- Rollout must stop/drain every older API/standalone email worker before starting this version. An older worker can still reclaim expired processing rows; do not run mixed reclaim policies. Do not automatically requeue uncertain CANCELLED rows without independent provider evidence that no delivery occurred.
 - Template phải versioned; payload outbox lưu dữ liệu tối thiểu và không lưu private message/evidence để tiện render email.
 
 ## 8. Acceptance và negative tests
