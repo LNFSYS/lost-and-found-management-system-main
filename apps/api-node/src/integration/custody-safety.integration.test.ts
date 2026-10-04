@@ -134,6 +134,19 @@ test("isolated MySQL custody: authorization, concurrency, lifecycle, proof and n
     assert.ok(messages.length >= 8);
     assert.ok(messages.every(n => !String(n.body).includes(input.reason)));
     assert.ok(messages.filter(n => n.event_type).every(n => n.event_type === "CUSTODY"));
+    await t.test("an expired undisposed walk-in can be returned with private evidence, but not under legal hold", async () => {
+      const expired = await warehouse.createItem({ itemName: "Expired fixture", handoverPointId: point, conditionNotes: "Good", receivedAt: new Date(Date.now()-200*86400000) },ids.staff);
+      await warehouse.updateItem(expired.id,{ status: "EXPIRED" },ids.staff);
+      await assert.rejects(warehouse.updateItem(expired.id,{ status: "RETURNED" },ids.staff));
+      const proof = await warehouse.uploadProof(expired.id,{ buffer: Buffer.from([0xff,0xd8,0xff,0xe0]), size: 4, mimetype: "image/jpeg" },ids.staff);
+      const input = { receiverName: "Offline owner", receiverIdentity: "ID-123456", receiverPhone: "0359123456", proofImage: proof.id };
+      await warehouse.legalHold(expired.id,true,"Check pending",ids.approver);
+      await assert.rejects(warehouse.returnItem(expired.id,input,ids.staff));
+      assert.equal((await p.warehouseRepository.findProof(proof.id,undefined))?.attached,false);
+      await warehouse.legalHold(expired.id,false,"Check cleared",ids.approver);
+      assert.equal((await warehouse.returnItem(expired.id,input,ids.staff))?.status,"RETURNED");
+      assert.ok((await warehouse.listLogs(expired.id)).some(log => log.fromStatus === "EXPIRED" && log.toStatus === "RETURNED"));
+    });
     await t.test("disposition requires separate Admin approval and rechecks legal hold, retention and disputes", async () => {
       await pool.execute("INSERT INTO user_roles (user_id,role_code) VALUES (?,'ADMIN')", [ids.finder]);
       const record = await warehouse.createItem({ itemName: "Unclaimed fixture", handoverPointId: point, conditionNotes: "Good", receivedAt: new Date(Date.now()-200*86400000) },ids.staff);

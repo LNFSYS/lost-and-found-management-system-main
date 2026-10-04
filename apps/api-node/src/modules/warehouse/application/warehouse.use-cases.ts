@@ -216,7 +216,7 @@ export function createWarehouseUseCases(options: WarehouseDependencies) {
           return [];
         }
         if (current.postId) await warehouseRepository.lockPhysicalPost(current.postId, connection);
-        if (!["STORED","RECEIVED","CLAIMED"].includes(current.status) || current.legalHold) {
+        if (!canTransitionWarehouseStatus(current.status, "RETURNED") || current.legalHold) {
           throw new AppError("conflict", `Vật phẩm đang ở trạng thái ${warehouseStatusLabels[current.status as WarehouseStatus]} nên không thể thao tác trả lại`);
         }
         if (current.reservedClaimId && !claimId) throw new AppError("conflict", "Vật phẩm đang được giữ cho một claim; hãy liên kết claim khi trả hàng");

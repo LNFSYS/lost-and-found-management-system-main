@@ -276,8 +276,10 @@ for (const viewport of [{ width: 1440, height: 1000 }, { width: 390, height: 844
   });
 }
 
-test("warehouse return retains server field errors and can retry an in-person return", async ({ page }) => {
+for (const status of ["RECEIVED", "EXPIRED"]) {
+test(`warehouse ${status} return retains server field errors and can retry an in-person return`, async ({ page }) => {
   await prepare(page, {});
+  await page.route(/\/api\/staff\/warehouse-items(?:\?.*)?$/, route => route.fulfill({ json: { ...dashboard(), items: [{ ...item, status }] } }));
   await page.route("**/api/staff/warehouse-items/*/return-recipients", route => route.fulfill({ json: { recipients: [] } }));
   const pageErrors: string[] = [];
   page.on("pageerror", error => pageErrors.push(error.message));
@@ -324,3 +326,4 @@ test("warehouse return retains server field errors and can retry an in-person re
   expect(attempts).toBe(2);
   expect(pageErrors).toEqual([]);
 });
+}

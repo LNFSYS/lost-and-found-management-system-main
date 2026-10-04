@@ -1137,7 +1137,7 @@ function WarehouseInventoryTab({
                     <button type="button" className="secondary-button warehouse-select-button" onClick={() => selectItem(item)}>
                       <History size={14} /> Chi tiết & Nhật ký
                     </button>
-                    {["RECEIVED", "STORED", "CLAIMED"].includes(item.status) && (
+                    {["RECEIVED", "STORED", "CLAIMED", "EXPIRED"].includes(item.status) && (
                       <button type="button" className="primary-button warehouse-select-button" onClick={() => openReturnModal(item)}>
                         <UserCheck size={14} /> Trả cho chủ sở hữu
                       </button>

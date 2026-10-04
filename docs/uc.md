@@ -201,7 +201,7 @@ Completed UC work above is not reassigned. The 71 Partial/Planned UCs in the ret
 | UC-052 | Receive a warehouse item | Staff / Admin | Create a custody record, validate its storage location, assign the initial state, and record the receiving action. | Implemented |
 | UC-053 | Update warehouse item details | Staff / Admin | Update permitted warehouse information such as location, condition notes, and storage code. | Implemented |
 | UC-054 | Move an item to stored state | Staff / Admin | Apply the valid warehouse state transition from received to stored and append a storage log. | Implemented |
-| UC-055 | Confirm a warehouse return | Staff / Admin | Confirm the actual verified recipient, private return evidence and authorized completion; mark the item returned and append the custody log. Branch hardening evidence is separate from dev status. | Implemented |
+| UC-055 | Confirm a warehouse return | Staff / Admin | Return retained RECEIVED/STORED/CLAIMED/EXPIRED property after verifying the actual recipient, recording identity/contact and private proof, and checking reservations, competing cases and legal hold. Online claims require explicit Finder or post-intake Staff verification; offline return creates no synthetic claim or feedback participant. | Implemented |
 | UC-056 | View warehouse storage logs | Staff / Admin | View the immutable action history for a warehouse item. | Implemented |
 | UC-057 | Calculate item retention deadline | System | Calculate and store the retention deadline from the receiving time and configured category policy. | Implemented |
 | UC-141 | Request transfer to staff custody | Finder | Ask to transfer a found item to an official handover point when direct return is unsuitable. | Planned |

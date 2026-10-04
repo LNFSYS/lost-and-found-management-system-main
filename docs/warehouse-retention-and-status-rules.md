@@ -42,6 +42,8 @@ Request and acceptance leave the Finder holding the item. Only Staff physical in
 
 `PENDING_APPROVAL` is retained for legacy data; a custody request is not a warehouse item in that state. Terminal outcomes cannot be reopened by PATCH. Releasing a CLAIMED reservation to STORED is a distinct action with reason, storage location, no active blocker/legal hold and audit; the old reservation history remains.
 
+EXPIRED property is still physically retained until disposition. Canonical return can transition it to RETURNED, with the same identity/contact, verified online claimant when linked, private proof, reservation, dispute and legal-hold checks as other retained states. The original retention deadline remains unchanged. Generic PATCH does not bypass this return contract.
+
 ## Authorization and Integrity
 
 - Transfer requires an owned, undeleted, active FOUND post and valid consented claim/room linkage when supplied. LOST chat is allowed, but ownership/custody needs a verified physical FOUND source owned by the Finder.
@@ -49,7 +51,7 @@ Request and acceptance leave the Finder holding the item. Only Staff physical in
 - Post/request/item locks and unique active-post constraints prevent double request/intake. An actor-scoped request retry remains valid after completed return. A retry returns the same intake/completion; a changed recipient/proof set conflicts.
 - Finder can cancel their own PENDING/ACCEPTED request; Staff can accept/reject/intake/cancel according to role and state. Unrelated users cannot read details/audit.
 - Generic PATCH cannot assign CLAIMED, RETURNED, DISPOSED, DONATED or TRANSFERRED. Admin controls legal hold and disposition request/approval; another Admin approves. Staff/Admin execute only an item-bound approved action, with current retention, case, dispute, hold and proof checks in the transaction. Denied execution attempts are logged without private evidence. A canonical return excludes only its own completing claim/appointment from active-case blockers; competing cases and pending disputes still block return.
-- Walk-in without a linked verified FOUND claim is not eligible for the claim-based return/feedback path. Do not invent a participant or use a raw terminal status to open feedback. A separate manual-return contract is still needed if that workflow is required.
+- Offline walk-in return records the recipient name, contact, identity and private proof without requiring an account or inventing a claim. Active online claims/disputes still block unlinked return. Only a real linked participant-based completed return authorizes feedback.
 
 ## Proof and Delivery
 
