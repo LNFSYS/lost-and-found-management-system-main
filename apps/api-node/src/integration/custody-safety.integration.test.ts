@@ -89,8 +89,22 @@ test("isolated MySQL custody: authorization, concurrency, lifecycle, proof and n
     for (const status of ["RETURNED","CLAIMED","DISPOSED","DONATED","TRANSFERRED"] as const) await assert.rejects(warehouse.updateItem(itemId,{ status },ids.staff));
     await assert.rejects(warehouse.updateItem(itemId,{ status: "EXPIRED" },ids.staff));
     await t.test("canonical verified return uses private proof and opens existing feedback contract", async () => {
-      await pool.execute("UPDATE claims SET status = 'ACCEPTED' WHERE id = ?", [ids.claim]);
-      await pool.execute("INSERT INTO claim_audit_events (id,claim_id,actor_id,action,metadata_json) VALUES (?,?,?,'VERIFICATION_ACCEPTED',?)", [randomUUID(),ids.claim,ids.finder,JSON.stringify({ decision: "VERIFY_FOR_MEETUP" })]);
+      const historyId = randomUUID();
+      await pool.execute("INSERT INTO claim_audit_events (id,claim_id,actor_id,action,metadata_json) VALUES (?,?,?,'CUSTODY_ESCALATED',?)", [historyId,ids.claim,ids.finder,JSON.stringify({ decision: "ESCALATE_TO_CUSTODY" })]);
+      assert.equal((await warehouse.returnClaimReviews(itemId,ids.staff)).claims[0].verified,false);
+      const verification = { claimId: ids.claim, recipientId: ids.owner, verified: true, reason: "Checked private key engraving and recipient ID in person" };
+      await assert.rejects(warehouse.verifyCustodyClaim(itemId,verification,ids.finder));
+      await warehouse.legalHold(itemId,true,"Review pending",ids.approver);
+      await assert.rejects(warehouse.verifyCustodyClaim(itemId,verification,ids.staff));
+      await warehouse.legalHold(itemId,false,"Review cleared",ids.approver);
+      await Promise.all([warehouse.verifyCustodyClaim(itemId,verification,ids.staff),warehouse.verifyCustodyClaim(itemId,verification,ids.staff)]);
+      const [history] = await pool.query<RowDataPacket[]>("SELECT id,actor_id,action FROM claim_audit_events WHERE claim_id = ?", [ids.claim]);
+      assert.ok(history.some(e => e.id === historyId && e.actor_id === ids.finder && e.action === "CUSTODY_ESCALATED"));
+      assert.equal(history.filter(e => e.action === "STAFF_CUSTODY_VERIFIED").length,1);
+      const [claimState] = await pool.query<RowDataPacket[]>("SELECT status,finder_decision FROM claims WHERE id = ?", [ids.claim]);
+      assert.equal(claimState[0].status,"ACCEPTED");
+      assert.equal(claimState[0].finder_decision,"ACCEPTED");
+      assert.equal((await warehouse.returnRecipients(itemId,ids.staff)).recipients[0].recipientId,ids.owner);
       await warehouse.reserveItem(itemId,ids.claim,ids.owner,ids.staff);
       const buffer = Buffer.from([0xff,0xd8,0xff,0xe0]);
       const proof = await warehouse.uploadProof(itemId,{ buffer, size: buffer.length, mimetype: "image/jpeg" },ids.staff);

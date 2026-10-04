@@ -59,6 +59,7 @@ function dashboard() {
 }
 
 async function prepare(page: Page, calls: { created?: unknown; patched?: unknown }) {
+  await page.route("**/api/staff/warehouse-items/*/return-claim-reviews", route => route.fulfill({ json: { claims: [] } }));
   await page.route(/\/api\/staff\/custody-requests(?:\?.*)?$/, route => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ items: [], total: 0, page: 1, pageSize: 20, counts: { PENDING: 0, ACCEPTED: 0, INTAKED: 0, REJECTED: 0, CANCELLED: 0 } }) }));
   await page.route("**/api/auth/refresh", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(staffSession) }));
   await page.route("**/api/staff/warehouse-items/catalog", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(catalog) }));
@@ -126,6 +127,45 @@ test("staff can see warehouse counts and receive an item with condition notes", 
   expect(calls.created?.conditionNotes).toBe("Nguyên vẹn");
   expect(calls.created?.handoverPointId).toBe("hp-1");
 });
+
+for (const width of [1440, 390]) {
+  test(`Staff verifies a custody claim in the return modal at ${width}px`, async ({ page }, testInfo) => {
+    await page.setViewportSize({ width, height: 950 });
+    await prepare(page, {});
+    const claim = { claimId: "claim-online", recipientId: "owner", fullName: "Nguyễn An", description: "Ví có chi tiết riêng bên trong", status: "CONVERSATION_OPEN", verified: false };
+    await page.route("**/api/staff/warehouse-items/*/return-claim-reviews", route => route.fulfill({ json: { claims: [claim] } }));
+    let verified = false;
+    await page.route("**/api/staff/warehouse-items/*/verify-claim", route => {
+      const input = route.request().postDataJSON();
+      expect(input.claimId).toBe(claim.claimId);
+      expect(input.recipientId).toBe(claim.recipientId);
+      expect(input.verified).toBe(true);
+      expect(input.reason.length).toBeGreaterThanOrEqual(10);
+      verified = true;
+      return route.fulfill({ json: { claims: [{ ...claim, verified: true, status: "ACCEPTED" }] } });
+    });
+    await page.goto("/staff");
+    await page.getByRole("button", { name: "Kho tài sản", exact: true }).click();
+    await page.getByRole("button", { name: "Trả cho chủ sở hữu", exact: true }).click();
+    const modal = page.locator(".custody-modal");
+    await modal.getByLabel("Liên kết claim trực tuyến (không bắt buộc)").selectOption(claim.claimId);
+    await modal.getByRole("button", { name: "Xác minh claim tại quầy", exact: true }).click();
+    await expect(modal.locator("#return-claimReviewReason-error")).toBeVisible();
+    expect(verified).toBe(false);
+    await modal.getByLabel("Nội dung đối chiếu").fill("Đã đối chiếu đặc điểm riêng và giấy tờ tại quầy");
+    await modal.getByLabel("Tôi đã đối chiếu quyền sở hữu tại quầy").check();
+    await modal.getByRole("button", { name: "Xác minh claim tại quầy", exact: true }).click();
+    await expect(modal.getByRole("button", { name: "Xác minh claim tại quầy", exact: true })).toHaveCount(0);
+    expect(verified).toBe(true);
+    await expect(modal.getByLabel("Liên kết claim trực tuyến (không bắt buộc)")).toContainText("Đã xác minh");
+    await expect(modal.getByLabel(/^Họ và tên người nhận/)).toHaveValue(claim.fullName);
+    await page.screenshot({ path: testInfo.outputPath(`custody-verified-${width}.png`) });
+    expect(await modal.evaluate(el => el.scrollWidth <= el.clientWidth + 1)).toBeTruthy();
+    const submit = modal.getByRole("button", { name: "Xác nhận Đã trả hàng" });
+    await submit.scrollIntoViewIfNeeded();
+    expect(await submit.evaluate(el => el.getBoundingClientRect().left >= el.parentElement!.getBoundingClientRect().left)).toBeTruthy();
+  });
+}
 
 test("staff can open storage logs and update item state", async ({ page }) => {
   const calls: { patched?: any } = {};

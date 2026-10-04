@@ -123,6 +123,15 @@ export interface WarehouseItemLock {
   reservedClaimId: string | null;
 }
 
+export interface WarehouseClaimReview {
+  claimId: string;
+  recipientId: string;
+  fullName: string;
+  description: string | null;
+  status: string;
+  verified: boolean;
+}
+
 export interface WarehouseRepository {
   isStaff(actorId: string, db?: TransactionContext): Promise<boolean>;
   isAdmin(actorId: string, db?: TransactionContext): Promise<boolean>;
@@ -144,6 +153,9 @@ export interface WarehouseRepository {
   hasBlockingCases(postId: string | null, db: TransactionContext, completingClaimId?: string): Promise<boolean>;
   verifiedRecipient(claimId: string, postId: string | null, recipientId: string, db: TransactionContext): Promise<boolean>;
   listVerifiedRecipients(postId: string | null): Promise<Array<{ claimId: string; recipientId: string; fullName: string; }>>;
+  listReturnClaimReviews(postId: string | null): Promise<WarehouseClaimReview[]>;
+  lockReturnClaim(claimId: string, postId: string, db: TransactionContext): Promise<WarehouseClaimReview | null>;
+  recordStaffVerification(input: { id: string; itemId: string; claimId: string; recipientId: string; actorId: string; fromStatus: string; reason: string; }, db: TransactionContext): Promise<void>;
   reserve(itemId: string, claimId: string | null, db: TransactionContext): Promise<void>;
   completeReturn(input: {
     id: string;

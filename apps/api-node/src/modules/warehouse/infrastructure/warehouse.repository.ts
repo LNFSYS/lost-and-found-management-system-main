@@ -15,6 +15,25 @@ import type { WarehouseStatus } from "../application/warehouse.dto.js";
 
 type DbExecutor = SqlExecutor | TransactionContext;
 
+const verifiedClaimSql = `EXISTS(SELECT 1 FROM claim_audit_events e WHERE e.claim_id = c.id AND (
+  (e.action IN ('VERIFICATION_ACCEPTED','VERIFICATION_DECISION_CORRECTED') AND JSON_UNQUOTE(JSON_EXTRACT(e.metadata_json,'$.decision')) = 'VERIFY_FOR_MEETUP')
+  OR (e.action = 'STAFF_CUSTODY_VERIFIED' AND JSON_UNQUOTE(JSON_EXTRACT(e.metadata_json,'$.decision')) = 'VERIFY_FOR_CUSTODY_RETURN'
+    AND EXISTS(SELECT 1 FROM warehouse_items wi WHERE wi.id = JSON_UNQUOTE(JSON_EXTRACT(e.metadata_json,'$.warehouseItemId'))
+      AND wi.post_id = found.id AND wi.deleted_at IS NULL))
+))`;
+
+const returnClaimReviewSql = `SELECT c.id AS claim_id,recipient.user_id AS recipient_id,u.full_name,c.description,c.status,
+  (c.status = 'ACCEPTED' AND ${verifiedClaimSql}) AS verified FROM claims c
+  JOIN posts found ON found.id = COALESCE(c.source_found_post_id,c.post_id) AND found.type = 'FOUND' AND found.deleted_at IS NULL
+  JOIN claim_participants recipient ON recipient.claim_id = c.id AND recipient.participant_role = 'CLAIMANT' AND recipient.user_id <> found.user_id AND recipient.consent_status = 'ACCEPTED'
+  JOIN claim_participants finder ON finder.claim_id = c.id AND finder.user_id = found.user_id AND finder.participant_role = 'FINDER' AND finder.consent_status = 'ACCEPTED'
+  JOIN users u ON u.id = recipient.user_id AND u.status = 'ACTIVE'
+  WHERE found.id = ? AND c.status IN ('CONVERSATION_OPEN','NEED_MORE_INFO','ACCEPTED')`;
+
+function mapClaimReview(row: RowDataPacket) {
+  return { claimId: String(row.claim_id), recipientId: String(row.recipient_id), fullName: String(row.full_name ?? "Người nhận"), description: row.description ? String(row.description) : null, status: String(row.status), verified: Boolean(row.verified) };
+}
+
 interface WarehouseItemRow extends RowDataPacket {
   id: string;
   post_id: string | null;
@@ -274,22 +293,31 @@ export function createWarehouseRepository(pool: SqlExecutor) {
     async verifiedRecipient(claimId, postId, recipientId, db) {
       const [rows] = await sqlExecutor(db).execute<RowDataPacket[]>(
         `SELECT c.id FROM claims c JOIN posts found ON found.id = COALESCE(c.source_found_post_id,c.post_id) AND found.type = 'FOUND'
-         JOIN claim_participants recipient ON recipient.claim_id = c.id AND recipient.user_id = ? AND recipient.consent_status = 'ACCEPTED'
-         JOIN claim_participants finder ON finder.claim_id = c.id AND finder.user_id = found.user_id AND finder.consent_status = 'ACCEPTED'
+         JOIN claim_participants recipient ON recipient.claim_id = c.id AND recipient.user_id = ? AND recipient.participant_role = 'CLAIMANT' AND recipient.consent_status = 'ACCEPTED'
+         JOIN claim_participants finder ON finder.claim_id = c.id AND finder.user_id = found.user_id AND finder.participant_role = 'FINDER' AND finder.consent_status = 'ACCEPTED'
          WHERE c.id = ? AND found.id = ? AND found.deleted_at IS NULL AND c.status = 'ACCEPTED' AND recipient.user_id <> found.user_id
-         AND EXISTS(SELECT 1 FROM claim_audit_events e WHERE e.claim_id = c.id AND e.action IN ('VERIFICATION_ACCEPTED','VERIFICATION_DECISION_CORRECTED')
-           AND JSON_UNQUOTE(JSON_EXTRACT(e.metadata_json,'$.decision')) = 'VERIFY_FOR_MEETUP') LIMIT 1`, [recipientId,claimId,postId]);
+         AND ${verifiedClaimSql} LIMIT 1`, [recipientId,claimId,postId]);
       return rows.length === 1;
     },
     async listVerifiedRecipients(postId) {
       if (!postId) return [];
-      const [rows] = await pool.execute<RowDataPacket[]>(`SELECT c.id AS claim_id,u.id AS recipient_id,u.full_name FROM claims c
-        JOIN posts found ON found.id = COALESCE(c.source_found_post_id,c.post_id) AND found.type = 'FOUND' AND found.deleted_at IS NULL
-        JOIN claim_participants cp ON cp.claim_id = c.id AND cp.user_id <> found.user_id AND cp.consent_status = 'ACCEPTED'
-        JOIN users u ON u.id = cp.user_id AND u.status = 'ACTIVE' WHERE found.id = ? AND c.status = 'ACCEPTED'
-        AND EXISTS(SELECT 1 FROM claim_audit_events e WHERE e.claim_id = c.id AND e.action IN ('VERIFICATION_ACCEPTED','VERIFICATION_DECISION_CORRECTED')
-          AND JSON_UNQUOTE(JSON_EXTRACT(e.metadata_json,'$.decision')) = 'VERIFY_FOR_MEETUP')`, [postId]);
+      const [rows] = await pool.execute<RowDataPacket[]>(`${returnClaimReviewSql} AND c.status = 'ACCEPTED' AND ${verifiedClaimSql}`, [postId]);
       return rows.map(row => ({ claimId: String(row.claim_id), recipientId: String(row.recipient_id), fullName: String(row.full_name ?? "Người nhận") }));
+    },
+    async listReturnClaimReviews(postId) {
+      if (!postId) return [];
+      const [rows] = await pool.execute<RowDataPacket[]>(`${returnClaimReviewSql} ORDER BY c.created_at,c.id`, [postId]);
+      return rows.map(mapClaimReview);
+    },
+    async lockReturnClaim(claimId, postId, db) {
+      const [rows] = await sqlExecutor(db).execute<RowDataPacket[]>(`${returnClaimReviewSql} AND c.id = ? FOR UPDATE`, [postId,claimId]);
+      return rows[0] ? mapClaimReview(rows[0]) : null;
+    },
+    async recordStaffVerification(input, db) {
+      const executor = sqlExecutor(db);
+      await executor.execute("UPDATE claims SET status = 'ACCEPTED', accepted_at = COALESCE(accepted_at,UTC_TIMESTAMP()), updated_at = UTC_TIMESTAMP() WHERE id = ?", [input.claimId]);
+      await executor.execute("INSERT INTO claim_audit_events (id,claim_id,actor_id,action,from_status,to_status,metadata_json) VALUES (?,?,?,'STAFF_CUSTODY_VERIFIED',?,'ACCEPTED',?)",
+        [input.id,input.claimId,input.actorId,input.fromStatus,JSON.stringify({ decision: "VERIFY_FOR_CUSTODY_RETURN", warehouseItemId: input.itemId, recipientId: input.recipientId, reason: input.reason, verificationMode: "IN_PERSON" })]);
     },
     async reserve(itemId, claimId, db) {
       await sqlExecutor(db).execute("UPDATE warehouse_items SET reserved_claim_id = ? WHERE id = ?", [claimId,itemId]);

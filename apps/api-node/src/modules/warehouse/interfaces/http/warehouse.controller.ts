@@ -7,7 +7,8 @@ import {
   listWarehouseItemsQuerySchema,
   updateWarehouseItemSchema,
   warehouseItemIdParamSchema,
-  returnWarehouseItemSchema
+  returnWarehouseItemSchema,
+  verifyCustodyClaimSchema
 } from "./warehouse.validator.js";
 
 export function createWarehouseController({ warehouseService }: {
@@ -61,6 +62,12 @@ export function createWarehouseController({ warehouseService }: {
     },
     async returnRecipients(request: Request, response: Response) {
       response.json(await warehouseService.returnRecipients(routeId(request), actorId(request)));
+    },
+    async returnClaimReviews(request: Request, response: Response) {
+      response.json(await warehouseService.returnClaimReviews(routeId(request), actorId(request)));
+    },
+    async verifyCustodyClaim(request: Request, response: Response) {
+      response.json(await warehouseService.verifyCustodyClaim(routeId(request), verifyCustodyClaimSchema.parse(request.body), actorId(request)));
     },
     async releaseReservation(request: Request, response: Response) {
       const { reason } = z.object({ reason: z.string().trim().min(3).max(1000) }).parse(request.body);

@@ -94,6 +94,7 @@ See [warehouse rules](warehouse-retention-and-status-rules.md) for project polic
 | BR-61 | FR-MATCH-06 | UC-026–UC-028 | post.controller.ts, post.use-cases.ts, matching.use-cases.ts; http-runtime-scenario.ts verifies more than 20 matches, page 2 and owner-scoped recalculate |
 | BR-62 | FR-MATCH-07 | UC-098, UC-099 | matching use cases/repository, post-matches-page.tsx; application + real HTTP dismissal/feedback replay tests, story-post-form.spec.ts; Partial until reviewed merge/manual QA |
 | BR-63 | FR-MATCH-08 | UC-100 | matching-refresh.worker.ts, matching.repository.ts, main/server.ts, 060_matching_refresh_leases.sql; matching-refresh.integration.test.ts fences two SQL connections, expired completion/failure/persistence, closed posts and five-attempt exhaustion |
+| BR-65 | FR-VERIFY-03 | UC-114, UC-055, UC-146 | warehouse.verifyCustodyClaim, return-claim-reviews/verify-claim routes, Staff return modal; custody-verification.test.ts, custody-safety.integration.test.ts and staff-page.spec.ts. Only post-intake approval is delivered; no automatic intake ownership decision. |
 | BR-64 | NFR-DATA-01–02 | UC-098–UC-100 | matching-recovery-supersession.ts, migration runner/preflight, immutable 054/057, additive 060; matching-refresh.integration.test.ts verifies three upgrade paths, ledger/timestamps/legacy labels and schema drift |
 
 No new UC is introduced. UC-097 notification delivery remains Planned and is not conflated with this scheduler. Evidence and rollout limitations: [matching-feedback-review.md](matching-feedback-review.md).

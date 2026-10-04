@@ -756,7 +756,7 @@ export function createClaimRepository(pool: SqlExecutor) {
     async listVerificationAuditEvents(claimId: string, queryable: Queryable = pool) {
       const actions = [
         "CONVERSATION_OPENED", "QUESTION_SENT", "ANSWER_SUBMITTED", "MORE_INFO_REQUESTED", "VERIFICATION_ACCEPTED",
-        "VERIFICATION_DECLINED", "CUSTODY_ESCALATED", "VERIFICATION_DECISION_CORRECTED"
+        "VERIFICATION_DECLINED", "CUSTODY_ESCALATED", "VERIFICATION_DECISION_CORRECTED", "STAFF_CUSTODY_VERIFIED"
       ];
       const placeholders = actions.map(() => "?").join(", ");
       const [rows] = await sqlExecutor(queryable).execute<ClaimAuditRow[]>(

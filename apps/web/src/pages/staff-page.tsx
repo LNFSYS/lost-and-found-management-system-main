@@ -836,16 +836,21 @@ function WarehouseInventoryTab({
   const [logs, setLogs] = useState<WarehouseStorageLog[]>([]);
   const [updateModalOpen, setUpdateModalOpen] = useState(false);
   const [returnTargetItem, setReturnTargetItem] = useState<WarehouseItem | null>(null);
-  const [returnRecipients, setReturnRecipients] = useState<Array<{ claimId: string; recipientId: string; fullName: string }>>([]);
+  const [returnRecipients, setReturnRecipients] = useState<Array<{ claimId: string; recipientId: string; fullName: string; description: string | null; verified: boolean }>>([]);
+  const [claimReviewsLoading, setClaimReviewsLoading] = useState(false);
+  const [claimReviewReason, setClaimReviewReason] = useState("");
+  const [claimReviewConfirmed, setClaimReviewConfirmed] = useState(false);
+  const [claimReviewBusy, setClaimReviewBusy] = useState(false);
   useEffect(() => {
     let active = true;
     setReturnRecipients([]);
     if (returnTargetItem) {
-      void api.getWarehouseReturnRecipients(returnTargetItem.id).then(value => {
-        if (active) setReturnRecipients(value.recipients);
-      }).catch(() => {
-        if (active) setReturnRecipients([]);
-      });
+      setClaimReviewsLoading(true);
+      void api.getWarehouseReturnClaimReviews(returnTargetItem.id).then(value => {
+        if (active) setReturnRecipients(value.claims);
+      }).catch(reason => {
+        if (active) setReturnError(messageOf(reason, "Không thể tải claim của vật phẩm"));
+      }).finally(() => { if (active) setClaimReviewsLoading(false); });
     }
     return () => { active = false; };
   }, [returnTargetItem?.id]);
@@ -982,8 +987,31 @@ function WarehouseInventoryTab({
     setReturnErrors({});
     setReturnError("");
     setReturnVerified(false);
+    setClaimReviewReason("");
+    setClaimReviewConfirmed(false);
     setReturnTargetItem(item);
     setReturnForm({ claimId: "", recipientId: "", receiverName: "", receiverIdentity: "", receiverPhone: "", proofImages: [], note: "" });
+  }
+
+  async function verifyReturnClaim() {
+    if (!returnTargetItem || claimReviewBusy) return;
+    const reason = claimReviewReason.trim();
+    const errors: Record<string, string> = {};
+    if (reason.length < 10 || reason.length > 1000) errors.claimReviewReason = "Nội dung đối chiếu phải có từ 10 đến 1000 ký tự.";
+    if (!claimReviewConfirmed) errors.claimReviewConfirmed = "Cần xác nhận đã đối chiếu quyền sở hữu tại quầy.";
+    setReturnErrors(errors);
+    if (Object.keys(errors).length) return;
+    const itemId = returnTargetItem.id;
+    setClaimReviewBusy(true);
+    setReturnError("");
+    try {
+      const result = await api.verifyWarehouseClaim(itemId, { claimId: returnForm.claimId, recipientId: returnForm.recipientId, verified: true, reason });
+      setReturnRecipients(result.claims);
+    } catch (reason) {
+      setReturnError(messageOf(reason, "Không thể xác minh claim tại quầy"));
+    } finally {
+      setClaimReviewBusy(false);
+    }
   }
 
   async function submitReturn(event: FormEvent) {
@@ -996,6 +1024,8 @@ function WarehouseInventoryTab({
     }
     if (returnForm.proofImages.length < 1 || returnForm.proofImages.length > 5) errors.proofImage = "Vui lòng tải lên từ 1 đến 5 ảnh bằng chứng.";
     if (!returnVerified) errors.verified = "Vui lòng xác nhận đã đối chiếu người nhận và bằng chứng bàn giao.";
+    if (returnForm.claimId && !returnRecipients.some(recipient => recipient.claimId === returnForm.claimId && recipient.verified)) errors.claimId = "Cần xác minh claim tại quầy trước khi trả đồ.";
+    if (claimReviewsLoading || claimReviewBusy) errors.claimId = "Vui lòng đợi hoàn tất kiểm tra claim.";
     setReturnErrors(errors);
     setReturnError("");
     if (Object.keys(errors).length) return;
@@ -1309,9 +1339,9 @@ function WarehouseInventoryTab({
       )}
 
       {returnTargetItem && (
-        <div className="custody-modal-overlay" onClick={() => setReturnTargetItem(null)}>
+        <div className="custody-modal-overlay" onClick={() => { if (!claimReviewBusy && !pendingAction) setReturnTargetItem(null); }}>
           <div
-            className="custody-modal"
+            className="custody-modal custody-modal--warehouse-return"
             style={{ maxWidth: "760px", width: "95%", maxHeight: "90vh", display: "flex", flexDirection: "column" }}
             onClick={(e) => e.stopPropagation()}
           >
@@ -1321,7 +1351,7 @@ function WarehouseInventoryTab({
                 <h3 style={{ margin: 0, fontSize: "1.05rem", fontWeight: 700 }}>Xác nhận trả hàng cho chủ sở hữu</h3>
                 <p style={{ margin: 0, fontSize: "0.82rem", color: "#64748b" }}>Vật phẩm: <strong style={{ color: "#0f172a" }}>{returnTargetItem.itemName}</strong></p>
               </div>
-              <button type="button" className="close-btn" onClick={() => setReturnTargetItem(null)}><X size={18} /></button>
+              <button type="button" className="close-btn" aria-label="Đóng trả hàng" disabled={claimReviewBusy || Boolean(pendingAction)} onClick={() => setReturnTargetItem(null)}><X size={18} /></button>
             </div>
 
             <form noValidate className="admin-form modal-form" style={{ padding: "16px 20px", overflowY: "auto", flex: 1, display: "flex", flexDirection: "column", gap: "12px" }} onSubmit={submitReturn}>
@@ -1350,16 +1380,32 @@ function WarehouseInventoryTab({
               {returnRecipients.length > 0 && (
                 <label className="input-field" style={{ margin: 0 }}>
                   <span>Liên kết claim trực tuyến (không bắt buộc)</span>
-                  <select value={returnForm.claimId} onChange={(event) => {
+                  <select value={returnForm.claimId} disabled={claimReviewBusy} onChange={(event) => {
                     const recipient = returnRecipients.find(value => value.claimId === event.target.value);
+                    setClaimReviewReason("");
+                    setClaimReviewConfirmed(false);
                     setReturnForm(prev => ({ ...prev, claimId: recipient?.claimId ?? "", recipientId: recipient?.recipientId ?? "", receiverName: recipient?.fullName ?? prev.receiverName }));
                   }}>
                     <option value="">Trả trực tiếp, không có claim</option>
-                    {returnRecipients.map(recipient => <option key={recipient.claimId} value={recipient.claimId}>{recipient.fullName} · {recipient.claimId.slice(0, 8)}</option>)}
+                    {returnRecipients.map(recipient => <option key={recipient.claimId} value={recipient.claimId}>{recipient.fullName} · {recipient.verified ? "Đã xác minh" : "Chưa xác minh"} · {recipient.claimId.slice(0, 8)}</option>)}
                   </select>
                   {returnFieldError("claimId")}
                   {returnFieldError("recipientId")}
                 </label>
+              )}
+              {returnRecipients.some(recipient => recipient.claimId === returnForm.claimId && !recipient.verified) && (
+                <section aria-label="Xác minh claim tại quầy">
+                  <h4>Xác minh quyền sở hữu tại quầy</h4>
+                  <p>{returnRecipients.find(recipient => recipient.claimId === returnForm.claimId)?.description}</p>
+                  <label className="input-field">
+                    <span>Nội dung đối chiếu</span>
+                    <textarea maxLength={1000} rows={3} value={claimReviewReason} onChange={event => setClaimReviewReason(event.target.value)} aria-invalid={Boolean(returnErrors.claimReviewReason)} placeholder="Đặc điểm riêng, phụ kiện hoặc thông tin đã đối chiếu; không ghi số giấy tờ tại đây" />
+                    {returnFieldError("claimReviewReason")}
+                  </label>
+                  <label className="warehouse-return-verification"><input type="checkbox" checked={claimReviewConfirmed} onChange={event => setClaimReviewConfirmed(event.target.checked)} />Tôi đã đối chiếu quyền sở hữu tại quầy</label>
+                  {returnFieldError("claimReviewConfirmed")}
+                  <button type="button" className="secondary-button" disabled={claimReviewBusy || claimReviewsLoading} onClick={() => void verifyReturnClaim()}><UserCheck size={17} />{claimReviewBusy ? "Đang xác minh..." : "Xác minh claim tại quầy"}</button>
+                </section>
               )}
               <div className="warehouse-return-grid">
                 <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>

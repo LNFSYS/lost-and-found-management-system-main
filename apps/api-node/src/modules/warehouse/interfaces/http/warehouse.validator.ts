@@ -67,4 +67,11 @@ export const returnWarehouseItemSchema = z.object({
   }
 });
 
+export const verifyCustodyClaimSchema = z.object({
+  claimId: uuid,
+  recipientId: uuid,
+  verified: z.literal(true, { errorMap: () => ({ message: "Cần xác nhận đã đối chiếu quyền sở hữu tại quầy." }) }),
+  reason: z.string().trim().min(10, "Nội dung đối chiếu phải có từ 10 đến 1000 ký tự.").max(1000, "Nội dung đối chiếu phải có từ 10 đến 1000 ký tự.")
+});
+
 export type { CreateWarehouseItemInput, ListWarehouseItemsQuery, UpdateWarehouseItemInput, ReturnWarehouseItemInput, WarehouseStatus } from "../../application/warehouse.dto.js";

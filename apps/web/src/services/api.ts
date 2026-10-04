@@ -963,6 +963,8 @@ export const api = {
   },
   getWarehouseProof: (id: string) => mediaBlob(`/staff/warehouse-proofs/${id}`),
   getWarehouseReturnRecipients: (id: string) => raw<{ recipients: Array<{ claimId: string; recipientId: string; fullName: string }> }>(`/staff/warehouse-items/${id}/return-recipients`),
+  getWarehouseReturnClaimReviews: (id: string) => raw<{ claims: Array<{ claimId: string; recipientId: string; fullName: string; description: string | null; status: string; verified: boolean }> }>(`/staff/warehouse-items/${id}/return-claim-reviews`),
+  verifyWarehouseClaim: (id: string, payload: { claimId: string; recipientId: string; verified: boolean; reason: string }) => raw<{ claims: Array<{ claimId: string; recipientId: string; fullName: string; description: string | null; status: string; verified: boolean }> }>(`/staff/warehouse-items/${id}/verify-claim`, { method: "POST", body: JSON.stringify(payload) }),
   getWarehouseLogs: (id: string) => raw<{ logs: WarehouseStorageLog[] }>(`/staff/warehouse-items/${id}/logs`).then((payload) => payload.logs),
   // Custody requests
   listCustodyRequests: (filters: CustodyRequestFilters = {}) => raw<CustodyRequestListResponse>(`/staff/custody-requests${queryString(filters)}`),

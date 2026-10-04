@@ -690,6 +690,9 @@ export function createClaimUseCases(options: ClaimDependencies) {
         if (ensureIdempotentReplay(existing, fingerprint)) return;
 
         const history = await claimRepository.listVerificationAuditEvents(claimId, connection);
+        if (history.some(event => event.action === "STAFF_CUSTODY_VERIFIED")) {
+          throw new AppError("conflict", "Vật phẩm đã được Staff xác minh tại quầy; Finder không thể sửa quyết định này");
+        }
         const finalActions = new Set(["VERIFICATION_ACCEPTED", "VERIFICATION_DECLINED", "CUSTODY_ESCALATED", "VERIFICATION_DECISION_CORRECTED"]);
         const latestDecision = [...history].reverse().find((event) => finalActions.has(event.action));
         const isCorrection = Boolean(input.correctsEventId);

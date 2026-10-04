@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { returnWarehouseItemSchema } from "./warehouse.validator.js";
+import { returnWarehouseItemSchema, verifyCustodyClaimSchema } from "./warehouse.validator.js";
 
 const directReturn = {
   receiverName: "Trần Thế Lượng",
@@ -24,4 +24,12 @@ test("normalizes empty claim fields from direct-return forms", () => {
 
 test("requires claim and recipient ids together when linking an online claim", () => {
   assert.throws(() => returnWarehouseItemSchema.parse({ ...directReturn, claimId: "00000000-0000-4000-8000-000000000001" }));
+});
+
+test("custody verification requires explicit confirmation, actual recipient and a bounded reason", () => {
+  const input = { claimId: directReturn.proofImage, recipientId: directReturn.proofImage, verified: true, reason: "Checked unique private features at desk" };
+  assert.equal(verifyCustodyClaimSchema.parse(input).verified, true);
+  assert.throws(() => verifyCustodyClaimSchema.parse({ ...input, verified: false }));
+  assert.throws(() => verifyCustodyClaimSchema.parse({ ...input, reason: "ok" }));
+  assert.throws(() => verifyCustodyClaimSchema.parse({ ...input, reason: "x".repeat(1001) }));
 });

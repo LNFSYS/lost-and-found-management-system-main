@@ -145,6 +145,14 @@ function commonRepository(overrides: Partial<ClaimRepository> = {}) {
   return { repository, audits, status: () => currentStatus };
 }
 
+test("Finder cannot correct or impersonate a Staff custody verification decision", async () => {
+  const eventId = "staff-decision";
+  const harness = commonRepository({ findByIdForUpdate: async () => claim("ACCEPTED"), listVerificationAuditEvents: async () => [{ id: eventId, claimId, actorId: "staff", action: "STAFF_CUSTODY_VERIFIED", fromStatus: "CONVERSATION_OPEN", toStatus: "ACCEPTED", metadata: { decision: "VERIFY_FOR_CUSTODY_RETURN" }, createdAt: "2026-10-04T00:00:00Z" }] });
+  const service = createTestClaimUseCases({ claimRepository: harness.repository });
+  await assert.rejects(service.decideVerification(claimId, finderId, { decision: "DECLINE", reason: "Try to override Staff", idempotencyKey: "finder-override", correctsEventId: eventId }), error => (error as { code: string }).code === "conflict");
+  assert.equal(harness.audits.length, 0);
+});
+
 test("Finder verification is authoritative, appointment-eligible and idempotent", async () => {
   const questions = [answeredQuestion("case-accessory"), answeredQuestion("loss-context")];
   let transitions = 0;

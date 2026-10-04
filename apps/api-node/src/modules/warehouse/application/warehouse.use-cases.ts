@@ -294,6 +294,35 @@ export function createWarehouseUseCases(options: WarehouseDependencies) {
       if (!item) throw new AppError("not_found", "Không tìm thấy vật phẩm");
       return { recipients: await warehouseRepository.listVerifiedRecipients(item.postId) };
     },
+    async returnClaimReviews(itemId: string, actorId: string) {
+      await staff(actorId);
+      const item = await warehouseRepository.findItemById(itemId);
+      if (!item) throw new AppError("not_found", "Không tìm thấy vật phẩm");
+      return { claims: await warehouseRepository.listReturnClaimReviews(item.postId) };
+    },
+    async verifyCustodyClaim(itemId: string, input: { claimId: string; recipientId: string; verified: boolean; reason: string; }, actorId: string) {
+      await staff(actorId);
+      const reason = input.reason.trim();
+      if (!input.verified || reason.length < 10 || reason.length > 1000) throw new AppError("invalid_input", "Cần xác nhận đối chiếu và ghi nội dung xác minh từ 10 đến 1000 ký tự");
+      const deliveries = await withTransaction(async db => {
+        const item = await warehouseRepository.lockItemForUpdate(itemId, db);
+        if (!item?.postId || item.legalHold || !["RECEIVED", "STORED", "CLAIMED", "EXPIRED"].includes(item.status)) throw new AppError("conflict", "Chỉ xác minh sau khi Staff đã tiếp nhận vật phẩm và không có legal hold");
+        await warehouseRepository.lockPhysicalPost(item.postId, db);
+        const claim = await warehouseRepository.lockReturnClaim(input.claimId, item.postId, db);
+        if (!claim || claim.recipientId !== input.recipientId) throw new AppError("conflict", "Claim hoặc người nhận không hợp lệ cho vật phẩm này");
+        if (item.reservedClaimId && item.reservedClaimId !== claim.claimId) throw new AppError("conflict", "Vật phẩm đã được giữ cho claim khác");
+        if (await warehouseRepository.hasBlockingCases(item.postId, db, claim.claimId)) throw new AppError("conflict", "Vật phẩm còn claim khác hoặc dispute chưa giải quyết");
+        if (claim.verified) return [];
+        await warehouseRepository.recordStaffVerification({ id: id(), itemId, claimId: claim.claimId, recipientId: claim.recipientId, actorId, fromStatus: claim.status, reason }, db);
+        await warehouseRepository.createStorageLog({ id: id(), warehouseItemId: itemId, postId: item.postId, handoverPointId: item.handoverPointId, actorId, action: "CONDITION_UPDATED", fromStatus: item.status, toStatus: item.status, note: `Staff verified claim ${claim.claimId} at intake desk` }, db);
+        const source = await warehouseRepository.getPostInfoForIntake(item.postId, db);
+        const request = source ? await custodyRequestRepository.findActiveByPostId(item.postId, source.finderUserId, db) : null;
+        return request ? notifications.record({ id: request.id, postId: item.postId, claimId: claim.claimId, requesterId: request.requester.id, event: `VERIFIED:${claim.claimId}` }, db) : [];
+      });
+      await notifications.publish(deliveries);
+      const item = await warehouseRepository.findItemById(itemId);
+      return { claims: await warehouseRepository.listReturnClaimReviews(item?.postId ?? null) };
+    },
     async reserveItem(itemId: string, claimId: string, recipientId: string, actorId: string) {
       await staff(actorId);
       await withTransaction(async db => {

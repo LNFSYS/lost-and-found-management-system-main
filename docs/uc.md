@@ -133,7 +133,7 @@ Completed UC work above is not reassigned. The 71 Partial/Planned UCs in the ret
 | UC-111 | Escalate a claim for staff support | Claimant, Finder | Escalate an unresolved, suspicious, or disputed verification case with a required reason. | Planned |
 | UC-112 | List escalated claims | Staff, Admin | View claims escalated for staff support, filtered by state, age, or assigned handler. | Planned |
 | UC-113 | View an escalated claim | Staff, Admin | View the permitted claim context, evidence summary, messages, and audit history for an escalated case. | Planned |
-| UC-114 | Record an escalation decision | Staff, Admin | Record a supported, rejected, or more-information-required decision with a reason and audit entry. | Planned |
+| UC-114 | Record an escalation decision | Staff, Admin | Explicitly verify a consented claimant after physical custody intake with an in-person rationale, case/hold checks and independent Staff audit. General escalation rejection and more-information decisions remain pending. | Partial |
 | UC-115 | View claimants for a found item | Finder | View all separate claim requests received for one FOUND post without merging their private evidence. | Planned |
 | UC-116 | Compare claimant verification results | Finder | Compare status and verification progress across claimants while keeping each private conversation isolated. | Planned |
 | UC-117 | Reserve an item for one claimant | Finder | Temporarily reserve the item for one accepted claimant before arranging a meetup. | Planned |

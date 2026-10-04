@@ -54,6 +54,8 @@ export function createStaffRoutes({ warehouseController, custodyRequestControlle
   staffRoutes.patch("/warehouse-items/:id", (req, res, next) => warehouseController.updateItem(req, res).catch(next));
   staffRoutes.post("/warehouse-items/:id/return", (req, res, next) => warehouseController.returnItem(req, res).catch(next));
   staffRoutes.get("/warehouse-items/:id/return-recipients", (req, res, next) => warehouseController.returnRecipients(req, res).catch(next));
+  staffRoutes.get("/warehouse-items/:id/return-claim-reviews", (req, res, next) => warehouseController.returnClaimReviews(req, res).catch(next));
+  staffRoutes.post("/warehouse-items/:id/verify-claim", (req, res, next) => warehouseController.verifyCustodyClaim(req, res).catch(next));
   staffRoutes.get("/warehouse-items/:id/logs", (req, res, next) => warehouseController.listLogs(req, res).catch(next));
 
   // Custody request management

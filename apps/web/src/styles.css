@@ -418,6 +418,22 @@ textarea {
   align-items: start;
 }
 
+.custody-modal.custody-modal--warehouse-return {
+  padding: 0;
+  overflow: hidden;
+  border-radius: 8px;
+}
+
+.custody-modal--warehouse-return .custody-modal-actions {
+  flex-wrap: wrap;
+}
+
+.custody-modal--warehouse-return .custody-modal-actions button {
+  min-width: 0;
+  max-width: 100%;
+  white-space: normal;
+}
+
 .warehouse-return-verification {
   display: flex;
   align-items: flex-start;
@@ -436,6 +452,10 @@ textarea {
 @media (max-width: 600px) {
   .warehouse-return-grid {
     grid-template-columns: minmax(0, 1fr);
+  }
+  .custody-modal--warehouse-return .custody-modal-actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
   }
 }
 
