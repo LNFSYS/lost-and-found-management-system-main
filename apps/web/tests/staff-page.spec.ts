@@ -229,7 +229,7 @@ for (const viewport of [{ width: 1440, height: 1000 }, { width: 390, height: 844
       const url = new URL(route.request().url());
       queries.push(url.search);
       const pageNumber = Number(url.searchParams.get("page") ?? 1);
-      const status = url.searchParams.get("status") ?? "PENDING";
+      const status = url.searchParams.get("status") === "AWAITING_INTAKE" ? "ACCEPTED" : url.searchParams.get("status") ?? "PENDING";
       return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ page: pageNumber, pageSize: 20, total: 21,
         counts: { PENDING: 20, ACCEPTED: 1, INTAKED: 0, REJECTED: 0, CANCELLED: 0 },
         items: [{ id: `request-${pageNumber}`, postId: "post-1", post: { id: "post-1", title: `Item page ${pageNumber}` }, claimId: null, roomId: null,
@@ -242,9 +242,9 @@ for (const viewport of [{ width: 1440, height: 1000 }, { width: 390, height: 844
     await page.getByRole("navigation", { name: "Phân trang" }).getByRole("button", { name: "Sau", exact: true }).click();
     await expect(page.getByText("Item page 2", { exact: true })).toBeVisible();
     expect(queries.some(query => new URLSearchParams(query).get("page") === "2")).toBeTruthy();
-    await page.getByRole("button", { name: "Chờ bàn giao (1)", exact: true }).click();
+    await page.getByRole("button", { name: "Chờ tiếp nhận (21)", exact: true }).click();
     await expect(page.getByText("Item page 1", { exact: true })).toBeVisible();
-    expect(queries.some(query => new URLSearchParams(query).get("status") === "ACCEPTED" && new URLSearchParams(query).get("page") === "1")).toBeTruthy();
+    expect(queries.some(query => new URLSearchParams(query).get("status") === "AWAITING_INTAKE" && new URLSearchParams(query).get("page") === "1")).toBeTruthy();
     await page.evaluate(() => window.scrollTo(0, 0));
     const headerBox = await page.locator(".admin-workspace-bar").boundingBox();
     const headingBox = await page.getByRole("heading", { name: "Tiếp nhận & Quản lý Custody" }).boundingBox();

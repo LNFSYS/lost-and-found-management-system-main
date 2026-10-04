@@ -133,7 +133,9 @@ export function createCustodyRequestRepository(pool: SqlExecutor) {
       const offset = (page - 1) * pageSize;
       const where: string[] = [];
       const values: string[] = [];
-      if (input.status) {
+      if (input.status === "AWAITING_INTAKE") {
+        where.push("cr.status IN ('PENDING','ACCEPTED')");
+      } else if (input.status) {
         where.push("cr.status = ?");
         values.push(input.status);
       }

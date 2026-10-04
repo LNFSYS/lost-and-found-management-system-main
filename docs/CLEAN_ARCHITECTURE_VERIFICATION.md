@@ -1,6 +1,6 @@
 # Clean Architecture Verification
 
-Date: 2026-09-09. Repository: `F:/ky9/fptu-lost-found-system-main`.
+Date: 2026-09-09. Repository: `<workspace>`.
 Branch: `fix/aiven-schema-migration-reconciliation`; baseline commit: `fd8e25c`.
 
 ## Scope

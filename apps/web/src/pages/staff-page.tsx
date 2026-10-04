@@ -31,7 +31,6 @@ import {
 import {
   api,
   ApiError,
-  type AcceptCustodyRequestPayload,
   type CreateWarehouseItemPayload,
   type CustodyRequest,
   type CustodyRequestListResponse,
@@ -72,8 +71,8 @@ const statusOptions: Array<{ value: WarehouseStatus; label: string }> = [
 ];
 
 const custodyStatusLabels: Record<CustodyRequestStatus, { label: string; icon: ReactNode }> = {
-  PENDING: { label: "Chờ duyệt", icon: <Clock3 size={14} /> },
-  ACCEPTED: { label: "Đã duyệt – Chờ bàn giao", icon: <UserCheck size={14} /> },
+  PENDING: { label: "Chờ tiếp nhận", icon: <Clock3 size={14} /> },
+  ACCEPTED: { label: "Chờ tiếp nhận (yêu cầu cũ)", icon: <UserCheck size={14} /> },
   REJECTED: { label: "Từ chối", icon: <XCircle size={14} /> },
   CANCELLED: { label: "Đã hủy", icon: <XCircle size={14} /> },
   INTAKED: { label: "Đã tiếp nhận", icon: <CheckCircle2 size={14} /> }
@@ -95,7 +94,6 @@ const emptyCreateForm = {
 };
 
 const emptyFilters = { q: "", status: "", handoverPointId: "" };
-const emptyAcceptForm = { handoverPointId: "", confirmedHandoverAt: "", reason: "" };
 const emptyRejectForm = { reason: "" };
 const emptyIntakeForm = { conditionNotes: "", storageCode: "", confirmedHandoverAt: "" };
 
@@ -190,11 +188,9 @@ function CustodyQueueTab({
   onError: (msg: string) => void;
   setPendingAction: (action: PendingAction) => void;
 }) {
-  const [acceptModal, setAcceptModal] = useState<CustodyRequest | null>(null);
   const [rejectModal, setRejectModal] = useState<CustodyRequest | null>(null);
   const [intakeModal, setIntakeModal] = useState<CustodyRequest | null>(null);
   const [walkInModalOpen, setWalkInModalOpen] = useState(false);
-  const [acceptForm, setAcceptForm] = useState(emptyAcceptForm);
   const [rejectForm, setRejectForm] = useState(emptyRejectForm);
   const [intakeForm, setIntakeForm] = useState(emptyIntakeForm);
   const [createForm, setCreateForm] = useState(emptyCreateForm);
@@ -262,30 +258,6 @@ function CustodyQueueTab({
     }
   }
 
-  async function submitAccept(event: FormEvent) {
-    event.preventDefault();
-    if (!acceptModal) return;
-    setPendingAction("custody-action");
-    onError("");
-    onNotice("");
-    try {
-      const payload: AcceptCustodyRequestPayload = {
-        handoverPointId: acceptForm.handoverPointId,
-        confirmedHandoverAt: acceptForm.confirmedHandoverAt ? new Date(acceptForm.confirmedHandoverAt).toISOString() : null,
-        reason: clean(acceptForm.reason)
-      };
-      await api.acceptCustodyRequest(acceptModal.id, payload);
-      onNotice("Đã duyệt yêu cầu bàn giao thành công");
-      setAcceptModal(null);
-      setAcceptForm(emptyAcceptForm);
-      await onRefreshCustody();
-    } catch (reason) {
-      onError(messageOf(reason, "Không thể duyệt yêu cầu"));
-    } finally {
-      setPendingAction("");
-    }
-  }
-
   async function submitReject(event: FormEvent) {
     event.preventDefault();
     if (!rejectModal) return;
@@ -332,7 +304,7 @@ function CustodyQueueTab({
         storageCode: clean(intakeForm.storageCode),
         confirmedHandoverAt: intakeForm.confirmedHandoverAt ? new Date(intakeForm.confirmedHandoverAt).toISOString() : null
       });
-      onNotice("Đã xác nhận bàn giao thực tế & Nhập kho tài sản");
+      onNotice("Đã tiếp nhận thực tế. Vật phẩm ở trạng thái Đã tiếp nhận, chưa lưu kho.");
       setIntakeModal(null);
       setIntakeForm(emptyIntakeForm);
       await onRefreshCustody();
@@ -353,31 +325,11 @@ function currentLocalTime() {
   return `${year}-${month}-${day}T${hours}:${minutes}`;
 }
 
-function defaultHandoverTime() {
-  const date = new Date(Date.now() + 60 * 60 * 1000);
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  const hours = String(date.getHours()).padStart(2, "0");
-  const minutes = String(date.getMinutes()).padStart(2, "0");
-  return `${year}-${month}-${day}T${hours}:${minutes}`;
-}
-
-  function openAcceptModal(request: CustodyRequest) {
-    setAcceptForm({
-      ...emptyAcceptForm,
-      handoverPointId: request.handoverPoint?.id ?? catalog?.handoverPoints[0]?.id ?? "",
-      confirmedHandoverAt: defaultHandoverTime()
-    });
-    setAcceptModal(request);
-  }
-
   return (
     <>
       {/* Stats summary banner */}
       <div className="admin-stats warehouse-stats" aria-label="Thống kê custody">
-        <StatCard icon={<Clock3 size={20} />} value={custodyData?.counts.PENDING ?? 0} label="Chờ duyệt" tone="orange" />
-        <StatCard icon={<UserCheck size={20} />} value={custodyData?.counts.ACCEPTED ?? 0} label="Chờ bàn giao" tone="blue" />
+        <StatCard icon={<Clock3 size={20} />} value={(custodyData?.counts.PENDING ?? 0) + (custodyData?.counts.ACCEPTED ?? 0)} label="Chờ tiếp nhận" tone="orange" />
         <StatCard icon={<CheckCircle2 size={20} />} value={custodyData?.counts.INTAKED ?? 0} label="Đã tiếp nhận" tone="green" />
         <StatCard icon={<XCircle size={20} />} value={(custodyData?.counts.REJECTED ?? 0) + (custodyData?.counts.CANCELLED ?? 0)} label="Từ chối / Hủy" tone="red" />
       </div>
@@ -411,9 +363,8 @@ function defaultHandoverTime() {
             {/* Filter chips */}
             <div className="custody-filter-chips">
               <button type="button" className={`chip ${statusFilter === "ALL" ? "chip--active" : ""}`} onClick={() => setStatusFilter("ALL")}>Tất cả</button>
-              <button type="button" className={`chip ${statusFilter === "PENDING" ? "chip--active" : ""}`} onClick={() => setStatusFilter("PENDING")}>Chờ duyệt ({custodyData?.counts.PENDING ?? 0})</button>
-              <button type="button" className={`chip ${statusFilter === "ACCEPTED" ? "chip--active" : ""}`} onClick={() => setStatusFilter("ACCEPTED")}>Chờ bàn giao ({custodyData?.counts.ACCEPTED ?? 0})</button>
-              <button type="button" className={`chip ${statusFilter === "INTAKED" ? "chip--active" : ""}`} onClick={() => setStatusFilter("INTAKED")}>Đã nhập kho ({custodyData?.counts.INTAKED ?? 0})</button>
+              <button type="button" className={`chip ${statusFilter === "AWAITING_INTAKE" ? "chip--active" : ""}`} onClick={() => setStatusFilter("AWAITING_INTAKE")}>Chờ tiếp nhận ({(custodyData?.counts.PENDING ?? 0) + (custodyData?.counts.ACCEPTED ?? 0)})</button>
+              <button type="button" className={`chip ${statusFilter === "INTAKED" ? "chip--active" : ""}`} onClick={() => setStatusFilter("INTAKED")}>Đã tiếp nhận ({custodyData?.counts.INTAKED ?? 0})</button>
             </div>
 
             {/* Walk-in Intake Trigger Button */}
@@ -495,10 +446,10 @@ function defaultHandoverTime() {
                       <button
                         type="button"
                         className="primary-button custody-action-btn"
-                        onClick={() => openAcceptModal(request)}
+                        onClick={() => { setIntakeForm(emptyIntakeForm); setIntakeModal(request); }}
                         disabled={Boolean(pendingAction)}
                       >
-                        <CheckCircle2 size={15} /> Chấp nhận yêu cầu
+                        <PackageCheck size={16} /> Tiếp nhận vật phẩm
                       </button>
                       <button
                         type="button"
@@ -519,15 +470,15 @@ function defaultHandoverTime() {
                         onClick={() => { setIntakeForm(emptyIntakeForm); setIntakeModal(request); }}
                         disabled={Boolean(pendingAction)}
                       >
-                        <PackageCheck size={16} /> Xác nhận tiếp nhận
+                        <PackageCheck size={16} /> Tiếp nhận vật phẩm
                       </button>
                       <button
                         type="button"
                         className="secondary-button custody-action-btn custody-action-btn--danger"
-                        onClick={() => { if (window.confirm('Bạn có chắc chắn muốn hủy yêu cầu bàn giao này do người dùng không đến?')) submitCancel(request.id); }}
+                        onClick={() => { setRejectForm(emptyRejectForm); setRejectModal(request); }}
                         disabled={Boolean(pendingAction)}
                       >
-                        <XCircle size={15} /> Hủy
+                        <XCircle size={15} /> Từ chối tiếp nhận
                       </button>
                     </>
                   )}
@@ -686,53 +637,6 @@ function defaultHandoverTime() {
                 <CheckCircle2 size={16} /> Đã hiểu & Đóng
               </button>
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* Accept Modal */}
-      {acceptModal && (
-        <div className="custody-modal-overlay" onClick={() => setAcceptModal(null)}>
-          <div className="custody-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="custody-modal__header">
-              <span className="modal-badge modal-badge--blue"><CheckCircle2 size={18} /></span>
-              <div>
-                <h3>Chấp nhận yêu cầu Custody</h3>
-                <p>Xác nhận duyệt chuyển giao từ <strong>{acceptModal.requester.fullName}</strong></p>
-              </div>
-              <button type="button" className="close-btn" onClick={() => setAcceptModal(null)}><X size={18} /></button>
-            </div>
-
-            <form className="admin-form modal-form" onSubmit={submitAccept}>
-              <label className="input-field">
-                <span>Điểm hẹn bàn giao <strong className="required-star">*</strong></span>
-                <select value={acceptForm.handoverPointId} onChange={(e) => setAcceptForm({ ...acceptForm, handoverPointId: e.target.value })} required>
-                  <option value="">Chọn điểm bàn giao</option>
-                  {catalog?.handoverPoints.map((point) => (
-                    <option key={point.id} value={point.id}>{point.name} - {point.address}</option>
-                  ))}
-                </select>
-              </label>
-
-              <label className="input-field">
-                <span>Thời gian hẹn bàn giao (dự kiến)</span>
-                <input type="datetime-local" min={currentLocalTime()} value={acceptForm.confirmedHandoverAt} onChange={(e) => setAcceptForm({ ...acceptForm, confirmedHandoverAt: e.target.value })} />
-                <small className="field-hint">Thời gian này giúp thông báo người nhặt thời gian quầy tiếp nhận mở cửa.</small>
-              </label>
-
-              <label className="input-field">
-                <span>Ghi chú hướng dẫn (gửi cho người nhặt)</span>
-                <textarea value={acceptForm.reason} onChange={(e) => setAcceptForm({ ...acceptForm, reason: e.target.value })} rows={2} placeholder="Vui lòng mang theo MSSV khi đến bàn giao tại quầy..." />
-              </label>
-
-              <div className="custody-modal-actions">
-                <button className="primary-button" disabled={pendingAction === "custody-action"}>
-                  {pendingAction === "custody-action" ? <LoaderCircle className="spin-icon" size={17} /> : <CheckCircle2 size={17} />}
-                  <span>Chấp nhận yêu cầu</span>
-                </button>
-                <button type="button" className="secondary-button" onClick={() => setAcceptModal(null)}>Đóng</button>
-              </div>
-            </form>
           </div>
         </div>
       )}

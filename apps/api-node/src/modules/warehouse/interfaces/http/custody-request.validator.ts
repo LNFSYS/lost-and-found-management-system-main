@@ -10,7 +10,7 @@ export const custodyRequestStatusSchema = z.enum([
 export const custodyRequestIdParamSchema = z.object({ id: uuid });
 
 export const listCustodyRequestsQuerySchema = z.object({
-  status: custodyRequestStatusSchema.optional(),
+  status: z.enum(["AWAITING_INTAKE", ...custodyRequestStatusSchema.options]).optional(),
   page: z.coerce.number().int().min(1).max(999).default(1),
   pageSize: z.coerce.number().int().min(1).max(50).default(12)
 });
@@ -36,7 +36,7 @@ export const rejectCustodyRequestSchema = z.object({
 });
 
 export const cancelCustodyRequestSchema = z.object({
-  reason: nullableText(2000)
+  reason: z.string().trim().min(1, "Cần lý do hủy yêu cầu").max(2000)
 });
 
 export const intakeCustodyRequestSchema = z.object({

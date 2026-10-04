@@ -31,7 +31,7 @@ export type IntakeCustodyRequestInput = {
 };
 
 export type ListCustodyRequestsQuery = {
-  status?: "PENDING" | "ACCEPTED" | "REJECTED" | "CANCELLED" | "INTAKED" | undefined;
+  status?: "AWAITING_INTAKE" | "PENDING" | "ACCEPTED" | "REJECTED" | "CANCELLED" | "INTAKED" | undefined;
   page: number;
   pageSize: number;
 };

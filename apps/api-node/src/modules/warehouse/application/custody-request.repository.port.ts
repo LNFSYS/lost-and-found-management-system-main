@@ -47,7 +47,7 @@ export interface CustodyRequestAuditEntry {
 
 export interface CustodyRequestRepository {
   listRequests(input: {
-    status?: CustodyRequestStatus;
+    status?: CustodyRequestStatus | "AWAITING_INTAKE";
     page: number;
     pageSize: number;
   }): Promise<{ total: number; items: CustodyRequest[] }>;
