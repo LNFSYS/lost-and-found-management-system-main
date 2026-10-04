@@ -333,8 +333,17 @@ export function createPostUseCases(options: PostDependencies) {
     },
 
     async softDeletePost(postId: string, ownerId: string) {
-      const deleted = await postRepository.softDeletePost(postId, ownerId);
-      if (!deleted) throw new AppError("not_found", "Khong tim thay bai dang cua ban");
+      await withTransaction(async connection => {
+        if (!await postRepository.lockOwnedPostForDeletion(postId, ownerId, connection)) {
+          throw new AppError("not_found", "Không tìm thấy bài đăng của bạn");
+        }
+        if (await postRepository.hasDeletionBlockers(postId, connection)) {
+          throw new AppError("conflict", "Không thể xóa bài đang có bàn giao, vật phẩm trong kho, claim, lịch hẹn, tranh chấp hoặc legal hold chưa kết thúc");
+        }
+        if (!await postRepository.softDeletePost(postId, ownerId, connection)) {
+          throw new AppError("not_found", "Không tìm thấy bài đăng của bạn");
+        }
+      });
     },
 
     async uploadMedia(postId: string, ownerId: string, input: UploadMediaInput, file: ImageUpload, viewer: AccessTokenPayload) {
