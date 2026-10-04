@@ -186,7 +186,22 @@ export async function exerciseHttpRuntime(pool: Pool) {
     await request("/notifications", 200, tokens.finder);
 
     await request("/staff/warehouse-items", 403, tokens.owner);
-    const item = await (await request("/staff/warehouse-items", 201, tokens.staff, "POST", { handoverPointId, itemName: "HTTP warehouse fixture", conditionNotes: "Good condition", categoryId, areaId })).json();
+    const received = { handoverPointId, itemName: "HTTP warehouse fixture", conditionNotes: "Good condition", categoryId, areaId };
+    await request("/staff/warehouse-items", 422, tokens.staff, "POST", received);
+    const intakeKey = randomUUID();
+    const intakeForm = imageForm(true); intakeForm.set("intakeKey",intakeKey);
+    await request("/staff/warehouse-intake-images", 403, tokens.owner, "POST", intakeForm);
+    const intakeImage = await (await request("/staff/warehouse-intake-images", 201, tokens.staff, "POST", intakeForm)).json();
+    const item = await (await request("/staff/warehouse-items", 201, tokens.staff, "POST", { ...received, intakeKey,
+      intakeImageIds: [intakeImage.id], receivedQuantity: 1, accessories: "No additional accessories", physicalReviewConfirmed: true })).json();
+    assert.equal(item.status,"RECEIVED");
+    const gallery = await (await request(`/staff/warehouse-items/${item.id}/images`, 200, tokens.staff)).json();
+    assert.equal(gallery.images[0].provenance,"INTAKE");
+    assert.equal(JSON.stringify(gallery).includes("private://"),false);
+    await request(`/staff/warehouse-images/${intakeImage.id}?provenance=INTAKE`, 403, tokens.owner);
+    const intakeBytes = await request(`/staff/warehouse-images/${intakeImage.id}?provenance=INTAKE`, 200, tokens.staff);
+    assert.equal(intakeBytes.headers.get("cache-control"),"private, no-store");
+    assert.deepEqual(Buffer.from(await intakeBytes.arrayBuffer()),imageBytes);
     await request(`/staff/warehouse-items/${item.id}`, 200, tokens.staff, "PATCH", { status: "STORED", storageCode: "TEST-A1", note: "Stored by integration test" });
     await request(`/staff/warehouse-items/${item.id}/logs`, 200, tokens.staff);
     await request("/admin/users", 403, tokens.staff);

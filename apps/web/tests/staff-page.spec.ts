@@ -165,6 +165,13 @@ for (const width of [1440,390]) {
     await page.getByRole("button", { name: "Tiếp nhận vật phẩm", exact: true }).click();
     const modal = page.getByRole("dialog", { name: "Đối chiếu và tiếp nhận vật phẩm" });
     await expect(modal.locator(".intake-source").getByText("Bài gốc còn nguyên", { exact: true })).toBeVisible();
+    await modal.locator(".intake-source").getByRole("button", { name: "Xem ảnh vật phẩm", exact: true }).click();
+    const zoom = page.getByRole("dialog", { name: "Ảnh vật phẩm", exact: true });
+    await expect(zoom.getByAltText("Ảnh vật phẩm phóng to")).toBeVisible();
+    expect(await zoom.getByAltText("Ảnh vật phẩm phóng to").evaluate((image: HTMLImageElement) => image.naturalWidth)).toBeGreaterThan(0);
+    await page.keyboard.press("Escape");
+    await expect(zoom).toHaveCount(0);
+    await expect(modal).toBeVisible();
     expect(receives).toBe(0);
     await modal.getByRole("button", { name: "Xác nhận tiếp nhận", exact: true }).click();
     await expect(modal.getByText("Cần từ 1 đến 5 ảnh tình trạng do Staff tải lên.", { exact: true })).toBeVisible();
@@ -187,6 +194,40 @@ for (const width of [1440,390]) {
     expect(receives).toBe(1);
   });
 }
+
+test("walk-in photo suggestions remain optional and require explicit Staff review before receipt", async ({ page }) => {
+  const calls: { created?: any } = {};
+  await prepare(page,calls);
+  await page.route("**/api/posts/analyze-image",route => route.fulfill({ json: { title: "Thẻ được nhận tại quầy", description: "Thẻ sinh viên có góc bị xước",
+    suggestedCategory: catalog.categories[1], visualAttributes: ["card"], visibleText: [], confidence: .9, warnings: [], model: "fixture", assistedBy: "fixture", imageCount: 1 } }));
+  await page.goto("/staff");
+  await page.getByRole("button", { name: "Tiếp nhận Walk-in (Tại quầy)", exact: true }).click();
+  const modal = page.getByRole("dialog", { name: "Tiếp nhận trực tiếp (Walk-in / Tại quầy)", exact: true });
+  await modal.getByLabel("Tên vật phẩm").fill("Thông tin Staff đang đối chiếu");
+  await modal.getByLabel("Tình trạng khi nhận").fill("Một góc bị xước");
+  await modal.getByLabel("Phụ kiện thực nhận").fill("Không có");
+  await modal.getByLabel("Ảnh tình trạng tiếp nhận", { exact: true }).setInputFiles(intakePhoto);
+  await expect(modal.getByText("Ảnh tình trạng tiếp nhận * (1/5)")).toBeVisible();
+  await modal.getByRole("button", { name: "Phân tích ảnh", exact: true }).click();
+  await expect(modal.getByRole("heading", { name: "Gợi ý từ ảnh", exact: true })).toBeVisible();
+  await expect(modal.getByLabel("Tên vật phẩm")).toHaveValue("Thông tin Staff đang đối chiếu");
+  expect(calls.created).toBeUndefined();
+  await modal.getByLabel("Tôi đã đối chiếu vật phẩm, số lượng, phụ kiện và ảnh tình trạng tại quầy.").check();
+  await modal.getByRole("button", { name: "Áp dụng gợi ý", exact: true }).click();
+  await expect(modal.getByLabel("Danh mục")).toHaveValue("cat-card");
+  await expect(modal.getByLabel("Tên vật phẩm")).toHaveValue("Thẻ được nhận tại quầy");
+  await expect(modal.getByLabel("Tôi đã đối chiếu vật phẩm, số lượng, phụ kiện và ảnh tình trạng tại quầy.")).not.toBeChecked();
+  await modal.getByRole("button", { name: "Tạo hồ sơ kho (Walk-in)", exact: true }).click();
+  await expect(modal.getByText("Cần xác nhận đã kiểm tra vật phẩm thực tế.", { exact: true })).toBeVisible();
+  expect(calls.created).toBeUndefined();
+  await modal.getByLabel("Tôi đã đối chiếu vật phẩm, số lượng, phụ kiện và ảnh tình trạng tại quầy.").check();
+  await modal.getByRole("button", { name: "Tạo hồ sơ kho (Walk-in)", exact: true }).click();
+  await expect(modal).toHaveCount(0);
+  expect(calls.created.itemName).toBe("Thẻ được nhận tại quầy");
+  expect(calls.created.physicalReviewConfirmed).toBe(true);
+  expect(calls.created.intakeImageIds).toEqual(["intake-photo"]);
+  expect(calls.created.postId).toBeUndefined();
+});
 
 for (const width of [1440, 390]) {
   test(`Staff verifies a custody claim in the return modal at ${width}px`, async ({ page }, testInfo) => {
