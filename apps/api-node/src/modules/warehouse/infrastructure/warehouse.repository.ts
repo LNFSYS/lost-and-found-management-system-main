@@ -5,6 +5,7 @@ export type { HandoverItemCount, StorageLogAction, WarehouseCatalog, WarehouseDa
 import type { TransactionContext } from "../../../shared/application/transaction.js";
 
 import { sqlExecutor, type SqlExecutor } from "../../../shared/infrastructure/transaction-context.js";
+import { claimantIdSql, finderIdSql } from "../../../shared/infrastructure/claim-identity-sql.js";
 
 import type { RowDataPacket } from "mysql2";
 import { randomUUID } from "node:crypto";
@@ -23,12 +24,15 @@ const verifiedClaimSql = `EXISTS(SELECT 1 FROM claim_audit_events e WHERE e.clai
       AND wi.post_id = found.id AND wi.deleted_at IS NULL))
 ))`;
 
-const returnClaimReviewSql = `SELECT c.id AS claim_id,recipient.user_id AS recipient_id,u.full_name,c.description,c.status,
-  (c.status = 'ACCEPTED' AND ${verifiedClaimSql}) AS verified FROM claims c
+const returnClaimParticipantsSql = `FROM claims c
+  JOIN posts identity_post ON identity_post.id = c.post_id
   JOIN posts found ON found.id = COALESCE(c.source_found_post_id,c.post_id) AND found.type = 'FOUND' AND found.deleted_at IS NULL
-  JOIN claim_participants recipient ON recipient.claim_id = c.id AND recipient.participant_role = 'CLAIMANT' AND recipient.user_id <> found.user_id AND recipient.consent_status = 'ACCEPTED'
-  JOIN claim_participants finder ON finder.claim_id = c.id AND finder.user_id = found.user_id AND finder.participant_role = 'FINDER' AND finder.consent_status = 'ACCEPTED'
-  JOIN users u ON u.id = recipient.user_id AND u.status = 'ACTIVE'
+  JOIN claim_participants recipient ON recipient.claim_id = c.id AND recipient.user_id = ${claimantIdSql} AND recipient.user_id <> found.user_id AND recipient.consent_status = 'ACCEPTED'
+  JOIN claim_participants finder ON finder.claim_id = c.id AND finder.user_id = found.user_id AND finder.user_id = ${finderIdSql} AND finder.consent_status = 'ACCEPTED'
+  JOIN users u ON u.id = recipient.user_id AND u.status = 'ACTIVE'`;
+
+const returnClaimReviewSql = `SELECT c.id AS claim_id,recipient.user_id AS recipient_id,u.full_name,c.description,c.status,
+  (c.status = 'ACCEPTED' AND ${verifiedClaimSql}) AS verified ${returnClaimParticipantsSql}
   WHERE found.id = ? AND c.status IN ('CONVERSATION_OPEN','NEED_MORE_INFO','ACCEPTED')`;
 
 function mapClaimReview(row: RowDataPacket) {
@@ -306,10 +310,8 @@ export function createWarehouseRepository(pool: SqlExecutor) {
     },
     async verifiedRecipient(claimId, postId, recipientId, db) {
       const [rows] = await sqlExecutor(db).execute<RowDataPacket[]>(
-        `SELECT c.id FROM claims c JOIN posts found ON found.id = COALESCE(c.source_found_post_id,c.post_id) AND found.type = 'FOUND'
-         JOIN claim_participants recipient ON recipient.claim_id = c.id AND recipient.user_id = ? AND recipient.participant_role = 'CLAIMANT' AND recipient.consent_status = 'ACCEPTED'
-         JOIN claim_participants finder ON finder.claim_id = c.id AND finder.user_id = found.user_id AND finder.participant_role = 'FINDER' AND finder.consent_status = 'ACCEPTED'
-         WHERE c.id = ? AND found.id = ? AND found.deleted_at IS NULL AND c.status = 'ACCEPTED' AND recipient.user_id <> found.user_id
+        `SELECT c.id ${returnClaimParticipantsSql}
+         WHERE recipient.user_id = ? AND c.id = ? AND found.id = ? AND c.status = 'ACCEPTED'
          AND ${verifiedClaimSql} LIMIT 1`, [recipientId,claimId,postId]);
       return rows.length === 1;
     },

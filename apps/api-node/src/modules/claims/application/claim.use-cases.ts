@@ -360,8 +360,8 @@ export function createClaimUseCases(options: ClaimDependencies) {
           approximateLostAt: input.approximateLostAt,
           approximateLocation: input.approximateLocation
         }, connection);
-        await claimRepository.addParticipant({ claimId, userId: claimClaimantId, role: "CLAIMANT", consentStatus: "ACCEPTED" }, connection);
-        await claimRepository.addParticipant({ claimId, userId: finderId, role: "FINDER", consentStatus: input.postId ? "ACCEPTED" : "PENDING" }, connection);
+        await claimRepository.addParticipant({ claimId, userId: claimClaimantId, role: isLostContact ? "FINDER" : "CLAIMANT", consentStatus: "ACCEPTED" }, connection);
+        await claimRepository.addParticipant({ claimId, userId: finderId, role: isLostContact ? "CLAIMANT" : "FINDER", consentStatus: input.postId ? "ACCEPTED" : "PENDING" }, connection);
         if (isLostContact) await options.contactPhotos!.attach(input.contactCheckId,foundPostId,requesterId,claimId,connection);
         if (input.postId) await claimRepository.createRoom(claimId, connection);
         const toStatus = input.postId ? "CONVERSATION_OPEN" : "PENDING";
@@ -403,9 +403,7 @@ export function createClaimUseCases(options: ClaimDependencies) {
           if (post.type !== "LOST" || !source || source.type !== "FOUND" || source.ownerId !== requesterId) throw new AppError("forbidden", "FOUND source phải thuộc người gửi");
         }
 
-        // A direct conversation is always between the requester and the post
-        // owner. Keep the requester as claimant for both LOST and FOUND posts
-        // so an existing conversation is scoped to this user/post pair.
+        // Keep the requester key stable, but persist the actual ownership roles.
         const claimantId = requesterId;
         const finderId = post.ownerId;
         if (claimantId === finderId) throw new AppError("conflict", "Bạn không thể nhắn tin với chính mình");
@@ -442,8 +440,8 @@ export function createClaimUseCases(options: ClaimDependencies) {
             status: "CONVERSATION_OPEN",
             finderDecision: "ACCEPTED"
           }, connection);
-          await claimRepository.addParticipant({ claimId, userId: claimantId, role: "CLAIMANT", consentStatus: "ACCEPTED" }, connection);
-          await claimRepository.addParticipant({ claimId, userId: finderId, role: "FINDER", consentStatus: "ACCEPTED" }, connection);
+          await claimRepository.addParticipant({ claimId, userId: claimantId, role: post.type === "LOST" ? "FINDER" : "CLAIMANT", consentStatus: "ACCEPTED" }, connection);
+          await claimRepository.addParticipant({ claimId, userId: finderId, role: post.type === "LOST" ? "CLAIMANT" : "FINDER", consentStatus: "ACCEPTED" }, connection);
           roomId = (await claimRepository.createRoom(claimId, connection)).id;
           await claimRepository.writeAudit({ claimId, actorId: requesterId, action: "CLAIM_CREATED", toStatus: "CONVERSATION_OPEN" }, connection);
           const createdClaim = await claimRepository.findById(claimId, connection);
