@@ -1,4 +1,5 @@
 import type { MigrationConnection } from "./migration-state.js";
+import { missingClaimParticipantsSql } from "./claim-participant-integrity.js";
 
 type Column = { t: string; n: string; ty: string; nullable: string; def: string | null; extra: string; gen: string; collation: string | null };
 type Index = { t: string; n: string; non_unique: number; seq: number; c: string; prefix: number | null; visible: string };
@@ -106,9 +107,8 @@ export async function verifyClaimConversationSchema(connection: MigrationConnect
   if ((tables as { name: string; engine: string }[]).some((t) => t.name === "schema_migration_attempts" && t.engine !== "InnoDB")) failures.push("engine:schema_migration_attempts");
   if (failures.length) throw new Error(`Claim migration schema mismatch: ${failures.join(", ")}`);
 
-  // Migration 045 also backfills participants. Missing rows are not a completed migration.
+  // Missing rows still block completion; newer direct-LOST role labels are valid.
   const [missing] = await connection.query(`SELECT COUNT(*) AS total FROM claims c JOIN posts p ON p.id=c.post_id
-    WHERE NOT EXISTS (SELECT 1 FROM claim_participants cp WHERE cp.claim_id=c.id AND cp.user_id=c.claimant_id AND cp.participant_role='CLAIMANT')
-       OR (p.user_id <> c.claimant_id AND NOT EXISTS (SELECT 1 FROM claim_participants cp WHERE cp.claim_id=c.id AND cp.user_id=p.user_id AND cp.participant_role='FINDER'))`);
+    WHERE ${missingClaimParticipantsSql}`);
   if (Number((missing as { total: number }[])[0]?.total) !== 0) throw new Error("Claim migration participant backfill is incomplete");
 }
