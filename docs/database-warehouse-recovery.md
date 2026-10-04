@@ -2,7 +2,7 @@
 
 ## Scope and History
 
-**4 October 2026 status:** the exact original `054_matching_feedback_periodic_refresh.sql` has been recovered, normalized SHA256 `404c6ac5d3b9424db1a82eef2238924ac5f2ef36366c89fd4ed03b97ab60853d`, and is immutable. A database with its original applied record skips it; reviewed 057-only history uses schema-verified, read-only supersession without inventing history or converting legacy labels. Migration 059 is already applied; 060 was applied on 3 October after backup and isolated rehearsal. Read-only preflight on 4 October reports no pending migrations. Original custody-time 055 remains unavailable. See the current rollout record below; older unavailable-source statements refer to the 2 October snapshot only.
+**4 October 2026 status:** the exact original `054_matching_feedback_periodic_refresh.sql` has been recovered, normalized SHA256 `404c6ac5d3b9424db1a82eef2238924ac5f2ef36366c89fd4ed03b97ab60853d`, and is immutable. A database with its original applied record skips it; reviewed 057-only history uses schema-verified, read-only supersession without inventing history or converting legacy labels. Migration 059 is already applied; 060 was applied on 3 October after backup and isolated rehearsal. Additive 061/062 were applied on 4 October after a new encrypted backup and isolated restore/repeat-run rehearsal. Current preflight reports no pending migrations and the warehouse schema probe is ready. Original custody-time 055 remains unavailable. See the rollout records below; older unavailable-source statements refer to the 2 October snapshot only.
 
 The original forward recovery was developed on `feat/lnfs-55` and is now integrated into `dev`; it is not a reconstruction of missing applied SQL.
 The user authorized creating and applying the missing runtime schema on Aiven on 2026-10-02.
@@ -61,7 +61,7 @@ Executed on 2026-10-02:
 - Maintenance schema probe: `ready: true`, missing objects: none. A real maintenance tick passed after a preview found 0 overdue reminders and 0 expired proofs; no notification/media deletion was triggered by that smoke test. Existing API `/api/ready` returned ready.
 - Verification: root tests 213 passed / 0 failed / 4 DB suites skipped; architecture 173 production files / 0 violations; full isolated integration 24 passed before final storage-link addition, and final recovery suite 5 passed after that addition; API build passed. No E2E/provider/manual QA or remote application deployment is claimed by this recovery.
 
-## Current Rollout Record (4 October 2026)
+## Earlier Rollout Record (Through 060)
 
 - The warehouse recovery and matching feature are integrated into `dev` through `5ab9f0d` (PR #79). Their earlier branch/uncommitted statements are historical, not current rollout status. Four follow-up audit fixes are local commits, not yet pushed in this audit.
 - `059_direct_return_recipient.sql` was applied on 2 October 2026 at 07:15:32 UTC. It supports identity/contact records for direct offline recipients without creating an account or synthetic claim. Do not apply it again.
@@ -70,3 +70,19 @@ Executed on 2026-10-02:
 - Read-only `npm run migrate:preflight` on 4 October 2026: 56 source migrations, 59 applied entries, 26 applied attempts, no pending/superseded migrations. Only the historical 053 scope and unavailable original custody-time 055 warnings remain. No ledger checksum/timestamp was modified.
 - No new migration or shared data correction was run for the four audit fixes. The two LOST-linked custody records still require physical-source review; this rollout does not resolve them. Database readiness does not certify remote application deployment or every UC.
 - Current tests and release limits: [dev audit fixes](dev-main-audit-fixes.md). SQL integration ran on isolated MySQL 9.3, not the shared Aiven service.
+
+## Physical Intake and Contact Rollout (4 October 2026)
+
+- The updated API paused warehouse maintenance because exactly `warehouse_intake_sessions`, `warehouse_intake_images` and `lost_contact_photo_checks` were absent. Read-only preflight listed only 061/062 pending; this was missing additive schema, not a credentials or connection failure.
+- New backup: 61 tables / 3,585 rows, consistent read-only InnoDB snapshot with string-preserved date/time precision, authenticated AES-256-GCM and verified decrypt round trip. Directory `<protected-backup-dir>` is restricted to the owner and SYSTEM. Encrypted backup and separate key remain outside Git; external media/provider backups are not included.
+- Restored to generated loopback MySQL 9.3.0. Initial row fingerprints matched the backup; applying exactly 061/062 preserved every old business row, table definition and ledger record. Only the three new empty tables and two successful ledger/attempt entries were added. A second migration run changed nothing; all foreign keys and the maintenance probe passed. The disposable clone was dropped.
+- Shared Aiven MySQL 8.4.8 apply/post-verification completed at `2026-10-04T12:48:48.350Z` (19:48:48 UTC+07). The existing runner and session lock applied only `061_warehouse_intake_evidence.sql` and `062_lost_contact_photo_checks.sql`. All original ledger checksums/timestamps and existing table definitions were preserved; all foreign keys passed. Concurrent application business writes were not fingerprint-compared on the shared DB.
+- Post-apply `npm run migrate:preflight`: 58 source migrations, 61 applied entries, 28 APPLIED attempts, no pending/superseded migrations. Warehouse schema: `ready: true`, `missing: []`. The existing local API on port 3001 returned `/api/ready` ready and `/api/health` ok. Maintenance rechecks schema every 60 seconds; it does not require disabling its guard.
+- Restricted operational receipt: `061-062-rollout.json` in the backup directory above. Focused migration/backup/maintenance tests: 17 passed, 0 failed, normal process exit. This rollout did not replay 054/059, rewrite history or perform custody-link recovery.
+- Historical 053/055 warnings and the two LOST-linked custody records still require the separately documented review. Schema readiness does not certify real Gemini quality, durable private media, manual role/privacy acceptance, remote application deployment or every UC. The four feature commits remain local on `dev`; no push/merge is claimed by this schema rollout.
+
+## Actor Journey Audit Follow-Up
+
+The later LOST/custody participant, atomic source-deletion and read-only legacy repairs require no new SQL migration. The TypeScript claim schema verifier accepts complete canonical direct-LOST roles as well as recognized migration-045 legacy roles; missing participants still block verification. Applied SQL, checksums and ledger history remain unchanged. The participant repair command was not run.
+
+The follow-up ran only read-only Aiven `migrate:preflight`: 58 source migrations, 61 applied entries, 28 APPLIED attempts and no pending/superseded migrations; historical 053/055 warnings remain. All destructive regression work ran on a task-owned temporary loopback MySQL instance. No shared custody-link correction or automatic restoration of deleted sources occurred. Current tests, scoped commits and deployment limits: [full-system audit](full-system-audit-2026-10-04.md).

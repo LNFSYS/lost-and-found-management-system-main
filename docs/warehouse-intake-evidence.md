@@ -21,12 +21,14 @@ Photos document what was physically received and its condition. They do not waiv
 
 ## Rollout and Acceptance
 
-Run checksum preflight, back up and rehearse the additive `061_warehouse_intake_evidence.sql` on an isolated database before applying it to the shared DB. No previously applied migration or ledger checksum is edited. This task's isolated tests do not establish that Aiven has 061.
+On a new environment, run checksum preflight, back up and rehearse additive `061_warehouse_intake_evidence.sql` on an isolated database before applying it. No previously applied migration or ledger checksum may be edited.
 
 The accompanying LOST contact-photo work also needs `062_lost_contact_photo_checks.sql`; deploy both additive migrations before starting the updated API. Maintenance intentionally pauses if either required schema is missing. See [contact-photo rules](lost-contact-photo-rules.md). Historical preflight evidence through 060 predates these changes and cannot certify this rollout.
 
-The 4 October read-only shared-DB preflight passed and listed exactly 061/062 as pending. Neither was applied by this task.
+On 4 October 2026, shared preflight initially listed exactly 061/062 pending. Both were then applied through the existing runner after a new encrypted 61-table/3,585-row backup and isolated restore/repeat-run rehearsal. Current preflight has no pending migrations, the maintenance probe is ready, and the existing local API health/readiness checks pass. Original ledger records and existing table definitions were preserved. See [the rollout receipt and limits](database-warehouse-recovery.md); schema readiness is not manual/provider acceptance or remote application deployment.
 
 Automated evidence: intake-evidence.test.ts (missing/forged/stale/cross-actor/replay/privacy guards), custody-safety.integration.test.ts (fresh migrated MySQL, concurrent physical receipt, original source preservation, return/hold/dispute regressions), staff-page.spec.ts (walk-in, PENDING/legacy receipt, manual fallback and responsive form).
+
+The later [actor-journey audit repairs](full-system-audit-2026-10-04.md) preserve source availability with atomic deletion guards and consistent LOST/FOUND ownership roles. Intake remains separate from Staff ownership verification. Warehouse intake/return images still use private local storage; the post/claim Cloudinary adapter does not establish durable warehouse-media deployment. No new migration or shared business-data repair is needed or performed for these code safeguards.
 
 Manual role/privacy QA, physical inventory reconciliation, representative real photos/Gemini output, multi-instance media durability and Jira/PR acceptance remain open. No Done/accepted claim is made by this document.

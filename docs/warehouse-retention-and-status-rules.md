@@ -22,7 +22,7 @@ Updated 4 October 2026. These are LNFS project defaults, **not an approved unive
 | --- | --- |
 | Post | Publication/search lifecycle; not physical location |
 | Claim | Consent and human ownership-verification decision |
-| Custody request | PENDING → ACCEPTED → INTAKED; or pre-intake REJECTED/CANCELLED |
+| Custody request | PENDING → INTAKED; legacy ACCEPTED may also become INTAKED; or pre-intake REJECTED/CANCELLED |
 | Warehouse item | Physical intake, storage, reservation, completed return or guarded disposition |
 
 Request and acceptance leave the Finder holding the item. Only Staff physical intake changes custody. Intake must **not** resolve a post or accept/reject its claim. Custody escalation is not a claim rejection; cancellation/rejection clears the room escalation projection while retaining history.
@@ -53,6 +53,8 @@ EXPIRED property is still physically retained until disposition. Canonical retur
 - Generic PATCH cannot assign CLAIMED, RETURNED, DISPOSED, DONATED or TRANSFERRED. Admin controls legal hold and disposition request/approval; another Admin approves. Staff/Admin execute only an item-bound approved action, with current retention, case, dispute, hold and proof checks in the transaction. Denied execution attempts are logged without private evidence. A canonical return excludes only its own completing claim/appointment from active-case blockers; competing cases and pending disputes still block return.
 - Offline walk-in return records the recipient name, contact, identity and private proof without requiring an account or inventing a claim. Active online claims/disputes still block unlinked return. Only a real linked participant-based completed return authorizes feedback.
 - After physical intake, Staff/Admin can separately verify a consented claimant in person with explicit confirmation and a 10-1000 character rationale (BR-65). Check item/claim/recipient linkage, other reservations, active competing claims/appointments, disputes and legal hold. Append independent Staff audit without rewriting Finder identity or decisions. Finder cannot override that Staff custody decision; intake alone never accepts ownership.
+- Staff pre-approval is not required before physical receipt. Finder retains physical custody until intake; queueing alone does not resolve the post or verify ownership. Direct LOST uses the LOST owner as Claimant and the linked FOUND holder as Finder, including normalized legacy participants without changing consent/history.
+- Source deletion locks the post and checks active requests/items/cases, disputes and legal hold atomically (BR-70). Completed eligible publication may be removed with history retained; previously deleted sources need authorized review rather than automatic restoration. GET cannot approve pending legacy claims (BR-71).
 
 ## Proof and Delivery
 
@@ -67,7 +69,7 @@ EXPIRED property is still physically retained until disposition. Canonical retur
 
 ## Traceability and Rollout
 
-BR-53–BR-60, BR-65–BR-67; FR-CUSTODY-02, FR-VERIFY-03, FR-WAREHOUSE-03/04/05, FR-MATCH-05, FR-NOTIFY-05/06, FR-STAFF-02; existing UC-026–031, UC-040/042, UC-051–060, UC-114, UC-141–158, UC-168. Bug fixes do not introduce new UC IDs.
+BR-53–BR-60, BR-65–BR-71; FR-POST-02, FR-CLAIM-01, FR-CUSTODY-02, FR-VERIFY-03, FR-WAREHOUSE-03/04/05/06, FR-MATCH-05, FR-NOTIFY-05/06, FR-STAFF-02; existing UC-022, UC-026–031, UC-040/042, UC-051–060, UC-114, UC-141–158, UC-168. Bug fixes do not introduce new UC IDs.
 
 Canonical `053_custody_requests.sql`, additive `054_custody_safety_contract.sql`, recovery 056–058 and direct-recipient 059 are applied on Aiven. Matching lease migration 060 was applied on 3 October after backup and isolated rehearsal; read-only preflight on 4 October reports no pending migrations. Historical 053 is not an alias. Exact original matching 054 is recovered and immutable; original custody-time 055 effects remain unverified despite schema checks. No applied checksum/history was rewritten. No new migration is needed for the four follow-up fixes. See [database recovery](database-warehouse-recovery.md) for rollout evidence and unresolved physical-link reviews.
 
