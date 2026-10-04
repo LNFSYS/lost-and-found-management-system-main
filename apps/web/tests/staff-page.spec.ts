@@ -1,4 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
+const photoBuffer = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jMioAAAAASUVORK5CYII=", "base64");
+const intakePhoto = { name: "condition.png", mimeType: "image/png", buffer: photoBuffer };
 
 const staffSession = {
   accessToken: "staff-access-token",
@@ -59,6 +61,9 @@ function dashboard() {
 }
 
 async function prepare(page: Page, calls: { created?: unknown; patched?: unknown }) {
+  await page.route("**/api/staff/warehouse-intake-images", route => route.fulfill({ json: { id: "intake-photo", url: "/staff/warehouse-images/intake-photo?provenance=INTAKE" } }));
+  await page.route("**/api/staff/warehouse-images/**", route => route.fulfill({ contentType: "image/png", body: photoBuffer }));
+  await page.route("**/api/staff/warehouse-items/*/images", route => route.fulfill({ json: { images: [] } }));
   await page.route("**/api/staff/warehouse-items/*/return-claim-reviews", route => route.fulfill({ json: { claims: [] } }));
   await page.route(/\/api\/staff\/custody-requests(?:\?.*)?$/, route => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ items: [], total: 0, page: 1, pageSize: 20, counts: { PENDING: 0, ACCEPTED: 0, INTAKED: 0, REJECTED: 0, CANCELLED: 0 } }) }));
   await page.route("**/api/auth/refresh", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(staffSession) }));
@@ -117,16 +122,71 @@ test("staff can see warehouse counts and receive an item with condition notes", 
   await receive.getByLabel("Tên vật phẩm").fill("Thẻ sinh viên");
   await receive.getByLabel("Tình trạng khi nhận").fill("Nguyên vẹn");
   await receive.getByLabel("Danh mục").selectOption("cat-card");
+  await receive.getByLabel("Phụ kiện thực nhận").fill("Không có");
+  await receive.getByLabel("Ảnh tình trạng tiếp nhận", { exact: true }).setInputFiles(intakePhoto);
+  await expect(receive.getByText("Ảnh tình trạng tiếp nhận * (1/5)")).toBeVisible();
+  await receive.getByLabel("Tôi đã đối chiếu vật phẩm, số lượng, phụ kiện và ảnh tình trạng tại quầy.").check();
   await receive.getByRole("button", { name: "Tạo hồ sơ kho (Walk-in)" }).click();
 
-  await expect(page.getByText("Đã tiếp nhận vật phẩm thành công (Walk-in)", { exact: true })).toBeVisible();
+  await expect(page.getByText("Đã tiếp nhận thực tế, chưa lưu kho.", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Đã hiểu & Đóng" }).click();
   await page.getByRole("button", { name: "Kho tài sản", exact: true }).click();
   await expect(page.getByText("Ví da màu nâu", { exact: true })).toBeVisible();
   expect(calls.created?.itemName).toBe("Thẻ sinh viên");
   expect(calls.created?.conditionNotes).toBe("Nguyên vẹn");
   expect(calls.created?.handoverPointId).toBe("hp-1");
+  expect(calls.created?.intakeImageIds).toEqual(["intake-photo"]);
+  expect(calls.created?.receivedQuantity).toBe(1);
 });
+
+for (const width of [1440,390]) {
+  test(`custody physical reconciliation retains source and receives pending/legacy request at ${width}px`, async ({ page }, testInfo) => {
+    await page.setViewportSize({ width, height: 900 });
+    await prepare(page, {});
+    let receives = 0;
+    const request = { id: "request-1", postId: "post-1", post: { id: "post-1", title: "Thẻ sinh viên", thumbnailId: "source-photo" },
+      status: width === 1440 ? "PENDING" : "ACCEPTED", intakeType: "CUSTODY_TRANSFER", requester: { id: "finder", fullName: "Finder" },
+      handler: null, handoverPoint: catalog.handoverPoints[0], claimId: null, roomId: null, reason: null, rejectionReason: null,
+      warehouseItemId: null, confirmedHandoverAt: null, createdAt: "2026-10-04T09:00:00Z", updatedAt: "2026-10-04T09:00:00Z" };
+    await page.route(/\/api\/staff\/custody-requests(?:\?.*)?$/, route => route.fulfill({ json: { items: [request], total: 1, page: 1, pageSize: 20, counts: { PENDING: 1, ACCEPTED: 0, INTAKED: 0, REJECTED: 0, CANCELLED: 0 } } }));
+    await page.route("**/api/staff/custody-requests/*/intake-context", route => route.fulfill({ json: { request,
+      post: { title: "Thẻ sinh viên", description: "Bài gốc còn nguyên", categoryId: "cat-card", areaId: "area-1", buildingId: "building-1", roomText: "Sảnh", finderName: "Finder", finderContact: "finder@example.com", finderUserId: "finder" },
+      images: [{ id: "source-photo", provenance: "SOURCE_POST", uploadedAt: "2026-10-04T09:00:00Z", capturedAt: null }] } }));
+    await page.route("**/api/staff/custody-requests/*/intake", route => {
+      receives++;
+      const body = route.request().postDataJSON();
+      expect(body.itemName).toBe("Thẻ sinh viên tại quầy");
+      expect(body.intakeImageIds).toEqual(["intake-photo"]);
+      expect(body.receivedQuantity).toBe(2);
+      return route.fulfill({ json: { ...request, status: "INTAKED", warehouseItemId: "new-item" } });
+    });
+    await page.route("**/api/posts/analyze-image", route => route.fulfill({ status: 503, json: { message: "AI chưa sẵn sàng" } }));
+    await page.goto("/staff");
+    await page.getByRole("button", { name: "Tiếp nhận vật phẩm", exact: true }).click();
+    const modal = page.getByRole("dialog", { name: "Đối chiếu và tiếp nhận vật phẩm" });
+    await expect(modal.locator(".intake-source").getByText("Bài gốc còn nguyên", { exact: true })).toBeVisible();
+    expect(receives).toBe(0);
+    await modal.getByRole("button", { name: "Xác nhận tiếp nhận", exact: true }).click();
+    await expect(modal.getByText("Cần từ 1 đến 5 ảnh tình trạng do Staff tải lên.", { exact: true })).toBeVisible();
+    expect(receives).toBe(0);
+    await modal.getByLabel("Tên vật phẩm").fill("Thẻ sinh viên tại quầy");
+    await modal.getByLabel("Tình trạng khi nhận").fill("Một góc bị xước nhẹ");
+    await modal.getByLabel("Số lượng thực nhận").fill("2");
+    await modal.getByLabel("Phụ kiện thực nhận").fill("Không có");
+    await modal.getByLabel("Ảnh tình trạng tiếp nhận", { exact: true }).setInputFiles(intakePhoto);
+    await expect(modal.getByText("Ảnh tình trạng tiếp nhận * (1/5)")).toBeVisible();
+    await modal.getByRole("button", { name: "Phân tích ảnh" }).click();
+    await expect(modal.getByText("AI chưa sẵn sàng", { exact: true })).toBeVisible();
+    await expect(modal.getByLabel("Tên vật phẩm")).toHaveValue("Thẻ sinh viên tại quầy");
+    await expect(modal.locator(".intake-source").getByText("Bài gốc còn nguyên", { exact: true })).toBeVisible();
+    await modal.getByLabel("Tôi đã đối chiếu vật phẩm, số lượng, phụ kiện và ảnh tình trạng tại quầy.").check();
+    await page.screenshot({ path: testInfo.outputPath(`intake-${width}.png`) });
+    expect(await modal.evaluate(el => el.scrollWidth <= el.clientWidth + 1)).toBeTruthy();
+    await modal.getByRole("button", { name: "Xác nhận tiếp nhận", exact: true }).click();
+    await expect(modal).toHaveCount(0);
+    expect(receives).toBe(1);
+  });
+}
 
 for (const width of [1440, 390]) {
   test(`Staff verifies a custody claim in the return modal at ${width}px`, async ({ page }, testInfo) => {

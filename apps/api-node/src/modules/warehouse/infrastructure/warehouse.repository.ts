@@ -12,6 +12,7 @@ import { randomUUID } from "node:crypto";
 import type { PoolConnection } from "mysql2/promise";
 
 import type { WarehouseStatus } from "../application/warehouse.dto.js";
+import { createWarehouseIntakeRepository } from "./warehouse-intake.repository.js";
 
 type DbExecutor = SqlExecutor | TransactionContext;
 
@@ -64,6 +65,10 @@ interface WarehouseItemRow extends RowDataPacket {
   created_at: Date | string;
   updated_at: Date | string;
   log_count: number | string;
+  received_quantity?: number | null;
+  accessories?: string | null;
+  thumbnail_id?: string | null;
+  thumbnail_source?: "INTAKE" | "SOURCE_POST";
 }
 
 interface WarehouseItemLockRow extends RowDataPacket {
@@ -144,14 +149,19 @@ const itemSelect = `SELECT wi.id, wi.post_id, wi.handover_point_id, hp.name AS h
   wi.finder_user_id, fu.full_name AS finder_user_name, wi.finder_name, wi.finder_contact,
   wi.status, wi.condition_notes, wi.storage_code, wi.received_at, wi.returned_at, wi.retention_deadline,
   wi.created_by, cu.full_name AS created_by_name, wi.created_at, wi.updated_at,
-  (SELECT COUNT(*) FROM storage_logs sl WHERE sl.warehouse_item_id = wi.id OR (wi.post_id IS NOT NULL AND sl.post_id = wi.post_id)) AS log_count
+  (SELECT COUNT(*) FROM storage_logs sl WHERE sl.warehouse_item_id = wi.id OR (wi.post_id IS NOT NULL AND sl.post_id = wi.post_id)) AS log_count,
+  intake.received_quantity,intake.accessories,
+  COALESCE((SELECT id FROM warehouse_intake_images WHERE intake_id = intake.id ORDER BY created_at,id LIMIT 1),
+    (SELECT id FROM post_media WHERE post_id = wi.post_id AND media_kind = 'ITEM' ORDER BY sort_order,id LIMIT 1)) AS thumbnail_id,
+  IF(EXISTS(SELECT 1 FROM warehouse_intake_images ii WHERE ii.intake_id = intake.id),'INTAKE','SOURCE_POST') AS thumbnail_source
   FROM warehouse_items wi
   LEFT JOIN handover_points hp ON hp.id = wi.handover_point_id
   LEFT JOIN item_categories c ON c.id = wi.category_id
   LEFT JOIN campus_areas a ON a.id = wi.area_id
   LEFT JOIN campus_buildings b ON b.id = wi.building_id
   LEFT JOIN users fu ON fu.id = wi.finder_user_id
-  INNER JOIN users cu ON cu.id = wi.created_by`;
+  INNER JOIN users cu ON cu.id = wi.created_by
+  LEFT JOIN warehouse_intake_sessions intake ON intake.warehouse_item_id = wi.id`;
 
 function iso(value: Date | string | null) {
   if (value === null) return null;
@@ -186,7 +196,10 @@ function mapItem(row: WarehouseItemRow): WarehouseItem {
     createdBy: { id: row.created_by, fullName: row.created_by_name },
     createdAt: iso(row.created_at) ?? "",
     updatedAt: iso(row.updated_at) ?? "",
-    logCount: Number(row.log_count ?? 0)
+    logCount: Number(row.log_count ?? 0),
+    receivedQuantity: row.received_quantity ?? null,
+    accessories: row.accessories ?? null,
+    thumbnail: row.thumbnail_id ? { id: row.thumbnail_id, provenance: row.thumbnail_source ?? "SOURCE_POST" } : null
   };
 }
 
@@ -229,6 +242,7 @@ function listWhere(input: { q?: string; status?: WarehouseStatus; handoverPointI
 export function createWarehouseRepository(pool: SqlExecutor) {
 
   const warehouseRepository = {
+    ...createWarehouseIntakeRepository(pool),
     async findItemByPostId(postId) {
       const [rows] = await pool.execute<RowDataPacket[]>("SELECT id,status FROM warehouse_items WHERE post_id = ? AND deleted_at IS NULL ORDER BY received_at DESC LIMIT 1", [postId]);
       return rows[0] ? { id: String(rows[0].id), status: rows[0].status as WarehouseStatus } : null;

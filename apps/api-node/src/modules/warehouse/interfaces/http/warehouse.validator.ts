@@ -30,7 +30,16 @@ export const listWarehouseItemsQuerySchema = z.object({
   pageSize: z.coerce.number().int().min(1).max(50).default(12)
 });
 
+export const intakeEvidenceFields = {
+  physicalReviewConfirmed: z.literal(true, { errorMap: () => ({ message: "Cần xác nhận đã đối chiếu vật phẩm thực tế tại quầy" }) }),
+  intakeKey: uuid,
+  intakeImageIds: z.array(uuid).min(1, "Cần ít nhất 1 ảnh tình trạng tiếp nhận").max(5, "Chỉ được tải tối đa 5 ảnh tiếp nhận").refine(ids => new Set(ids).size === ids.length, "Ảnh tiếp nhận không được trùng nhau"),
+  receivedQuantity: z.number().int().min(1).max(999),
+  accessories: z.string().trim().min(1, "Cần ghi phụ kiện thực nhận; ghi Không có nếu không có").max(2000)
+};
+
 export const createWarehouseItemSchema = z.object({
+  ...intakeEvidenceFields,
   postId: uuid.nullable().optional(),
   handoverPointId: uuid,
   itemName: z.string().trim().min(1, "Tên vật phẩm không được để trống").max(255),

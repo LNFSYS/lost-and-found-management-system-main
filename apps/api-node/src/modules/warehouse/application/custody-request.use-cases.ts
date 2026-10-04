@@ -7,6 +7,7 @@ import type { CustodyRequestRepository } from "./custody-request.repository.port
 import type { WarehouseRepository } from "./warehouse.repository.port.js";
 import { custodyNotifications, type CustodyNotifications } from "./custody-notifications.js";
 import { custodyFingerprint } from "./custody-fingerprint.js";
+import { intakeFingerprint, prepareIntakeEvidence, serializeWarehouseImage, validateIntakeEvidence } from "./intake-evidence.js";
 
 const clean = (value: string | null | undefined) => value?.trim() || null;
 export interface CustodyRequestDependencies extends CustodyNotifications {
@@ -34,6 +35,13 @@ export function createCustodyRequestUseCases(options: CustodyRequestDependencies
         throw new AppError("not_found", "Không tìm thấy yêu cầu custody");
       }
       return { request, audit: await repo.listAudit(requestId) };
+    },
+    async getIntakeContext(requestId: string, actorId: string) {
+      await staff(actorId);
+      const request = await repo.findById(requestId);
+      const post = request?.postId ? await warehouse.getPostInfoForIntake(request.postId) : null;
+      if (!request || !post || post.finderUserId !== request.requester.id) throw new AppError("conflict", "Yêu cầu cần kiểm tra lại nguồn FOUND");
+      return { request, post, images: (await warehouse.listSourceImages(request.postId!)).map(serializeWarehouseImage) };
     },
     async getMyRequestByPost(postId: string, actorId: string) {
       const post = await warehouse.getPostInfoForIntake(postId);
@@ -115,13 +123,19 @@ export function createCustodyRequestUseCases(options: CustodyRequestDependencies
     },
     async confirmIntake(requestId: string, input: IntakeCustodyRequestInput, actorId: string) {
       await staff(actorId);
+      validateIntakeEvidence(input);
+      const payload = intakeFingerprint({ ...input, accessories: input.accessories.trim(), intakeImageIds: [...input.intakeImageIds].sort(), confirmedHandoverAt: input.confirmedHandoverAt?.toISOString() ?? null });
       const receivedAt = input.confirmedHandoverAt ?? new Date();
       if (!Number.isFinite(receivedAt.getTime()) || receivedAt.getTime() > Date.now()) throw new AppError("bad_request", "Thời gian tiếp nhận không được ở tương lai");
       if (!clean(input.conditionNotes)) throw new AppError("bad_request", "Cần tình trạng vật phẩm");
       const deliveries = await withTransaction(async db => {
         const lock = await repo.lockForUpdate(requestId, db);
         if (!lock) throw new AppError("not_found", "Không tìm thấy yêu cầu");
-        if (lock.status === "INTAKED" && lock.warehouseItemId) return [];
+        if (lock.status === "INTAKED" && lock.warehouseItemId) {
+          const replay = await prepareIntakeEvidence(warehouse, input, actorId, requestId, payload, db);
+          if (replay !== lock.warehouseItemId) throw new AppError("conflict", "Yêu cầu đã được tiếp nhận bằng phiên khác");
+          return [];
+        }
         if (!canTransitionCustodyStatus(lock.status, "INTAKED")) throw new AppError("conflict", "Yêu cầu không còn chờ tiếp nhận");
         if (!lock.postId || !await repo.lockEligiblePost(lock.postId, lock.requesterId, db)) throw new AppError("conflict", "Bài FOUND không hợp lệ cho intake");
         if (lock.claimId && !await repo.validateClaimLink(lock.postId, lock.requesterId, lock.claimId, lock.roomId, db)) throw new AppError("conflict", "Claim/phòng trao đổi không thuộc vật phẩm của Finder");
@@ -129,17 +143,32 @@ export function createCustodyRequestUseCases(options: CustodyRequestDependencies
         if (!lock.handoverPointId || !await warehouse.findHandoverPointById(lock.handoverPointId)) throw new AppError("conflict", "Điểm bàn giao không hoạt động");
         const post = await warehouse.getPostInfoForIntake(lock.postId, db);
         if (!post || post.finderUserId !== lock.requesterId) throw new AppError("conflict", "Không tìm thấy vật phẩm của Finder");
-        const category = post.categoryId ? await warehouse.findCategoryNames(post.categoryId) : null;
+        const replay = await prepareIntakeEvidence(warehouse, input, actorId, requestId, payload, db);
+        if (replay) throw new AppError("conflict", "Phiên đối chiếu đã dùng cho vật phẩm khác");
+        const categoryId = input.categoryId !== undefined ? input.categoryId : post.categoryId;
+        const category = categoryId ? await warehouse.findCategoryNames(categoryId) : null;
+        if (categoryId && !category) throw new AppError("bad_request", "Danh mục tiếp nhận không hợp lệ");
+        let areaId = input.areaId !== undefined ? input.areaId : post.areaId;
+        const buildingId = input.buildingId !== undefined ? input.buildingId : post.buildingId;
+        if (buildingId) {
+          const building = await warehouse.findBuildingById(buildingId);
+          if (!building || (areaId && building.areaId !== areaId)) throw new AppError("bad_request", "Địa điểm không thuộc khu vực đã chọn");
+          areaId = building.areaId;
+        }
+        if (areaId && !await warehouse.findAreaById(areaId)) throw new AppError("bad_request", "Khu vực tiếp nhận không hợp lệ");
         const key = retentionConfigKeyForCategory(category);
         const days = await warehouse.getConfigInt(key, retentionFallbacks[key]);
         const warehouseItemId = id();
         const storageCode = clean(input.storageCode) ?? await warehouse.generateNextStorageCode(db);
         await warehouse.createItem({ id: warehouseItemId, postId: lock.postId, handoverPointId: lock.handoverPointId,
-          itemName: post.title, description: post.description, categoryId: post.categoryId, areaId: post.areaId, buildingId: post.buildingId,
-          roomText: post.roomText, finderUserId: post.finderUserId, finderName: post.finderName, finderContact: post.finderContact,
+          itemName: clean(input.itemName) ?? post.title, description: input.description !== undefined ? clean(input.description) : post.description, categoryId, areaId, buildingId,
+          roomText: input.roomText !== undefined ? clean(input.roomText) : post.roomText, finderUserId: post.finderUserId,
+          finderName: input.finderName !== undefined ? clean(input.finderName) : post.finderName, finderContact: input.finderContact !== undefined ? clean(input.finderContact) : post.finderContact,
           conditionNotes: input.conditionNotes.trim(), storageCode, receivedAt, retentionDeadline: calculateRetentionDeadline(receivedAt, days), createdBy: actorId }, db);
         await warehouse.createStorageLog({ id: id(), warehouseItemId, postId: lock.postId, handoverPointId: lock.handoverPointId, actorId,
           action: "RECEIVED", toStatus: "RECEIVED", conditionNotes: input.conditionNotes.trim(), storageCode, note: `Custody ${requestId}` }, db);
+        await warehouse.completeIntakeSession({ id: input.intakeKey, itemId: warehouseItemId, requestPayload: payload, sourceSnapshot: post,
+          quantity: input.receivedQuantity, accessories: input.accessories.trim() }, db);
         // Physical intake changes custody, never ownership or resolution.
         await repo.updateStatus(requestId, { status: "INTAKED", handlerId: actorId, warehouseItemId, confirmedHandoverAt: receivedAt }, db);
         await repo.writeAudit({ id: id(), custodyRequestId: requestId, actorId, action: "INTAKED", fromStatus: lock.status, toStatus: "INTAKED", metadata: { warehouseItemId, receivedAt: receivedAt.toISOString(), retentionDays: days } }, db);

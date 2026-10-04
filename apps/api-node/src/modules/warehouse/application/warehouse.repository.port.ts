@@ -1,5 +1,6 @@
 import type { TransactionContext } from "../../../shared/application/transaction.js";
 import type { WarehouseStatus } from "./warehouse.dto.js";
+import type { IntakeSession, WarehouseImageRecord, WarehouseImageProvenance } from "./intake-evidence.dto.js";
 
 export type StorageLogAction = WarehouseStatus | "OVERDUE_MARKED" | "CONDITION_UPDATED";
 
@@ -47,6 +48,9 @@ export interface WarehouseItem {
   createdAt: string;
   updatedAt: string;
   logCount: number;
+  receivedQuantity?: number | null;
+  accessories?: string | null;
+  thumbnail?: { id: string; provenance: WarehouseImageProvenance } | null;
 }
 
 export interface WarehouseStorageLog {
@@ -133,6 +137,17 @@ export interface WarehouseClaimReview {
 }
 
 export interface WarehouseRepository {
+  openIntakeSession(id: string, actorId: string, custodyRequestId: string | null, db: TransactionContext): Promise<void>;
+  lockIntakeSession(id: string, db: TransactionContext): Promise<IntakeSession | null>;
+  listIntakeImages(intakeKey: string, db: TransactionContext): Promise<WarehouseImageRecord[]>;
+  deleteDraftIntakeImage(id: string, db: TransactionContext): Promise<void>;
+  listExpiredIntakeSessions(db: TransactionContext): Promise<string[]>;
+  deleteExpiredIntakeSession(id: string, db: TransactionContext): Promise<void>;
+  createIntakeImage(input: { id: string; intakeKey: string; actorId: string; storageRef: string; format: string; bytes: number; capturedAt: Date | null }, db: TransactionContext): Promise<void>;
+  completeIntakeSession(input: { id: string; itemId: string; requestPayload: string; sourceSnapshot: unknown; quantity: number; accessories: string }, db: TransactionContext): Promise<void>;
+  listItemImages(itemId: string): Promise<WarehouseImageRecord[]>;
+  listSourceImages(postId: string): Promise<WarehouseImageRecord[]>;
+  findWarehouseImage(id: string, provenance: WarehouseImageProvenance): Promise<WarehouseImageRecord | null>;
   isStaff(actorId: string, db?: TransactionContext): Promise<boolean>;
   isAdmin(actorId: string, db?: TransactionContext): Promise<boolean>;
   lockPhysicalPost(postId: string, db: TransactionContext): Promise<void>;
