@@ -1,4 +1,5 @@
 import { AppError } from "../../../shared/domain/app-error.js";
+import type { AccessTokenPayload } from "../../../shared/domain/auth.js";
 import type { ClaimRepository } from "../../claims/application/index.js";
 import type { NotificationRecord } from "../../notifications/application/index.js";
 
@@ -16,6 +17,7 @@ export interface RealtimeConnection {
   rooms: Set<string>;
   deliveredEventIds: Set<string>;
   response: EventStreamResponse;
+  session?: AccessTokenPayload;
 }
 
 export interface WorkflowNotificationInput {
@@ -25,9 +27,12 @@ export interface WorkflowNotificationInput {
   roomId?: string | null;
 }
 
-export function createRealtimeUseCases({ claimRepository, id }: {
+export function createRealtimeUseCases({ claimRepository, id, validateSession, clock = Date.now, validationTimeoutMs = 5000 }: {
   claimRepository: Pick<ClaimRepository, "findRoomForParticipant">;
   id: () => string;
+  validateSession?: (session: AccessTokenPayload) => Promise<boolean>;
+  clock?: () => number;
+  validationTimeoutMs?: number;
 }) {
   const connections = new Map<string, RealtimeConnection>();
   const connectionsByUser = new Map<string, Set<string>>();
@@ -64,6 +69,43 @@ export function createRealtimeUseCases({ claimRepository, id }: {
     response.write(`data: ${JSON.stringify(data)}\n\n`);
   }
 
+  function close(connection: RealtimeConnection) {
+    cleanup(connection.id);
+    connection.response.end();
+  }
+
+  function expired(session: AccessTokenPayload) {
+    return !Number.isFinite(session.exp) || session.exp! * 1000 <= clock();
+  }
+
+  async function sessionValid(session?: AccessTokenPayload) {
+    if (!session) return !validateSession;
+    if (expired(session) || !validateSession) return false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      const valid = await Promise.race([
+        validateSession(session),
+        new Promise<boolean>(resolve => { timer = setTimeout(() => resolve(false), validationTimeoutMs); })
+      ]);
+      return valid && !expired(session);
+    } catch {
+      return false;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  async function authorized(connection: RealtimeConnection) {
+    const valid = await sessionValid(connection.session);
+    // A late validation must not revive a disconnected or replaced stream.
+    if (connections.get(connection.id) !== connection) return false;
+    if (!valid || connection.response.destroyed) {
+      close(connection);
+      return false;
+    }
+    return true;
+  }
+
   async function authorizeRooms(userId: string, requestedRoomIds: string[] = []) {
     const roomIds = [...new Set(requestedRoomIds)];
     for (const roomId of roomIds) {
@@ -90,11 +132,16 @@ export function createRealtimeUseCases({ claimRepository, id }: {
   return {
     authorizeRooms,
 
-    async connect(input: { userId: string; roomIds?: string[]; response: RealtimeConnection["response"]; authorized?: boolean; }) {
+    async connect(input: { userId: string; roomIds?: string[]; response: RealtimeConnection["response"]; authorized?: boolean; session?: AccessTokenPayload; }) {
       const roomIds = [...new Set(input.roomIds ?? [])];
-      const connection: RealtimeConnection = { id: id(), userId: input.userId, rooms: new Set(), deliveredEventIds: new Set(), response: input.response };
+      if ((input.session && input.session.sub !== input.userId) || !await sessionValid(input.session)) {
+        throw new AppError("unauthenticated", "Realtime session has expired");
+      }
+      const connection: RealtimeConnection = { id: id(), userId: input.userId, rooms: new Set(), deliveredEventIds: new Set(), response: input.response, session: input.session };
       const authorizedRoomIds = input.authorized ? roomIds : await authorizeRooms(input.userId, roomIds);
       if (stopped) throw new AppError("unavailable", "Realtime service is shutting down");
+      if (input.session && expired(input.session)) throw new AppError("unauthenticated", "Realtime session has expired");
+      if (input.response.destroyed) throw new AppError("unavailable", "Realtime connection is closed");
       for (const roomId of authorizedRoomIds) subscribe(connection, roomId);
       connections.set(connection.id, connection);
       const userConnections = connectionsByUser.get(input.userId) ?? new Set<string>();
@@ -110,35 +157,41 @@ export function createRealtimeUseCases({ claimRepository, id }: {
       return { connectionId: connection.id, cleanup: () => cleanup(connection.id) };
     },
 
-    publishNotification(input: WorkflowNotificationInput) {
+    async publishNotification(input: WorkflowNotificationInput) {
       const connectionIds = connectionsByUser.get(input.userId) ?? new Set<string>();
       let delivered = 0;
       const eventId = input.notification.id;
       for (const connectionId of connectionIds) {
         const connection = connections.get(connectionId);
         if (!connection || connection.response.destroyed || connection.deliveredEventIds.has(eventId)) continue;
+        if (!await authorized(connection) || connection.deliveredEventIds.has(eventId)) continue;
         connection.deliveredEventIds.add(eventId);
-        send(connection.response, "workflow.notification", {
-          eventId,
-          workflow: input.workflow,
-          roomId: input.roomId ?? null,
-          notification: safeNotification(input.notification),
-          resync: { notifications: "/api/notifications" }
-        });
-        delivered += 1;
+        try {
+          send(connection.response, "workflow.notification", {
+            eventId,
+            workflow: input.workflow,
+            roomId: input.roomId ?? null,
+            notification: safeNotification(input.notification),
+            resync: { notifications: "/api/notifications" }
+          });
+          delivered += 1;
+        } catch {
+          close(connection);
+        }
       }
       return { delivered };
     },
 
-    heartbeat(connectionId: string) {
+    async heartbeat(connectionId: string) {
       const connection = connections.get(connectionId);
-      if (!connection || connection.response.destroyed) return false;
+      if (!connection || !await authorized(connection)) return false;
       send(connection.response, "realtime.ping", { connectionId, at: new Date().toISOString() });
       return true;
     },
 
     disconnect(connectionId: string) {
-      cleanup(connectionId);
+      const connection = connections.get(connectionId);
+      if (connection) close(connection);
     },
 
     stop() {

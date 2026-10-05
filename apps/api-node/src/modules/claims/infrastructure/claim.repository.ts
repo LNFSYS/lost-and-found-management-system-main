@@ -97,6 +97,7 @@ interface VerificationContextRow extends RowDataPacket {
 
 interface ClaimItemContextRow extends RowDataPacket {
   found_post_id: string;
+  owner_id: string;
   title: string;
   category_name: string | null;
   visibility_mode: "PUBLIC" | "PRIVATE_DETAILS";
@@ -452,7 +453,7 @@ export function createClaimRepository(pool: SqlExecutor) {
         `SELECT found.id AS found_post_id, category.name_normalized AS category_name,
           parent.name_normalized AS parent_category_name
          FROM claims c
-         INNER JOIN posts found ON found.id = COALESCE(c.source_found_post_id,c.post_id) AND found.type = 'FOUND' AND found.deleted_at IS NULL
+         INNER JOIN posts found ON found.id = COALESCE(c.source_found_post_id,c.post_id) AND found.type IN ('FOUND', 'LOST') AND found.deleted_at IS NULL
          INNER JOIN item_categories category ON category.id = found.category_id
          LEFT JOIN item_categories parent ON parent.id = category.parent_id
          WHERE c.id = ? LIMIT 1`,
@@ -468,14 +469,14 @@ export function createClaimRepository(pool: SqlExecutor) {
 
     async findClaimItemContext(claimId: string, queryable: Queryable = pool) {
       const [rows] = await sqlExecutor(queryable).execute<ClaimItemContextRow[]>(
-        `SELECT found.id AS found_post_id, found.title, category.name AS category_name,
+        `SELECT found.id AS found_post_id, found.user_id AS owner_id, found.title, category.name AS category_name,
           found.visibility_mode, area.name AS area_name, building.name AS building_name,
           found.room_text, found.custom_location, handover.name AS handover_point_name,
           (SELECT media.id FROM post_media media
            WHERE media.post_id = found.id AND media.media_kind = 'ITEM'
            ORDER BY media.sort_order ASC, media.created_at ASC, media.id ASC LIMIT 1) AS media_id
          FROM claims c
-         INNER JOIN posts found ON found.id = COALESCE(c.source_found_post_id,c.post_id) AND found.type = 'FOUND' AND found.deleted_at IS NULL
+         INNER JOIN posts found ON found.id = COALESCE(c.source_found_post_id,c.post_id) AND found.type IN ('FOUND', 'LOST') AND found.deleted_at IS NULL
          LEFT JOIN item_categories category ON category.id = found.category_id
          LEFT JOIN campus_areas area ON area.id = found.area_id
          LEFT JOIN campus_buildings building ON building.id = found.building_id
@@ -486,6 +487,7 @@ export function createClaimRepository(pool: SqlExecutor) {
       const row = rows[0];
       return row ? {
         foundPostId: row.found_post_id,
+        ownerId: row.owner_id,
         title: row.title,
         categoryName: row.category_name,
         visibilityMode: row.visibility_mode,

@@ -3,6 +3,27 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { warehouseRepository } from "../../../test/persistence-fixtures.js";
 import { createTransactionRunner } from "../../../shared/infrastructure/transaction-context.js";
+import type { SqlExecutor } from "../../../shared/infrastructure/transaction-context.js";
+import { createWarehouseRepository } from "./warehouse.repository.js";
+
+test("inventory uses newest physical receipt first with a stable tie-breaker before pagination", async () => {
+  const queries: Array<{ sql: string; values?: unknown[] }> = [];
+  const pool = { execute: async (sql: string, values?: unknown[]) => {
+    queries.push({ sql: sql.replace(/\s+/g, " ").trim(), values });
+    return [/^SELECT COUNT\(\*\) AS total FROM warehouse_items/.test(sql) ? [{ total: 25 }] : [], []];
+  } } as unknown as SqlExecutor;
+  const repository = createWarehouseRepository(pool);
+  await repository.listItems({ page: 1, pageSize: 12 });
+  await repository.listItems({ page: 2, pageSize: 12, status: "STORED", handoverPointId: "desk", q: "keys" });
+  assert.match(queries[0].sql, /ORDER BY wi\.received_at DESC, wi\.id DESC LIMIT 12 OFFSET 0$/);
+  assert.match(queries[2].sql, /ORDER BY wi\.received_at DESC, wi\.id DESC LIMIT 12 OFFSET 12$/);
+  for (const query of [queries[0], queries[2]]) {
+    assert.doesNotMatch(query.sql, /ORDER BY wi\.status|wi\.retention_deadline ASC/);
+    assert.match(query.sql, /wi\.deleted_at IS NULL/);
+  }
+  assert.deepEqual(queries[2].values, ["STORED", "desk", "%keys%", "%keys%", "%keys%", "%keys%"]);
+  assert.deepEqual(queries[3].values, queries[2].values);
+});
 
 function transactionConnection(execute: (sql: string, values?: unknown[]) => Promise<[unknown, unknown]>) {
   return { execute } as unknown as PoolConnection;

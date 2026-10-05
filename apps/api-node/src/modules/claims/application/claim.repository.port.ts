@@ -246,6 +246,7 @@ export interface ClaimRepository {
   } | null>;
   findClaimItemContext(claimId: string, queryable?: TransactionContext): Promise<{
     foundPostId: string;
+    ownerId: string;
     title: string;
     categoryName: string | null;
     visibilityMode: "PUBLIC" | "PRIVATE_DETAILS";

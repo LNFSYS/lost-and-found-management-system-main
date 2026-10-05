@@ -35,6 +35,7 @@ function sampleClaim() {
 function sampleItemContext(foundPostId = sampleClaim().foundPostId) {
   return {
     foundPostId,
+    ownerId: sampleClaim().finderId,
     title: "Ví nhặt được",
     categoryName: "Ví / bóp",
     visibilityMode: "PUBLIC" as const,

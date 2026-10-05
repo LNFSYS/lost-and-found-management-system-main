@@ -7,7 +7,7 @@ type CloudinaryClient = typeof cloudinary;
 type Fetcher = (input: string) => Promise<Response>;
 type CloudinaryConfig = { cloudName: string | null; apiKey: string | null; apiSecret: string | null; };
 type ConfiguredCloudinary = { cloudName: string; apiKey: string; apiSecret: string; };
-type MediaNamespace = "post-media" | "claim-evidence";
+type MediaNamespace = "post-media" | "claim-evidence" | "warehouse-proof";
 
 function isConfigured(config: CloudinaryConfig): config is ConfiguredCloudinary {
   return Boolean(config.cloudName && config.apiKey && config.apiSecret);
@@ -41,6 +41,7 @@ export function createCloudinaryPrivateMediaStorage(options: {
   config: CloudinaryConfig;
   namespace: MediaNamespace;
   fallback?: PrivateMediaStorage;
+  allowLocalWrites?: boolean;
   client?: CloudinaryClient;
   fetcher?: Fetcher;
 }): PrivateMediaStorage {
@@ -83,19 +84,25 @@ export function createCloudinaryPrivateMediaStorage(options: {
 
   return {
     async save(ownerId, mediaId, extension, bytes) {
-      if (!isConfigured(options.config) && options.fallback) {
+      if (!isConfigured(options.config) && options.fallback && options.allowLocalWrites !== false) {
         return options.fallback.save(ownerId, mediaId, extension, bytes);
       }
       const image = imageFormat(extension);
-      const result = await uploadBuffer(configuredClient(client, options.config), bytes, {
-        folder,
-        public_id: `${ownerId}/${mediaId}`,
-        resource_type: "image",
-        type: "authenticated",
-        format: image,
-        overwrite: false,
-        unique_filename: false
-      });
+      const configured = configuredClient(client, options.config);
+      let result: UploadApiResponse;
+      try {
+        result = await uploadBuffer(configured, bytes, {
+          folder,
+          public_id: `${ownerId}/${mediaId}`,
+          resource_type: "image",
+          type: "authenticated",
+          format: image,
+          overwrite: false,
+          unique_filename: false
+        });
+      } catch {
+        throw new AppError("upstream_failure", "Dich vu luu anh tam thoi khong kha dung");
+      }
       return {
         secureUrl: `${prefix}${ownerId}/${mediaId}.${image}`,
         publicId: result.public_id

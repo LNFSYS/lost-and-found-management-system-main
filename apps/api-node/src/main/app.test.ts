@@ -19,7 +19,7 @@ const reportId = "33333333-3333-4333-8333-333333333333";
 const appointmentId = "44444444-4444-4444-8444-444444444444";
 
 function makeAccessToken(roles: Role[] = ["USER", "ADMIN"]) {
-  return jwt.sign({ sub: "admin-id", email: "admin@example.com", roles, sessionVersion: 0 }, env.jwtAccessSecret);
+  return jwt.sign({ sub: "admin-id", email: "admin@example.com", roles, sessionVersion: 0 }, env.jwtAccessSecret, { expiresIn: "1h" });
 }
 
 function jsonHeaders(roles: Role[] = ["USER", "ADMIN"]) {
