@@ -31,7 +31,11 @@ export function decryptBackup(bytes: Buffer, key: Buffer): RecoveryBackup {
 
 export async function captureRecoveryBackup(pool: Pool): Promise<RecoveryBackup> {
   const connection = await pool.getConnection();
+  let previousTimezone: string | undefined;
   try {
+    const [zone] = await connection.query<RowDataPacket[]>("SELECT @@SESSION.time_zone AS zone");
+    previousTimezone = String(zone[0].zone);
+    await connection.query("SET SESSION time_zone='+00:00'");
     await connection.query("SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ");
     await connection.query("START TRANSACTION WITH CONSISTENT SNAPSHOT, READ ONLY");
     const [database] = await connection.query<RowDataPacket[]>("SELECT DATABASE() AS name");
@@ -47,7 +51,10 @@ export async function captureRecoveryBackup(pool: Pool): Promise<RecoveryBackup>
       const [definition] = await connection.query<RowDataPacket[]>("SHOW CREATE TABLE ??", [table.name]);
       const [metadata] = await connection.query<RowDataPacket[]>("SELECT COLUMN_NAME AS name, DATA_TYPE AS type, GENERATION_EXPRESSION AS expression FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=? ORDER BY ORDINAL_POSITION", [table.name]);
       const columns = metadata.filter(row => !row.expression);
-      const [rows] = await connection.query<RowDataPacket[]>("SELECT * FROM ??", [table.name]);
+      const [rows] = await connection.query<RowDataPacket[]>({ sql: "SELECT * FROM ??", typeCast(field, next) {
+        // Date objects truncate microseconds; SQL strings preserve the UTC snapshot.
+        return ["TIMESTAMP", "DATETIME", "DATE"].includes(field.type) ? field.string() : next();
+      } }, [table.name]);
       backup.tables.push({ name: table.name, ddl: definition[0]["Create Table"], columns: columns.map(row => row.name), rows: rows.map(row => columns.map(column => {
         const value = row[column.name];
         if (value === null) return null;
@@ -61,6 +68,7 @@ export async function captureRecoveryBackup(pool: Pool): Promise<RecoveryBackup>
     return backup;
   } finally {
     await connection.query("ROLLBACK").catch(() => undefined);
+    if (previousTimezone !== undefined) await connection.query("SET SESSION time_zone=?", [previousTimezone]).catch(() => { connection.destroy(); });
     connection.release();
   }
 }
@@ -80,12 +88,16 @@ export async function writeRecoveryBackup(backup: RecoveryBackup, directory: str
 // Never restore to a shared host or an existing database, even with CLI overrides.
 export async function restoreRecoveryBackup(pool: Pool, backup: RecoveryBackup, reviewedOrphans: { table: string; constraint: string; count: number }[] = []) {
   const connection = await pool.getConnection();
+  let previousTimezone: string | undefined;
   try {
     if (!["127.0.0.1", "localhost", "::1"].includes(connection.config.host ?? "")) throw new Error("Recovery rehearsal must use loopback MySQL");
     const [database] = await connection.query<RowDataPacket[]>("SELECT DATABASE() AS name");
     if (!/^lnfs_recovery_[a-f0-9]{32}_test$/.test(database[0]?.name ?? "")) throw new Error("Recovery rehearsal requires a dedicated generated *_test database");
     const [tables] = await connection.query<RowDataPacket[]>("SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE()");
     if (tables.length) throw new Error("Refusing to overwrite an existing rehearsal database");
+    const [zone] = await connection.query<RowDataPacket[]>("SELECT @@SESSION.time_zone AS zone");
+    previousTimezone = String(zone[0].zone);
+    await connection.query("SET SESSION time_zone='+00:00'");
     await connection.query("SET SESSION sql_mode = CONCAT(@@sql_mode, ',ANSI_QUOTES')");
     await connection.query("SET FOREIGN_KEY_CHECKS=0");
     for (const table of backup.tables) await connection.query(table.ddl);
@@ -100,6 +112,7 @@ export async function restoreRecoveryBackup(pool: Pool, backup: RecoveryBackup, 
     await verifyRecoveryForeignKeys(connection, reviewedOrphans);
   } finally {
     await connection.query("SET FOREIGN_KEY_CHECKS=1").catch(() => undefined);
+    if (previousTimezone !== undefined) await connection.query("SET SESSION time_zone=?", [previousTimezone]).catch(() => { connection.destroy(); });
     connection.release();
   }
 }
