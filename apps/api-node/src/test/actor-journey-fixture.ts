@@ -21,7 +21,7 @@ export const isolatedJourney = { skip: process.env.LNFS_DB_INTEGRATION !== "1" }
 
 async function fixture(pool: Pool, uploadDir: string) {
   const p = createPersistence(pool);
-  const services = createServices(p, { ...env, uploadDir });
+  const services = createServices(p, { ...env, uploadDir, cloudinary: { cloudName: null, apiKey: null, apiSecret: null } });
   const ids = { finder: randomUUID(), owner: randomUUID(), outsider: randomUUID(), staff: randomUUID(), admin: randomUUID(), found: randomUUID(), lost: randomUUID() };
   for (const user of [ids.finder, ids.owner, ids.outsider, ids.staff, ids.admin]) {
     const email = `${user}@example.invalid`;

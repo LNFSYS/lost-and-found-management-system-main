@@ -224,7 +224,7 @@ test("isolated MySQL custody: authorization, concurrency, lifecycle, proof and n
         await pool.execute("INSERT INTO posts (id,user_id,type,title,title_normalized,description,description_normalized,status,deleted_at) VALUES (?,?,'LOST','Fixture','fixture','Fixture','fixture',?,?)", [post,user,status,deletedAt]);
         await pool.execute("INSERT INTO match_results (id,lost_post_id,found_post_id,total_score) VALUES (?,?,?,0.7)", [randomUUID(),post,source]);
       }
-      const services = createServices(p,{ ...env, uploadDir });
+      const services = createServices(p,{ ...env, uploadDir, cloudinary: { cloudName: null, apiKey: null, apiSecret: null } });
       const contactPhotos = createContactPhotoUseCases({ repository: p.contactPhotoRepository, claims: p.claimRepository, matching: p.matchingRepository,
         authorizeTarget: postId => services.postService.getPost(postId), transaction: p.transaction, id: randomUUID,
         mediaStorage: createPrivateMediaStorage({ uploadDir, namespace: "claim-evidence", invalidPathMessage: "Invalid", notFoundMessage: "Missing" }),
@@ -302,6 +302,52 @@ test("isolated MySQL custody: authorization, concurrency, lifecycle, proof and n
         assert.equal(context?.foundPostId,source);
         assert.equal(conversation.finderId,ids.finder);
         assert.equal(conversation.claimantId,ids.owner);
+        await httpTest.test("direct LOST verification works without a FOUND source and cannot create forged custody", async () => {
+          const unlinkedLost = randomUUID();
+          await pool.execute("INSERT INTO posts (id,user_id,type,title,title_normalized,description,description_normalized,category_id) VALUES (?,?,'LOST','Keys','keys','Fixture','fixture',?)", [unlinkedLost,ids.owner,categoryId]);
+          const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}/api`;
+          const headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
+          const form = new FormData();
+          form.set("postId",unlinkedLost);
+          form.set("file",new Blob([new Uint8Array([0xff,0xd8,0xff,0xe0])],{ type: "image/jpeg" }),"fixture.jpg");
+          const check = await fetch(`${base}/claims/contact-photo-checks`,{ method: "POST", headers: { Authorization: `Bearer ${token}` }, body: form });
+          assert.equal(check.status,200);
+          const approval = await check.json() as { checkId: string };
+          const created = await fetch(`${base}/claims/direct-messages`,{ method: "POST", headers,
+            body: JSON.stringify({ postId: unlinkedLost, content: "Contact without a FOUND post", clientMessageId: randomUUID(), contactCheckId: approval.checkId }) });
+          assert.equal(created.status,201);
+          const direct = await created.json() as { claim: { id: string; canSend: boolean; item: { categoryName: string } } };
+          assert.equal(direct.claim.canSend,true);
+          const [category] = await pool.query<RowDataPacket[]>("SELECT name FROM item_categories WHERE id = ?", [categoryId]);
+          assert.equal(direct.claim.item.categoryName,category[0].name);
+          assert.equal((await p.claimRepository.findVerificationContext(direct.claim.id))?.foundPostId,unlinkedLost);
+          for (const [actor,role] of [[ids.finder,"FINDER"],[ids.owner,"CLAIMANT"]]) {
+            const participantToken = createAuthSecurity(env).signAccessToken({ sub: actor, email: `${actor}@example.invalid`, roles: ["STUDENT"], sessionVersion: 0 });
+            const verification = await fetch(`${base}/claims/${direct.claim.id}/verification`,{ headers: { Authorization: `Bearer ${participantToken}` } });
+            assert.equal(verification.status,200);
+            const state = await verification.json() as { participantRole: string; appointmentEligible: boolean; policy: { answeredCount: number; minimumAnswers: number } };
+            assert.equal(state.participantRole,role);
+            assert.equal(state.appointmentEligible,false);
+            assert.equal(state.policy.answeredCount,0);
+            assert.equal(state.policy.minimumAnswers,1);
+          }
+          const templates = await fetch(`${base}/claims/${direct.claim.id}/verification/templates`,{ headers });
+          assert.equal(templates.status,200);
+          const transfer = await fetch(`${base}/claims/${direct.claim.id}/verification/decision`,{ method: "POST",
+            headers: { ...headers, "Idempotency-Key": randomUUID() }, body: JSON.stringify({ decision: "ESCALATE_TO_CUSTODY", reason: "No physical FOUND source", handoverPointId: point }) });
+          assert.equal(transfer.status,403);
+          const [requests] = await pool.query<RowDataPacket[]>("SELECT id FROM custody_requests WHERE claim_id = ?", [direct.claim.id]);
+          assert.equal(requests.length,0);
+          assert.equal((await gatedClaims.getVerification(direct.claim.id,ids.finder)).status,"CONVERSATION_OPEN");
+          await pool.execute("UPDATE posts SET visibility_mode = 'PRIVATE_DETAILS', custom_location = 'Private desk' WHERE id = ?", [unlinkedLost]);
+          await pool.execute("INSERT INTO post_media (id,post_id,secure_url,public_id,resource_type,format,bytes,media_kind) VALUES (?,?,?,'source','image','jpg',4,'ITEM')", [randomUUID(),unlinkedLost,"private://source-test"]);
+          const ownerItem = (await gatedClaims.getClaim(direct.claim.id,ids.owner)).item;
+          const finderItem = (await gatedClaims.getClaim(direct.claim.id,ids.finder)).item;
+          assert.equal(ownerItem?.locationLabel,"Private desk");
+          assert.ok(ownerItem?.imageUrl);
+          assert.equal(finderItem?.locationLabel,null);
+          assert.equal(finderItem?.imageUrl,null);
+        });
       } finally {
         await new Promise<void>((resolve,reject) => {
           server.close(error => error ? reject(error) : resolve());

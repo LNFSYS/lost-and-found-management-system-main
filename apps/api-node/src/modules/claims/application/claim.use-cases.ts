@@ -163,7 +163,7 @@ export function createClaimUseCases(options: ClaimDependencies) {
       claimRepository.listParticipants(claimId),
       claimRepository.findClaimItemContext(claimId)
     ]);
-    const seesPrivateItemContext = userId === claim.finderId;
+    const seesPrivateItemContext = userId === itemContext?.ownerId;
     const exactLocation = itemContext
       ? itemContext.handoverPointName ?? itemContext.customLocation ?? itemContext.buildingName ?? itemContext.roomText ?? itemContext.areaName
       : null;

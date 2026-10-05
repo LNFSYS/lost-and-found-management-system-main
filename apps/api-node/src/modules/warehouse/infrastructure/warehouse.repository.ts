@@ -452,10 +452,7 @@ export function createWarehouseRepository(pool: SqlExecutor) {
       const offset = (page - 1) * pageSize;
       const [rows] = await pool.execute<WarehouseItemRow[]>(
         `${itemSelect} WHERE ${where}
-      ORDER BY wi.status IN (${activeWarehouseStatusSql}) DESC,
-        wi.retention_deadline IS NULL,
-        wi.retention_deadline ASC,
-        wi.received_at DESC
+      ORDER BY wi.received_at DESC, wi.id DESC
       LIMIT ${pageSize} OFFSET ${offset}`,
         values
       );
