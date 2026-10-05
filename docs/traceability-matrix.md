@@ -1,6 +1,6 @@
 # Ma trận truy vết LNFS
 
-Cập nhật mapping: **04/10/2026**. Baseline đã merge: `dev@5ab9f0d` (PR #79); các commit sửa audit cục bộ, test và giới hạn rollout xem [dev audit fixes](dev-main-audit-fixes.md). [Verification LNFS-55](LNFS-55-SAFETY-VERIFICATION.md) giữ bằng chứng lịch sử.
+Cập nhật mapping: **05/10/2026**. Baseline matching đã merge: `dev@5ab9f0d` (PR #79); các commit sửa audit cục bộ, test và giới hạn rollout xem [dev audit fixes](dev-main-audit-fixes.md) và [audit 05/10 + follow-up](full-system-audit-2026-10-05.md). Các guard SSE/chat/warehouse cloud mới có local regression, chưa có remote exact-candidate acceptance. [Verification LNFS-55](LNFS-55-SAFETY-VERIFICATION.md) giữ bằng chứng lịch sử.
 
 ## 1. Quy tắc
 
@@ -20,12 +20,12 @@ Nguồn status là code/test hiện tại. Mỗi dòng liên kết business rule
 | BR-32, BR-39 | FR-STAFF-01, FR-WAREHOUSE-01 | UC-050–UC-057 | Implemented/Partial | staff.routes.ts; warehouse.use-cases.ts; warehouse.repository.ts; warehouse.use-cases.test.ts; staff-page.tsx; staff-page.spec.ts |
 | BR-27 | NFR-DATA-01 | N/A | Implemented/Verified | migration-runner.ts; migration-runner.test.ts; numbered SQL migrations |
 | BR-28 | NFR-ARCH-01; FR-JAVA-01 retired | N/A | Implemented | src/main composition; application ports; domain policies; scripts/check-architecture.mjs; Java source/build removed |
-| BR-29, BR-30 | FR-MEDIA-02, NFR-PORT-01 | UC-023–UC-025, UC-044, UC-045 | Partial | Authenticated Cloudinary adapters cho post/claim với private local fallback; warehouse intake/return proof local. Durable multi-instance/provider acceptance chưa có |
+| BR-29, BR-30 | FR-MEDIA-02, NFR-PORT-01 | UC-023–UC-025, UC-044, UC-045, UC-051, UC-052, UC-055, UC-056, UC-146 | Partial | Authenticated adapters; warehouse refuses production local writes. cloudinary-private-media-storage.test.ts, warehouse-media-rollout.test.ts, warehouse-media.integration.test.ts and verify-warehouse-cloud.ts cover strict mode, unknown outcomes/CAS rollback/cleanup, real provider/API roles and independent processes/restart. 16 legacy warehouse references transferred after protected backup/UTC restore and post-check. Full production/non-warehouse/manual acceptance remains separate; warehouse-media-rollout.md |
 | BR-31 | FR-AUDIT-01 | UC-069–UC-081, UC-163 | Planned | Catalog audit before/after chưa có runtime evidence |
 | BR-33–BR-36 | FR-VERIFY-01, FR-VERIFY-02, FR-CLAIM-01 | UC-032–UC-038, UC-043–UC-045, UC-106–UC-118 | Implemented/Partial | claim routes/use-cases/repository/validators; verification-question-templates.ts; claim-verification-panel.tsx; state/idempotency/privacy/AI-negative unit tests và claims-resilience Playwright. Staff review và OCR evidence vẫn partial/planned |
 | BR-37 | FR-APPT-01, FR-HANDOVER-02 | UC-126–UC-140 | Partial/Planned | Canonical `ACCEPTED` eligibility policy và negative tests có; appointment/dual-confirmation runtime chưa có |
 | BR-38, BR-40, BR-42 | FR-CUSTODY-01, FR-WAREHOUSE-02 | UC-141–UC-158 | Partial/TBD | Custody request/queue/intake and canonical disposition API guards are in dev. Full scheduling/order/evidence UI and acceptance remain incomplete; university policy is unapproved |
-| BR-41, BR-43 | FR-CHAT-01, FR-RT-01 | UC-039–UC-042, UC-119–UC-125 | Partial/Planned | Private REST text room, participant guard, retry idempotency, cursor history, claim notifications and authenticated SSE exist; full image/seen/unread and general escalation review remain open |
+| BR-06, BR-41, BR-43 | FR-CHAT-01, FR-RT-01 | UC-039–UC-042, UC-119–UC-125 | Partial/Planned | Private REST text room, participant guard, retry idempotency, cursor history, notifications and session-bound SSE. realtime-auth-lifetime.test.ts and realtime.use-cases.test.ts cover expiry/revocation/timeout/disconnect; claims-resilience.spec.ts covers delayed message success/failure, verification and evidence across room switches. Full seen/unread/PWA push and general escalation review remain open |
 | BR-16–BR-18 | FR-TRAIN-01 | UC-101–UC-105 | Planned | Chưa có dataset pipeline, evaluation hoặc model artifact |
 | BR-41 | FR-PWA-01, NFR-PWA-01 | N/A (delivery channel) | Partial | Manifest, service worker, offline shell và privacy-safe cache có; device matrix/manual evidence còn thiếu |
 | BR-41 | FR-MOBILE-01, FR-MOBILE-02, NFR-MOBILE-01 | UC-M01–UC-M12 | Planned | Không tìm thấy project Android/iOS/Expo/React Native/Flutter |
@@ -51,10 +51,12 @@ Nguồn status là code/test hiện tại. Mỗi dòng liên kết business rule
 | Native Mobile | Không có thư mục/project mobile | Planned — project not created yet |
 | Backend/API | Node.js Clean Architecture: modules/domain/application/infrastructure/interfaces + main/shared | Implemented theo module; advanced claim/realtime vẫn partial/planned |
 | Java | Không còn source/runtime/build trong repository | Retired 09/09/2026 |
-| Database | Numbered migrations through 062, checksum/preflight runner and forward recovery | Aiven read-only preflight: 58 source migrations, 61 applied entries, 28 APPLIED attempts, no pending migrations. Historical 053/055 limits remain; exact matching 054 stays immutable. This audit applies no migration or shared business-data change. Schema evidence is not business acceptance |
+| Database | Numbered migrations through 062, checksum/preflight runner and forward recovery | Aiven read-only preflight: 58 source migrations, 61 applied entries, 28 APPLIED attempts, no pending migrations. Historical 053/055 limits remain; exact matching 054 stays immutable. Authorized photo rollout changes only 16 warehouse storage references, with unchanged other metadata/ledger and retained originals; no DDL or custody-link correction. Schema evidence is not business acceptance |
 | Test | Normal Node tests/typecheck/build, opt-in loopback SQL suites and two-worker Playwright | Commands, current counts and limits: full-system-audit-2026-10-04.md. Provider/manual QA and remote CI for follow-up commits remain separate |
 
 ## Actor Journey Audit Corrections
+
+5 October inventory follow-up: existing FR-STAFF-02/FR-WAREHOUSE-06, UC-051/053/056 use a responsive three/two/one-column inventory grid with image/title/status/category/receipt time and a full detail/history popup. `warehouse.repository.test.ts` checks newest-receipt ordering before pagination; `staff-page.spec.ts` covers grid layout/compact metadata, desktop/mobile detail, protected images, updates/returns, late responses and retry. No new BR/FR/UC ID or status promotion. See [inventory presentation](warehouse-intake-evidence.md).
 
 | Rule | Existing Requirement | Existing UC | Evidence / Limit |
 | --- | --- | --- | --- |
