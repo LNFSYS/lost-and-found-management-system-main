@@ -491,6 +491,10 @@ function WarehouseInventoryTab({
   const [filters, setFilters] = useState(emptyFilters);
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [logs, setLogs] = useState<WarehouseStorageLog[]>([]);
+  const [logsError, setLogsError] = useState("");
+  const [logsLoading, setLogsLoading] = useState(false);
+  const logsSequence = useRef(0);
+  const detailsModalRef = useRef<HTMLDivElement>(null);
   const [itemImages, setItemImages] = useState<WarehouseImage[]>([]);
   const [imagesError, setImagesError] = useState("");
   useEffect(() => {
@@ -589,6 +593,44 @@ function WarehouseInventoryTab({
     [dashboard, selectedItemId]
   );
 
+  useEffect(() => {
+    if (!selectedItem) return;
+    const overflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = overflow; };
+  }, [selectedItem?.id]);
+
+  useEffect(() => {
+    const modal = detailsModalRef.current;
+    if (!modal || updateModalOpen || previewImageUrl) return;
+    const previousFocus = document.activeElement as HTMLElement | null;
+    modal.querySelector<HTMLButtonElement>(".close-btn")?.focus();
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") { event.preventDefault(); closeDetails(); }
+      if (event.key !== "Tab") return;
+      const scope = modal.querySelector(".warehouse-image-overlay") ?? modal;
+      const controls = Array.from(scope.querySelectorAll<HTMLElement>("button:not(:disabled), a[href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex='0']"))
+        .filter(element => element.getClientRects().length);
+      const first = controls[0], last = controls.at(-1);
+      if (first && (!scope.contains(document.activeElement) || (!event.shiftKey && document.activeElement === last))) {
+        event.preventDefault(); first.focus();
+      } else if (last && event.shiftKey && document.activeElement === first) {
+        event.preventDefault(); last.focus();
+      }
+    };
+    window.addEventListener("keydown", handleKey);
+    return () => {
+      window.removeEventListener("keydown", handleKey);
+      if (!modal.isConnected) previousFocus?.focus();
+    };
+  }, [selectedItem?.id, updateModalOpen, previewImageUrl]);
+
+  function closeDetails() {
+    logsSequence.current++;
+    setSelectedItemId(null);
+    setLogsLoading(false);
+  }
+
   async function submitFilters(event: FormEvent) {
     event.preventDefault();
     setPendingAction("load");
@@ -603,18 +645,22 @@ function WarehouseInventoryTab({
   }
 
   async function loadLogs(itemId: string, silent = false) {
-    if (!silent) setPendingAction("logs");
-    onError("");
+    const sequence = ++logsSequence.current;
+    if (!silent) setLogsLoading(true);
+    setLogsError("");
     try {
-      setLogs(await api.getWarehouseLogs(itemId));
+      const result = await api.getWarehouseLogs(itemId);
+      if (sequence === logsSequence.current) setLogs(result);
     } catch (reason) {
-      onError(messageOf(reason, "Không thể tải nhật ký kho"));
+      if (sequence === logsSequence.current) setLogsError(messageOf(reason, "Không thể tải nhật ký kho"));
     } finally {
-      if (!silent) setPendingAction("");
+      if (sequence === logsSequence.current) setLogsLoading(false);
     }
   }
 
   function selectItem(item: WarehouseItem) {
+    setLogs([]);
+    setLogsError("");
     setSelectedItemId(item.id);
     setUpdateForm({
       status: item.status,
@@ -794,40 +840,28 @@ function WarehouseInventoryTab({
           {dashboard && <Pagination page={dashboard.page} pageSize={dashboard.pageSize} total={dashboard.total} busy={Boolean(pendingAction)} onPage={page => void onRefresh(filters, page)} />}
           <div className="warehouse-item-list">
             {dashboard?.items.map((item) => (
-              <article className={`warehouse-item-card ${selectedItemId === item.id ? "is-selected" : ""}`} key={item.id}>
-                <div className="warehouse-item-card__top">
+              <article className="warehouse-item-card" key={item.id}>
+                <WarehouseImageView image={item.thumbnail} />
+                <div className="warehouse-card-body">
                   <span className={`warehouse-status warehouse-status--${item.status.toLowerCase()}`}>
                     {statusLabel(item.status)}
                   </span>
-                  <div className="warehouse-card-actions">
-                    <button type="button" className="secondary-button warehouse-select-button" onClick={() => selectItem(item)}>
-                      <History size={14} /> Chi tiết & Nhật ký
-                    </button>
-                    {["RECEIVED", "STORED", "CLAIMED", "EXPIRED"].includes(item.status) && (
-                      <button type="button" className="primary-button warehouse-select-button" onClick={() => openReturnModal(item)}>
-                        <UserCheck size={14} /> Trả cho chủ sở hữu
-                      </button>
-                    )}
-                  </div>
+                  <h2 title={item.itemName}>{item.itemName}</h2>
+                  <dl className="warehouse-card-meta">
+                    <ItemMeta label="Danh mục" value={item.category?.name ?? "Chưa ghi nhận"} />
+                    <ItemMeta label="Tiếp nhận" value={<time dateTime={item.receivedAt}>{formatDateTime(item.receivedAt)}</time>} />
+                  </dl>
                 </div>
-
-                <WarehouseImageView image={item.thumbnail} />
-                <h2>{item.itemName}</h2>
-                <p>{item.description || "Không có mô tả chi tiết."}</p>
-
-                <dl className="warehouse-item-meta">
-                  <ItemMeta
-                    label="Hạn lưu giữ"
-                    value={
-                      <span className={isOverdue(item) ? "warehouse-deadline is-overdue" : "warehouse-deadline"}>
-                        {formatDate(item.retentionDeadline)}
-                      </span>
-                    }
-                  />
-                  <ItemMeta label="Mã lưu kho" value={<code className="code-badge">{item.storageCode || "Chưa gán"}</code>} />
-                  <ItemMeta label="Điểm nhận" value={item.handoverPoint?.name ?? "Chưa rõ"} />
-                  <ItemMeta label="Lịch sử" value={`${item.logCount} nhật ký`} />
-                </dl>
+                <div className="warehouse-card-actions">
+                  <button type="button" className="secondary-button warehouse-select-button" onClick={() => selectItem(item)}>
+                    <History size={16} /> Xem chi tiết
+                  </button>
+                  {["RECEIVED", "STORED", "CLAIMED", "EXPIRED"].includes(item.status) && (
+                    <button type="button" className="primary-button warehouse-select-button" onClick={() => openReturnModal(item)}>
+                      <UserCheck size={16} /> Trả cho chủ sở hữu
+                    </button>
+                  )}
+                </div>
               </article>
             ))}
 
@@ -840,19 +874,20 @@ function WarehouseInventoryTab({
             )}
           </div>
         </section>
+      </div>
 
-        {/* Details & History Panel (No embedded form; Clean detail view + Update Status Button) */}
-        <aside className="admin-panel warehouse-detail-panel">
-          <div className="admin-panel-heading">
-            <span className="panel-icon-badge"><History size={18} /></span>
-            <div>
-              <p className="eyebrow">CHI TIẾT VẬT PHẨM KHO</p>
-              <h2>Chi tiết & Lịch sử</h2>
-            </div>
-          </div>
+      {selectedItem && (
+        <div className="custody-modal-overlay warehouse-detail-overlay" onClick={closeDetails}>
+          <div ref={detailsModalRef} className="warehouse-detail-modal" role="dialog" aria-modal="true" aria-labelledby="warehouse-detail-title" onClick={event => event.stopPropagation()}>
+            <header className="warehouse-detail-modal__header">
+              <span className="panel-icon-badge"><History size={18} /></span>
+              <div>
+                <h2 id="warehouse-detail-title">Chi tiết vật phẩm kho</h2>
+              </div>
+              <button type="button" className="close-btn" aria-label="Đóng chi tiết" title="Đóng chi tiết" onClick={closeDetails}><X size={20} /></button>
+            </header>
 
-          {selectedItem ? (
-            <>
+            <div className="warehouse-detail-modal__body">
               <div className="warehouse-selected-summary">
                 <div className="summary-header">
                   <span className={`warehouse-status warehouse-status--${selectedItem.status.toLowerCase()}`}>
@@ -862,18 +897,28 @@ function WarehouseInventoryTab({
                 </div>
 
                 <h3>{selectedItem.itemName}</h3>
-                <p className="summary-desc">{selectedItem.description || "Không có mô tả thêm."}</p>
-                <WarehouseImageGallery images={itemImages} />
+                {itemImages.length ? <WarehouseImageGallery images={itemImages} /> : <WarehouseImageView image={selectedItem.thumbnail} />}
                 {imagesError && <p className="field-error" role="alert">{imagesError}</p>}
+                <h4>Mô tả vật phẩm</h4>
+                <p className="summary-desc">{selectedItem.description || "Không có mô tả thêm."}</p>
 
-                <div className="item-detail-grid">
-                  <div><strong>Hạn lưu giữ:</strong> {formatDate(selectedItem.retentionDeadline)}</div>
-                  <div><strong>Tiếp nhận lúc:</strong> {formatDateTime(selectedItem.receivedAt)}</div>
-                  {selectedItem.handoverPoint && <div><strong>Điểm bàn giao:</strong> {selectedItem.handoverPoint.name}</div>}
-                  {selectedItem.conditionNotes && <div><strong>Tình trạng nhận:</strong> {selectedItem.conditionNotes}</div>}
-                  <div><strong>Số lượng thực nhận:</strong> {selectedItem.receivedQuantity ?? "Hồ sơ cũ chưa ghi nhận"}</div>
-                  <div><strong>Phụ kiện thực nhận:</strong> {selectedItem.accessories ?? "Hồ sơ cũ chưa ghi nhận"}</div>
-                </div>
+                <dl className="warehouse-detail-meta">
+                  <ItemMeta label="Danh mục" value={selectedItem.category?.name ?? "Chưa ghi nhận"} />
+                  <ItemMeta label="Hạn lưu giữ" value={<span className={isOverdue(selectedItem) ? "warehouse-deadline is-overdue" : "warehouse-deadline"}>{formatDate(selectedItem.retentionDeadline)}</span>} />
+                  <ItemMeta label="Tiếp nhận lúc" value={formatDateTime(selectedItem.receivedAt)} />
+                  <ItemMeta label="Điểm bàn giao" value={selectedItem.handoverPoint?.name ?? "Chưa ghi nhận"} />
+                  <ItemMeta label="Địa chỉ điểm nhận" value={selectedItem.handoverPoint?.address ?? "Chưa ghi nhận"} />
+                  <ItemMeta label="Vị trí nhặt" value={[selectedItem.location.area?.name, selectedItem.location.building?.name, selectedItem.location.roomText].filter(Boolean).join(" · ") || "Chưa ghi nhận"} />
+                  <ItemMeta label="Người nhặt / bàn giao" value={selectedItem.finder.userName ?? selectedItem.finder.name ?? "Chưa ghi nhận"} />
+                  <ItemMeta label="Liên hệ người nhặt" value={selectedItem.finder.contact ?? "Chưa ghi nhận"} />
+                  <ItemMeta label="Tình trạng nhận" value={selectedItem.conditionNotes ?? "Chưa ghi nhận"} />
+                  <ItemMeta label="Số lượng thực nhận" value={selectedItem.receivedQuantity ?? "Hồ sơ cũ chưa ghi nhận"} />
+                  <ItemMeta label="Phụ kiện thực nhận" value={selectedItem.accessories ?? "Hồ sơ cũ chưa ghi nhận"} />
+                  <ItemMeta label="Đã trả lúc" value={formatDateTime(selectedItem.returnedAt)} />
+                  <ItemMeta label="Nhân viên tiếp nhận" value={selectedItem.createdBy.fullName ?? "Chưa ghi nhận"} />
+                  <ItemMeta label="Tạo hồ sơ lúc" value={formatDateTime(selectedItem.createdAt)} />
+                  <ItemMeta label="Cập nhật lúc" value={formatDateTime(selectedItem.updatedAt)} />
+                </dl>
 
                 <div className="summary-action-bar">
                   <button
@@ -896,9 +941,13 @@ function WarehouseInventoryTab({
                   </div>
                 </div>
 
-                {pendingAction === "logs" && (
+                {logsLoading && (
                   <div className="loading-inline"><LoaderCircle className="spin-icon" size={16} /> Đang tải nhật ký...</div>
                 )}
+                {logsError && <div className="warehouse-log-error" role="alert">
+                  <p className="field-error">{logsError}</p>
+                  <button type="button" className="secondary-button" onClick={() => void loadLogs(selectedItem.id)}><RefreshCw size={16} /> Thử lại</button>
+                </div>}
 
                 <div className="timeline-log">
                   {logs.map((log) => {
@@ -943,21 +992,15 @@ function WarehouseInventoryTab({
                       </article>
                     );
                   })}
-                  {!logs.length && pendingAction !== "logs" && (
+                  {!logs.length && !logsError && !logsLoading && (
                     <p className="admin-hint">Chưa có nhật ký ghi nhận cho vật phẩm này.</p>
                   )}
                 </div>
               </div>
-            </>
-          ) : (
-            <div className="warehouse-empty warehouse-empty--compact">
-              <History size={40} className="empty-icon" />
-              <h3>Chưa chọn vật phẩm</h3>
-              <p>Chọn một vật phẩm trong danh sách bên trái để xem chi tiết và lịch sử nhật ký.</p>
             </div>
-          )}
-        </aside>
-      </div>
+          </div>
+        </div>
+      )}
 
       {/* Update Warehouse Item Status Modal */}
       {updateModalOpen && selectedItem && (

@@ -1,4 +1,4 @@
-import { AlertTriangle, CalendarDays, CheckCircle2, Clock3, HelpCircle, LoaderCircle, LockKeyhole, PackageCheck, ShieldAlert, ShieldCheck, X, XCircle } from "lucide-react";
+import { AlertTriangle, CalendarDays, CheckCircle2, Clock3, HelpCircle, LoaderCircle, LockKeyhole, PackageCheck, RotateCw, ShieldAlert, ShieldCheck, X, XCircle } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 import { api, type ClaimMessage, type ClaimRecord, type ClaimVerificationState } from "../services/api";
 
@@ -26,12 +26,15 @@ function metadataText(metadata: Record<string, unknown> | null, key: string) {
 interface Props {
   claim: ClaimRecord;
   verification: ClaimVerificationState | null;
+  loading: boolean;
+  loadError: string;
+  onRetry: () => void;
   onVerificationChange: (value: ClaimVerificationState) => void;
   onClaimChange: (value: ClaimRecord) => void;
   onDecisionMessage: (value: ClaimMessage) => void;
 }
 
-export function ClaimVerificationPanel({ claim, verification, onVerificationChange, onClaimChange, onDecisionMessage }: Props) {
+export function ClaimVerificationPanel({ claim, verification, loading, loadError, onRetry, onVerificationChange, onClaimChange, onDecisionMessage }: Props) {
   const [decision, setDecision] = useState<Decision | null>(null);
   const [reason, setReason] = useState("");
   const [handoverPoints, setHandoverPoints] = useState<Array<{ id: string; name: string; address: string }>>([]);
@@ -112,7 +115,12 @@ export function ClaimVerificationPanel({ claim, verification, onVerificationChan
     }
   }
 
-  if (!verification) return <section className="review-panel review-panel--loading"><Clock3 /> Đang tải trạng thái xác minh...</section>;
+  if (loadError) return <section className="review-panel review-panel--error">
+    <header><span>OWNERSHIP REVIEW</span><ShieldAlert /></header>
+    <p className="review-load-error" role="alert">Không tải được trạng thái xác minh. {loadError}</p>
+    <button type="button" className="review-retry" onClick={onRetry} disabled={loading}><RotateCw />{loading ? "Đang thử lại..." : "Thử lại"}</button>
+  </section>;
+  if (!verification) return <section className="review-panel review-panel--loading" role="status" aria-busy="true"><Clock3 /> Đang tải trạng thái xác minh...</section>;
 
   const accepted = verification.appointmentEligible;
   const custody = Boolean(verification.roomEscalation);
