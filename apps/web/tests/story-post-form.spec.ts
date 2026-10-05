@@ -115,6 +115,55 @@ async function fillCommonForm(page: Page) {
   await form.getByLabel("Mô tả nhận dạng").fill("Ví da màu đen có một vết xước nhỏ ở cạnh.");
 }
 
+for (const type of ["LOST", "FOUND"] as const) {
+  for (const width of [1440, 390]) {
+    test(`shows image upload and analysis before manual ${type} fields at ${width}px`, async ({ page }, testInfo) => {
+      await page.setViewportSize({ width, height: 900 });
+      await page.emulateMedia({ reducedMotion: "reduce" });
+      await prepare(page, () => undefined);
+      if (type === "FOUND") {
+        await page.locator("#two-sides").getByRole("button", { name: /Tôi nhặt được đồ/i }).click();
+        await expect(page.getByText("Báo nhặt được vật phẩm")).toBeVisible();
+      }
+
+      const form = page.locator(".story-post-form");
+      await form.locator(".story-post-form__head").evaluate((element) => {
+        const navigation = document.querySelector(".topbar")!;
+        window.scrollBy({ top: element.getBoundingClientRect().top - navigation.getBoundingClientRect().bottom - 16, behavior: "instant" });
+      });
+      const upload = form.locator(".story-image-drop");
+      const analyze = form.getByRole("button", { name: "Phân tích các ảnh" });
+      await expect(upload).toBeInViewport({ ratio: 1 });
+      await expect(analyze).toBeInViewport({ ratio: 1 });
+      const analysisNote = form.locator(".story-image-analysis-note");
+      await expect(analysisNote).toBeInViewport({ ratio: 1 });
+      await expect(analysisNote).toContainText("Thông tin điền sẵn từ ảnh chỉ mang tính tham khảo, không đảm bảo chính xác 100%");
+      await expect(analysisNote).toContainText("Vui lòng kiểm tra kỹ và chỉnh sửa trước khi đăng");
+      expect(await upload.evaluate((element) => element.getBoundingClientRect().top > document.querySelector(".topbar")!.getBoundingClientRect().bottom)).toBe(true);
+      await expect(analyze).toBeDisabled();
+      await expect(form.getByLabel("Tên vật phẩm")).toHaveValue("");
+      expect(await form.evaluate((element) => {
+        const assistance = element.querySelector(".story-image-assistance")!;
+        const fields = element.querySelector(".story-form-fields")!;
+        return Boolean(assistance.compareDocumentPosition(fields) & Node.DOCUMENT_POSITION_FOLLOWING)
+          && assistance.getBoundingClientRect().bottom < fields.getBoundingClientRect().top;
+      })).toBe(true);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+      await page.screenshot({ path: testInfo.outputPath("image-first-form.png") });
+
+      const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=", "base64");
+      await upload.locator("input[type=file]").setInputFiles({ name: "item.png", mimeType: "image/png", buffer: png });
+      await expect(form.locator(".story-image-thumb")).toHaveCount(1);
+      await expect.poll(() => form.locator(".story-image-thumb img").evaluate((element: HTMLImageElement) => element.naturalWidth)).toBeGreaterThan(0);
+      await expect(form.getByRole("button", { name: "Phân tích 1 ảnh" })).toBeEnabled();
+      await expect(form.getByLabel("Tên vật phẩm")).toHaveValue("");
+      await form.getByRole("button", { name: "Xóa ảnh 1" }).click();
+      await expect(form.locator(".story-image-thumb")).toHaveCount(0);
+      await expect(analyze).toBeDisabled();
+    });
+  }
+}
+
 test("creates a LOST post inside the storytelling flow", async ({ page }) => {
   let payload: Record<string, unknown> = {};
   await prepare(page, (value) => { payload = value; });
@@ -289,6 +338,11 @@ test("analyzes an image, fills an editable draft, posts it and shows real catego
   const form = page.locator(".story-post-form");
   await expect(form.getByLabel("Tên vật phẩm")).toHaveValue("Ví da màu đen");
   await expect(form.getByLabel("Danh mục cụ thể", { exact: true })).toHaveValue(catalog.categories[1].id);
+  expect(await form.evaluate((element) => {
+    const result = element.querySelector(".story-analysis-result")!;
+    const fields = element.querySelector(".story-form-fields")!;
+    return result.getBoundingClientRect().bottom < fields.getBoundingClientRect().top;
+  })).toBe(true);
   await form.getByLabel("Tên vật phẩm").fill("Ví da màu đen của tôi");
   await form.getByLabel("Khu vực").selectOption(catalog.areas[0].id);
   await page.getByRole("button", { name: "Đăng bài LOST" }).click();
