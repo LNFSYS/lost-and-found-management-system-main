@@ -310,6 +310,50 @@ export function StoryPostForm({
     {!catalog && !catalogError && <div className="story-form-loading"><LoaderCircle /> Đang tải dữ liệu campus...</div>}
     {!online && <div className="story-form-message is-warning">Bạn đang offline. Dữ liệu nhập chỉ ở trên màn hình này và chưa được gửi lên hệ thống.</div>}
 
+    <div className="story-image-assistance">
+      <div className="story-image-picker">
+        <label className={`story-image-drop ${files.length ? "has-files" : ""}`}>
+          <span><ImagePlus /></span>
+          <strong>{files.length ? "Thêm góc chụp khác" : "Thêm ảnh vật phẩm"}</strong>
+          <small>{files.length}/5 ảnh · JPG, PNG hoặc WebP · tổng tối đa 14 MB</small>
+          <input
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            multiple
+            disabled={!online || analyzing || files.length >= MAX_IMAGE_COUNT}
+            onChange={(event) => {
+              addFiles(Array.from(event.target.files ?? []));
+              event.currentTarget.value = "";
+            }}
+          />
+        </label>
+        {previewUrls.length > 0 && <div className="story-image-grid" aria-label={`${previewUrls.length} ảnh vật phẩm đã chọn`}>
+          {previewUrls.map((url, index) => <figure className="story-image-thumb" key={`${files[index].name}-${files[index].lastModified}`}>
+            <img src={url} alt={`Góc chụp vật phẩm ${index + 1}`} />
+            <figcaption>Ảnh {index + 1}</figcaption>
+            <button type="button" disabled={analyzing} aria-label={`Xóa ảnh ${index + 1}`} onClick={() => removeFile(index)}><X /></button>
+          </figure>)}
+        </div>}
+      </div>
+      <div className="story-image-analysis-actions">
+        <button className="story-analyze-button" type="button" disabled={!online || !files.length || analyzing} onClick={analyzeImage}>
+          {analyzing ? <><LoaderCircle className="is-spinning" /> Đang phân tích {files.length} ảnh...</> : <><Sparkles /> Phân tích {files.length || "các"} ảnh</>}
+        </button>
+        <p className="story-image-analysis-note"><strong>Lưu ý:</strong> Thông tin điền sẵn từ ảnh chỉ mang tính tham khảo, không đảm bảo chính xác 100%. Vui lòng kiểm tra kỹ và chỉnh sửa trước khi đăng.</p>
+        <p>Chụp nhiều góc giúp đọc rõ hãng, model, chữ, phụ kiện và dấu hiệu riêng. Ảnh chỉ được gửi tới Gemini khi bạn chủ động phân tích.</p>
+      </div>
+    </div>
+
+    {analysis && <div className="story-analysis-result" role="status">
+      <span><Sparkles /></span>
+      <div>
+        <strong>Đã tổng hợp {analysis.imageCount || files.length} ảnh · độ tin cậy {Math.round(analysis.confidence * 100)}%</strong>
+        <p>Bạn có thể sửa mọi trường. Vị trí và thời gian không được suy đoán từ ảnh.</p>
+        {analysis.visualAttributes.length > 0 && <div>{analysis.visualAttributes.slice(0, 5).map((attribute) => <small key={attribute}>{attribute}</small>)}</div>}
+        {analysis.warnings.map((warning) => <em key={warning}>{warning}</em>)}
+      </div>
+    </div>}
+
     <div className="story-form-fields">
       <label className="story-field story-field--wide">
         <span>Tên vật phẩm</span>
@@ -373,49 +417,6 @@ export function StoryPostForm({
         <input value={draft.contactInfo} onChange={(event) => updateDraft("contactInfo", event.target.value)} required minLength={3} maxLength={255} />
       </label>
     </div>
-
-    <div className="story-image-assistance">
-      <div className="story-image-picker">
-        <label className={`story-image-drop ${files.length ? "has-files" : ""}`}>
-          <span><ImagePlus /></span>
-          <strong>{files.length ? "Thêm góc chụp khác" : "Thêm ảnh vật phẩm"}</strong>
-          <small>{files.length}/5 ảnh · JPG, PNG hoặc WebP · tổng tối đa 14 MB</small>
-          <input
-            type="file"
-            accept="image/jpeg,image/png,image/webp"
-            multiple
-            disabled={!online || analyzing || files.length >= MAX_IMAGE_COUNT}
-            onChange={(event) => {
-              addFiles(Array.from(event.target.files ?? []));
-              event.currentTarget.value = "";
-            }}
-          />
-        </label>
-        {previewUrls.length > 0 && <div className="story-image-grid" aria-label={`${previewUrls.length} ảnh vật phẩm đã chọn`}>
-          {previewUrls.map((url, index) => <figure className="story-image-thumb" key={`${files[index].name}-${files[index].lastModified}`}>
-            <img src={url} alt={`Góc chụp vật phẩm ${index + 1}`} />
-            <figcaption>Ảnh {index + 1}</figcaption>
-            <button type="button" disabled={analyzing} aria-label={`Xóa ảnh ${index + 1}`} onClick={() => removeFile(index)}><X /></button>
-          </figure>)}
-        </div>}
-      </div>
-      <div className="story-image-analysis-actions">
-        <button className="story-analyze-button" type="button" disabled={!online || !files.length || analyzing} onClick={analyzeImage}>
-          {analyzing ? <><LoaderCircle className="is-spinning" /> Đang phân tích {files.length} ảnh...</> : <><Sparkles /> Phân tích {files.length || "các"} ảnh</>}
-        </button>
-        <p>Chụp nhiều góc giúp đọc rõ hãng, model, chữ, phụ kiện và dấu hiệu riêng. Ảnh chỉ được gửi tới Gemini khi bạn chủ động phân tích.</p>
-      </div>
-    </div>
-
-    {analysis && <div className="story-analysis-result" role="status">
-      <span><Sparkles /></span>
-      <div>
-        <strong>Đã tổng hợp {analysis.imageCount || files.length} ảnh · độ tin cậy {Math.round(analysis.confidence * 100)}%</strong>
-        <p>Bạn có thể sửa mọi trường. Vị trí và thời gian không được suy đoán từ ảnh.</p>
-        {analysis.visualAttributes.length > 0 && <div>{analysis.visualAttributes.slice(0, 5).map((attribute) => <small key={attribute}>{attribute}</small>)}</div>}
-        {analysis.warnings.map((warning) => <em key={warning}>{warning}</em>)}
-      </div>
-    </div>}
 
     {type === "FOUND" && <label className="story-private-option">
       <input type="checkbox" checked={draft.privateDetails} onChange={(event) => updateDraft("privateDetails", event.target.checked)} />

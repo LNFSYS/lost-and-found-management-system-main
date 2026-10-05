@@ -7001,7 +7001,7 @@ textarea {
   display: grid;
   grid-template-columns: minmax(0, 1.35fr) minmax(240px, 0.65fr);
   gap: 14px;
-  margin-top: 20px;
+  margin: 0 0 22px;
 }
 
 .story-image-assistance .story-image-drop {
@@ -7119,6 +7119,11 @@ textarea {
   line-height: 1.55;
 }
 
+.story-image-analysis-actions .story-image-analysis-note {
+  color: #82410b;
+  font-size: 0.75rem;
+}
+
 .story-analyze-button,
 .workflow-analysis-actions button,
 .workflow-reset-button {
@@ -7156,7 +7161,7 @@ textarea {
   display: grid;
   grid-template-columns: auto 1fr;
   gap: 12px;
-  margin-top: 16px;
+  margin: 0 0 22px;
   padding: 15px;
   border: 1px solid #b9d9c0;
   border-left: 4px solid var(--fpt-green);
