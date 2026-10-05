@@ -59,6 +59,90 @@ async function fulfillJson(route: Parameters<Page["route"]>[0], body: unknown) {
   await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
 }
 
+const directLostClaim = {
+  ...claimA, lostPostId: null, claimantId: "lost-owner", finderId: session.user.id,
+  claimant: { id: "lost-owner", fullName: "LOST owner" }, finder: { id: session.user.id, fullName: session.user.fullName },
+  posts: { lost: null, found: { id: claimA.foundPostId, title: "Balo bị mất" } },
+  item: { postId: claimA.foundPostId, title: "Balo bị mất", categoryName: "Balo", locationLabel: "Campus", imageUrl: null }
+};
+const directLostVerification = {
+  claimId: directLostClaim.id, status: "CONVERSATION_OPEN", appointmentEligible: false, participantRole: "FINDER", roomEscalation: null,
+  policy: { templateId: "wallet-bag", templateVersion: 1, minimumAnswers: 1, answeredCount: 0, readyForDecision: false }, questions: [], history: []
+};
+
+async function setupDirectLostRoom(page: Page, items: Array<typeof directLostClaim> = [directLostClaim]) {
+  await page.route("**/api/auth/refresh", route => fulfillJson(route, session));
+  await page.route("**/api/claims?page=1&pageSize=50", route => fulfillJson(route, { items, total: items.length, page: 1, pageSize: 50, hasMore: false }));
+  for (const item of items) {
+    await page.route(`**/api/claims/${item.id}`, route => fulfillJson(route, item));
+    await page.route(`**/api/claims/${item.id}/messages*`, route => fulfillJson(route, {
+      room: { id: item.roomId, claimId: item.id, status: item.status, participantRole: "FINDER", createdAt: item.createdAt },
+      items: [], hasMore: false, nextCursor: null
+    }));
+    await page.route(`**/api/claims/${item.id}/evidence`, route => fulfillJson(route, { items: [] }));
+    await page.route(`**/api/claims/${item.id}/verification/templates`, route => fulfillJson(route, {
+      category: "balo", template: { id: "wallet-bag", version: 1, minimumAnswers: 1, customFollowUpAllowed: true, prompts: [] }
+    }));
+  }
+}
+
+test("LOST Finder sees all four decision buttons without automatic ownership approval", async ({ page }) => {
+  await setupDirectLostRoom(page);
+  await page.route(`**/api/claims/${directLostClaim.id}/verification`, route => fulfillJson(route, directLostVerification));
+  await page.goto(`/claims/${directLostClaim.id}`);
+  await expect(page.locator(".review-actions button")).toHaveCount(4);
+  await expect(page.getByRole("button", { name: "Đề xuất gặp mặt" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Yêu cầu thêm thông tin" })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "Từ chối", exact: true })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "Chuyển sang custody" })).toBeEnabled();
+  await expect(page.getByText("Đang tải trạng thái xác minh...")).toHaveCount(0);
+  await page.getByRole("button", { name: "Chuyển sang custody" }).scrollIntoViewIfNeeded();
+  await page.screenshot({ path: test.info().outputPath("lost-finder-controls-desktop.png"), fullPage: true });
+});
+
+test("verification failure is red, stops automatic retries and recovers without losing the message draft", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.clock.install();
+  await setupDirectLostRoom(page);
+  let requests = 0;
+  await page.route(`**/api/claims/${directLostClaim.id}/verification`, async route => {
+    requests++;
+    if (requests === 1) return route.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ message: "Verification temporarily unavailable" }) });
+    await fulfillJson(route, directLostVerification);
+  });
+  await page.goto(`/claims/${directLostClaim.id}`);
+  await expect(page.locator(".review-load-error")).toContainText("Verification temporarily unavailable");
+  await expect(page.locator(".review-load-error")).toHaveCSS("color", "rgb(180, 35, 24)");
+  await expect(page.getByText("Đang tải trạng thái xác minh...")).toHaveCount(0);
+  await page.screenshot({ path: test.info().outputPath("verification-error-mobile.png"), fullPage: true });
+  await page.getByLabel("Tin nhắn riêng").fill("Draft kept after verification failure");
+  await page.clock.fastForward(15000);
+  expect(requests).toBe(1);
+  await page.getByRole("button", { name: "Thử lại", exact: true }).click();
+  await expect(page.locator(".review-actions button")).toHaveCount(4);
+  await expect(page.getByLabel("Tin nhắn riêng")).toHaveValue("Draft kept after verification failure");
+  expect(requests).toBe(2);
+});
+
+test("a late verification response cannot replace another room's error state", async ({ page }) => {
+  const second = { ...directLostClaim, id: claimB.id, posts: { lost: null, found: { id: claimB.foundPostId, title: "Balo phòng B" } }, item: { ...directLostClaim.item, title: "Balo phòng B" } };
+  await setupDirectLostRoom(page, [directLostClaim, second]);
+  let firstStarted = false;
+  await page.route(`**/api/claims/${directLostClaim.id}/verification`, async route => {
+    firstStarted = true;
+    await new Promise(resolve => setTimeout(resolve, 700));
+    await fulfillJson(route, directLostVerification);
+  });
+  await page.route(`**/api/claims/${second.id}/verification`, route => route.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ message: "Room B verification unavailable" }) }));
+  await page.goto(`/claims/${directLostClaim.id}`);
+  await expect.poll(() => firstStarted).toBe(true);
+  await page.getByRole("button", { name: /Balo phòng B/ }).click();
+  await expect(page.locator(".review-load-error")).toContainText("Room B verification unavailable");
+  await page.waitForTimeout(850);
+  await expect(page.locator(".review-load-error")).toContainText("Room B verification unavailable");
+  await expect(page.locator(".review-actions button")).toHaveCount(0);
+});
+
 test("ignores a late claim-room response after switching to another room", async ({ page }) => {
   await page.route("**/api/auth/refresh", (route) => fulfillJson(route, session));
   await page.route("**/api/claims?page=1&pageSize=50", (route) => fulfillJson(route, {
@@ -247,4 +331,163 @@ test("Finder can request custody from chat without closing or deciding the claim
   expect(decisionBody?.decision).toBe("ESCALATE_TO_CUSTODY");
   expect(decisionBody?.reason).toBe(reason);
   expect(decisionBody?.handoverPointId).toBe(handoverPointId);
+});
+
+function secondMutationRoom() {
+  return { ...directLostClaim, id: claimB.id, roomId: "room-b", posts: { lost: null, found: { id: claimB.foundPostId, title: "Mutation room B" } }, item: { ...directLostClaim.item, title: "Mutation room B" } };
+}
+
+async function setupMutationRooms(page: Page, role = "FINDER") {
+  const second = secondMutationRoom();
+  await setupDirectLostRoom(page, [directLostClaim, second]);
+  for (const claim of [directLostClaim, second]) {
+    await page.route(`**/api/claims/${claim.id}/verification`, route => fulfillJson(route, { ...directLostVerification, claimId: claim.id, participantRole: role }));
+  }
+  return second;
+}
+
+async function settleMutation(page: Page, url: string, release: () => void) {
+  const response = page.waitForResponse(result => result.url().endsWith(url) && result.request().method() === "POST");
+  release();
+  await (await response).finished();
+  await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+}
+
+for (const outcome of ["success", "failure"] as const) test(`a delayed message ${outcome} cannot alter another room or its draft`, async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const second = await setupMutationRooms(page);
+  let started = false;
+  let release!: () => void;
+  const held = new Promise<void>(resolve => { release = resolve; });
+  await page.route(`**/api/claims/${directLostClaim.id}/messages`, async route => {
+    if (route.request().method() !== "POST") return route.fallback();
+    started = true;
+    await held;
+    if (outcome === "failure") return route.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ message: "Room A send failed" }) });
+    await fulfillJson(route, { id: "late-room-a", roomId: directLostClaim.roomId, sender: { id: session.user.id, fullName: session.user.fullName }, content: "ROOM_A_MESSAGE", messageType: "TEXT", createdAt: "2026-10-05T01:00:00Z" });
+  });
+  await page.goto(`/claims/${directLostClaim.id}`);
+  await page.getByLabel("Tin nhắn riêng").fill("ROOM_A_MESSAGE");
+  await page.getByRole("button", { name: "Gửi tin nhắn" }).click();
+  await expect.poll(() => started).toBe(true);
+  await page.getByRole("button", { name: /Mutation room B/ }).click();
+  await expect(page).toHaveURL(new RegExp(`/claims/${second.id}$`));
+  await expect(page.getByRole("heading", { name: "Mutation room B" })).toBeVisible();
+  await page.getByLabel("Tin nhắn riêng").fill("ROOM_B_DRAFT");
+  await expect(page.getByRole("button", { name: "Gửi tin nhắn" })).toBeEnabled();
+  await settleMutation(page, `/claims/${directLostClaim.id}/messages`, release);
+  await expect(page.locator(".claim-messages")).not.toContainText("ROOM_A_MESSAGE");
+  await expect(page.getByLabel("Tin nhắn riêng")).toHaveValue("ROOM_B_DRAFT");
+  await expect(page.locator(".claim-alert")).toHaveCount(0);
+  await page.screenshot({ path: test.info().outputPath(`room-switch-send-${outcome}.png`), fullPage: true });
+});
+
+test("a late verification decision cannot replace the next room's claim or review", async ({ page }) => {
+  const second = await setupMutationRooms(page);
+  let started = false;
+  let release!: () => void;
+  const held = new Promise<void>(resolve => { release = resolve; });
+  await page.route(`**/api/claims/${directLostClaim.id}/verification/decision`, async route => {
+    started = true;
+    await held;
+    await fulfillJson(route, {
+      claim: { ...directLostClaim, status: "REJECTED" }, verification: { ...directLostVerification, status: "REJECTED" },
+      message: { id: "late-decision-a", roomId: directLostClaim.roomId, sender: { id: session.user.id, fullName: session.user.fullName }, content: "ROOM_A_DECISION", messageType: "SYSTEM", createdAt: "2026-10-05T01:00:00Z" }
+    });
+  });
+  await page.goto(`/claims/${second.id}`);
+  await page.getByRole("button", { name: /Balo bị mất/ }).click();
+  await page.getByRole("button", { name: "Từ chối", exact: true }).click();
+  await page.getByLabel("Lý do / nhận xét").fill("Room A verification declined");
+  await page.getByRole("button", { name: "Xác nhận quyết định" }).click();
+  await expect.poll(() => started).toBe(true);
+  await page.goBack();
+  await expect(page).toHaveURL(new RegExp(`/claims/${second.id}$`));
+  await expect(page.getByRole("heading", { name: "Mutation room B" })).toBeVisible();
+  await page.getByLabel("Tin nhắn riêng").fill("B decision draft");
+  await settleMutation(page, `/claims/${directLostClaim.id}/verification/decision`, release);
+  await expect(page.getByRole("heading", { name: "Mutation room B" })).toBeVisible();
+  await expect(page.locator(".review-actions button")).toHaveCount(4);
+  await expect(page.locator(".claim-messages")).not.toContainText("ROOM_A_DECISION");
+  await expect(page.getByLabel("Tin nhắn riêng")).toHaveValue("B decision draft");
+});
+
+test("a late evidence upload stays with the original room and resets upload UI", async ({ page }) => {
+  const second = await setupMutationRooms(page, "CLAIMANT");
+  let started = false;
+  let release!: () => void;
+  const held = new Promise<void>(resolve => { release = resolve; });
+  await page.route(`**/api/claims/${directLostClaim.id}/evidence`, async route => {
+    if (route.request().method() !== "POST") return route.fallback();
+    started = true;
+    await held;
+    await fulfillJson(route, { id: "evidence-a", claimId: directLostClaim.id, evidenceType: "PHOTO", description: "ROOM_A_EVIDENCE", url: `/api/claims/${directLostClaim.id}/evidence/evidence-a/media`, uploadedBy: { id: session.user.id, fullName: session.user.fullName }, createdAt: "2026-10-05T01:00:00Z" });
+  });
+  await page.goto(`/claims/${directLostClaim.id}`);
+  await page.getByRole("button", { name: "Thêm evidence" }).click();
+  await page.locator(".evidence-upload-compact input[type=file]").setInputFiles({ name: "proof.png", mimeType: "image/png", buffer: Buffer.from("synthetic-browser-fixture") });
+  await page.getByRole("button", { name: "Tải lên", exact: true }).click();
+  await expect.poll(() => started).toBe(true);
+  await page.getByRole("button", { name: /Mutation room B/ }).click();
+  await expect(page).toHaveURL(new RegExp(`/claims/${second.id}$`));
+  await expect(page.getByRole("heading", { name: "Mutation room B" })).toBeVisible();
+  await page.getByLabel("Tin nhắn riêng").fill("B upload draft");
+  await settleMutation(page, `/claims/${directLostClaim.id}/evidence`, release);
+  await expect(page.locator(".evidence-count")).toContainText("0 private evidence items");
+  await expect(page.locator(".evidence-thumbnails")).toHaveCount(0);
+  await expect(page.locator(".evidence-upload-compact")).toHaveCount(0);
+  await expect(page.getByLabel("Tin nhắn riêng")).toHaveValue("B upload draft");
+});
+
+test("returning to the same claim does not revive an old mutation generation", async ({ page }) => {
+  const second = await setupMutationRooms(page);
+  let started = false;
+  let release!: () => void;
+  const held = new Promise<void>(resolve => { release = resolve; });
+  await page.route(`**/api/claims/${directLostClaim.id}/messages`, async route => {
+    if (route.request().method() !== "POST") return route.fallback();
+    started = true;
+    await held;
+    await fulfillJson(route, { id: "old-generation-a", roomId: directLostClaim.roomId, sender: { id: session.user.id, fullName: session.user.fullName }, content: "OLD_A_GENERATION", messageType: "TEXT", createdAt: "2026-10-05T01:00:00Z" });
+  });
+  await page.goto(`/claims/${directLostClaim.id}`);
+  await page.getByLabel("Tin nhắn riêng").fill("OLD_A_GENERATION");
+  await page.getByRole("button", { name: "Gửi tin nhắn" }).click();
+  await expect.poll(() => started).toBe(true);
+  await page.getByRole("button", { name: /Mutation room B/ }).click();
+  await expect(page.getByRole("heading", { name: "Mutation room B" })).toBeVisible();
+  await page.getByRole("button", { name: /Balo bị mất/ }).click();
+  await expect(page.getByRole("heading", { name: "Balo bị mất", exact: true })).toBeVisible();
+  await page.getByLabel("Tin nhắn riêng").fill("NEW_A_GENERATION_DRAFT");
+  await settleMutation(page, `/claims/${directLostClaim.id}/messages`, release);
+  await expect(page.getByLabel("Tin nhắn riêng")).toHaveValue("NEW_A_GENERATION_DRAFT");
+  await expect(page.locator(".claim-messages")).not.toContainText("OLD_A_GENERATION");
+  await expect(page).not.toHaveURL(new RegExp(`/claims/${second.id}$`));
+});
+
+test("finishing the previous room's send cannot unlock a pending send in the current room", async ({ page }) => {
+  const second = await setupMutationRooms(page);
+  const releases = new Map<string, () => void>();
+  for (const claim of [directLostClaim, second]) {
+    await page.route(`**/api/claims/${claim.id}/messages`, async route => {
+      if (route.request().method() !== "POST") return route.fallback();
+      await new Promise<void>(resolve => releases.set(claim.id, resolve));
+      await fulfillJson(route, { id: `message-${claim.id}`, roomId: claim.roomId, sender: { id: session.user.id, fullName: session.user.fullName }, content: route.request().postDataJSON().content, messageType: "TEXT", createdAt: "2026-10-05T01:00:00Z" });
+    });
+  }
+  await page.goto(`/claims/${directLostClaim.id}`);
+  await page.getByLabel("Tin nhắn riêng").fill("PENDING_A");
+  await page.getByRole("button", { name: "Gửi tin nhắn" }).click();
+  await expect.poll(() => releases.has(directLostClaim.id)).toBe(true);
+  await page.getByRole("button", { name: /Mutation room B/ }).click();
+  await expect(page.getByRole("heading", { name: "Mutation room B" })).toBeVisible();
+  await page.getByLabel("Tin nhắn riêng").fill("PENDING_B");
+  await page.getByRole("button", { name: "Gửi tin nhắn" }).click();
+  await expect.poll(() => releases.has(second.id)).toBe(true);
+  await settleMutation(page, `/claims/${directLostClaim.id}/messages`, releases.get(directLostClaim.id)!);
+  await expect(page.getByRole("button", { name: "Gửi tin nhắn" })).toBeDisabled();
+  await expect(page.getByLabel("Tin nhắn riêng")).toHaveValue("PENDING_B");
+  await settleMutation(page, `/claims/${second.id}/messages`, releases.get(second.id)!);
+  await expect(page.locator(".claim-messages")).toContainText("PENDING_B");
+  await expect(page.locator(".claim-messages")).not.toContainText("PENDING_A");
 });

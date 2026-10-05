@@ -274,8 +274,8 @@ test("staff can open storage logs and update item state", async ({ page }) => {
   await page.goto("/staff");
 
   await page.getByRole("button", { name: "Kho tài sản", exact: true }).click();
-  await page.getByRole("button", { name: "Chi tiết & Nhật ký" }).click();
-  const detail = page.locator(".warehouse-detail-panel");
+  await page.getByRole("button", { name: "Xem chi tiết" }).click();
+  const detail = page.getByRole("dialog", { name: "Chi tiết vật phẩm kho" });
   await expect(detail.getByText("Move to shelf", { exact: false })).toBeVisible();
   await detail.getByRole("button", { name: "Cập nhật trạng thái" }).click();
   const update = page.locator(".custody-modal");
@@ -288,6 +288,128 @@ test("staff can open storage logs and update item state", async ({ page }) => {
   expect(calls.patched?.status).toBe("STORED");
   expect(calls.patched?.storageCode).toBe("A1-04");
   expect(calls.patched?.note).toBe("Move to shelf");
+});
+
+for (const width of [1920, 1440, 1024, 390]) {
+  test(`inventory stays compact and opens full details with photos at ${width}px`, async ({ page }, testInfo) => {
+    await page.setViewportSize({ width, height: 900 });
+    await prepare(page, {});
+    const description = "Vật phẩm có nhiều ngăn, phụ kiện và dấu hiệu nhận dạng cần đối chiếu khi bàn giao. ".repeat(30);
+    const newest = { ...item, itemName: "Balo xám đựng laptop và dụng cụ học tập", category: { id: "cat-bag", name: "Balo" }, description, receivedAt: "2026-10-05T10:00:00Z", storageCode: "WH-2026-A1-04",
+      receivedQuantity: 1, accessories: "Laptop, sạc và bình nước", thumbnail: { id: "condition", provenance: "INTAKE" } };
+    await page.route(/\/api\/staff\/warehouse-items(?:\?.*)?$/, route => route.fulfill({ json: { ...dashboard(), total: 4,
+      items: [newest,
+        { ...item, id: "stored", itemName: "Điện thoại có ốp bảo vệ và dây đeo", status: "STORED", category: { id: "cat-phone", name: "Thiết bị điện tử và phụ kiện điện thoại" } },
+        { ...item, id: "claimed", itemName: "Chìa khóa xe", status: "CLAIMED" },
+        { ...item, id: "older", itemName: "Áo thun trắng", status: "RETURNED", category: null }] } }));
+    await page.route("**/api/staff/warehouse-items/*/images", route => route.fulfill({ json: { images: [{ id: "condition", provenance: "INTAKE",
+      uploadedAt: newest.receivedAt, capturedAt: newest.receivedAt }] } }));
+    const errors: string[] = [];
+    page.on("pageerror", error => errors.push(error.message));
+    await page.goto("/admin/staff");
+    await page.getByRole("button", { name: "Kho tài sản", exact: true }).click();
+    const cards = page.locator(".warehouse-item-card");
+    await expect(cards).toHaveCount(4);
+    await expect(cards.first().getByRole("heading")).toHaveText(newest.itemName);
+    await expect(cards.first().locator("p")).toHaveCount(0);
+    await expect(cards.first().locator(".warehouse-card-meta dt")).toHaveText(["Danh mục", "Tiếp nhận"]);
+    await expect(cards.first().locator(".warehouse-card-meta dd").first()).toHaveText("Balo");
+    await expect(cards.first().locator("time")).toHaveAttribute("datetime", newest.receivedAt);
+    const receiptText = await page.evaluate(value => new Intl.DateTimeFormat("vi-VN", { dateStyle: "short", timeStyle: "short" }).format(new Date(value)), newest.receivedAt);
+    await expect(cards.first().locator("time")).toHaveText(receiptText);
+    await expect(cards.locator(".warehouse-status")).toHaveText(["Đã tiếp nhận", "Đang lưu kho", "Đang đợi nhận", "Đã trả"]);
+    await expect(cards.last().locator(".warehouse-card-meta dd").first()).toHaveText("Chưa ghi nhận");
+    await expect(cards.first().locator(".warehouse-card-actions button")).toHaveCount(2);
+    await expect(cards.last().getByRole("button", { name: "Trả cho chủ sở hữu" })).toHaveCount(0);
+    await expect(cards.first().locator("img")).toBeVisible();
+    const columns = width > 1200 ? 3 : width > 700 ? 2 : 1;
+    const positions = await cards.evaluateAll(elements => elements.map(element => {
+      const { x, y, height } = element.getBoundingClientRect();
+      return { x, y, height };
+    }));
+    expect(positions.filter(position => Math.abs(position.y - positions[0].y) < 1)).toHaveLength(columns);
+    expect(positions[columns].y).toBeGreaterThan(positions[0].y);
+    for (const position of positions) expect(position.height).toBeLessThan(520);
+    for (const card of await cards.all()) {
+      expect(await card.evaluate(element => element.scrollWidth <= element.clientWidth)).toBeTruthy();
+      for (const button of await card.locator(".warehouse-card-actions button").all()) {
+        expect(await button.evaluate(element => element.scrollWidth <= element.clientWidth && element.getBoundingClientRect().height >= 44)).toBeTruthy();
+      }
+    }
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBeTruthy();
+    await page.locator(".warehouse-item-list").screenshot({ path: testInfo.outputPath(`inventory-compact-${width}.png`) });
+
+    const trigger = cards.first().getByRole("button", { name: "Xem chi tiết" });
+    await trigger.click();
+    const modal = page.getByRole("dialog", { name: "Chi tiết vật phẩm kho" });
+    await expect(modal).toBeVisible();
+    await expect(modal.locator(".summary-desc")).toHaveText(description.trim());
+    await expect(modal.getByText("WH-2026-A1-04", { exact: true })).toBeVisible();
+    await expect(modal.getByText(newest.accessories, { exact: true })).toBeVisible();
+    await expect(modal.getByText("Nguyễn An", { exact: true })).toBeVisible();
+    await expect(modal.getByText("an@example.com", { exact: true })).toBeVisible();
+    await expect(modal.getByText("Move to shelf", { exact: false })).toBeVisible();
+    await expect(modal.getByRole("button", { name: "Đóng chi tiết" })).toBeFocused();
+    await page.keyboard.press("Shift+Tab");
+    await expect(modal.getByRole("button", { name: "Cập nhật trạng thái" })).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(modal.getByRole("button", { name: "Đóng chi tiết" })).toBeFocused();
+    expect(await modal.evaluate(element => element.scrollWidth <= element.clientWidth)).toBeTruthy();
+    await modal.getByRole("button", { name: "Xem ảnh vật phẩm" }).click();
+    const zoom = page.getByRole("dialog", { name: "Ảnh vật phẩm", exact: true });
+    await expect(zoom).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(zoom).toHaveCount(0);
+    await expect(modal).toBeVisible();
+    await page.screenshot({ path: testInfo.outputPath(`inventory-detail-${width}.png`) });
+    await page.keyboard.press("Escape");
+    await expect(modal).toHaveCount(0);
+    await expect(trigger).toBeFocused();
+    expect(errors).toEqual([]);
+  });
+}
+
+test("inventory detail ignores late logs after closing and selecting another item", async ({ page }) => {
+  await prepare(page, {});
+  await page.route(/\/api\/staff\/warehouse-items(?:\?.*)?$/, route => route.fulfill({ json: { ...dashboard(), total: 2,
+    items: [item, { ...item, id: "other-item", itemName: "Khóa xe" }] } }));
+  let release!: () => void;
+  const delayed = new Promise<void>(resolve => { release = resolve; });
+  let started!: () => void;
+  const requested = new Promise<void>(resolve => { started = resolve; });
+  await page.route("**/api/staff/warehouse-items/item-1/logs", async route => {
+    started(); await delayed;
+    await route.fulfill({ json: { logs: [{ id: "stale", actor: { fullName: "STALE LOG" }, createdAt: item.receivedAt }] } });
+  });
+  await page.goto("/staff");
+  await page.getByRole("button", { name: "Kho tài sản", exact: true }).click();
+  await page.getByRole("button", { name: "Xem chi tiết" }).first().click();
+  await requested;
+  await page.getByRole("button", { name: "Đóng chi tiết" }).click();
+  await page.getByRole("button", { name: "Xem chi tiết" }).last().click();
+  const modal = page.getByRole("dialog", { name: "Chi tiết vật phẩm kho" });
+  await expect(modal.getByRole("heading", { name: "Khóa xe" })).toBeVisible();
+  await expect(modal.getByText("Move to shelf", { exact: false })).toBeVisible();
+  const lateResponse = page.waitForResponse("**/api/staff/warehouse-items/item-1/logs");
+  release();
+  await lateResponse;
+  await expect(modal.getByText("STALE LOG", { exact: false })).toHaveCount(0);
+});
+
+test("inventory detail displays log errors and retries inside the popup", async ({ page }) => {
+  await prepare(page, {});
+  let attempts = 0;
+  await page.route("**/api/staff/warehouse-items/item-1/logs", route => route.fulfill(++attempts === 1
+    ? { status: 503, json: { message: "Nhật ký đang tạm thời không khả dụng" } } : { json: { logs: [] } }));
+  await page.goto("/staff");
+  await page.getByRole("button", { name: "Kho tài sản", exact: true }).click();
+  await page.getByRole("button", { name: "Xem chi tiết" }).click();
+  const modal = page.getByRole("dialog", { name: "Chi tiết vật phẩm kho" });
+  await expect(modal.getByRole("alert")).toContainText("Nhật ký đang tạm thời không khả dụng");
+  await modal.getByRole("button", { name: "Thử lại" }).click();
+  await expect(modal.getByRole("alert")).toHaveCount(0);
+  await expect(modal.getByText("Chưa có nhật ký ghi nhận cho vật phẩm này.", { exact: true })).toBeVisible();
+  expect(attempts).toBe(2);
 });
 
 for (const viewport of [{ width: 1440, height: 1000 }, { width: 390, height: 844 }]) {

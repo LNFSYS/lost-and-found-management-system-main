@@ -94,6 +94,7 @@ function DirectMessageDraft({ postId, sourceFoundPostId, viewer }: { postId: str
   const [contactCheckId, setContactCheckId] = useState<string | null>(null);
   const [error, setError] = useState("");
   const pendingMessage = useRef<{ content: string; clientMessageId: string } | null>(null);
+  const draftGeneration = useRef(0);
   const draftClaim = useMemo<ClaimRecord | null>(() => {
     if (!post) return null;
     const currentUser = viewer ?? { id: "draft-user", fullName: "Bạn" };
@@ -140,6 +141,7 @@ function DirectMessageDraft({ postId, sourceFoundPostId, viewer }: { postId: str
 
   useEffect(() => {
     let active = true;
+    draftGeneration.current += 1;
     setLoading(true);
     setError("");
     setContactCheckId(null);
@@ -160,7 +162,7 @@ function DirectMessageDraft({ postId, sourceFoundPostId, viewer }: { postId: str
         if (active) setLoading(false);
       }
     })();
-    return () => { active = false; };
+    return () => { active = false; draftGeneration.current += 1; };
   }, [navigate, postId, sourceFoundPostId]);
 
   async function submit(event: FormEvent) {
@@ -174,14 +176,16 @@ function DirectMessageDraft({ postId, sourceFoundPostId, viewer }: { postId: str
       ? pendingMessage.current
       : { content, clientMessageId: crypto.randomUUID() };
     pendingMessage.current = retry;
+    const generation = draftGeneration.current;
     try {
       const result = await api.createDirectMessage(post.id, content, retry.clientMessageId, sourceFoundPostId, contactCheckId ?? undefined);
+      if (generation !== draftGeneration.current) return;
       pendingMessage.current = null;
       navigate(`/claims/${result.claim.id}`, { replace: true });
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Không thể gửi tin nhắn");
+      if (generation === draftGeneration.current) setError(reason instanceof Error ? reason.message : "Không thể gửi tin nhắn");
     } finally {
-      setSending(false);
+      if (generation === draftGeneration.current) setSending(false);
     }
   }
 
@@ -233,6 +237,8 @@ export function ClaimsPage() {
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [evidence, setEvidence] = useState<ClaimEvidence[]>([]);
   const [verification, setVerification] = useState<ClaimVerificationState | null>(null);
+  const [verificationLoading, setVerificationLoading] = useState(false);
+  const [verificationError, setVerificationError] = useState("");
   const [verificationTemplates, setVerificationTemplates] = useState<VerificationTemplatesResponse | null>(null);
   const [showVerificationModal, setShowVerificationModal] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -248,6 +254,7 @@ export function ClaimsPage() {
   const [filter, setFilter] = useState<ConversationFilter>("ALL");
   const [attachmentMenu, setAttachmentMenu] = useState(false);
   const roomRequest = useRef<{ generation: number; controller: AbortController | null }>({ generation: 0, controller: null });
+  const verificationRequest = useRef<{ controller: AbortController | null; blocked: boolean }>({ controller: null, blocked: false });
   const selectedClaimId = useRef<string | undefined>(claimId);
   const messageCursorRef = useRef<MessageCursor | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -255,6 +262,10 @@ export function ClaimsPage() {
   const pendingOpenDecision = useRef<{ decision: "ACCEPT" | "DECLINE" | "REQUEST_MORE_INFO"; key: string } | null>(null);
   const pendingWithdrawal = useRef<string | null>(null);
   const pollInFlight = useRef(false);
+
+  function isCurrentRoom(id: string, generation: number) {
+    return selectedClaimId.current === id && roomRequest.current.generation === generation;
+  }
 
   const visibleClaims = useMemo(() => {
     const query = search.trim().toLocaleLowerCase("vi");
@@ -314,7 +325,41 @@ export function ClaimsPage() {
     setMessageCursor(cursor);
   }
 
+  async function loadVerification(id: string, retry = false) {
+    if (selectedClaimId.current !== id || verificationRequest.current.controller || (verificationRequest.current.blocked && !retry)) return;
+    const controller = new AbortController();
+    const generation = roomRequest.current.generation;
+    verificationRequest.current.controller = controller;
+    const isCurrent = () => selectedClaimId.current === id && roomRequest.current.generation === generation
+      && verificationRequest.current.controller === controller;
+    setVerificationLoading(true);
+    if (retry) {
+      verificationRequest.current.blocked = false;
+    }
+    try {
+      const result = await api.getClaimVerification(id, controller.signal);
+      if (!isCurrent()) return;
+      setVerification(result);
+      setVerificationError("");
+      const templates = result.participantRole === "FINDER"
+        ? await api.getClaimVerificationTemplates(id, controller.signal).catch(() => null)
+        : null;
+      if (isCurrent()) setVerificationTemplates(templates);
+    } catch (failure) {
+      if (!isCurrent() || (failure instanceof Error && failure.name === "AbortError")) return;
+      verificationRequest.current.blocked = true;
+      setVerificationTemplates(null);
+      setVerificationError(failure instanceof Error ? failure.message : "Không thể tải trạng thái xác minh");
+    } finally {
+      if (isCurrent()) {
+        verificationRequest.current.controller = null;
+        setVerificationLoading(false);
+      }
+    }
+  }
+
   async function loadClaimRoom(id: string, silent = false) {
+    if (selectedClaimId.current !== id) return;
     roomRequest.current.controller?.abort();
     const controller = new AbortController();
     const generation = roomRequest.current.generation;
@@ -343,27 +388,17 @@ export function ClaimsPage() {
       setEvidence(evidenceResult.items);
       setClaims((items) => items.map((item) => item.id === id && item.conversation ? { ...item, conversation: { ...item.conversation, unreadCount: 0 } } : item));
 
-      // A missing/legacy verification record must not hide a valid chat room
-      // or the message that was just sent. Load it independently instead.
-      void api.getClaimVerification(id, controller.signal).then(async (verificationResult) => {
-        if (!isCurrent()) return;
-        setVerification(verificationResult);
-        const templates = verificationResult.participantRole === "FINDER"
-          ? await api.getClaimVerificationTemplates(id, controller.signal).catch(() => null)
-          : null;
-        if (isCurrent()) setVerificationTemplates(templates);
-      }).catch(() => {
-        if (isCurrent()) {
-          setVerification(null);
-          setVerificationTemplates(null);
-        }
-      });
+      // Verification failures must not hide the chat or erase a sent message.
+      if (!silent) void loadVerification(id);
     } catch (failure) {
       if (!isCurrent() || (failure instanceof Error && failure.name === "AbortError")) return;
       setClaim(null);
       setMessages([]);
       setEvidence([]);
       setVerification(null);
+      verificationRequest.current.controller?.abort();
+      verificationRequest.current.controller = null;
+      setVerificationLoading(false);
       setVerificationTemplates(null);
       updateMessageCursor(null);
       setError(failure instanceof Error ? failure.message : "Không thể mở conversation");
@@ -377,17 +412,35 @@ export function ClaimsPage() {
     roomRequest.current.generation += 1;
     roomRequest.current.controller?.abort();
     roomRequest.current.controller = null;
+    verificationRequest.current.controller?.abort();
+    verificationRequest.current = { controller: null, blocked: false };
     setClaim(null);
     setMessages([]);
     setEvidence([]);
     setVerification(null);
+    setVerificationLoading(false);
+    setVerificationError("");
     setVerificationTemplates(null);
     updateMessageCursor(null);
     setMessageDraft("");
+    setReplyingToQuestion(null);
+    setShowVerificationModal(false);
+    setSending(false);
+    setWithdrawing(false);
+    setOpeningConversation(false);
+    setOpeningReason("");
+    setLoadingOlder(false);
     setAttachmentMenu(false);
     pendingMessage.current = null;
+    pendingOpenDecision.current = null;
+    pendingWithdrawal.current = null;
     if (claimId) void loadClaimRoom(claimId);
-    return () => roomRequest.current.controller?.abort();
+    return () => {
+      roomRequest.current.generation += 1;
+      selectedClaimId.current = undefined;
+      roomRequest.current.controller?.abort();
+      verificationRequest.current.controller?.abort();
+    };
   }, [claimId, user?.id]);
 
   useEffect(() => {
@@ -400,16 +453,14 @@ export function ClaimsPage() {
     return () => window.clearInterval(timer);
   }, [claimId, claim?.canSend]);
 
-  // Refresh verification periodically to update answeredCount
+  // Stop automatic retries after a failure; the panel offers an explicit retry.
   useEffect(() => {
-    if (!claimId || !claim?.canSend) return;
+    if (!claimId || !claim?.canSend || verificationError) return;
     const timer = window.setInterval(() => {
-      if (pollInFlight.current) return;
-      pollInFlight.current = true;
-      api.getClaimVerification(claimId).then(setVerification).catch(() => {}).finally(() => { pollInFlight.current = false; });
+      void loadVerification(claimId);
     }, 5000);
     return () => window.clearInterval(timer);
-  }, [claimId, claim?.canSend]);
+  }, [claimId, claim?.canSend, verificationError]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -427,9 +478,9 @@ export function ClaimsPage() {
       updateMessageCursor(result.nextCursor);
     } catch (failure) {
       if (failure instanceof Error && failure.name === "AbortError") return;
-      if (selectedClaimId.current === claimId) setError(failure instanceof Error ? failure.message : "Không thể tải tin nhắn cũ");
+      if (isCurrentRoom(claimId, generation)) setError(failure instanceof Error ? failure.message : "Không thể tải tin nhắn cũ");
     } finally {
-      setLoadingOlder(false);
+      if (isCurrentRoom(claimId, generation)) setLoadingOlder(false);
     }
   }
 
@@ -451,7 +502,8 @@ export function ClaimsPage() {
   async function submitMessage(event: FormEvent) {
     event.preventDefault();
     const content = messageDraft.trim();
-    if (!content || !claimId) return;
+    if (!content || !claimId || sending) return;
+    const generation = roomRequest.current.generation;
     setSending(true);
     setError("");
     
@@ -465,32 +517,35 @@ export function ClaimsPage() {
     pendingMessage.current = retry;
     try {
       const sent = await api.sendClaimMessage(claimId, finalContent, retry.clientMessageId);
-      setMessages((current) => [...current, sent]);
       setClaims((items) => items.map((item) => item.id === claimId ? { ...item, conversation: { lastMessage: finalContent, lastMessageAt: sent.createdAt, unreadCount: 0, custodyEscalated: item.conversation?.custodyEscalated } } : item));
-      setMessageDraft("");
-      setReplyingToQuestion(null);
+      if (!isCurrentRoom(claimId, generation)) return;
+      setMessages((current) => mergeMessages(current, [sent]));
+      setMessageDraft(current => current === content || current.trim() === content ? "" : current);
+      setReplyingToQuestion(current => current === replyingToQuestion ? null : current);
       if (pendingMessage.current?.clientMessageId === retry.clientMessageId) pendingMessage.current = null;
     } catch (failure) {
-      setError(failure instanceof Error ? failure.message : "Không thể gửi tin nhắn");
-    } finally { setSending(false); }
+      if (isCurrentRoom(claimId, generation)) setError(failure instanceof Error ? failure.message : "Không thể gửi tin nhắn");
+    } finally { if (isCurrentRoom(claimId, generation)) setSending(false); }
   }
 
   async function withdraw() {
     if (!claimId) return;
+    const generation = roomRequest.current.generation;
     setWithdrawing(true);
     setError("");
     try {
       pendingWithdrawal.current ??= crypto.randomUUID();
       await api.withdrawClaim(claimId, pendingWithdrawal.current);
+      if (!isCurrentRoom(claimId, generation)) return;
       pendingWithdrawal.current = null;
       await loadClaimRoom(claimId);
     } catch (failure) {
-      setError(failure instanceof Error ? failure.message : "Không thể đóng claim");
-    } finally { setWithdrawing(false); }
+      if (isCurrentRoom(claimId, generation)) setError(failure instanceof Error ? failure.message : "Không thể đóng claim");
+    } finally { if (isCurrentRoom(claimId, generation)) setWithdrawing(false); }
   }
 
   function applyClaimUpdate(updated: ClaimRecord) {
-    setClaim(updated);
+    if (selectedClaimId.current === updated.id) setClaim(updated);
     setClaims((current) => current.map((item) => item.id === updated.id ? {
       ...item,
       ...updated,
@@ -500,19 +555,21 @@ export function ClaimsPage() {
 
   async function decideConversation(decision: "ACCEPT" | "DECLINE" | "REQUEST_MORE_INFO") {
     if (!claimId || !openingReason.trim()) return;
+    const generation = roomRequest.current.generation;
     setOpeningConversation(true);
     setError("");
     const retry = pendingOpenDecision.current?.decision === decision ? pendingOpenDecision.current : { decision, key: crypto.randomUUID() };
     pendingOpenDecision.current = retry;
     try {
       const updated = await api.decideClaim(claimId, decision, openingReason.trim(), retry.key);
+      if (!isCurrentRoom(claimId, generation)) return;
       pendingOpenDecision.current = null;
       setOpeningReason("");
       applyClaimUpdate(updated);
       await loadClaimRoom(claimId);
     } catch (failure) {
-      setError(failure instanceof Error ? failure.message : "Không thể lưu quyết định");
-    } finally { setOpeningConversation(false); }
+      if (isCurrentRoom(claimId, generation)) setError(failure instanceof Error ? failure.message : "Không thể lưu quyết định");
+    } finally { if (isCurrentRoom(claimId, generation)) setOpeningConversation(false); }
   }
 
   function jumpTo(sectionId: string) {
@@ -521,6 +578,9 @@ export function ClaimsPage() {
   }
 
   const sensitiveDocument = /thẻ|giấy|cccd|cmnd|bằng lái|ngân hàng/i.test(claim?.item?.categoryName ?? "");
+  // Only LOST rooms have contactPhoto; required=false identifies the target post's owner.
+  const showLostOwnerSafetyNote = claim?.contactPhoto?.required === false;
+  const displayedGeneration = roomRequest.current.generation;
 
   if (!claimId && composePostId) return <main className="claims-page">
     {error && <div className="claim-alert"><AlertTriangle /> {error}</div>}
@@ -532,7 +592,7 @@ export function ClaimsPage() {
         <ClaimList claims={visibleClaims} userId={user?.id} onSelect={(id) => navigate(`/claims/${id}`)} />
         {claimHasMore && <button className="claim-load-older claim-load-claims" type="button" disabled={loadingMoreClaims} onClick={() => void loadMoreClaims()}><RefreshCw className={loadingMoreClaims ? "is-spinning" : ""} /> {loadingMoreClaims ? "Đang tải..." : "Xem thêm"}</button>}
       </aside>
-      <DirectMessageDraft postId={composePostId} sourceFoundPostId={searchParams.get("sourceFoundPostId") ?? undefined} viewer={user ?? undefined} />
+      <DirectMessageDraft key={`${composePostId}:${searchParams.get("sourceFoundPostId") ?? ""}`} postId={composePostId} sourceFoundPostId={searchParams.get("sourceFoundPostId") ?? undefined} viewer={user ?? undefined} />
     </section>
   </main>;
 
@@ -554,13 +614,20 @@ export function ClaimsPage() {
               <header className="claim-chat-header">
                 <div><strong>{counterpartName(claim, user?.id)}</strong><span><i /> {claim.canSend ? "Đang hoạt động" : statusLabels[claim.status]}</span><small>{claimTitle(claim)}</small></div>
                 <div className="claim-header-actions"><Link to={`/reports?targetType=CLAIM&targetId=${claim.id}`} title="Báo cáo claim"><FileWarning /></Link>{claim.claimantId === user?.id && ["PENDING", "CONVERSATION_OPEN", "NEED_MORE_INFO"].includes(claim.status) && <button type="button" className="claim-close-button" disabled={withdrawing} onClick={() => void withdraw()} title="Đóng claim"><X /></button>}</div>
+                {showLostOwnerSafetyNote && <aside className="claim-lost-safety-note" aria-label="Lưu ý tránh lừa đảo">
+                  <AlertTriangle aria-hidden="true" />
+                  <div>
+                    <strong>Hãy xin ảnh vật phẩm trước khi hẹn nhận đồ</strong>
+                    <p>Yêu cầu người liên hệ gửi ảnh hiện tại và đối chiếu đặc điểm riêng của món đồ. Không chuyển tiền hoặc cung cấp thông tin nhạy cảm; ảnh tương đồng chưa chứng minh họ đang giữ đồ.</p>
+                  </div>
+                </aside>}
               </header>
 
               {!claim.canSend ? claim.contactPhoto?.required && !claim.contactPhoto.approved ? <div className="claim-chat-scroll"><LostContactPhotoGate key={claim.id} postId={claim.contactPhoto.postId} onReady={checkId => {
                 if (checkId) void api.attachContactPhoto(claim.id,checkId).then(() => {
-                  if (selectedClaimId.current === claim.id) return loadClaimRoom(claim.id);
+                  if (isCurrentRoom(claim.id, displayedGeneration)) return loadClaimRoom(claim.id);
                 }).catch(reason => {
-                  if (selectedClaimId.current === claim.id) setError(reason instanceof Error ? reason.message : "Không thể xác nhận ảnh liên hệ");
+                  if (isCurrentRoom(claim.id, displayedGeneration)) setError(reason instanceof Error ? reason.message : "Không thể xác nhận ảnh liên hệ");
                 });
               }} /></div> : claim.finderId === user?.id && claim.status === "PENDING" ? <section className="claim-open-decision">
                 <div><Clock3 /><strong>Mở conversation xác minh</strong></div>
@@ -586,14 +653,14 @@ export function ClaimsPage() {
                     </div>
                   </div>
                 </form>
-                {showVerificationModal && verification && verificationTemplates && <ClaimVerificationQuestionModal claim={claim} verification={verification} templates={verificationTemplates} onClose={() => setShowVerificationModal(false)} onSuccess={setVerification} />}
+                {showVerificationModal && verification && verificationTemplates && <ClaimVerificationQuestionModal key={claim.id} claim={claim} verification={verification} templates={verificationTemplates} onClose={() => { if (isCurrentRoom(claim.id, displayedGeneration)) setShowVerificationModal(false); }} onSuccess={value => { if (isCurrentRoom(claim.id, displayedGeneration)) setVerification(value); }} />}
               </>}
             </section>
 
             <aside className="claim-inspector">
               <ClaimItemPanel claim={claim} />
-              <ClaimEvidencePanel claimId={claim.id} evidence={evidence} sensitiveDocument={sensitiveDocument} canUpload={Boolean(claim.canSend && verification?.participantRole === "CLAIMANT")} onEvidenceAdded={(item) => setEvidence((current) => [...current, item])} />
-              <ClaimVerificationPanel claim={claim} verification={verification} onVerificationChange={setVerification} onClaimChange={applyClaimUpdate} onDecisionMessage={(message) => setMessages((current) => mergeMessages(current, [message]))} />
+              <ClaimEvidencePanel key={`evidence:${claim.id}`} claimId={claim.id} evidence={evidence} sensitiveDocument={sensitiveDocument} canUpload={Boolean(claim.canSend && verification?.participantRole === "CLAIMANT")} onEvidenceAdded={(item) => { if (isCurrentRoom(claim.id, displayedGeneration)) setEvidence((current) => [...current, item]); }} />
+              <ClaimVerificationPanel key={`review:${claim.id}`} claim={claim} verification={verification} loading={verificationLoading} loadError={verificationError} onRetry={() => void loadVerification(claim.id, true)} onVerificationChange={value => { if (isCurrentRoom(claim.id, displayedGeneration)) setVerification(value); }} onClaimChange={value => { if (isCurrentRoom(claim.id, displayedGeneration)) applyClaimUpdate(value); }} onDecisionMessage={(message) => { if (isCurrentRoom(claim.id, displayedGeneration)) setMessages((current) => mergeMessages(current, [message])); }} />
             </aside>
           </> : <section className="claim-workspace-state"><AlertTriangle /><h2>Không mở được conversation</h2></section>}
     </section>}
