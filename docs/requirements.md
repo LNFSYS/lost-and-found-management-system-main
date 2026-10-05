@@ -114,7 +114,7 @@ Requirements target bao phủ Web Application, PWA và Native Mobile. Status bê
 | NFR-DATA-02 | Shared Aiven/dev DB không dùng cho destructive test; integration test dùng database local riêng. | P0 | Process rule |
 | NFR-PERF-01 | Board có pagination; matching có candidate limit/window và rerun rate limit. | P0 | Implemented ở tested baseline; chưa load test |
 | NFR-PORT-01 | Media tồn tại sau restart/deploy và đọc được từ mọi instance. | P0 | Authenticated Cloudinary adapters include warehouse. Warehouse legacy transfer and independent-process/restart/restore checks passed; production topology and non-warehouse local fallback remain unaccepted overall |
-| NFR-TEST-01 | API/Web build pass và logic quan trọng có unit/browser/integration evidence. | P0 | Current local tests/build pass, including SQL/HTTP custody-to-return and browser regressions. Merged baseline CI passed MySQL 8.0/8.4; new local commits still need remote CI/manual acceptance. Counts/limits: dev-main-audit-fixes.md |
+| NFR-TEST-01 | API/Web build pass và logic quan trọng có unit/browser/integration evidence. | P0 | Local tests/build plus exact dc92525 CI pass: MySQL 8.0/8.4 each 375 tests, no skips; browser 69 pass. Later candidates and deployment/manual acceptance remain separate. Counts/limits: full-system-audit-2026-10-05.md |
 | NFR-CI-01 | Pull request tự chạy test/build với MySQL isolated. | P1 | Implemented workflow config; CI run chưa được quan sát từ checkout này |
 | NFR-OBS-01 | Có health/readiness, structured request log và graceful shutdown. | P1 | Partial: health/readiness có; cần verify phần còn lại |
 | NFR-AUDIT-01 | Admin và sensitive transitions có audit trail đủ actor/action/before-after/time. | P1 | Partial |
