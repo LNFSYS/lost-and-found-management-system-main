@@ -1,6 +1,6 @@
 # Ma trận truy vết LNFS
 
-Cập nhật mapping: **05/10/2026**. Baseline matching đã merge: `dev@5ab9f0d` (PR #79); các commit sửa audit cục bộ, test và giới hạn rollout xem [dev audit fixes](dev-main-audit-fixes.md) và [audit 05/10 + follow-up](full-system-audit-2026-10-05.md). Các guard SSE/chat/warehouse cloud mới có local regression, chưa có remote exact-candidate acceptance. [Verification LNFS-55](LNFS-55-SAFETY-VERIFICATION.md) giữ bằng chứng lịch sử.
+Cập nhật mapping: **05/10/2026**. Baseline matching đã merge: `dev@5ab9f0d` (PR #79); audit follow-up và tám commit trước đó đã push `dev` trong candidate `dc92525`. CI đúng SHA này đã xanh MySQL 8.0/8.4 (375 test mỗi job, không skip) và browser (69 test). Bằng chứng commit/CI, rollout và giới hạn xem [audit 05/10 + receipt](full-system-audit-2026-10-05.md); commit sau vẫn phải kiểm tra CI riêng. [Verification LNFS-55](LNFS-55-SAFETY-VERIFICATION.md) và [dev audit fixes](dev-main-audit-fixes.md) giữ snapshot lịch sử, không chứng nhận deployment mới.
 
 ## 1. Quy tắc
 
@@ -32,7 +32,7 @@ Nguồn status là code/test hiện tại. Mỗi dòng liên kết business rule
 | BR-03, BR-06, BR-14 | NFR-SEC-01–03, NFR-VALID-01 | UC-001–UC-009, UC-018, UC-019, UC-023, UC-044 | Implemented/Verified current scope | Zod validators, auth utilities, middleware, rate limiters và tests |
 | BR-10, BR-15, BR-25 | NFR-PRIV-01 | UC-015, UC-024, UC-028, UC-045 | Implemented current API scope | Post/media/matching serializer, private search predicates, participant authorization và evidence proxy; local shared-storage deployment risk còn lại |
 | BR-20, BR-24 | NFR-PERF-01 | UC-013, UC-014, UC-027, UC-029 | Implemented current baseline | Board pagination, candidate bound, time window và rerun rate limit; chưa load test |
-| BR-19, BR-27, BR-39 | NFR-TEST-01 | N/A | Current local verification | Reproducible commands/counts/limits: [dev audit fixes](dev-main-audit-fixes.md). Historical LNFS-55 counts and baseline remote CI do not certify the later local commits. |
+| BR-19, BR-27, BR-39 | NFR-TEST-01 | N/A | Local and exact code-candidate CI verified | [5 October audit/CI receipt](full-system-audit-2026-10-05.md): 330 regular pass/14 opt-in skips, 45 isolated SQL pass, 69 browser pass; exact dc92525 MySQL 8.0/8.4 each 375 pass/no skips. Later commits/deployment require separate evidence. |
 | BR-27, BR-28 | NFR-DATA-02 | N/A | Process rule | README yêu cầu không destructive test trên Aiven/shared DB |
 | BR-27 | NFR-OBS-01 | N/A | Partial | /api/health và /api/ready có; graceful shutdown/observability cần verify thêm |
 | BR-31 | NFR-AUDIT-01 | UC-056, UC-090, UC-163, UC-164, UC-166 | Implemented/Partial | Warehouse storage log, admin user/config và moderation audit đã có; catalog audit và toàn bộ domain transition còn thiếu |

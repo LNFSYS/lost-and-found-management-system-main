@@ -69,7 +69,7 @@ LNFS hướng tới:
 - Warehouse có receive/store/return và retention deadline; overdue disposition/donation/transfer/disposal documents chưa đủ.
 - Manual browser/device QA cho toàn bộ admin/profile vẫn cần bổ sung evidence; Cloudinary authenticated upload/delivery/cleanup smoke test đã pass.
 - Post/claim có Cloudinary adapter và local fallback. Warehouse intake/return dùng Cloudinary authenticated, production không ghi fallback local; đã chuyển đủ 16 reference kho local sau backup/restore và giữ file gốc. Test API/provider thật qua process độc lập, restart và quyền Staff/Admin đã pass trên DB cô lập; chưa chứng nhận topology production hay toàn bộ ảnh post/claim. Xem [rollout ảnh kho](warehouse-media-rollout.md); DB Aiven không lưu bytes ảnh.
-- CI MySQL 8.0/8.4 và browser phải chạy trên đúng commit ứng viên; bằng chứng commit/push/CI xem follow-up audit, không dùng run cũ. Các extension chưa được nghiệm thu deployment/manual không được gọi là production-ready.
+- `dev@dc92525` đã push và CI đúng SHA xanh: MySQL 8.0/8.4 mỗi job 375 pass/0 skip, browser 69 pass. Bằng chứng xem receipt audit; commit sau phải kiểm tra CI riêng, không dùng run cũ. Các extension chưa nghiệm thu deployment/manual không được gọi là production-ready.
 
 ### 4.3 Planned product scope
 

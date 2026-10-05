@@ -178,7 +178,7 @@ The latest request authorizes code/tests/docs, protected backup/restore, transfe
 | A2 | Repaired and regression verified | Room ID/generation fencing for message, decision, photo, evidence and verification callbacks; old finally cannot unlock another pending send, A-B-A does not revive old mutations. Full browser suite passes, including delayed success/failure, decision/upload, room switch and same-room draft preservation. |
 | A3 | Documentation reconciled | Current overview, BR/FR/UC, traceability, intake runbook, media receipt and migration-history review distinguish current operations from dated snapshots. Existing IDs extended only; catalogue stays 168/97/17/54, no blanket status promotion. |
 | R1 | Observed legacy warehouse storage issue repaired; controlled provider acceptance passed | 16 original local references transferred after encrypted backup/restore. 0 conflicts/review entries/remaining local warehouse refs; all originals retained. Independent post-check verifies metadata/history/source/delivery. Real provider + authorized API role/independent-process/replacement/restart/cleanup checks passed on disposable loopback SQL. Actual production configuration, physical/manual privacy acceptance and non-warehouse legacy scope remain separate. |
-| R2 | Local verification complete; exact-candidate remote CI pending at this pre-push snapshot | MySQL 8.0/8.4 and browser workflow records checked-out SHA and browser artifacts. Commit/push/remote receipt is recorded separately after CI completes; older CI is not evidence for the new tree. No production release/main merge approval is inferred. |
+| R2 | Exact code-candidate CI verified; deployment/manual acceptance separate | `dc925252c855afa0d34b30d26d8283e359849ef6` is pushed to dev and its MySQL 8.0/8.4 and browser jobs all passed. Checkout SHA, logs and artifacts were verified; see the receipt below. Any subsequent candidate must be checked again, and no production release/main merge approval is inferred. |
 
 ### Fresh Verification
 
@@ -206,4 +206,23 @@ Historical 053 source was recovered from Git object `70911f6`, exact normalized 
 
 ### Remaining Acceptance
 
-Remote CI must pass on the exact committed candidate and any subsequent candidate, not the old dev run. Production deployment configuration, representative provider/photo accuracy, SMTP end-to-end behavior, physical intake/identity privacy UAT, complete ASVS/WCAG, load/failover and incomplete product scope are not certified by the controlled tests. Historical 053/055 effects and previously flagged physical-source links remain scoped operator reviews, not automatically repaired business history. The historical 77/100 score is unchanged; this execution does not label the entire product done or main-merge ready.
+The exact code-candidate CI below passed; any subsequent candidate requires its own check, not reuse of that run. Production deployment configuration, representative provider/photo accuracy, SMTP end-to-end behavior, physical intake/identity privacy UAT, complete ASVS/WCAG, load/failover and incomplete product scope are not certified by the controlled tests. Historical 053/055 effects and previously flagged physical-source links remain scoped operator reviews, not automatically repaired business history. The historical 77/100 score is unchanged; this execution does not label the entire product done or main-merge ready.
+
+## Commit and Remote CI Receipt
+
+Four meaningful repair commits were pushed to `dev`; each has Author `Trần Thế Lượng`. Committer remains `Vo Chieu Quan`; no global Git setting or existing author was changed.
+
+| Commit | Scope |
+| --- | --- |
+| `2a89a69dc9406c12e91cead1d8515a8c6b0ed98a` | Backend session-bound SSE, private LOST/FOUND context, warehouse Cloudinary composition and regressions |
+| `fb7dde6dd6e7b5a13c748b7aa577d74a71ab5472` | Guarded async chat mutations, error/retry, compact inventory and browser regressions |
+| `530aaf1f92239166d55ee21421f00086cb927c46` | Safe journaled photo rollout, protected backup/UTC restore, isolated/live-provider acceptance and exact historical archive |
+| `dc925252c855afa0d34b30d26d8283e359849ef6` | Reconciled audit/rules/requirements/traceability/runbooks and exact-artifact CI workflow |
+
+[GitHub Actions run 37269042341](https://github.com/LNFSYS/lost-and-found-management-system-main/actions/runs/37269042341) completed successfully for **exact SHA `dc925252c855afa0d34b30d26d8283e359849ef6`**, push event on `dev`, on 5 October 2026. Actual checkout SHA was checked in each job's logs, not inferred from a branch label.
+
+- MySQL 8.0: normal root tests, **375 passed, 0 failed, 0 skipped**; architecture 191 production files/0 violations, production advisory audit 0 vulnerabilities, API/Web build passed.
+- MySQL 8.4: the same **375 passed, 0 failed, 0 skipped**, architecture/audit/build passed.
+- Browser: **69 passed**, exact checkout verified. [Browser JUnit/screenshots artifact 11327976310](https://github.com/LNFSYS/lost-and-found-management-system-main/actions/runs/37269042341/artifacts/11327976310) is retained for 14 days; digest `sha256:61f242797111b4cbb5190ff1e6d5f0e8ffcf538e6916a3058debfe3d0e98c85a`.
+
+This receipt documents the tested code candidate. The later documentation-only commit carrying this receipt must also receive its own post-push CI check; it does not silently inherit an older green status. Main remains untouched. The task-owned loopback MySQL server was orderly shut down after verification; user API/Web and other MySQL processes were not stopped.
