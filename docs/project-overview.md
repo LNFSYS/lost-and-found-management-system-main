@@ -1,6 +1,6 @@
 # Tổng quan dự án FPTU Lost & Found System
 
-Cập nhật: **06/09/2026**
+Cập nhật hiện trạng: **05/10/2026**, theo bản sửa audit trên `dev` và rollout ảnh kho đã được cho phép. Trạng thái commit/push/CI được ghi riêng trong [audit 05/10](full-system-audit-2026-10-05.md); kết quả lịch sử ở mục 11 được giữ nguyên và không chứng nhận deployment mới.
 
 ## 1. Định vị
 
@@ -52,11 +52,15 @@ LNFS hướng tới:
 - Category hai cấp, campus area, building và public active-only handover point catalog.
 - Admin CRUD/toggle điểm bàn giao, map image upload, marker coordinates và guard không xóa điểm còn appointment/reference vận hành.
 - Admin moderation/report, dashboard KPI theo kỳ, current snapshot, status breakdown và aggregate CSV/JSON export; moderation target được suy ra từ report.
-- Post media local storage qua protected proxy, validation MIME/signature/size/count.
+- Post/claim media qua Cloudinary authenticated và protected proxy, validation MIME/signature/size/count; đọc tương thích và fallback local khi chưa cấu hình ở scope hiện có.
 - Gemini-assisted multi-image analysis tạo title/description/category/tags draft có thể chỉnh sửa.
 - Hybrid/rule-based matching dùng text normalization tiếng Việt, category, location, time, image/OCR tags, tier, score breakdown và explanation.
 - Claim request/decision, participant-scoped private text room, cursor-paginated history, private evidence proxy và claim notification feed; đây là current partial peer-return runtime.
-- Staff warehouse receive/store/return, retention deadline, handover counts và storage log.
+- Staff custody/walk-in nhận đồ vật lý không cần duyệt request trước, có ảnh tình trạng riêng và đối chiếu thông tin nguồn; kho có receive/store/reserve/return, retention deadline, storage log và API disposition có gate. Staff có thể xác minh claimant sau intake với lý do/audit, không giả danh Finder hay tự accept claim lúc nhập kho.
+- LOST direct contact cần private photo check trên 60% và confidence tối thiểu 60%; điểm chỉ mở giao tiếp, không chứng minh người gửi đang giữ đồ hay quyền sở hữu.
+- Matching có feedback/dismissal theo actor, phân trang trước serializer và periodic refresh với lease/fencing/retry hữu hạn.
+- Authenticated SSE thông báo workflow, giới hạn theo user/participant. Sửa audit 05/10 đóng stream khi access token hết hạn, kiểm tra session trước delivery/heartbeat và fail closed khi revalidation lỗi/quá hạn.
+- Ảnh intake/return kho mới dùng Cloudinary authenticated khi cấu hình; production không fallback ghi local. Proxy Staff/Admin và khả năng đọc ảnh local cũ được giữ.
 - PWA manifest, service worker, application shell và offline fallback không cache API/private data.
 
 ### 4.2 Partial
@@ -64,7 +68,8 @@ LNFS hướng tới:
 - Responsive web có mobile viewport checks, PWA manifest, service worker và privacy-safe offline shell; device/installability evidence vẫn cần manual QA.
 - Warehouse có receive/store/return và retention deadline; overdue disposition/donation/transfer/disposal documents chưa đủ.
 - Manual browser/device QA cho toàn bộ admin/profile vẫn cần bổ sung evidence; Cloudinary authenticated upload/delivery/cleanup smoke test đã pass.
-- Claim evidence và post media vẫn local filesystem nên chưa phù hợp nhiều máy/instance dùng chung database; shared object storage là deployment blocker.
+- Post/claim có Cloudinary adapter và local fallback. Warehouse intake/return dùng Cloudinary authenticated, production không ghi fallback local; đã chuyển đủ 16 reference kho local sau backup/restore và giữ file gốc. Test API/provider thật qua process độc lập, restart và quyền Staff/Admin đã pass trên DB cô lập; chưa chứng nhận topology production hay toàn bộ ảnh post/claim. Xem [rollout ảnh kho](warehouse-media-rollout.md); DB Aiven không lưu bytes ảnh.
+- CI MySQL 8.0/8.4 và browser phải chạy trên đúng commit ứng viên; bằng chứng commit/push/CI xem follow-up audit, không dùng run cũ. Các extension chưa được nghiệm thu deployment/manual không được gọi là production-ready.
 
 ### 4.3 Planned product scope
 
@@ -72,7 +77,7 @@ Luồng nghiệp vụ mục tiêu là:
 
 LOST/FOUND post → matching suggestion → private verification chat → Finder decision → meetup → dual-confirmed direct handover
 
-Phạm vi target còn gồm automated evidence confidence, multiple claimant reservation policy end-to-end, realtime chat/notification, appointment, escalation/report, PWA installability và Native Mobile. Claim/private text chat/guided verification/evidence/claim notification đã có runtime, nhưng chưa phải full return journey.
+Phạm vi còn thiếu gồm representative photo/AI quality evaluation, full multiple-claimant acceptance, peer appointment/dual handover, đầy đủ seen/unread/push, PWA device/installability và Native Mobile. Claim/private text chat/guided verification/evidence/claim notification/SSE và canonical Staff custody return đã có runtime; peer-to-peer return journey đầy đủ vẫn chưa hoàn thành.
 
 ### 4.4 Future/TBD
 
@@ -90,7 +95,8 @@ flowchart LR
   PWA[PWA target - same web client] --> API
   Mobile[Native Mobile - planned] --> API
   API --> DB[(MySQL / Aiven target)]
-  API --> Media[Local media storage - current]
+  API --> Media[Cloudinary authenticated media]
+  API --> Local[Legacy local media / development fallback]
   API --> SMTP[SMTP email - optional]
   API --> Gemini[Gemini image analysis - optional]
   API --> Avatar[Cloudinary authenticated avatar]
@@ -105,12 +111,12 @@ Bounded contexts mục tiêu:
 | Auth/account | Node.js, implemented |
 | Posts/catalog/media | Node.js, implemented; media shared storage planned |
 | Matching/AI assistance | Node.js, implemented theo rule-based/Gemini-assisted scope |
-| Claim/evidence/private text chat | Node.js, current partial runtime; private local storage và review workflow còn gap |
-| Appointment/dual handover | Chưa có runtime; phải chọn một write owner trước khi làm |
+| Claim/evidence/private text chat | Node.js, guided Finder review và Staff post-intake verification; provider/manual acceptance và full escalation review còn gap |
+| Appointment/dual handover | Peer appointment/dual confirmation Planned; canonical custody completed return và participant feedback đã có, không đồng nhất hai nhánh |
 | Handover point catalog | Node.js, implemented cho public active-only và Admin CRUD |
 | Warehouse | Node.js, implemented một phần cho Staff operations |
-| Claim notification | Node.js, REST/in-app current scope |
-| Realtime transport | Chưa có runtime |
+| Claim notification | Node.js, REST/in-app và transactional email outbox; provider/full-producer acceptance còn mở |
+| Realtime transport | Node.js, authenticated user-scoped SSE; full chat presence/seen/unread/PWA push còn Partial/Planned |
 | Native Mobile | Client planned, dùng shared API |
 
 Module chỉ truy cập module khác qua public application contract. Application không import MySQL, Express, provider SDK hoặc environment; transaction context không chứa `PoolConnection` trong core.
@@ -151,8 +157,8 @@ Module chỉ truy cập module khác qua public application contract. Applicatio
 1. Owner tạo claim từ cặp LOST/FOUND có matching đạt ngưỡng; backend tự suy ra Finder và khóa cặp trong transaction.
 2. Finder dùng `ACCEPT / OPEN_CONVERSATION`, request thêm thông tin hoặc decline; action mở room không phải ownership verification. Decision và withdrawal dùng claim row lock/state guard/idempotency.
 3. Khi Finder mở conversation, claim chuyển `CONVERSATION_OPEN`; chỉ final human decision `ACCEPTED` mới đủ điều kiện cho appointment.
-4. Tin nhắn text có idempotency key, cursor pagination; Web merge và deduplicate theo message ID, polling không chồng request và hủy khi đổi room.
-5. Evidence chỉ đi qua endpoint được authorization; API không trả raw storage URL. Local filesystem hiện chưa phù hợp multi-instance.
+4. Tin nhắn text có idempotency key, cursor pagination; Web merge/deduplicate theo message ID. Read và mutation callbacks được guard theo room/generation; phản hồi trễ không thay message, draft, quyết định hay evidence của phòng mới.
+5. Evidence chỉ đi qua endpoint được authorization; API không trả raw storage URL. Cloudinary authenticated là nguồn cloud, local fallback/ảnh cũ cần đối soát trước multi-instance.
 6. Guided questions theo category, hashed answer comparison, Finder confidence/reason, append-only audit và correction đã có trên Web/PWA. Appointment và dual handover chưa có.
 
 ### 6.4 Catalog và warehouse hiện tại
@@ -174,7 +180,7 @@ Luồng sau là target end-to-end. Current runtime mới bao phủ đến claim/
 4. Owner gửi verification request cho FOUND phù hợp.
 5. Finder thực hiện `ACCEPT / OPEN_CONVERSATION`; hệ thống mở conversation riêng đúng cặp Owner–Finder–LOST–FOUND và giữ claim ở `CONVERSATION_OPEN`.
 6. Finder dùng guided questions theo category; Owner trả lời qua private answer control mà không xem expected answer.
-7. Finder chọn `NEED_MORE_INFO`, final `ACCEPTED`, `REJECTED`, hoặc custody escalation. Trên `feat/lnfs-55`, custody giữ nguyên claim status, có request riêng và escalation metadata; request/accept chưa đổi custodian, intake chưa resolve post. Chỉ `ACCEPTED` đủ điều kiện tạo appointment. Xem [warehouse rules](warehouse-retention-and-status-rules.md).
+7. Finder chọn `NEED_MORE_INFO`, final `ACCEPTED`, `REJECTED`, hoặc custody escalation. Trong `dev`, custody giữ claim status, request và escalation history riêng; tạo request đi thẳng vào hàng đợi tiếp nhận vật lý. `PENDING` và legacy `ACCEPTED` có thể intake một lần; chưa nhận đồ thì chưa đổi custodian, intake không resolve post hay xác minh sở hữu. Staff verification sau intake có audit và giữ các gate tranh chấp/hold; canonical return mới hoàn tất trả đồ. Peer appointment vẫn cần `ACCEPTED`. Xem [warehouse rules](warehouse-retention-and-status-rules.md).
 8. Hai bên đề xuất và cùng xác nhận thời gian/địa điểm; appointment chỉ confirmed khi có mutual agreement.
 9. Hai bên gặp trực tiếp; Finder xác nhận HANDED_OVER, Owner xác nhận RECEIVED.
 10. Chỉ khi dual confirmation hợp lệ, hệ thống mới chuyển item sang RETURNED/đóng hồ sơ.
@@ -210,14 +216,14 @@ Schema hiện tại có post status OPEN/MATCHED/RESOLVED/CLOSED/EXPIRED/HIDDEN,
 - Ảnh public phải tránh lộ toàn bộ serial, IMEI, QR/barcode, giấy tờ và thông tin liên hệ.
 - Gemini/OCR chỉ đọc tín hiệu trong ảnh để hỗ trợ draft/matching; không suy đoán quyền sở hữu.
 - Human verification bắt buộc trước khi trả đồ.
-- Claim evidence trong tương lai phải có protected access; không trả raw storage URL cho actor không có quyền.
+- Claim và warehouse evidence hiện có protected access; không trả raw storage URL cho actor không có quyền. Warehouse proxy chỉ Staff/Admin; similarity không xác minh ngầm quyền sở hữu.
 - Thẻ sinh viên, CCCD, ngân hàng, điện thoại/laptop, chìa khóa, tiền, thuốc và vật nguy hiểm cần policy vận hành riêng; phần chưa được trường xác nhận ghi TBD.
 
 ## 10. Database, migration và media
 
-Migrations SQL nằm tại apps/api-node/src/migrations, được chạy theo thứ tự và kiểm tra checksum. Repository hiện có migration `001`–`046`; `046_feedback_idempotency_legacy_cleanup.sql` là forward corrective migration cho legacy feedback index và chưa được áp dụng lên Aiven/shared DB. Schema cho auth, posts, catalog, matching, claims, appointments, chat, notifications, warehouse, AI feedback và map/catalog không thay thế runtime evidence.
+Migrations SQL nằm tại apps/api-node/src/migrations, được chạy theo thứ tự và kiểm tra checksum. Các migration mới gồm additive `059_direct_return_recipient.sql`, `060_matching_refresh_leases.sql`, `061_warehouse_intake_evidence.sql`, `062_lost_contact_photo_checks.sql`. Không giả định mọi số giữa 001–062 đều có file hoặc ledger khớp một-một. Preflight Aiven ngày 05/10 pass: 58 source migrations, 61 applied ledger entries, 28 APPLIED attempts, không pending/superseded. Historical compatibility/scope warning 053/055 còn nguyên; original custody-time 055 chưa có SQL được xác minh. Sửa audit 05/10 không đổi SQL/checksum/ledger, không cần migration schema mới. Schema không thay thế runtime evidence.
 
-Đối chiếu trực tiếp ngày 07/09/2026: Aiven có 49 bảng, tất cả có nguồn gốc trong migration; 39/43 file SQL khớp ledger, 043–046 chưa được ghi nhận. Bản 040_peer_claim_conversations đã chạy có checksum khớp 045 hiện tại. Schema feedback thiếu cột của 043; không được chạy lại 045 nguyên trạng. Đã thêm preflight toàn bộ lịch sử, migration lock và công cụ reconciliation dry-run; shared DB chưa thay đổi. Không xóa các bảng planned/legacy chỉ vì trống. Xem [báo cáo và runbook](archive/AIVEN_SCHEMA_RECONCILIATION_2026-09-07.md).
+Snapshot lịch sử 07/09/2026: Aiven có 49 bảng, 39/43 SQL khớp ledger và 043–046 chưa được ghi nhận ở thời điểm đó. Snapshot này không mô tả DB hiện tại. Bản 040_peer_claim_conversations khớp 045; không chạy lại migration đã áp dụng để sửa drift. Xem [snapshot reconciliation](archive/AIVEN_SCHEMA_RECONCILIATION_2026-09-07.md) và [bằng chứng recovery/rollout hiện tại](database-warehouse-recovery.md). Không xóa các bảng planned/legacy chỉ vì trống.
 
 Khi dùng Aiven/shared MySQL:
 
@@ -225,9 +231,11 @@ Khi dùng Aiven/shared MySQL:
 - chỉ một người chạy migration sau review;
 - không chạy test destructive trên shared DB;
 - không commit .env, password, API key hay CA certificate;
-- media local trên từng máy không đồng bộ theo database; trước staging cần shared object storage.
+- Production warehouse upload cần Cloudinary authenticated. Rollout 05/10 đã chuyển 16 ảnh kho và kiểm tra portability trên process độc lập; giữ backup/file gốc và xác nhận cấu hình production trước bỏ nguồn. Xem [runbook ảnh kho](warehouse-media-rollout.md).
 
-## 11. Kiểm thử và evidence
+## 11. Kiểm thử và evidence lịch sử
+
+Các số bên dưới là snapshot tháng 09, không phải kết quả của bản mới. Kiểm thử audit 05/10 và sửa sau audit được ghi riêng trong [full-system-audit-2026-10-05.md](full-system-audit-2026-10-05.md); không dùng test xanh local để chứng nhận mọi UC hay CI của remote.
 
 Refactor kiến trúc 09/09 có kết quả riêng tại [Clean Architecture verification](CLEAN_ARCHITECTURE_VERIFICATION.md): 156 API/unit/integration tests, 23 browser E2E, typecheck/build và dependency check pass. Scope chỉ thay đổi kiến trúc; không nâng trạng thái hoàn thành các workflow còn thiếu.
 
@@ -243,7 +251,7 @@ Evidence đã kiểm tra ngày 06/09/2026:
 
 Cập nhật 07/09: API/unit/integration và Web typecheck pass với 152 tests, không skip; có MySQL local thật cho fresh/alias upgrade, partial DDL, ledger rollback, lock, feedback/chat retry và unique constraints. Đây không phải full claim-to-return UI evidence và không phải xác nhận CI từ xa. Evidence chi tiết nằm trong báo cáo reconciliation.
 
-Các gap còn lại: triển khai schema sửa lên Aiven sau phê duyệt, appointment dual confirmation, guided review, full warehouse disposition, shared media storage, PWA browser/device matrix, Native Mobile, load test, UAT và production backup/rollback.
+Gap hiện tại: peer appointment/dual confirmation, full escalation/disposition evidence UI, deployment production và media ngoài kho, PWA/device matrix, Native Mobile, load/failover và UAT. Backup/restore và CAS rollback ảnh kho đã có rehearsal cô lập 05/10, không phải nghiệm thu mọi khả năng recovery. Guided review/custody return đã có runtime; Aiven preflight 05/10 không còn pending migration nhưng không chứng minh toàn bộ tác động SQL lịch sử 053/055. Xem [history review](migration-history-review-2026-10-05.md).
 
 ## 12. Deployment và roadmap
 

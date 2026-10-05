@@ -1,6 +1,6 @@
 # Luật nghiệp vụ LNFS
 
-Cập nhật mapping: **04/10/2026**. Baseline custody/matching đã merge trên `dev`; luật bổ sung và test của các commit sửa audit cục bộ xem [dev audit fixes](dev-main-audit-fixes.md). Bằng chứng lịch sử giữ trong [verification LNFS-55](LNFS-55-SAFETY-VERIFICATION.md), không suy ra mọi UC đã hoàn thành.
+Cập nhật mapping: **05/10/2026**. Baseline custody/matching đã merge trên `dev`; luật bổ sung và test của các commit sửa audit cục bộ xem [dev audit fixes](dev-main-audit-fixes.md) và [audit 05/10](full-system-audit-2026-10-05.md). Bằng chứng lịch sử giữ trong [verification LNFS-55](LNFS-55-SAFETY-VERIFICATION.md), không suy ra mọi UC đã hoàn thành.
 
 ## 1. Quy ước
 
@@ -19,7 +19,7 @@ Cập nhật mapping: **04/10/2026**. Baseline custody/matching đã merge trên
 | BR-03 | Password dùng bcrypt; OTP, refresh token và reset token không lưu plaintext; token có expiry/use-once phù hợp. | UC-001–UC-007 | Enforced |
 | BR-04 | Login chỉ thành công với account ACTIVE và session version hợp lệ. | UC-003, UC-004 | Enforced |
 | BR-05 | Refresh token được rotate trong transaction; logout revoke session hiện tại. | UC-004, UC-005 | Enforced |
-| BR-06 | Protected endpoint phải xác thực JWT; Admin API chỉ chấp nhận ADMIN, Staff API chỉ chấp nhận STAFF/ADMIN theo route. | UC-003, UC-008, UC-050–UC-057, UC-062–UC-068 | Enforced |
+| BR-06 | Protected endpoint phải xác thực JWT; Admin API chỉ chấp nhận ADMIN, Staff API chỉ chấp nhận STAFF/ADMIN theo route. SSE gắn với validated subject/session version và token expiry; đóng khi token hết hạn, kiểm tra session trước delivery/heartbeat, fail closed khi DB revalidation lỗi hoặc quá 5 giây. Kết nối cũ không được tiếp tục nhận thông báo khi phiên đã thu hồi/account bị disable. | UC-003, UC-008, UC-050–UC-057, UC-062–UC-068, UC-119, UC-123 | Enforced current REST/SSE scope; full realtime UC acceptance remains Partial |
 | BR-07 | Post chỉ có LOST hoặc FOUND; chỉ owner được update/delete/upload/delete media của bài. | UC-018–UC-025 | Enforced |
 | BR-08 | Post cần title, description, category cụ thể, contact, incident time không ở tương lai và location hợp lệ. | UC-018, UC-019 | Enforced |
 | BR-09 | Building phải thuộc area đã chọn; LOST không dùng handover point; FOUND phải có nơi lưu/area/custom location/handover hợp lệ. | UC-016, UC-018, UC-019, UC-049 | Enforced |
@@ -55,7 +55,7 @@ Cập nhật mapping: **04/10/2026**. Baseline custody/matching đã merge trên
 
 | ID | Luật | UC | Status |
 | --- | --- | --- | --- |
-| BR-29 | Shared DB không được tham chiếu file chỉ tồn tại trên một máy; shared object storage là yêu cầu trước multi-instance staging. | UC-023–UC-025, UC-044, UC-045 | Planned |
+| BR-29 | Shared DB không được tham chiếu file chỉ tồn tại trên một máy; shared object storage là yêu cầu trước multi-instance staging. Post/claim và warehouse intake/return có Cloudinary authenticated adapter; production warehouse không ghi fallback local. Ảnh local cũ phải backup/đối soát và copy có xác minh trước khi bỏ instance nguồn. | UC-023–UC-025, UC-044, UC-045, UC-051, UC-052, UC-055, UC-056, UC-146 | Partial overall: warehouse 16-reference transfer, protected backup/UTC restore, independent-process/provider/restart/role checks pass; production topology and non-warehouse legacy acceptance remain separate |
 | BR-30 | Metadata media còn nhưng file mất phải trả 404 có kiểm soát, không để unhandled 500. | UC-024, UC-045 | Enforced cho local post media |
 | BR-31 | Admin catalog write cần audit actor, action, before/after và timestamp. | UC-069–UC-081, UC-163 | Planned |
 | BR-32 | Staff page chỉ công bố hoàn thành khi có operational flow và backend role evidence. | UC-050–UC-057, UC-143–UC-146 | Enforced cho warehouse operations hiện tại |

@@ -1,5 +1,7 @@
 # Warehouse Database Recovery
 
+Latest operational follow-up: [5 October warehouse-media rollout](warehouse-media-rollout.md) and [053/055 history review](migration-history-review-2026-10-05.md). The dated records below remain historical snapshots, including their then-local commit/push status.
+
 ## Scope and History
 
 **4 October 2026 status:** the exact original `054_matching_feedback_periodic_refresh.sql` has been recovered, normalized SHA256 `404c6ac5d3b9424db1a82eef2238924ac5f2ef36366c89fd4ed03b97ab60853d`, and is immutable. A database with its original applied record skips it; reviewed 057-only history uses schema-verified, read-only supersession without inventing history or converting legacy labels. Migration 059 is already applied; 060 was applied on 3 October after backup and isolated rehearsal. Additive 061/062 were applied on 4 October after a new encrypted backup and isolated restore/repeat-run rehearsal. Current preflight reports no pending migrations and the warehouse schema probe is ready. Original custody-time 055 remains unavailable. See the rollout records below; older unavailable-source statements refer to the 2 October snapshot only.
@@ -86,3 +88,9 @@ Executed on 2026-10-02:
 The later LOST/custody participant, atomic source-deletion and read-only legacy repairs require no new SQL migration. The TypeScript claim schema verifier accepts complete canonical direct-LOST roles as well as recognized migration-045 legacy roles; missing participants still block verification. Applied SQL, checksums and ledger history remain unchanged. The participant repair command was not run.
 
 The follow-up ran only read-only Aiven `migrate:preflight`: 58 source migrations, 61 applied entries, 28 APPLIED attempts and no pending/superseded migrations; historical 053/055 warnings remain. All destructive regression work ran on a task-owned temporary loopback MySQL instance. No shared custody-link correction or automatic restoration of deleted sources occurred. Current tests, scoped commits and deployment limits: [full-system audit](full-system-audit-2026-10-04.md).
+
+## Warehouse Media Follow-Up (5 October 2026)
+
+The authorized photo operation backed up 64 tables/3,758 rows and all 16 source files, rehearsed full isolated restore, then changed only 16 unchanged warehouse `storage_ref` values to authenticated Cloudinary references. Post-check confirms source/canonical hashes, original retention, unchanged other row fields and unchanged migration ledger/attempts; no new DDL or custody-link correction was run. A second UTC-explicit restore matched all row/file fingerprints and preserved fractional timestamp precision. Receipts and limits are in [warehouse-media-rollout.md](warehouse-media-rollout.md).
+
+Original historical 053 SQL was recovered exactly from Git object `70911f6` and archived outside the forward runner, matching checksum `63b1268a45409de6b4b12eb7473a3e5254459bd9da0e4db1c0c3497d9e4c4eef`. Missing old disposition/hold tables mean its full historical scope is still not certified. Original custody-time 055 remains unavailable. Read-only preflight still reports 58 source/61 ledger/28 attempts and no pending/superseded migrations, with both intentional warnings. See [the separate review/recovery plan](migration-history-review-2026-10-05.md); it authorizes no historical recovery writes.
