@@ -103,11 +103,24 @@ test("isolated recovery: preserved history/labels, full restore and conservative
     await t.test("backup restores every table and row on loopback; refuses nonempty targets", async () => {
       await pool.query("CREATE TABLE recovery_clock (id INT PRIMARY KEY, instant TIMESTAMP(6) NULL, wallclock DATETIME(6) NULL) ENGINE=InnoDB");
       const source = await pool.getConnection();
+      const [original] = await source.query<RowDataPacket[]>("SELECT @@SESSION.sql_mode AS mode, @@SESSION.sql_quote_show_create AS quoted");
       try {
         await source.query("SET SESSION time_zone='+07:00'");
         await source.query("INSERT INTO recovery_clock VALUES(1,'2026-10-05 14:12:34.123456','2026-10-05 14:12:34.654321')");
-      } finally { source.release(); }
-      const backup = await captureRecoveryBackup(pool);
+        await source.query("SET SESSION sql_mode='ANSI,STRICT_ALL_TABLES', sql_quote_show_create=0");
+      } catch (reason) { source.release(); throw reason; }
+      const pinned = { getConnection: async () => ({ query: source.query.bind(source), release() {}, destroy() { source.destroy(); } }) } as unknown as Pool;
+      let backup;
+      try {
+        backup = await captureRecoveryBackup(pinned);
+        const [settings] = await source.query<RowDataPacket[]>("SELECT @@SESSION.sql_mode AS mode, @@SESSION.sql_quote_show_create AS quoted, @@SESSION.time_zone AS zone");
+        assert.match(settings[0].mode, /ANSI/); assert.equal(Number(settings[0].quoted), 0); assert.equal(settings[0].zone, "+07:00");
+      } finally {
+        await source.query("SET SESSION sql_mode=?, sql_quote_show_create=?", [original[0].mode, original[0].quoted]);
+        source.release();
+      }
+      for (const table of backup.tables) assert.match(table.ddl, /ENGINE=InnoDB/);
+      assert.match(backup.tables.find(table => table.name === "chat_rooms")!.ddl, /COLLATE=utf8mb4_unicode_ci/);
       assert.deepEqual(backup.tables.find(table => table.name === "recovery_clock")!.rows, [[1, "2026-10-05 07:12:34.123456", "2026-10-05 14:12:34.654321"]]);
       const { pool: clone } = await create();
       await clone.query("SET SESSION time_zone='-05:00'");

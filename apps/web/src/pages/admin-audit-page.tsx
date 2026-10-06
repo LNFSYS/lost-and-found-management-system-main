@@ -1,0 +1,21 @@
+import { Download, History, Search, ChevronLeft, ChevronRight } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { api } from "../services/api";
+import { displayTime, type ActivityEvent, type AuditFilter } from "../services/workflow-types";
+import "./workflow-pages.css";
+export function AdminAuditPage(){
+  const [query,setQuery]=useState("");const [source,setSource]=useState("");const [from,setFrom]=useState("");const [to,setTo]=useState("");
+  const [actor,setActor]=useState("");const [target,setTarget]=useState("");const [filter,setFilter]=useState<AuditFilter>({page:1});
+  const [items,setItems]=useState<ActivityEvent[]>([]);const [total,setTotal]=useState(0);const [error,setError]=useState("");const [loading,setLoading]=useState(true);const [busy,setBusy]=useState(false);const [format,setFormat]=useState<"csv"|"json">("csv");
+  const alive=useRef(true);useEffect(()=>{alive.current=true;return()=>{alive.current=false;};},[]);
+  useEffect(()=>{let active=true;const controller=new AbortController();setLoading(true);setError("");void api.listAudit(filter,controller.signal).then(r=>{if(active){setItems(r.results);setTotal(r.total);}}).catch(e=>{if(active&&!controller.signal.aborted)setError(e.message);}).finally(()=>{if(active)setLoading(false);});return()=>{active=false;controller.abort();};},[filter]);
+  function search(e:React.FormEvent){e.preventDefault();setFilter({query,source,actorId:actor,targetId:target,from:from?new Date(from).toISOString():undefined,to:to?new Date(to).toISOString():undefined,page:1});}
+  async function download(){if(busy)return;setBusy(true);setError("");try{const blob=await api.exportAudit(filter,format);if(!alive.current)return;const url=URL.createObjectURL(blob);const a=document.createElement("a");a.href=url;a.download=`lnfs-audit.${format}`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}catch(e){if(alive.current)setError(e instanceof Error?e.message:"Không thể xuất nhật ký");}finally{if(alive.current)setBusy(false);}}
+  return <section className="workflow-page"><header className="workflow-heading"><h1><History/> Nhật ký hệ thống</h1><div><select aria-label="Định dạng xuất" value={format} onChange={e=>setFormat(e.target.value as "csv"|"json")}><option value="csv">CSV</option><option value="json">JSON</option></select><button disabled={busy||loading} onClick={()=>void download()}><Download/> Xuất nhật ký</button></div></header>
+    <form className="audit-filters" onSubmit={search}><label>Từ khóa<input value={query} maxLength={100} onChange={e=>setQuery(e.target.value)}/></label><label>Nguồn<select value={source} onChange={e=>setSource(e.target.value)}><option value="">Tất cả</option>{["ADMIN","CLAIM","CUSTODY","WAREHOUSE","REPORT","MODERATION","APPOINTMENT"].map(s=><option key={s}>{s}</option>)}</select></label>
+      <label>Từ ngày<input type="datetime-local" value={from} onChange={e=>setFrom(e.target.value)}/></label><label>Đến ngày<input type="datetime-local" value={to} onChange={e=>setTo(e.target.value)}/></label>
+      <label>ID người thao tác<input value={actor} onChange={e=>setActor(e.target.value)}/></label><label>ID đối tượng<input value={target} onChange={e=>setTarget(e.target.value)}/></label><button type="submit" disabled={loading}><Search/> Tìm kiếm</button></form>
+    {error&&<p className="workflow-error" role="alert">{error}</p>}{loading?<p role="status">Đang tải nhật ký...</p>:<div className="audit-table-wrap"><table><thead><tr><th>Thời gian</th><th>Nguồn / Thao tác</th><th>Người thao tác</th><th>Đối tượng</th><th>Trạng thái</th></tr></thead><tbody>{items.map(e=><tr key={e.id}><td>{displayTime(e.createdAt)}</td><td>{e.source}<br/><strong>{e.action}</strong></td><td>{e.actorId??"Hệ thống"}</td><td>{e.targetType}<br/>{e.targetId||"—"}</td><td>{e.fromStatus??""}{e.toStatus?` → ${e.toStatus}`:""}</td></tr>)}</tbody></table>{!items.length&&<p>Không có nhật ký phù hợp.</p>}</div>}
+    <div className="workflow-pagination"><button aria-label="Trang trước" disabled={loading||filter.page===1} onClick={()=>setFilter(f=>({...f,page:(f.page??1)-1}))}><ChevronLeft/></button><span>Trang {filter.page} · {total} sự kiện</span><button aria-label="Trang sau" disabled={loading||(filter.page??1)*30>=total} onClick={()=>setFilter(f=>({...f,page:(f.page??1)+1}))}><ChevronRight/></button></div>
+  </section>;
+}

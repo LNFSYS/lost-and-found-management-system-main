@@ -1,4 +1,6 @@
 import { createAdminCatalogUseCases } from "../modules/admin/application/admin-catalog.use-cases.js";
+import { createAppointmentUseCases } from "../modules/appointments/application/appointment.use-cases.js";
+import { createActivityUseCases } from "../modules/activity/application/activity.use-cases.js";
 import { createAdminReportingUseCases } from "../modules/admin/application/admin-reporting.use-cases.js";
 import { createAdminUserUseCases } from "../modules/admin/application/admin-user.use-cases.js";
 import { createAuthUseCases } from "../modules/auth/application/auth.use-cases.js";
@@ -69,6 +71,9 @@ export function createServices(persistence: Persistence, config: typeof env = en
     id, frontendUrl: config.frontendUrl, logger: console
   });
   const notificationService = createNotificationUseCases({ notificationRepository, notificationEmailRepository, notificationEmailQueue });
+  const appointmentService = createAppointmentUseCases({ repository:persistence.appointmentRepository,transaction,id,
+    hash:security.hashToken,notifications:notificationRepository,emails:notificationEmailQueue,reminderLeadMinutes:config.appointmentReminderMinutes });
+  const activityService = createActivityUseCases({ repository:persistence.activityRepository,audit:adminAuditRepository,transaction,id });
   const systemConfigService = createSystemConfigUseCases({
     repository: systemConfigRepository, auditRepository: adminAuditRepository, transaction, idFactory: id
   });
@@ -119,6 +124,7 @@ export function createServices(persistence: Persistence, config: typeof env = en
   });
   const geminiImageService = createImageAnalysisUseCases({ postRepository, analyzer: createGeminiImageAnalyzer(config.gemini) });
   return {
+    appointmentService, activityService,
     notificationService, notificationEmailWorker, systemConfigService, adminUserService, adminReportingService,
     adminCatalogService, warehouseService, custodyRequestService, returnFeedbackService, matchingService,
     postService, claimService, realtimeService, reportService, authService, geminiImageService

@@ -1,4 +1,6 @@
 import type { Pool } from "mysql2/promise";
+import { createAppointmentRepository } from "../modules/appointments/infrastructure/appointment.repository.js";
+import { createActivityRepository } from "../modules/activity/infrastructure/activity.repository.js";
 import { createAdminAuditRepository } from "../modules/admin/infrastructure/admin-audit.repository.js";
 import { createAdminCatalogRepository } from "../modules/admin/infrastructure/admin-catalog.repository.js";
 import { createAdminReportingRepository } from "../modules/admin/infrastructure/admin-reporting.repository.js";
@@ -26,6 +28,8 @@ export function createPersistence(database: Pool) {
   };
   return {
     transaction: createTransactionRunner(sqlTransaction),
+    appointmentRepository: createAppointmentRepository(database),
+    activityRepository: createActivityRepository(database),
     mediaUploads: createMediaUploads(database),
     adminAuditRepository: createAdminAuditRepository(database),
     adminCatalogRepository: createAdminCatalogRepository(database),

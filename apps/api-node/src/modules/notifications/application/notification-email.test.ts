@@ -250,6 +250,15 @@ function deliveryFixture(overrides: Partial<NotificationEmailRepository> = {}) {
   });
 }
 
+test("appointment reminders reuse SMTP with an authenticated appointment link and no private payload",async()=>{
+  const item={id:"reminder",notificationId:notification.id,recipientUserId:"user-a",eventType:"APPOINTMENT" as const,entityType:"APPOINTMENT_REMINDER",entityId:notification.entityId,roomId:null,deliveryMode:"IMMEDIATE" as const,idempotencyKey:"reminder-key",attemptCount:1};
+  let content="";
+  let claimed=false;
+  const worker=createNotificationEmailWorker({repository:repository({claimDue:async()=>{if(claimed)return [];claimed=true;return [item];},listLease:async()=>[{...item,email:"fixture@example.invalid",emailVerified:true,accountActive:true,notificationUnread:true,entityAccessible:true}]}),
+    emailDelivery:{send:async input=>{content=JSON.stringify(input);return {}; }},id:()=>"lease",frontendUrl:"https://lnfs.example",logger:{warn(){}}});
+  const result=await worker.runOnce();assert.equal(result.sent,1);assert.ok(content.includes(`/appointments/${notification.entityId}`));assert.ok(content.includes("NHẮC LỊCH HẸN"));assert.ok(!content.includes(notification.body!));await worker.stop();
+});
+
 for (const failure of ["known rejection", "unclassified transport error", "ack write failure"]) {
   test(`email ${failure} never retries an uncertain send`, async () => {
     let released = false, cancelled = false, sent = 0;

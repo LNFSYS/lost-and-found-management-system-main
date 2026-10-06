@@ -197,6 +197,12 @@ export function createNotificationEmailRepository(pool: SqlExecutor) {
           CASE WHEN o.entity_type = 'CUSTODY_REQUEST' THEN EXISTS (
               SELECT 1 FROM custody_requests cr WHERE cr.id = o.entity_id AND (cr.requester_id = o.recipient_user_id
                 OR EXISTS(SELECT 1 FROM user_roles ur WHERE ur.user_id = o.recipient_user_id AND ur.role_code IN ('STAFF','ADMIN'))))
+            WHEN o.entity_type IN ('APPOINTMENT','APPOINTMENT_REMINDER') THEN EXISTS (
+              SELECT 1 FROM return_appointments a JOIN claim_participants cp ON cp.claim_id=a.claim_id
+              WHERE a.id=o.entity_id AND cp.user_id=o.recipient_user_id AND cp.consent_status='ACCEPTED'
+                AND (o.entity_type='APPOINTMENT' OR (a.status='ACCEPTED' AND a.proposed_at>UTC_TIMESTAMP()
+                  AND a.custody_authorized_at IS NULL
+                  AND NOT EXISTS(SELECT 1 FROM custody_requests cr WHERE cr.claim_id=a.claim_id AND cr.status IN ('PENDING','ACCEPTED','INTAKED')))))
             WHEN o.entity_type <> 'CLAIM' THEN TRUE
             WHEN EXISTS (SELECT 1 FROM claim_participants cp WHERE cp.claim_id = o.entity_id AND cp.user_id = o.recipient_user_id) THEN TRUE
             ELSE FALSE END AS entity_accessible

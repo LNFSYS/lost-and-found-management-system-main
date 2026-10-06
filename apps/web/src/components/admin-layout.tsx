@@ -1,4 +1,4 @@
-import { FileText, FolderTree, Globe2, Handshake, LogOut, MapPinned, Settings2, ShieldCheck, UsersRound, Warehouse } from "lucide-react";
+import { FileText, FolderTree, Globe2, Handshake, History, LogOut, MapPinned, Settings2, ShieldCheck, UsersRound, Warehouse } from "lucide-react";
 import { Link, NavLink, Outlet, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../context/auth-context";
 import { useNetworkStatus } from "../hooks/use-network-status";
@@ -38,6 +38,7 @@ export function AdminLayout() {
           <tab.icon size={18} /><span>{tab.label}</span>
         </button>)}
         <NavLink to="/admin/staff"><Warehouse size={18} /><span>Khu vực nội bộ</span></NavLink>
+        {isAdmin&&<NavLink to="/admin/audit"><History size={18}/><span>Nhật ký hệ thống</span></NavLink>}
       </nav>
       <div className="admin-sidebar__account">
         <span>{user?.fullName.slice(0, 1).toUpperCase()}</span>

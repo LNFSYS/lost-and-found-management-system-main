@@ -1,0 +1,28 @@
+.workflow-page{max-width:1100px;margin:24px auto;padding:0 24px 32px;color:#20354a;letter-spacing:0}
+.workflow-heading{display:flex;align-items:center;justify-content:space-between;gap:16px;border-bottom:1px solid #d8e2ec;padding-bottom:16px;margin-bottom:20px}
+.workflow-heading h1{font-size:24px;margin:0;display:flex;align-items:center;gap:10px}
+.workflow-page h2{font-size:18px;line-height:1.5;overflow-wrap:anywhere;margin:22px 0 12px}
+.workflow-heading>div,.workflow-actions,.workflow-pagination{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.workflow-page button,.workflow-page select,.workflow-page input:not([type=checkbox]){border:1px solid #bacde0;border-radius:6px;padding:10px 12px;font:inherit;background:white;max-width:100%;min-width:0}
+.workflow-page button{display:inline-flex;align-items:center;justify-content:center;gap:8px;color:#0768b6;min-height:42px;cursor:pointer}
+.workflow-page button svg{width:18px;height:18px;flex-shrink:0}
+.workflow-page button:disabled{opacity:.5;cursor:default}
+.workflow-page :focus-visible{outline:3px solid #1583ce;outline-offset:3px}
+.workflow-page a{color:#0768b6;overflow-wrap:anywhere}
+.workflow-error{color:#bd2525;background:#fff3f3;border-left:3px solid #d23838;padding:12px;overflow-wrap:anywhere}
+.workflow-status{display:inline-block;font-size:13px;font-weight:600;color:#086ba1;background:#e9f4fa;padding:6px 10px;border-radius:4px}
+.workflow-facts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;border-block:1px solid #d8e2ec;padding:20px 0}
+.workflow-facts dt{font-size:13px;color:#687d90}.workflow-facts dd{margin:6px 0 0;overflow-wrap:anywhere}
+.workflow-actions{margin:20px 0;padding:20px 0;border-block:1px solid #d8e2ec}
+.workflow-check{flex-basis:100%;display:flex;gap:10px;align-items:start}.workflow-check input{width:18px;height:18px;min-height:18px;flex:0 0 18px;margin:2px 0 0;padding:0;accent-color:#0868b4}
+.workflow-note{flex-basis:100%;display:flex;flex-direction:column;gap:8px;font-size:14px}.workflow-note textarea{max-width:100%;border:1px solid #bacde0;border-radius:6px;padding:10px;font:inherit;resize:vertical}
+.workflow-proposal,.audit-filters{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin:20px 0;padding:20px 0;border-block:1px solid #d8e2ec}
+.workflow-proposal h2{grid-column:1/-1;margin:0}.workflow-proposal label,.audit-filters label{display:flex;flex-direction:column;gap:8px;font-size:14px}
+.workflow-proposal button,.audit-filters button{justify-self:start}
+.appointment-list{list-style:none;padding:0}.appointment-list li{display:flex;justify-content:space-between;align-items:center;gap:20px;padding:18px 0;border-bottom:1px solid #d8e2ec}.appointment-list p{font-size:14px;color:#657b90;margin:8px 0 0}
+.workflow-pagination{justify-content:center;margin-top:24px}
+.workflow-timeline{padding:0 0 0 24px;margin:24px 0;list-style:none;border-left:2px solid #b7d5e9}
+.workflow-timeline li{position:relative;padding:0 0 24px;overflow-wrap:anywhere}.workflow-timeline li:before{content:"";position:absolute;left:-30px;top:5px;width:10px;height:10px;border-radius:50%;background:#0780bd}
+.workflow-timeline strong,.workflow-timeline time{display:block}.workflow-timeline time{font-size:13px;color:#667c91;margin:6px 0}.workflow-timeline p{margin:6px 0;font-size:14px}.workflow-source{font-size:11px;color:#a7610c;display:block;margin-bottom:6px}
+.audit-table-wrap{overflow-x:auto}.audit-table-wrap table{width:100%;border-collapse:collapse;font-size:13px}.audit-table-wrap th,.audit-table-wrap td{padding:12px;text-align:left;border-bottom:1px solid #d8e2ec;vertical-align:top;max-width:240px;overflow-wrap:anywhere}.audit-table-wrap th{background:#f1f6fa;white-space:nowrap}
+@media(max-width:700px){.workflow-page{padding:0 16px 24px;margin-top:16px}.workflow-heading{align-items:start;flex-wrap:wrap}.workflow-heading h1{font-size:20px}.workflow-facts,.workflow-proposal,.audit-filters{grid-template-columns:minmax(0,1fr)}.appointment-list li{align-items:start;flex-direction:column;gap:10px}.workflow-actions button{width:100%}.workflow-heading>div{width:100%;justify-content:space-between}.audit-table-wrap table{min-width:640px}}

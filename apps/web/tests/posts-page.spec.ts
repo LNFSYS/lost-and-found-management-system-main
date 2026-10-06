@@ -51,8 +51,10 @@ test("shows the public board and loads the current user's posts in a separate ta
   await prepare(page, requests);
   await expect(page.getByRole("heading", { name: "Bài đăng", exact: true })).toBeVisible();
   await expect(page.getByText("Ví da nam màu nâu")).toBeVisible();
+  await expect(page.getByRole("link",{name:"Xem hành trình vật phẩm",exact:true})).toHaveCount(0);
   await page.getByRole("tab", { name: "Bài đăng của tôi" }).click();
   await expect(page.getByText("Thẻ sinh viên của tôi")).toBeVisible();
+  await expect(page.getByRole("link",{name:"Xem hành trình vật phẩm",exact:true})).toHaveAttribute("href","/posts/post-mine/journey");
   expect(requests.some((url) => url.includes("/api/posts/mine?"))).toBeTruthy();
 });
 

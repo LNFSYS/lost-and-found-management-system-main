@@ -1,5 +1,6 @@
 import { AlertTriangle, CalendarDays, CheckCircle2, Clock3, HelpCircle, LoaderCircle, LockKeyhole, PackageCheck, RotateCw, ShieldAlert, ShieldCheck, X, XCircle } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import { useModalFocus } from "../hooks/use-modal-focus";
 import { api, type ClaimMessage, type ClaimRecord, type ClaimVerificationState } from "../services/api";
 
@@ -150,7 +151,7 @@ export function ClaimVerificationPanel({ claim, verification, loading, loadError
       {accepted && latestDecision && <div className="review-outcome">
         <strong>Finder đã chọn: {selectedDecision ?? "Đề xuất gặp mặt"}</strong>
         <dl><div><dt>Quyết định bởi</dt><dd>{actorName(latestDecision.actorId)}</dd></div><div><dt>Thời gian</dt><dd>{new Intl.DateTimeFormat("vi-VN", { dateStyle: "short", timeStyle: "short" }).format(new Date(latestDecision.createdAt))}</dd></div>{lastReason && <div><dt>Lý do</dt><dd>{lastReason}</dd></div>}</dl>
-        <div className="review-appointment"><span>APPOINTMENT</span><button type="button" disabled title="Appointment thuộc LNFS-54"><CalendarDays /> Tạo lịch hẹn</button></div>
+        <div className="review-appointment"><span>LỊCH HẸN</span><Link className="secondary-button" to={`/appointments?claimId=${claim.id}`}><CalendarDays /> Tạo / xem lịch hẹn</Link></div>
         {finder && <button type="button" className="review-correct" onClick={toggleCorrection}>{correctionMode ? "Ẩn lựa chọn quyết định" : "Điều chỉnh quyết định"}</button>}
       </div>}
 
