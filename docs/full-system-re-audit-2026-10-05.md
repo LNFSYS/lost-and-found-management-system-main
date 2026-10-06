@@ -235,3 +235,11 @@ The user subsequently authorized committing/pushing the current work to `dev` an
 - SQL integration was not rerun during this documentation/commit-preparation step. The earlier complete 58-test isolated MySQL 9.3 run and later focused 13-test authenticated custody run are scoped receipts in [photo workflow evidence](lost-contact-photo-rules.md), not new full SQL acceptance. Candidate CI must exercise MySQL 8.0/8.4 and browser jobs on the actual pushed SHA.
 
 No migration, Aiven write, recovery or repeat media rollout was performed. Existing 053/055 history limits, physical-source review, real-provider/physical UAT, load/failover and broader accessibility acceptance remain open. Local verification does not declare production/main readiness. Commit/push and exact candidate CI must be checked separately after this preparation; no older green SHA certifies this candidate.
+
+### Initial Candidate CI and Browser Timing Repair
+
+Candidate `379e8b9f51a70ea186beb1a69350ed9fdec3848b` was committed/pushed to `dev`. [Exact candidate run 37408441283](https://github.com/LNFSYS/lost-and-found-management-system-main/actions/runs/37408441283) passed both MySQL 8.0 and 8.4 jobs, each with 437 tests and zero failures/skips, clean production dependency audit and successful API/Web builds. Browser had 84 passes and one failure; this run is **not** a fully green acceptance receipt.
+
+The existing image-analysis test delayed its HTTP fixture response for only 1500 ms, then scrolled and asserted the transient `.is-scanning` state. The response could complete before these checks on a different runner. The test now holds that response behind an explicit gate until the scanner visibility, two-image filmstrip, animated-beam movement and screenshot assertions finish, and releases it in `finally`. Draft/edit/publication/matching assertions remain unchanged. No product timing change, longer assertion timeout, retry setting, skipped test or removed assertion was used. This repair changes verification scheduling only, not UC scope/status; a new candidate still requires its own full CI result.
+
+The repaired browser test passed four consecutive local runs with two workers; Web type checking passed. The earlier full local 85-test pass remains a scoped receipt, not proof of the new candidate's CI. Catalogue totals remain 168 with the 97/18/53 split.

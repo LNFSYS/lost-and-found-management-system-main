@@ -315,12 +315,14 @@ test("paginates matching results and preserves page on recalculate", async ({ pa
 test("analyzes an image, fills an editable draft, posts it and shows real category candidates", async ({ page }) => {
   let payload: Record<string, unknown> = {};
   let analysisImageParts = 0;
+  let finishAnalysis!: () => void;
+  const analysisResponse = new Promise<void>(resolve => { finishAnalysis = resolve; });
   await page.emulateMedia({ reducedMotion: "reduce" });
   await prepare(page, (value) => { payload = value; }, true);
   await page.route("**/api/posts/analyze-image", async (route) => {
     const multipartBody = route.request().postDataBuffer()?.toString("utf8") ?? "";
     analysisImageParts = multipartBody.match(/name="files"/g)?.length ?? 0;
-    await new Promise((resolve) => setTimeout(resolve, 1500));
+    await analysisResponse;
     return route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -343,16 +345,21 @@ test("analyzes an image, fills an editable draft, posts it and shows real catego
   ]);
   await expect(page.locator(".story-image-thumb")).toHaveCount(2);
   await page.getByRole("button", { name: "Phân tích 2 ảnh" }).click();
-  await page.locator("#system-analysis").scrollIntoViewIfNeeded();
-  await expect(page.locator(".workflow-image-scanner.is-scanning")).toBeVisible();
-  await expect(page.locator(".workflow-image-scanner__filmstrip > span")).toHaveCount(2);
-  const scanBeam = page.locator(".workflow-image-scanner__beam");
-  await expect(scanBeam).toHaveCSS("animation-name", "workflow-image-scan");
-  const initialBeamTop = await scanBeam.evaluate((element) => element.getBoundingClientRect().top);
-  await page.waitForTimeout(400);
-  const movedBeamTop = await scanBeam.evaluate((element) => element.getBoundingClientRect().top);
-  expect(Math.abs(movedBeamTop - initialBeamTop)).toBeGreaterThan(8);
-  await page.screenshot({ path: "../../test-results/home/story-image-analysis.png" });
+  // Hold the response until loading-state assertions finish, regardless of runner speed.
+  try {
+    await page.locator("#system-analysis").scrollIntoViewIfNeeded();
+    await expect(page.locator(".workflow-image-scanner.is-scanning")).toBeVisible();
+    await expect(page.locator(".workflow-image-scanner__filmstrip > span")).toHaveCount(2);
+    const scanBeam = page.locator(".workflow-image-scanner__beam");
+    await expect(scanBeam).toHaveCSS("animation-name", "workflow-image-scan");
+    const initialBeamTop = await scanBeam.evaluate((element) => element.getBoundingClientRect().top);
+    await page.waitForTimeout(400);
+    const movedBeamTop = await scanBeam.evaluate((element) => element.getBoundingClientRect().top);
+    expect(Math.abs(movedBeamTop - initialBeamTop)).toBeGreaterThan(8);
+    await page.screenshot({ path: "../../test-results/home/story-image-analysis.png" });
+  } finally {
+    finishAnalysis();
+  }
   const form = page.locator(".story-post-form");
   await expect(form.getByLabel("Tên vật phẩm")).toHaveValue("Ví da màu đen");
   await expect(form.getByLabel("Danh mục cụ thể", { exact: true })).toHaveValue(catalog.categories[1].id);
