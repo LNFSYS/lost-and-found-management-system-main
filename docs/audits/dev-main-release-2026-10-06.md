@@ -34,7 +34,15 @@ Nội dung đã commit trước đây vẫn tra được trong lịch sử Git; 
 - `npm audit --omit=dev`: 0 vulnerabilities. UC catalogue giữ 168 = 129 Implemented + 20 Partial + 19 Planned.
 - 35 Markdown files, 355 local links, 0 broken; `git diff --check` đạt.
 - Backup mới được bảo vệ ngoài Git: 64 bảng/4.426 dòng; restore, bảo toàn dữ liệu/schema/ledger cũ, additive 2 bảng và repeated runner đều PASS. Aiven chưa ghi. Helper MySQL 9.3 loopback 33319, không thay CI 8.0/8.4.
-- Full API/SQL trên helper cô lập đang chạy trong lúc chốt candidate; không dùng 30 skips làm bằng chứng SQL đã pass.
+- Full API/SQL trên helper cô lập: 469 PASS, 0 FAIL, 0 SKIP; không dùng 30 skips làm bằng chứng SQL đã pass. Browser rerun xác nhận native exit 0, 105/105; lượt đầu có PowerShell NativeCommandError do warning NO_COLOR/FORCE_COLOR, không có assertion thất bại.
+
+### Finding của CI candidate đầu
+
+[CI của 4fe8211](https://github.com/LNFSYS/lost-and-found-management-system-main/actions/runs/37453993012): MySQL 8.4 đạt, MySQL 8.0 có 468 PASS/1 FAIL, browser bị skip. Không dùng run này để cho phép rollout.
+
+Ca hai reminder workers vẫn enqueue đúng một reminder/two outbox rows, nhưng đọc lease ngay có thể thấy 0. Fixture dùng JavaScript time có milliseconds; MySQL DATETIME(0) có thể làm tròn due_at lên giây kế tiếp, trong khi claimDue so với UTC_TIMESTAMP() không có phần lẻ. Probe cô lập xác nhận 12:00:00.900 được lưu thành 12:00:01 và chưa đủ điều kiện ở 12:00:00. Không phải mất outbox hay gửi trùng.
+
+Sửa clock fixture sang UTC_TIMESTAMP() authoritative của DB và thêm assertion cả hai reminder đã đến hạn. Giữ nguyên concurrency, số outbox, lease eligibility và no-show assertions; không skip hoặc giảm yêu cầu nghiệm thu. Candidate mới phải chạy lại toàn bộ CI; chưa ghi Aiven trong lúc xử lý finding này.
 
 ## Giới hạn nghiệm thu
 
