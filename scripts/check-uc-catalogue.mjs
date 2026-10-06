@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
-const text = await readFile(new URL("../docs/uc.md", import.meta.url), "utf8");
+const text = await readFile(new URL("../docs/requirements/uc.md", import.meta.url), "utf8");
 const rows = text.split(/\r?\n/).filter(line => /^\| UC-\d{3} \|/.test(line));
 const ids = new Set();
 const counts = { Implemented: 0, Partial: 0, Planned: 0 };

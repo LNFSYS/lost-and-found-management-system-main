@@ -23,7 +23,8 @@ Current repository là baseline Web + Node.js API. Native Mobile, PWA infrastruc
 - Upload media bài đăng qua local protected media proxy, có kiểm tra loại, kích thước và file signature.
 - Gemini-assisted multi-image analysis tạo bản nháp có thể chỉnh sửa; không tự đăng bài và không tự xác minh quyền sở hữu.
 - Hybrid/rule-based matching với text normalization tiếng Việt, category, location, time, image/OCR tags, tier, score breakdown và explanation.
-- Claim peer-to-peer, participant authorization, private text room, guided ownership questions, explicit Finder decision, cursor-paginated history, private evidence proxy và in-app claim notifications đã có runtime; appointment và realtime transport chưa có.
+- Claim peer-to-peer, participant authorization, private text/image room, guided ownership questions, explicit Finder decision, unread/read, private evidence proxy và in-app notifications đã có runtime. SSE backend có; immediate Web chat subscriber/PWA push còn thiếu.
+- Local lịch hẹn có danh sách/chi tiết, đề xuất thời gian/điểm, accept/reject/cancel, nhắc email, no-show và xác nhận bàn giao hai bên; Admin có audit search/export, User có hành trình vật phẩm từ Bài của tôi. Migration 063 chưa áp dụng Aiven; xem [rollout và bằng chứng](docs/runbooks/appointment-journey-rollout.md).
 - Staff warehouse operations: tiếp nhận, lưu, trả, retention deadline, handover counts và storage log.
 
 Các mục trên là **current implementation baseline**, không đồng nghĩa mọi workflow trong product scope đã hoàn tất end-to-end.
@@ -34,18 +35,18 @@ Luồng nghiệp vụ mục tiêu là:
 
 `LOST/FOUND post → matching suggestion → claim/private verification chat → finder decision → meetup → dual-confirmed direct handover`
 
-Staff custody/warehouse là nhánh hỗ trợ hoặc escalation khi Finder không thể tiếp tục giữ đồ, có dispute, item nhạy cảm/nguy hiểm hoặc policy yêu cầu chuyển vào kho. Claim, private text chat, guided questions, explicit Finder decision, evidence proxy và claim notification đã có route/UI/test evidence; appointment, realtime chat/notification và phần PWA/native mobile nâng cao vẫn chưa hoàn tất.
+Staff custody/warehouse là nhánh hỗ trợ hoặc escalation khi Finder không thể tiếp tục giữ đồ, có dispute, item nhạy cảm/nguy hiểm hoặc policy yêu cầu chuyển vào kho. Basic appointment và dual physical handover đã có local runtime; counter-proposal/rescheduling, realtime Web delivery và PWA/native mobile nâng cao vẫn chưa hoàn tất. Matching ảnh hỗ trợ trao đổi, không thay thế kiểm tra vật lý hoặc cho phép Staff trả đồ.
 
 ## Trạng thái chưa có runtime evidence
 
-- Automated evidence confidence, appointment/meetup và multiple-claimant reservation policy end-to-end.
-- Meetup proposal/acceptance/reschedule và dual-confirmation direct handover.
-- Socket.IO realtime chat, image message, unread/seen và realtime notification.
+- Automated evidence confidence và multiple-claimant reservation policy end-to-end.
+- Counter-proposal và mutually agreed rescheduling; basic booking/dual-confirmation có local code, shared schema/deployment và manual UAT chưa hoàn tất.
+- Immediate Web chat SSE subscriber và full PWA notification/push matrix; image message và persisted unread/read đã có.
 - Overdue disposition, donation/transfer/disposal document flow và dispute escalation.
 - PWA installability và browser/device verification đầy đủ; manifest, service worker, offline shell và mobile-browser flow đã có ở mức hiện tại.
 - Native Mobile Application.
 - Custom-trained AI model, MLOps hoặc production model registry.
-- Shared object storage; media hiện lưu local filesystem.
+- Full rollout media ngoài kho: Cloudinary authenticated/protected proxy đã có; legacy local reads và local fallback theo từng module vẫn cần theo dõi riêng. Không chạy lại đợt 16 ảnh kho đã chuyển.
 
 ## Kiến trúc hiện tại
 
@@ -58,7 +59,7 @@ Web / PWA -> Node.js + TypeScript modular monolith -> MySQL
 Native Mobile (planned) -> same API/auth/business rules
 ```
 
-Node.js là backend, business-write owner và migration owner duy nhất. Toàn bộ Java skeleton/build đã được gỡ; không có microservice Java. Xem [Clean Architecture và dependency rules](docs/CLEAN_ARCHITECTURE.md), [mapping source](docs/CLEAN_ARCHITECTURE_FILE_MAP.md) và [draw.io ba trang](docs/LNFS_NODE_ONLY_ARCHITECTURE.drawio).
+Node.js là backend, business-write owner và migration owner duy nhất. Toàn bộ Java skeleton/build đã được gỡ; không có microservice Java. Xem [Clean Architecture và dependency rules](docs/architecture/CLEAN_ARCHITECTURE.md), [mapping source](docs/architecture/CLEAN_ARCHITECTURE_FILE_MAP.md) và [draw.io ba trang](docs/architecture/LNFS_NODE_ONLY_ARCHITECTURE.drawio).
 
 ## Yêu cầu môi trường
 
@@ -141,21 +142,23 @@ Metadata media nằm trong MySQL; bytes ảnh không nằm trong Aiven. Avatar v
 
 Ảnh tiếp nhận và ảnh trả đồ của kho trên production không ghi fallback local: thiếu cấu hình hoặc Cloudinary lỗi sẽ báo lỗi. Adapter vẫn hỗ trợ đọc reference local cũ. Đợt rollout kho đã chuyển 16 reference sau backup/restore và giữ nguyên file nguồn; không có nghĩa toàn bộ ảnh post/claim đã migrate.
 
-Post/claim còn fallback ghi local khi chưa cấu hình Cloudinary; kho chỉ cho phép fallback ghi local ngoài production. Những reference local cần đúng volume `UPLOAD_DIR`, nên chưa có bảo đảm đọc được giữa hai instance không dùng chung disk. Xem [rollout ảnh kho](docs/warehouse-media-rollout.md) và [đối soát upload chưa rõ kết quả](docs/media-upload-reconciliation.md). Bằng chứng kiểm thử có kiểm soát không thay thế nghiệm thu cấu hình/deployment thực tế.
+Post/claim còn fallback ghi local khi chưa cấu hình Cloudinary; kho chỉ cho phép fallback ghi local ngoài production. Những reference local cần đúng volume `UPLOAD_DIR`, nên chưa có bảo đảm đọc được giữa hai instance không dùng chung disk. Xem [rollout ảnh kho](docs/runbooks/warehouse-media-rollout.md) và [đối soát upload chưa rõ kết quả](docs/runbooks/media-upload-reconciliation.md). Bằng chứng kiểm thử có kiểm soát không thay thế nghiệm thu cấu hình/deployment thực tế.
 
 ## Tài liệu chính
 
 - [Tài liệu index](docs/README.md)
-- [Tổng quan dự án](docs/project-overview.md)
-- [Quy trình nghiệp vụ A–Z](docs/LNFS_BUSINESS_PROCESS_A_TO_Z.md)
-- [Requirements](docs/requirements.md)
-- [Business rules](docs/business-rules.md)
-- [Traceability matrix](docs/traceability-matrix.md)
-- [Use-case catalogue](docs/uc.md)
-- [Notification email rules](docs/notification-email-rules.md)
-- [Clean Architecture](docs/CLEAN_ARCHITECTURE.md)
-- [Node/Java boundary lịch sử, đã ngừng sử dụng](docs/node-java-service-boundary.md)
-- [Historical reports](docs/archive/)
+- [Kế hoạch xử lý các vấn đề UAT 06/10](docs/plans/uat-repair-plan-2026-10-06.md)
+- [Báo cáo kiểm thử thực tế 06/10](docs/audits/real-workflow-uat-2026-10-06.md)
+- [Tổng quan dự án](docs/overview/project-overview.md)
+- [Quy trình nghiệp vụ A–Z](docs/overview/LNFS_BUSINESS_PROCESS_A_TO_Z.md)
+- [Requirements](docs/requirements/requirements.md)
+- [Business rules](docs/requirements/business-rules.md)
+- [Traceability matrix](docs/requirements/traceability-matrix.md)
+- [Use-case catalogue](docs/requirements/uc.md)
+- [Notification email rules](docs/workflows/notification-email-rules.md)
+- [Clean Architecture](docs/architecture/CLEAN_ARCHITECTURE.md)
+- [Lịch sử đối soát schema](docs/archive/AIVEN_SCHEMA_RECONCILIATION_2026-09-07.md)
+- [Phạm vi lọc tài liệu và rollout 06/10](docs/audits/dev-main-release-2026-10-06.md)
 
 ## Cách trình bày trung thực
 
