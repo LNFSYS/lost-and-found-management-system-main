@@ -29,7 +29,7 @@ import type { Persistence } from "./persistence.js";
 
 export function createServices(persistence: Persistence, config: typeof env = env) {
   const {
-    transaction, adminAuditRepository, adminCatalogRepository, adminReportingRepository,
+    transaction, mediaUploads, adminAuditRepository, adminCatalogRepository, adminReportingRepository,
     adminUserRepository, authRepository, claimRepository, matchingRepository,
     notificationRepository, notificationEmailRepository, postRepository, returnFeedbackRepository, reportRepository,
     systemConfigRepository, userRepository, warehouseRepository, custodyRequestRepository
@@ -83,7 +83,7 @@ export function createServices(persistence: Persistence, config: typeof env = en
   const adminCatalogService = createAdminCatalogUseCases({ adminCatalogRepository, id });
   const authService = createAuthUseCases({
     authRepository, userRepository, avatarStorage, security,
-    policy: config, emailService, withTransaction: transaction, logger: console
+    policy: config, emailService, withTransaction: transaction, logger: console, uploads: mediaUploads
   });
   const realtimeService = createRealtimeUseCases({ claimRepository, id, validateSession: session => authService.validateAccessSession(session) });
   const custodyDelivery = { notificationRepository, notificationEmailQueue,
@@ -95,7 +95,7 @@ export function createServices(persistence: Persistence, config: typeof env = en
     config: config.cloudinary, namespace: "warehouse-proof", allowLocalWrites: config.nodeEnv !== "production",
     fallback: createPrivateMediaStorage({ uploadDir: config.uploadDir, namespace: "warehouse-proof", invalidPathMessage: "Invalid proof path", notFoundMessage: "Proof not found" })
   });
-  const warehouseService = createWarehouseUseCases({ warehouseRepository, custodyRequestRepository, proofStorage, sourceMediaStorage: postMediaStorage, ...custodyDelivery, withTransaction: transaction, id });
+  const warehouseService = createWarehouseUseCases({ warehouseRepository, custodyRequestRepository, proofStorage, sourceMediaStorage: postMediaStorage, contactMediaStorage: claimMediaStorage, ...custodyDelivery, withTransaction: transaction, id, uploads: mediaUploads, logger: console });
   const custodyRequestService = createCustodyRequestUseCases({ custodyRequestRepository, warehouseRepository, ...custodyDelivery, withTransaction: transaction, id });
   const returnFeedbackService = createReturnFeedbackUseCases({
     repository: returnFeedbackRepository, adminAuditRepository, runInTransaction: transaction, id
@@ -106,16 +106,16 @@ export function createServices(persistence: Persistence, config: typeof env = en
   const matchingService = createMatchingUseCases({ matchingRepository, postRepository, idFactory: id });
   const postService = createPostUseCases({
     postRepository, matchingRepository, matchingService,
-    withTransaction: transaction, id, mediaStorage: postMediaStorage, logger: console
+    withTransaction: transaction, id, mediaStorage: postMediaStorage, logger: console, uploads: mediaUploads
   });
   const claimService = createClaimUseCases({
     contactPhotos: createContactPhotoUseCases({ repository: persistence.contactPhotoRepository, claims: claimRepository, matching: matchingRepository,
       imageAnalysis: createImageAnalysisUseCases({ postRepository, analyzer: createGeminiImageAnalyzer(config.gemini) }),
-      authorizeTarget: postId => postService.getPost(postId), mediaStorage: claimMediaStorage, transaction, id }),
+      authorizeTarget: postId => postService.getPost(postId), mediaStorage: claimMediaStorage, transaction, id, uploads: mediaUploads, logger: console }),
     claimRepository, matchingRepository, notificationRepository, custodyRequestRepository, warehouseRepository, notificationEmailQueue,
     realtimeNotifier: realtimeService,
     withTransaction: transaction, id, mediaStorage: claimMediaStorage,
-    hashIdempotencyPayload: security.hashToken, logger: console
+    hashIdempotencyPayload: security.hashToken, logger: console, uploads: mediaUploads
   });
   const geminiImageService = createImageAnalysisUseCases({ postRepository, analyzer: createGeminiImageAnalyzer(config.gemini) });
   return {

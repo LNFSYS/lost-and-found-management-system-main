@@ -7012,7 +7012,7 @@ textarea {
 .story-image-picker {
   min-width: 0;
   display: grid;
-  align-content: start;
+  align-content: stretch;
   gap: 10px;
 }
 
@@ -7104,7 +7104,7 @@ textarea {
 
 .story-image-analysis-actions {
   display: grid;
-  align-content: center;
+  align-self: start;
   gap: 10px;
   padding: 18px;
   border: 1px solid #d8e5ef;
@@ -7112,6 +7112,14 @@ textarea {
   background: #f8fbfd;
 }
 
+.story-image-analysis-copy {
+  grid-column: 1 / -1;
+  min-width: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.story-image-analysis-copy p,
 .story-image-analysis-actions p {
   margin: 0;
   color: var(--muted);
@@ -7119,7 +7127,13 @@ textarea {
   line-height: 1.55;
 }
 
-.story-image-analysis-actions .story-image-analysis-note {
+.story-image-analysis-copy .story-image-analysis-hint {
+  color: var(--ink);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.story-image-analysis-copy .story-image-analysis-note {
   color: #82410b;
   font-size: 0.75rem;
 }
@@ -8416,7 +8430,7 @@ textarea {
 .claim-chat-header > button svg { width: 16px; }
 .claim-chat-header > div { min-width: 0; display: grid; gap: 3px; }
 .claim-chat-header strong { font-size: .9rem; }
-.claim-chat-header span { display: flex; align-items: center; gap: 5px; color: #4f7b61; font-size: .64rem; font-weight: 800; }
+.claim-chat-header > div:first-child > span { display: flex; align-items: center; gap: 5px; color: #4f7b61; font-size: .64rem; font-weight: 800; }
 .claim-chat-header span i { width: 7px; height: 7px; border-radius: 50%; background: #35a369; }
 .claim-chat-header small { overflow: hidden; color: #738694; font-size: .65rem; text-overflow: ellipsis; white-space: nowrap; }
 .claim-chat-header .claim-close-button { color: #a33d34; border-color: #e0b7b2; }
@@ -8431,6 +8445,45 @@ textarea {
 .claim-private-banner strong { color: var(--ink-soft); font-size: .72rem; }
 .claim-private-banner span { color: #758896; font-size: .64rem; }
 .claim-chat-scroll { min-height: 0; overflow-y: auto; display: flex; flex-direction: column; overflow-x: hidden; }
+.claim-chat-header > .claim-chat-review { grid-column: 1 / -1; }
+.claim-chat-review .review-panel { padding: 10px 0; border-top: 1px solid #dfe7ec; }
+.claim-chat-review .review-panel > header { margin-bottom: 6px; }
+.claim-chat-review .review-progress { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px; margin: 0 0 8px; padding: 8px 10px; }
+.claim-chat-review .review-progress strong, .claim-chat-review .review-progress span { font-size: .72rem; }
+.claim-chat-review .review-actions { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.claim-chat-review .review-actions > span { grid-column: 1 / -1; }
+.claim-chat-review .review-action { min-height: 42px; padding: 6px 8px; gap: 5px; font-size: .72rem; }
+.claim-chat-review .review-panel { gap: 7px; }
+.claim-chat-review .review-action span { min-width: 0; overflow-wrap: anywhere; }
+.claim-question-suggestions { grid-column: 1 / -1; display: grid; gap: 5px; }
+.claim-question-suggestions button { min-width: 0; min-height: 34px; padding: 6px 10px; display: grid; grid-template-columns: 16px minmax(0, 1fr) 16px; gap: 8px; align-items: center; border: 1px solid #cbdce8; border-radius: 5px; background: #f8fbfe; color: #344f62; text-align: left; cursor: pointer; }
+.claim-question-suggestions button:hover { background: #eaf4fc; border-color: #87b6d5; }
+.claim-question-suggestions button span { font-size: .75rem; line-height: 1.4; overflow-wrap: anywhere; }
+.claim-question-suggestions button svg { width: 16px; height: 16px; color: #1367ab; }
+.claim-question-suggestions button:disabled { opacity: .6; cursor: wait; }
+.claim-question-suggestions .claim-question-toggle { min-height: 30px; padding-block: 4px; border: 0; background: transparent; }
+.claim-question-toggle span { font-weight: 700; }
+.claim-question-options { display: grid; gap: 5px; }
+.claim-question-options[hidden] { display: none; }
+.claim-chat-image { display: block; width: 220px; max-width: 100%; height: 180px; padding: 0; border: 0; background: #f0f4f7; cursor: zoom-in; }
+.claim-chat-image img { width: 100%; height: 100%; object-fit: contain; }
+.claim-chat-image-expanded { display: block; max-width: 100%; max-height: 65vh; margin: auto; object-fit: contain; }
+.claim-image-draft { min-width: 0; display: flex; align-items: center; gap: 10px; padding: 6px; border: 1px solid #bed4e4; border-radius: 5px; background: #f4f9fd; }
+.claim-image-draft img { width: 64px; height: 56px; object-fit: contain; }
+.claim-image-draft span { flex: 1; min-width: 0; font-size: .75rem; overflow-wrap: anywhere; }
+.claim-image-draft button { width: 32px; height: 32px; padding: 5px; border: 0; color: #ac3f38; background: transparent; cursor: pointer; }
+.evidence-panel--uploading { box-shadow: inset 3px 0 #176fbd; }
+.evidence-upload-compact input:focus { outline: 2px solid #176fbd; outline-offset: 3px; }
+.mobile-conversation-toggle { display: none; }
+@media (max-width: 720px) {
+  .mobile-conversation-toggle { width: 100%; min-height: 40px; display: flex; align-items: center; gap: 8px; padding: 8px 12px; border: 0; border-bottom: 1px solid #d5e1ea; background: #f6fafd; color: #235d86; font: inherit; font-size: .8rem; cursor: pointer; }
+  .mobile-conversation-toggle svg { width: 18px; height: 18px; }
+  .claims-page--focused .claims-sidebar { display: none; }
+}
+@media (max-width: 760px) {
+  .claim-chat-review .review-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .claim-chat-header { padding: 10px 12px; }
+}
 .claim-messages { max-height: none; min-height: 260px; overflow: visible; flex: 1; padding: 22px 24px 80px; }
 .claim-message { max-width: min(72%, 520px); padding: 10px 12px; border-color: #d6e0e6; border-radius: 7px 7px 7px 2px; box-shadow: none; }
 .claim-reply-question { margin-top: 8px; padding: 6px 10px; display: inline-flex; align-items: center; gap: 6px; border: 1px solid #d17a1f; border-radius: 4px; color: #d17a1f; background: #fff8f1; font-size: .64rem; font-weight: 800; cursor: pointer; }
@@ -8474,6 +8527,8 @@ textarea {
 
 .claim-message-form { position: relative; padding: 8px 18px 12px; margin-top: 3%; border-top: 1px solid #dce5ea; max-width: 100%; display: flex; flex-direction: column; gap: 8px; }
 .claim-message-form > .input-row { display: grid; grid-template-columns: 36px minmax(0, 1fr) auto; align-items: end; gap: 8px; max-width: 100%; }
+.claim-message-form--draft > .input-row { grid-template-columns: minmax(0, 1fr) auto; }
+.claim-message-form > .input-row .message-attachment { display: block; }
 .claim-message-form .message-actions { display: flex; gap: 6px; }
 .claim-message-form .verification-button { width: 38px; min-height: 42px; padding: 0; display: grid; place-items: center; border: 1px solid #d17a1f; border-radius: 6px; color: #d17a1f; background: #fff8f1; cursor: pointer; }
 .claim-message-form .verification-button svg { width: 17px; }
@@ -8558,9 +8613,9 @@ textarea {
 .evidence-panel__actions button, .evidence-upload-compact button { min-height: 33px; padding: 0 9px; display: inline-flex; align-items: center; gap: 6px; border: 1px solid #bfd1dc; border-radius: 5px; color: var(--fpt-blue-dark); background: #fff; font-size: .63rem; font-weight: 800; cursor: pointer; }
 .evidence-panel__actions svg { width: 14px; }
 .evidence-upload-compact { padding-top: 9px; display: grid; gap: 7px; border-top: 1px solid #e3eaee; }
-.evidence-upload-compact label { min-height: 34px; padding: 0 9px; display: flex; align-items: center; overflow: hidden; border: 1px dashed #b7cbd7; border-radius: 5px; color: #607b8c; font-size: .63rem; cursor: pointer; }
+.evidence-upload-compact label { min-width: 0; min-height: 34px; padding: 8px 9px; display: grid; gap: 6px; overflow: hidden; border: 1px dashed #b7cbd7; border-radius: 5px; color: #607b8c; font-size: .63rem; cursor: pointer; }
 .evidence-upload-compact label span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.evidence-upload-compact label input { display: none; }
+.evidence-upload-compact label input { display: block; width: 100%; min-width: 0; font-size: .7rem; }
 .evidence-upload-compact > input { min-height: 34px; padding: 0 9px; border: 1px solid #c8d7df; border-radius: 5px; font: inherit; font-size: .66rem; }
 .evidence-upload-compact button { justify-self: end; color: #fff; border-color: var(--fpt-blue); background: var(--fpt-blue); }
 
@@ -8656,7 +8711,8 @@ textarea {
   .claim-message { max-width: 88%; }
   .chat-question-panel { margin: 0 0 25px; }
   .claim-message-form { padding-inline: 12px; }
-  .claim-message-form > .input-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .claim-message-form > .input-row { grid-template-columns: 36px minmax(0, 1fr) auto; }
+  .claim-message-form--draft > .input-row { grid-template-columns: minmax(0, 1fr) auto; }
   .claim-workspace-state { min-height: 360px; }
   .decision-modal-backdrop, .evidence-modal-backdrop { padding: 10px; }
   .decision-modal > footer { display: grid; grid-template-columns: 1fr 1fr; }

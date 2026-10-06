@@ -1,5 +1,6 @@
 import { AlertTriangle, CalendarDays, CheckCircle2, Clock3, HelpCircle, LoaderCircle, LockKeyhole, PackageCheck, RotateCw, ShieldAlert, ShieldCheck, X, XCircle } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
+import { useModalFocus } from "../hooks/use-modal-focus";
 import { api, type ClaimMessage, type ClaimRecord, type ClaimVerificationState } from "../services/api";
 
 type Decision = "VERIFY_FOR_MEETUP" | "REQUEST_MORE_INFO" | "DECLINE" | "ESCALATE_TO_CUSTODY";
@@ -45,6 +46,10 @@ export function ClaimVerificationPanel({ claim, verification, loading, loadError
   const [error, setError] = useState("");
   const retry = useRef<{ decision: Decision; key: string } | null>(null);
   const actionsRef = useRef<HTMLDivElement>(null);
+  const decisionRef = useRef<HTMLElement>(null);
+  const custodyRef = useRef<HTMLElement>(null);
+  useModalFocus(decisionRef, Boolean(decision && decision !== "ESCALATE_TO_CUSTODY"), () => setDecision(null), busy);
+  useModalFocus(custodyRef, decision === "ESCALATE_TO_CUSTODY", () => setDecision(null), busy);
   const active = verification?.status === "CONVERSATION_OPEN" || verification?.status === "NEED_MORE_INFO";
   const finder = verification?.participantRole === "FINDER";
   const latestDecision = useMemo(
@@ -132,7 +137,7 @@ export function ClaimVerificationPanel({ claim, verification, loading, loadError
     <section className={`review-panel review-panel--${accepted ? "eligible" : custody ? "custody" : verification.status.toLowerCase()}`}>
       <header><span>OWNERSHIP REVIEW</span>{accepted ? <CheckCircle2 /> : <ShieldCheck />}</header>
       <div className="review-progress">
-        <strong>{accepted ? "✓ " : ""}{verification.policy.answeredCount} / {verification.policy.minimumAnswers} câu trả lời tối thiểu</strong>
+        <strong>{verification.policy.photoContactEligible ? "Ảnh đã đạt điều kiện trao đổi" : `${accepted ? "✓ " : ""}${verification.policy.answeredCount} / ${verification.policy.minimumAnswers} câu trả lời tối thiểu`}</strong>
         <span className={accepted ? "success" : "pending"}>{accepted ? "Đủ điều kiện đặt lịch" : verification.policy.readyForDecision ? "Có thể đưa ra quyết định" : "Chưa đủ điều kiện đặt lịch"}</span>
       </div>
 
@@ -157,16 +162,16 @@ export function ClaimVerificationPanel({ claim, verification, loading, loadError
           const item = decisionContent[value];
           const Icon = item.icon;
           const disabled = value === "VERIFY_FOR_MEETUP" && !verification.policy.readyForDecision;
-          return <button type="button" key={value} className={`review-action review-action--${value.toLowerCase()}`} disabled={disabled} onClick={() => openDecision(value)} title={disabled ? "Claim chưa đủ minimum answers" : item.label}><Icon /><span>{item.label}</span>{disabled && <LockKeyhole />}</button>;
+          return <button type="button" key={value} className={`review-action review-action--${value.toLowerCase()}`} disabled={disabled} onClick={() => openDecision(value)} title={disabled ? "Cần trả lời câu hỏi xác minh trước khi đề xuất gặp mặt" : item.label}><Icon /><span>{item.label}</span>{disabled && <LockKeyhole />}</button>;
         })}
       </div>}
     </section>
 
     {decision && decision !== "ESCALATE_TO_CUSTODY" && <div className="decision-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) setDecision(null); }}>
-      <section className="decision-modal" role="dialog" aria-modal="true" aria-labelledby="decision-modal-title">
+      <section ref={decisionRef} tabIndex={-1} className="decision-modal" role="dialog" aria-modal="true" aria-labelledby="decision-modal-title">
         <header><div><span>Xác nhận quyết định</span><h3 id="decision-modal-title">{decisionContent[decision].title}</h3></div><button type="button" onClick={() => setDecision(null)} disabled={busy} title="Đóng"><X /></button></header>
         <p>{decision === "VERIFY_FOR_MEETUP"
-          ? "Bạn đang xác nhận claim đã đủ điều kiện để tiến tới meetup."
+          ? verification.policy.photoContactEligible ? "Đề xuất gặp để đối chiếu trực tiếp. Ảnh tương đồng không xác nhận quyền sở hữu hoặc quyền nhận đồ tại kho." : "Bạn đang xác nhận claim đã đủ điều kiện để tiến tới meetup."
           : "Quyết định sẽ cập nhật trạng thái claim trên server."}</p>
         <label>Lý do / nhận xét<textarea value={reason} onChange={(event) => setReason(event.target.value)} minLength={3} maxLength={1000} autoFocus required /></label>
         <div className="decision-audit-note"><LockKeyhole /> Quyết định này sẽ được ghi vào audit.</div>
@@ -176,7 +181,7 @@ export function ClaimVerificationPanel({ claim, verification, loading, loadError
     </div>}
 
     {decision === "ESCALATE_TO_CUSTODY" && <div className="custody-modal-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) setDecision(null); }}>
-      <section className="custody-modal custody-modal--claim-transfer" role="dialog" aria-modal="true" aria-labelledby="custody-transfer-title">
+      <section ref={custodyRef} tabIndex={-1} className="custody-modal custody-modal--claim-transfer" role="dialog" aria-modal="true" aria-labelledby="custody-transfer-title">
         <header className="custody-modal__header">
           <span className="modal-badge modal-badge--blue"><PackageCheck /></span>
           <div>

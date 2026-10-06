@@ -109,6 +109,88 @@ async function prepare(page: Page, calls: { created?: unknown; patched?: unknown
   }));
 }
 
+for (const width of [1440, 390]) {
+  test(`intake keyboard isolation, nested preview and draft restoration at ${width}px`, async ({ page }, testInfo) => {
+    await page.setViewportSize({ width, height: 900 });
+    await prepare(page, {});
+    await page.goto("/staff");
+    const trigger = page.getByRole("button", { name: "Tiếp nhận Walk-in (Tại quầy)", exact: true });
+    await trigger.click();
+    const dialog = page.getByRole("dialog", { name: "Tiếp nhận trực tiếp (Walk-in / Tại quầy)" });
+    const close = dialog.getByRole("button", { name: "Đóng tiếp nhận", exact: true });
+    await expect(close).toBeFocused();
+    await page.keyboard.press("Shift+Tab");
+    await expect(dialog.getByRole("button", { name: "Hủy", exact: true })).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(close).toBeFocused();
+    expect(await trigger.evaluate(element => Boolean(element.closest("[inert]")))).toBe(true);
+    await dialog.getByLabel("Tên vật phẩm").fill("Draft kept after preview");
+    await dialog.getByLabel("Ảnh tình trạng tiếp nhận", { exact: true }).setInputFiles(intakePhoto);
+    const image = dialog.getByRole("button", { name: "Xem ảnh vật phẩm", exact: true });
+    await expect(image).toBeEnabled();
+    await image.click();
+    const preview = page.getByRole("dialog", { name: "Ảnh vật phẩm", exact: true });
+    const closeImage = preview.getByRole("button", { name: "Đóng ảnh", exact: true });
+    await expect(closeImage).toBeFocused();
+    await page.keyboard.press("Tab"); await expect(closeImage).toBeFocused();
+    await page.keyboard.press("Shift+Tab"); await expect(closeImage).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(preview).toHaveCount(0); await expect(dialog).toBeVisible(); await expect(image).toBeFocused();
+    await expect(dialog.getByLabel("Tên vật phẩm")).toHaveValue("Draft kept after preview");
+    await expect(dialog.getByText("Ảnh tình trạng tiếp nhận * (1/5)")).toBeVisible();
+    await page.screenshot({ path: testInfo.outputPath(`intake-keyboard-${width}.png`), fullPage: true });
+    await page.keyboard.press("Escape"); await expect(dialog).toHaveCount(0); await expect(trigger).toBeFocused();
+    expect(await trigger.evaluate(element => Boolean(element.closest("[inert]")))).toBe(false);
+  });
+
+  test(`busy intake cannot close or lose its draft during upload and save at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await prepare(page, {});
+    let uploaded!: () => void, uploadStarted!: () => void;
+    const waitUpload = new Promise<void>(resolve => { uploaded = resolve; });
+    const started = new Promise<void>(resolve => { uploadStarted = resolve; });
+    await page.route("**/api/staff/warehouse-intake-images", async route => {
+      uploadStarted(); await waitUpload;
+      await route.fulfill({ json: { id: "intake-photo", url: "/staff/warehouse-images/intake-photo?provenance=INTAKE" } });
+    });
+    await page.goto("/staff");
+    const trigger = page.getByRole("button", { name: "Tiếp nhận Walk-in (Tại quầy)", exact: true });
+    await trigger.click();
+    const dialog = page.getByRole("dialog", { name: "Tiếp nhận trực tiếp (Walk-in / Tại quầy)" });
+    await dialog.getByLabel("Tên vật phẩm").fill("Keyboard draft");
+    await dialog.getByLabel("Tình trạng khi nhận").fill("Good");
+    await dialog.getByLabel("Phụ kiện thực nhận").fill("None");
+    await dialog.getByLabel("Ảnh tình trạng tiếp nhận", { exact: true }).setInputFiles(intakePhoto);
+    await started;
+    await expect(dialog.getByRole("button", { name: "Đóng tiếp nhận", exact: true })).toBeDisabled();
+    await page.keyboard.press("Escape"); await expect(dialog).toBeVisible();
+    for (let index = 0; index < 25; index++) {
+      await page.keyboard.press(index % 2 ? "Shift+Tab" : "Tab");
+      expect(await dialog.evaluate(element => element.contains(document.activeElement))).toBe(true);
+    }
+    uploaded();
+    await expect(dialog.getByText("Ảnh tình trạng tiếp nhận * (1/5)")).toBeVisible();
+    await expect(dialog.getByLabel("Tên vật phẩm")).toHaveValue("Keyboard draft");
+    await dialog.getByLabel("Tôi đã đối chiếu vật phẩm, số lượng, phụ kiện và ảnh tình trạng tại quầy.").check();
+    let finish!: () => void, saving!: () => void;
+    const waitSave = new Promise<void>(resolve => { finish = resolve; });
+    const saveStarted = new Promise<void>(resolve => { saving = resolve; });
+    await page.route(/\/api\/staff\/warehouse-items(?:\?.*)?$/, async route => {
+      if (route.request().method() !== "POST") return route.fallback();
+      saving(); await waitSave;
+      await route.fulfill({ status: 503, json: { message: "Unknown acknowledgement; retry safely" } });
+    });
+    await dialog.getByRole("button", { name: "Tạo hồ sơ kho (Walk-in)" }).click();
+    await saveStarted; await page.keyboard.press("Escape"); await expect(dialog).toBeVisible();
+    await expect(dialog.getByRole("button", { name: "Hủy", exact: true })).toBeDisabled();
+    finish();
+    await expect(dialog.getByRole("alert")).toContainText("Unknown acknowledgement");
+    await expect(dialog.getByLabel("Tên vật phẩm")).toHaveValue("Keyboard draft");
+    await expect(dialog.getByText("Ảnh tình trạng tiếp nhận * (1/5)")).toBeVisible();
+    await page.keyboard.press("Escape"); await expect(trigger).toBeFocused();
+  });
+}
+
 test("staff can see warehouse counts and receive an item with condition notes", async ({ page }) => {
   const calls: { created?: any } = {};
   await prepare(page, calls);
@@ -164,14 +246,26 @@ for (const width of [1440,390]) {
     await page.goto("/staff");
     await page.getByRole("button", { name: "Tiếp nhận vật phẩm", exact: true }).click();
     const modal = page.getByRole("dialog", { name: "Đối chiếu và tiếp nhận vật phẩm" });
+    const close = modal.getByRole("button", { name: "Đóng tiếp nhận", exact: true });
+    await expect(close).toBeFocused();
+    await page.keyboard.press("Shift+Tab");
+    await expect(modal.getByRole("button", { name: "Hủy", exact: true })).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(close).toBeFocused();
     await expect(modal.locator(".intake-source").getByText("Bài gốc còn nguyên", { exact: true })).toBeVisible();
-    await modal.locator(".intake-source").getByRole("button", { name: "Xem ảnh vật phẩm", exact: true }).click();
+    const sourceImage = modal.locator(".intake-source").getByRole("button", { name: "Xem ảnh vật phẩm", exact: true });
+    await sourceImage.click();
     const zoom = page.getByRole("dialog", { name: "Ảnh vật phẩm", exact: true });
+    const closeImage = zoom.getByRole("button", { name: "Đóng ảnh", exact: true });
+    await expect(closeImage).toBeFocused();
+    await page.keyboard.press("Shift+Tab"); await expect(closeImage).toBeFocused();
+    await page.keyboard.press("Tab"); await expect(closeImage).toBeFocused();
     await expect(zoom.getByAltText("Ảnh vật phẩm phóng to")).toBeVisible();
     expect(await zoom.getByAltText("Ảnh vật phẩm phóng to").evaluate((image: HTMLImageElement) => image.naturalWidth)).toBeGreaterThan(0);
     await page.keyboard.press("Escape");
     await expect(zoom).toHaveCount(0);
     await expect(modal).toBeVisible();
+    await expect(sourceImage).toBeFocused();
     expect(receives).toBe(0);
     await modal.getByRole("button", { name: "Xác nhận tiếp nhận", exact: true }).click();
     await expect(modal.getByText("Cần từ 1 đến 5 ảnh tình trạng do Staff tải lên.", { exact: true })).toBeVisible();
@@ -192,6 +286,46 @@ for (const width of [1440,390]) {
     await modal.getByRole("button", { name: "Xác nhận tiếp nhận", exact: true }).click();
     await expect(modal).toHaveCount(0);
     expect(receives).toBe(1);
+  });
+}
+
+for (const width of [1440, 390]) {
+  test(`Staff receives a LOST chat transfer using the Finder photo without a FOUND post at ${width}px`, async ({ page }, testInfo) => {
+    await page.setViewportSize({ width, height: 900 });
+    await prepare(page, {});
+    const request = { id: "photo-request", postId: null, post: null, claimId: "lost-chat", roomId: "lost-room",
+      photoSource: { lostPostId: "lost-post", title: "Thẻ sinh viên", imageId: "contact-photo" },
+      status: "PENDING", intakeType: "CUSTODY_TRANSFER", requester: { id: "actual-finder", fullName: "Finder tại quầy" },
+      handoverPoint: catalog.handoverPoints[0], handler: null, reason: "Gửi đồ tại quầy", createdAt: "2026-10-05T09:00:00Z" };
+    await page.route(/\/api\/staff\/custody-requests(?:\?.*)?$/, route => route.fulfill({ json: { items: [request], total: 1,
+      page: 1, pageSize: 20, counts: { PENDING: 1, ACCEPTED: 0, INTAKED: 0, REJECTED: 0, CANCELLED: 0 } } }));
+    await page.route("**/api/staff/custody-requests/*/intake-context", route => route.fulfill({ json: { request,
+      post: { title: "Thẻ sinh viên", description: "Mô tả từ bài LOST để đối chiếu", categoryId: "cat-card", areaId: "area-1",
+        buildingId: "building-1", roomText: "Sảnh", finderUserId: "actual-finder", finderName: "Finder tại quầy", finderContact: "0359123456" },
+      images: [{ id: "contact-photo", provenance: "CONTACT_PHOTO", uploaderId: "actual-finder", uploadedAt: "2026-10-05T09:00:00Z", capturedAt: null }] } }));
+    let received = 0;
+    await page.route("**/api/staff/custody-requests/*/intake", route => {
+      received++;
+      expect(route.request().postDataJSON().intakeImageIds).toEqual(["intake-photo"]);
+      return route.fulfill({ json: { ...request, status: "INTAKED", warehouseItemId: "photo-item" } });
+    });
+    await page.goto("/staff");
+    await expect(page.getByAltText("Ảnh Finder đối chiếu trong chat")).toBeVisible();
+    await page.getByRole("button", { name: "Tiếp nhận vật phẩm", exact: true }).click();
+    const modal = page.getByRole("dialog", { name: "Đối chiếu và tiếp nhận vật phẩm" });
+    await expect(modal.getByAltText("Ảnh Finder đối chiếu trong chat")).toBeVisible();
+    expect(await modal.getByAltText("Ảnh Finder đối chiếu trong chat").evaluate((image: HTMLImageElement) => image.naturalWidth)).toBeGreaterThan(0);
+    await page.screenshot({ path: testInfo.outputPath(`photo-custody-source-${width}.png`) });
+    await expect(modal.getByLabel("Người bàn giao", { exact: true })).toHaveValue("Finder tại quầy");
+    await modal.getByLabel("Tình trạng khi nhận").fill("Nguyên vẹn, đã đối chiếu tại quầy");
+    await modal.getByLabel("Phụ kiện thực nhận").fill("Không có");
+    await modal.getByLabel("Ảnh tình trạng tiếp nhận", { exact: true }).setInputFiles(intakePhoto);
+    await expect(modal.getByText("Ảnh tình trạng tiếp nhận * (1/5)")).toBeVisible();
+    await modal.getByLabel("Tôi đã đối chiếu vật phẩm, số lượng, phụ kiện và ảnh tình trạng tại quầy.").check();
+    await page.screenshot({ path: testInfo.outputPath(`photo-custody-${width}.png`) });
+    await modal.getByRole("button", { name: "Xác nhận tiếp nhận", exact: true }).click();
+    await expect(modal).toHaveCount(0);
+    expect(received).toBe(1);
   });
 }
 

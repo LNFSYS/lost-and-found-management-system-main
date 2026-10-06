@@ -4,6 +4,20 @@ import test from "node:test";
 import type { PrivateMediaStorage } from "../application/media-storage.port.js";
 import { createCloudinaryPrivateMediaStorage } from "./cloudinary-private-media-storage.js";
 
+test("provider existing response requires protected delivery and never invents upload success", async () => {
+  const owner = "11111111-1111-4111-8111-111111111111", id = "22222222-2222-4222-8222-222222222222";
+  let available = true, reads = 0;
+  const client = { config() {}, url: () => "https://signed.example/opaque", uploader: {
+    upload_stream: (options: any, callback: any) => ({ end() { assert.equal(options.overwrite, false); callback(null, { existing: true }); } })
+  } } as unknown as typeof cloudinary;
+  const storage = createCloudinaryPrivateMediaStorage({ config: { cloudName: "test", apiKey: "test", apiSecret: "test" }, namespace: "warehouse-proof", client,
+    fetcher: async () => { reads++; return { ok: available, arrayBuffer: async () => new ArrayBuffer(4) } as Response; } });
+  assert.equal((await storage.save(owner, id, "jpg", Buffer.alloc(4))).publicId, `lnfs/warehouse-proof/${owner}/${id}`);
+  available = false;
+  await assert.rejects(storage.save(owner, id, "jpg", Buffer.alloc(4)));
+  assert.equal(reads, 2);
+});
+
 for (const namespace of ["post-media", "claim-evidence", "warehouse-proof"] as const) test(`Cloudinary ${namespace} uploads, signs downloads and removes authenticated assets across instances`, async () => {
   const calls: { upload?: unknown; destroy?: unknown; url?: unknown; } = {};
   const ownerId = "11111111-1111-4111-8111-111111111111";

@@ -148,6 +148,7 @@ export interface WarehouseRepository {
   listItemImages(itemId: string): Promise<WarehouseImageRecord[]>;
   listSourceImages(postId: string): Promise<WarehouseImageRecord[]>;
   findWarehouseImage(id: string, provenance: WarehouseImageProvenance): Promise<WarehouseImageRecord | null>;
+  findIntakeImage(id: string): Promise<WarehouseImageRecord | null>;
   isStaff(actorId: string, db?: TransactionContext): Promise<boolean>;
   isAdmin(actorId: string, db?: TransactionContext): Promise<boolean>;
   lockPhysicalPost(postId: string, db: TransactionContext): Promise<void>;
@@ -165,11 +166,11 @@ export interface WarehouseRepository {
   listOverdueRequests(db: TransactionContext): Promise<Array<{ id: string; postId: string | null; claimId: string | null; requesterId: string; }>>;
   lockFoundPost(postId: string, db: TransactionContext): Promise<boolean>;
   hasItemForPost(postId: string, db: TransactionContext): Promise<boolean>;
-  hasBlockingCases(postId: string | null, db: TransactionContext, completingClaimId?: string): Promise<boolean>;
-  verifiedRecipient(claimId: string, postId: string | null, recipientId: string, db: TransactionContext): Promise<boolean>;
-  listVerifiedRecipients(postId: string | null): Promise<Array<{ claimId: string; recipientId: string; fullName: string; }>>;
-  listReturnClaimReviews(postId: string | null): Promise<WarehouseClaimReview[]>;
-  lockReturnClaim(claimId: string, postId: string, db: TransactionContext): Promise<WarehouseClaimReview | null>;
+  hasBlockingCases(postId: string | null, db: TransactionContext, completingClaimId?: string, itemId?: string): Promise<boolean>;
+  verifiedRecipient(claimId: string, postId: string | null, recipientId: string, db: TransactionContext, itemId?: string): Promise<boolean>;
+  listVerifiedRecipients(postId: string | null, itemId?: string): Promise<Array<{ claimId: string; recipientId: string; fullName: string; }>>;
+  listReturnClaimReviews(postId: string | null, itemId?: string): Promise<WarehouseClaimReview[]>;
+  lockReturnClaim(claimId: string, postId: string | null, db: TransactionContext, itemId?: string): Promise<WarehouseClaimReview | null>;
   recordStaffVerification(input: { id: string; itemId: string; claimId: string; recipientId: string; actorId: string; fromStatus: string; reason: string; }, db: TransactionContext): Promise<void>;
   reserve(itemId: string, claimId: string | null, db: TransactionContext): Promise<void>;
   completeReturn(input: {
@@ -184,7 +185,7 @@ export interface WarehouseRepository {
     proofIds: string[];
     completedAt: Date;
   }, db: TransactionContext): Promise<string | null>;
-  createProof(input: { id: string; itemId: string; actorId: string; storageRef: string; format: string; bytes: number; }): Promise<void>;
+  createProof(input: { id: string; itemId: string; actorId: string; storageRef: string; format: string; bytes: number; }, db?: TransactionContext): Promise<void>;
   findProof(id: string, db?: TransactionContext): Promise<{ id: string; itemId: string; actorId: string; storageRef: string; format: string; attached: boolean; } | null>;
   attachProof(id: string, db: TransactionContext): Promise<void>;
   createApproval(input: { id: string; itemId: string; actorId: string; target: "DISPOSED" | "DONATED" | "TRANSFERRED"; reason: string; }, db: TransactionContext): Promise<void>;

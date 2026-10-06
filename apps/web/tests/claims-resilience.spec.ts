@@ -337,6 +337,35 @@ function secondMutationRoom() {
   return { ...directLostClaim, id: claimB.id, roomId: "room-b", posts: { lost: null, found: { id: claimB.foundPostId, title: "Mutation room B" } }, item: { ...directLostClaim.item, title: "Mutation room B" } };
 }
 
+for (const outcome of ["success", "failure"] as const) test(`a delayed chat image ${outcome} cannot affect another room`, async ({ page }) => {
+  const second = await setupMutationRooms(page);
+  let started = false;
+  let release!: () => void;
+  const held = new Promise<void>(resolve => { release = resolve; });
+  await page.route(`**/api/claims/${directLostClaim.id}/messages/images`, async route => {
+    started = true; await held;
+    if (outcome === "failure") return route.fulfill({ status: 503, json: { message: "Room A image failed" } });
+    await route.fulfill({ json: { id: "image-room-a", roomId: directLostClaim.roomId, sender: session.user,
+      content: "ROOM_A_IMAGE", messageType: "IMAGE", mediaUrl: `/api/claims/${directLostClaim.id}/evidence/photo-a`, createdAt: "2026-10-06T00:00:00Z" } });
+  });
+  await page.goto(`/claims/${directLostClaim.id}`);
+  await page.getByRole("button", { name: "Thêm", exact: true }).click();
+  await page.getByRole("button", { name: "Ảnh", exact: true }).click();
+  await page.getByLabel("Ảnh gửi trong chat").setInputFiles({ name: "a.png", mimeType: "image/png", buffer: Buffer.from([137,80,78,71]) });
+  await page.getByRole("button", { name: "Gửi tin nhắn", exact: true }).click();
+  await expect.poll(() => started).toBe(true);
+  await page.getByRole("button", { name: /Mutation room B/ }).click();
+  await expect(page).toHaveURL(new RegExp(`/claims/${second.id}$`));
+  await expect(page.getByRole("heading", { name: "Mutation room B" })).toBeVisible();
+  await page.getByLabel("Tin nhắn riêng").fill("B image draft");
+  await settleMutation(page, `/claims/${directLostClaim.id}/messages/images`, release);
+  await expect(page.getByLabel("Tin nhắn riêng")).toHaveValue("B image draft");
+  await expect(page.locator(".claim-alert")).toHaveCount(0);
+  await expect(page.getByAltText("Ảnh chờ gửi")).toHaveCount(0);
+  await expect(page.locator(".claim-messages")).not.toContainText("ROOM_A_IMAGE");
+  await expect(page.getByRole("button", { name: "Gửi tin nhắn", exact: true })).toBeEnabled();
+});
+
 async function setupMutationRooms(page: Page, role = "FINDER") {
   const second = secondMutationRoom();
   await setupDirectLostRoom(page, [directLostClaim, second]);
@@ -370,6 +399,7 @@ for (const outcome of ["success", "failure"] as const) test(`a delayed message $
   await page.getByLabel("Tin nhắn riêng").fill("ROOM_A_MESSAGE");
   await page.getByRole("button", { name: "Gửi tin nhắn" }).click();
   await expect.poll(() => started).toBe(true);
+  await page.getByRole("button", { name: /Cuộc trò chuyện \(/ }).click();
   await page.getByRole("button", { name: /Mutation room B/ }).click();
   await expect(page).toHaveURL(new RegExp(`/claims/${second.id}$`));
   await expect(page.getByRole("heading", { name: "Mutation room B" })).toBeVisible();

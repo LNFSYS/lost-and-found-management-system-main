@@ -5,6 +5,8 @@ import type { ClaimAuditEventRecord, ClaimRepository, ClaimStatus, FinderDecisio
 import type { CustodyRequestRepository } from "../../warehouse/application/custody-request.repository.port.js";
 import type { WarehouseRepository } from "../../warehouse/application/index.js";
 import type { NotificationRepository } from "../../notifications/application/notification.repository.port.js";
+import type { ContactPhotoUseCases } from "./contact-photo.use-cases.js";
+import { unexpectedPort } from "../../../test/unexpected-port.js";
 
 const claimId = "11111111-1111-4111-8111-111111111111";
 const claimantId = "22222222-2222-4222-8222-222222222222";
@@ -146,6 +148,21 @@ function commonRepository(overrides: Partial<ClaimRepository> = {}) {
   return { repository, audits, status: () => currentStatus };
 }
 
+test("an approved LOST Finder may explicitly propose a meetup without answers, not a custody return", async () => {
+  const harness = commonRepository({ listVerificationQuestions: async () => [] });
+  const contactPhotos = unexpectedPort<ContactPhotoUseCases>("contact photo");
+  contactPhotos.state = async (_id, actor) => ({ required: actor === finderId, approved: true, postId: claim("CONVERSATION_OPEN").foundPostId, questions: [] });
+  contactPhotos.requireSender = async () => undefined;
+  const service = createTestClaimUseCases({ claimRepository: harness.repository, contactPhotos });
+  const before = await service.getVerification(claimId, finderId);
+  assert.equal(before.policy.answeredCount, 0); assert.equal(before.policy.readyForDecision, true);
+  assert.equal(harness.status(), "CONVERSATION_OPEN");
+  await service.decideVerification(claimId, finderId, { decision: "VERIFY_FOR_MEETUP", reason: "Compare item in person", idempotencyKey: "photo-meetup-key" });
+  assert.equal(harness.status(), "ACCEPTED");
+  assert.equal(harness.audits.at(-1)!.metadata!.communicationOnly, true);
+  assert.equal(harness.audits.some(event => event.action === "STAFF_CUSTODY_VERIFIED"), false);
+});
+
 test("direct LOST verification keeps the participant roles and does not approve ownership", async () => {
   const harness = commonRepository({
     findVerificationContext: async () => ({ foundPostId: claim("CONVERSATION_OPEN").foundPostId, categoryName: "balo", parentCategoryName: null }),
@@ -178,7 +195,7 @@ test("direct LOST private item details belong to the post owner, not the Finder 
   assert.equal(finder.item?.categoryName, "Điện thoại");
 });
 
-test("LOST verification context cannot bypass the owned physical FOUND custody gate", async () => {
+test("LOST conversation without an approved Finder photo cannot request custody", async () => {
   let requests = 0;
   let escalation = 0;
   const harness = commonRepository({
@@ -190,6 +207,7 @@ test("LOST verification context cannot bypass the owned physical FOUND custody g
     claimRepository: harness.repository,
     custodyRequestRepository: {
       lockEligiblePost: async (postId: string) => { assert.equal(postId, "lost-source"); return false; },
+      findPhotoSource: async () => null,
       createRequest: async () => { requests++; }
     } as unknown as CustodyRequestRepository,
     warehouseRepository: { findHandoverPointById: async () => "point" } as unknown as WarehouseRepository

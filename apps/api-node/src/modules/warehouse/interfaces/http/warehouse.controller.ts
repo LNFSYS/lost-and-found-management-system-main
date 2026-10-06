@@ -64,7 +64,7 @@ export function createWarehouseController({ warehouseService }: {
       response.json(await warehouseService.deleteIntakeImage(intakeKey, routeId(request), actorId(request)));
     },
     async getImage(request: Request, response: Response) {
-      const { provenance } = z.object({ provenance: z.enum(["SOURCE_POST", "INTAKE", "RETURN"]) }).parse(request.query);
+      const { provenance } = z.object({ provenance: z.enum(["SOURCE_POST", "CONTACT_PHOTO", "INTAKE", "RETURN"]) }).parse(request.query);
       const image = await warehouseService.getImage(routeId(request), provenance, actorId(request));
       response.setHeader("Cache-Control", "private, no-store");
       response.setHeader("Vary", "Authorization");

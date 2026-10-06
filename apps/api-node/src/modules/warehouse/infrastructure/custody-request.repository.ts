@@ -1,6 +1,7 @@
 import type { RowDataPacket } from "mysql2";
 import { createHash } from "node:crypto";
 import { custodyFingerprint } from "../application/custody-fingerprint.js";
+import { mapPhotoCustodySource, photoCustodyScope, photoCustodySelect } from "./photo-custody-source.js";
 import type { TransactionContext } from "../../../shared/application/transaction.js";
 import { sqlExecutor, type SqlExecutor } from "../../../shared/infrastructure/transaction-context.js";
 import type { CustodyIntakeType, CustodyRequestStatus } from "../application/custody-request.dto.js";
@@ -128,6 +129,17 @@ function mapAudit(row: AuditRow): CustodyRequestAuditEntry {
 }
 
 export function createCustodyRequestRepository(pool: SqlExecutor) {
+  async function hydrate(row: CustodyRequestRow, db?: TransactionContext) {
+    const request = mapRequest(row);
+    if (!request.postId && request.claimId && request.roomId && request.intakeType === "CUSTODY_TRANSFER") {
+      const [sources] = await sqlExecutor(db ?? pool).execute<RowDataPacket[]>(`${photoCustodySelect}
+        WHERE ${photoCustodyScope} AND c.id = ? AND photo_user.id = ? AND photo_room.id = ?`,
+        [request.claimId,request.requester.id,request.roomId]);
+      const source = sources[0] ? mapPhotoCustodySource(sources[0]) : null;
+      request.photoSource = source ? { lostPostId: source.lostPostId, title: source.post.title, imageId: source.image.id } : null;
+    }
+    return request;
+  }
   const repository: CustodyRequestRepository = {
     async listRequests(input) {
       const pageSize = Math.max(1, Math.min(50, Number(input.pageSize) || 12));
@@ -154,14 +166,14 @@ export function createCustodyRequestRepository(pool: SqlExecutor) {
         `SELECT COUNT(*) AS total FROM custody_requests cr ${whereClause}`,
         values
       );
-      return { total: Number(countRows[0]?.total ?? 0), items: rows.map(mapRequest) };
+      return { total: Number(countRows[0]?.total ?? 0), items: await Promise.all(rows.map(row => hydrate(row))) };
     },
 
     async findById(id, db) {
       const [rows] = await sqlExecutor(db ?? pool).execute<CustodyRequestRow[]>(
         `${requestSelect} WHERE cr.id = ? LIMIT 1`, [id]
       );
-      return rows[0] ? mapRequest(rows[0]) : null;
+      return rows[0] ? hydrate(rows[0], db) : null;
     },
 
     async lockForUpdate(id, connection) {
@@ -189,14 +201,35 @@ export function createCustodyRequestRepository(pool: SqlExecutor) {
       const [rows] = await sqlExecutor(db ?? pool).execute<CustodyRequestRow[]>(
         `${requestSelect} WHERE cr.requester_id = ? AND cr.idempotency_key IN (?, ?) LIMIT 1`, [actorId, scoped, key]
       );
-      return rows[0] ? mapRequest(rows[0]) : null;
+      return rows[0] ? hydrate(rows[0], db) : null;
     },
 
     async findPendingByClaimId(claimId, db) {
       const [rows] = await sqlExecutor(db ?? pool).execute<CustodyRequestRow[]>(
         `${requestSelect} WHERE cr.claim_id = ? AND cr.status IN ('PENDING','ACCEPTED') LIMIT 1`, [claimId]
       );
-      return rows[0] ? mapRequest(rows[0]) : null;
+      return rows[0] ? hydrate(rows[0], db) : null;
+    },
+
+    async findActiveByClaimId(claimId, db) {
+      const [rows] = await sqlExecutor(db).execute<CustodyRequestRow[]>(`${requestSelect}
+        WHERE cr.claim_id = ? AND cr.status NOT IN ('CANCELLED','REJECTED') ORDER BY cr.created_at DESC LIMIT 1`, [claimId]);
+      return rows[0] ? hydrate(rows[0], db) : null;
+    },
+
+    async findByWarehouseItemId(itemId, db) {
+      const [rows] = await sqlExecutor(db).execute<CustodyRequestRow[]>(`${requestSelect}
+        WHERE cr.warehouse_item_id = ? AND cr.status = 'INTAKED' LIMIT 1`, [itemId]);
+      return rows[0] ? hydrate(rows[0], db) : null;
+    },
+
+    async findPhotoSource(claimId, requesterId, roomId, db) {
+      const [rows] = await sqlExecutor(db ?? pool).execute<RowDataPacket[]>(`${photoCustodySelect}
+        WHERE ${photoCustodyScope} AND c.id = ? AND photo_user.id = ? AND photo_room.id = ?
+          AND c.status IN ('CONVERSATION_OPEN','NEED_MORE_INFO','ACCEPTED')
+          AND identity_post.status IN ('OPEN','MATCHED') AND identity_post.deleted_at IS NULL${db ? " FOR UPDATE" : ""}`,
+        [claimId,requesterId,roomId]);
+      return rows[0] ? mapPhotoCustodySource(rows[0]) : null;
     },
 
     async findActiveByPostId(postId, requesterId, db) {
@@ -241,8 +274,9 @@ export function createCustodyRequestRepository(pool: SqlExecutor) {
     async notificationRecipients(postId, claimId, requesterId, db) {
       const [rows] = await sqlExecutor(db).execute<RowDataPacket[]>(
         `SELECT ? AS id UNION SELECT cp.user_id AS id FROM claim_participants cp JOIN claims c ON c.id = cp.claim_id
-         WHERE COALESCE(c.source_found_post_id,c.post_id) = ? AND (? IS NULL OR c.id = ?) AND cp.consent_status = 'ACCEPTED'
-         UNION SELECT ur.user_id AS id FROM user_roles ur JOIN users u ON u.id = ur.user_id WHERE ur.role_code IN ('STAFF','ADMIN') AND u.status = 'ACTIVE'`, [requesterId, postId, claimId, claimId]);
+         WHERE ((? IS NOT NULL AND COALESCE(c.source_found_post_id,c.post_id) = ?) OR (? IS NULL AND c.id = ?))
+           AND (? IS NULL OR c.id = ?) AND cp.consent_status = 'ACCEPTED'
+         UNION SELECT ur.user_id AS id FROM user_roles ur JOIN users u ON u.id = ur.user_id WHERE ur.role_code IN ('STAFF','ADMIN') AND u.status = 'ACTIVE'`, [requesterId, postId, postId, postId, claimId, claimId, claimId]);
       return [...new Set(rows.map(row => String(row.id)))];
     },
 

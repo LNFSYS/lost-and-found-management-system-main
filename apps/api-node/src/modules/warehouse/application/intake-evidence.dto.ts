@@ -17,7 +17,7 @@ export interface IntakeReconciliationInput {
   finderContact?: string | null | undefined;
 }
 
-export type WarehouseImageProvenance = "SOURCE_POST" | "INTAKE" | "RETURN";
+export type WarehouseImageProvenance = "SOURCE_POST" | "CONTACT_PHOTO" | "INTAKE" | "RETURN";
 export interface WarehouseImageRecord {
   id: string;
   provenance: WarehouseImageProvenance;

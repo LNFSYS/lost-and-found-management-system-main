@@ -34,7 +34,11 @@ export function createPrivateMediaStorage(options: {
       const filePath = path.resolve(directory, filename);
       if (!filePath.startsWith(`${root}${path.sep}`)) throw new AppError("bad_request", options.invalidPathMessage);
       await mkdir(directory, { recursive: true });
-      await writeFile(filePath, bytes, { flag: "wx" });
+      try { await writeFile(filePath, bytes, { flag: "wx" }); }
+      catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+        if (!(await readFile(filePath)).equals(bytes)) throw new AppError("conflict", "Media reference already contains different bytes");
+      }
       return { secureUrl: `${prefix}${ownerId}/${filename}`, publicId: `${options.namespace}/${ownerId}/${mediaId}` };
     },
     async resolve(secureUrl, format = "jpg") {

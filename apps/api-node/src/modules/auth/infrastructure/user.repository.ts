@@ -8,7 +8,7 @@ import { sqlExecutor, type SqlExecutor } from "../../../shared/infrastructure/tr
 
 import type { PoolConnection } from "mysql2/promise";
 
-import type { RowDataPacket } from "mysql2";
+import type { ResultSetHeader, RowDataPacket } from "mysql2";
 
 import type { ActivitySummary, Role, User } from "../../../shared/domain/auth.js";
 
@@ -135,8 +135,8 @@ export function createUserRepository(pool: SqlExecutor) {
       format: string;
       resourceType: "image";
       size: number;
-    }) {
-      await pool.execute(
+    }, connection?: TransactionContext) {
+      const [result] = await (connection ? sqlExecutor(connection) : pool).execute<ResultSetHeader>(
         `UPDATE users
        SET avatar_cloudinary_public_id = ?, avatar_cloudinary_asset_id = ?, avatar_cloudinary_version = ?,
            avatar_cloudinary_format = ?, avatar_cloudinary_resource_type = ?, avatar_cloudinary_bytes = ?,
@@ -144,7 +144,8 @@ export function createUserRepository(pool: SqlExecutor) {
        WHERE id = ? AND status = 'ACTIVE'`,
         [input.publicId, input.assetId, input.version, input.format, input.resourceType, input.size, userId]
       );
-      return this.findById(userId);
+      if (!result.affectedRows) return null;
+      return this.findById(userId, connection);
     },
     async getActivitySummary(userId: string): Promise<ActivitySummary> {
       const [

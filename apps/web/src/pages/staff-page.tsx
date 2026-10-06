@@ -43,6 +43,8 @@ import {
 } from "../services/api";
 
 import { WarehouseIntakeDialog } from "../components/warehouse-intake-dialog";
+import { AccessibleDialog } from "../components/accessible-dialog";
+import { useModalFocus } from "../hooks/use-modal-focus";
 import { WarehouseImageGallery, WarehouseImageView } from "../components/warehouse-images";
 
 type StaffTab = "custody" | "warehouse" | "dashboard" | "logs";
@@ -283,8 +285,9 @@ function CustodyQueueTab({
 
                 <div className="custody-request-card__body">
                   <div className="custody-item-preview">
-                    <WarehouseImageView image={request.post?.thumbnailId ? { id: request.post.thumbnailId, provenance: "SOURCE_POST" } : null} />
-                    <h3>{request.post?.title ?? "Bàn giao vật phẩm tìm thấy"}</h3>
+                    <WarehouseImageView image={request.post?.thumbnailId ? { id: request.post.thumbnailId, provenance: "SOURCE_POST" }
+                      : request.photoSource ? { id: request.photoSource.imageId, provenance: "CONTACT_PHOTO" } : null} />
+                    <h3>{request.post?.title ?? request.photoSource?.title ?? "Bàn giao vật phẩm tìm thấy"}</h3>
                     {request.reason && <p className="custody-reason">"{request.reason}"</p>}
                   </div>
 
@@ -391,7 +394,7 @@ function CustodyQueueTab({
       {/* Walk-in Intake Success Modal */}
       {createdWalkInItem && (
         <div className="custody-modal-overlay" onClick={() => setCreatedWalkInItem(null)}>
-          <div className="custody-modal custody-modal--success" onClick={(e) => e.stopPropagation()}>
+          <AccessibleDialog className="custody-modal custody-modal--success" aria-label="Đã tiếp nhận trực tiếp" onDismiss={() => setCreatedWalkInItem(null)} onClick={(e) => e.stopPropagation()}>
             <div className="custody-modal__header">
               <span className="modal-badge modal-badge--green"><CheckCircle2 size={24} /></span>
               <div>
@@ -421,21 +424,21 @@ function CustodyQueueTab({
                 <CheckCircle2 size={16} /> Đã hiểu & Đóng
               </button>
             </div>
-          </div>
+          </AccessibleDialog>
         </div>
       )}
 
       {/* Reject Modal */}
       {rejectModal && (
-        <div className="custody-modal-overlay" onClick={() => setRejectModal(null)}>
-          <div className="custody-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="custody-modal-overlay" onClick={() => { if (!pendingAction) setRejectModal(null); }}>
+          <AccessibleDialog className="custody-modal" aria-label="Từ chối bàn giao" busy={Boolean(pendingAction)} onDismiss={() => setRejectModal(null)} onClick={(e) => e.stopPropagation()}>
             <div className="custody-modal__header">
               <span className="modal-badge modal-badge--red"><XCircle size={18} /></span>
               <div>
                 <h3>Từ chối yêu cầu Custody</h3>
                 <p>Từ chối yêu cầu từ người dùng <strong>{rejectModal.requester.fullName}</strong></p>
               </div>
-              <button type="button" className="close-btn" onClick={() => setRejectModal(null)}><X size={18} /></button>
+              <button type="button" className="close-btn" aria-label="Đóng từ chối" disabled={Boolean(pendingAction)} onClick={() => setRejectModal(null)}><X size={18} /></button>
             </div>
 
             <form className="admin-form modal-form" onSubmit={submitReject}>
@@ -449,10 +452,10 @@ function CustodyQueueTab({
                   {pendingAction === "custody-action" ? <LoaderCircle className="spin-icon" size={17} /> : <XCircle size={17} />}
                   <span>Xác nhận từ chối</span>
                 </button>
-                <button type="button" className="secondary-button" onClick={() => setRejectModal(null)}>Đóng</button>
+                <button type="button" className="secondary-button" disabled={Boolean(pendingAction)} onClick={() => setRejectModal(null)}>Đóng</button>
               </div>
             </form>
-          </div>
+          </AccessibleDialog>
         </div>
       )}
 
@@ -600,32 +603,10 @@ function WarehouseInventoryTab({
     return () => { document.body.style.overflow = overflow; };
   }, [selectedItem?.id]);
 
-  useEffect(() => {
-    const modal = detailsModalRef.current;
-    if (!modal || updateModalOpen || previewImageUrl) return;
-    const previousFocus = document.activeElement as HTMLElement | null;
-    modal.querySelector<HTMLButtonElement>(".close-btn")?.focus();
-    const handleKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") { event.preventDefault(); closeDetails(); }
-      if (event.key !== "Tab") return;
-      const scope = modal.querySelector(".warehouse-image-overlay") ?? modal;
-      const controls = Array.from(scope.querySelectorAll<HTMLElement>("button:not(:disabled), a[href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex='0']"))
-        .filter(element => element.getClientRects().length);
-      const first = controls[0], last = controls.at(-1);
-      if (first && (!scope.contains(document.activeElement) || (!event.shiftKey && document.activeElement === last))) {
-        event.preventDefault(); first.focus();
-      } else if (last && event.shiftKey && document.activeElement === first) {
-        event.preventDefault(); last.focus();
-      }
-    };
-    window.addEventListener("keydown", handleKey);
-    return () => {
-      window.removeEventListener("keydown", handleKey);
-      if (!modal.isConnected) previousFocus?.focus();
-    };
-  }, [selectedItem?.id, updateModalOpen, previewImageUrl]);
+  useModalFocus(detailsModalRef, Boolean(selectedItem), closeDetails, Boolean(pendingAction));
 
   function closeDetails() {
+    if (pendingAction) return;
     logsSequence.current++;
     setSelectedItemId(null);
     setLogsLoading(false);
@@ -878,7 +859,7 @@ function WarehouseInventoryTab({
 
       {selectedItem && (
         <div className="custody-modal-overlay warehouse-detail-overlay" onClick={closeDetails}>
-          <div ref={detailsModalRef} className="warehouse-detail-modal" role="dialog" aria-modal="true" aria-labelledby="warehouse-detail-title" onClick={event => event.stopPropagation()}>
+          <div ref={detailsModalRef} tabIndex={-1} className="warehouse-detail-modal" role="dialog" aria-modal="true" aria-labelledby="warehouse-detail-title" onClick={event => event.stopPropagation()}>
             <header className="warehouse-detail-modal__header">
               <span className="panel-icon-badge"><History size={18} /></span>
               <div>
@@ -1004,15 +985,15 @@ function WarehouseInventoryTab({
 
       {/* Update Warehouse Item Status Modal */}
       {updateModalOpen && selectedItem && (
-        <div className="custody-modal-overlay" onClick={() => setUpdateModalOpen(false)}>
-          <div className="custody-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="custody-modal-overlay" onClick={() => { if (!pendingAction) setUpdateModalOpen(false); }}>
+          <AccessibleDialog className="custody-modal" aria-label="Cập nhật trạng thái kho" busy={Boolean(pendingAction)} onDismiss={() => setUpdateModalOpen(false)} onClick={(e) => e.stopPropagation()}>
             <div className="custody-modal__header">
               <span className="modal-badge modal-badge--blue"><Save size={18} /></span>
               <div>
                 <h3>Cập nhật trạng thái kho</h3>
                 <p>Vật phẩm: <strong>{selectedItem.itemName}</strong></p>
               </div>
-              <button type="button" className="close-btn" onClick={() => setUpdateModalOpen(false)}><X size={18} /></button>
+              <button type="button" className="close-btn" aria-label="Đóng cập nhật" disabled={Boolean(pendingAction)} onClick={() => setUpdateModalOpen(false)}><X size={18} /></button>
             </div>
 
             <form className="admin-form modal-form" onSubmit={submitUpdate}>
@@ -1045,16 +1026,17 @@ function WarehouseInventoryTab({
                   {pendingAction === "update" ? <LoaderCircle className="spin-icon" size={17} /> : <CheckCircle2 size={17} />}
                   <span>Lưu trạng thái mới</span>
                 </button>
-                <button type="button" className="secondary-button" onClick={() => setUpdateModalOpen(false)}>Đóng</button>
+                <button type="button" className="secondary-button" disabled={Boolean(pendingAction)} onClick={() => setUpdateModalOpen(false)}>Đóng</button>
               </div>
             </form>
-          </div>
+          </AccessibleDialog>
         </div>
       )}
 
       {returnTargetItem && (
-        <div className="custody-modal-overlay" onClick={() => { if (!claimReviewBusy && !pendingAction) setReturnTargetItem(null); }}>
-          <div
+        <div className="custody-modal-overlay" onClick={() => { if (!claimReviewBusy && !pendingAction && !uploadingProof) setReturnTargetItem(null); }}>
+          <AccessibleDialog
+            aria-label="Xác nhận trả hàng cho chủ sở hữu" onDismiss={() => setReturnTargetItem(null)} busy={claimReviewBusy || Boolean(pendingAction) || uploadingProof}
             className="custody-modal custody-modal--warehouse-return"
             style={{ maxWidth: "760px", width: "95%", maxHeight: "90vh", display: "flex", flexDirection: "column" }}
             onClick={(e) => e.stopPropagation()}
@@ -1065,7 +1047,7 @@ function WarehouseInventoryTab({
                 <h3 style={{ margin: 0, fontSize: "1.05rem", fontWeight: 700 }}>Xác nhận trả hàng cho chủ sở hữu</h3>
                 <p style={{ margin: 0, fontSize: "0.82rem", color: "#64748b" }}>Vật phẩm: <strong style={{ color: "#0f172a" }}>{returnTargetItem.itemName}</strong></p>
               </div>
-              <button type="button" className="close-btn" aria-label="Đóng trả hàng" disabled={claimReviewBusy || Boolean(pendingAction)} onClick={() => setReturnTargetItem(null)}><X size={18} /></button>
+              <button type="button" className="close-btn" aria-label="Đóng trả hàng" disabled={claimReviewBusy || Boolean(pendingAction) || uploadingProof} onClick={() => setReturnTargetItem(null)}><X size={18} /></button>
             </div>
 
             <form noValidate className="admin-form modal-form" style={{ padding: "16px 20px", overflowY: "auto", flex: 1, display: "flex", flexDirection: "column", gap: "12px" }} onSubmit={submitReturn}>
@@ -1183,7 +1165,7 @@ function WarehouseInventoryTab({
                         try {
                           for (const file of files) {
                             const res = await api.uploadWarehouseProof(file, returnTargetItem.id);
-                            setReturnForm((prev) => ({ ...prev, proofImages: [...prev.proofImages, res.id] }));
+                            setReturnForm((prev) => ({ ...prev, proofImages: prev.proofImages.includes(res.id) ? prev.proofImages : [...prev.proofImages, res.id] }));
                           }
                         } catch (error) {
                           setReturnErrors(prev => ({ ...prev, proofImage: messageOf(error, "Không thể tải lên ảnh bằng chứng") }));
@@ -1276,16 +1258,16 @@ function WarehouseInventoryTab({
                   {pendingAction === "update" ? <LoaderCircle className="spin-icon" size={17} /> : <CheckCircle2 size={17} />}
                   <span>Xác nhận Đã trả hàng</span>
                 </button>
-                <button type="button" className="secondary-button" onClick={() => setReturnTargetItem(null)}>Hủy</button>
+                <button type="button" className="secondary-button" disabled={claimReviewBusy || Boolean(pendingAction) || uploadingProof} onClick={() => setReturnTargetItem(null)}>Hủy</button>
               </div>
             </form>
-          </div>
+          </AccessibleDialog>
         </div>
       )}
 
       {previewImageUrl && (
         <div className="custody-modal-overlay" onClick={() => setPreviewImageUrl(null)} style={{ zIndex: 9999, background: "rgba(15, 23, 42, 0.75)", backdropFilter: "blur(4px)" }}>
-          <div onClick={(e) => e.stopPropagation()} style={{ position: "relative", maxWidth: "90vw", maxHeight: "90vh", display: "flex", flexDirection: "column", alignItems: "center" }}>
+          <AccessibleDialog aria-label="Ảnh bằng chứng bàn giao" onDismiss={() => setPreviewImageUrl(null)} onClick={(e) => e.stopPropagation()} style={{ position: "relative", maxWidth: "90vw", maxHeight: "90vh", display: "flex", flexDirection: "column", alignItems: "center" }}>
             <img src={previewImageUrl} alt="Ảnh bằng chứng bàn giao" style={{ maxWidth: "100%", maxHeight: "82vh", borderRadius: 8, boxShadow: "0 24px 48px rgba(15, 23, 42, 0.4)", border: "2px solid #fff" }} />
             <button
               type="button"
@@ -1296,7 +1278,7 @@ function WarehouseInventoryTab({
               ×
             </button>
             <span style={{ marginTop: 8, fontSize: "0.82rem", color: "#f8fafc", fontWeight: 500, textShadow: "0 1px 3px rgba(0,0,0,0.8)" }}>Ảnh bằng chứng bàn giao vật phẩm</span>
-          </div>
+          </AccessibleDialog>
         </div>
       )}
     </>

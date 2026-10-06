@@ -1,6 +1,7 @@
 import { AlertTriangle, ArrowLeft, Pencil, Plus, Send, X } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { api, type ClaimRecord, type ClaimVerificationState, type VerificationTemplatesResponse } from "../services/api";
+import { AccessibleDialog } from "./accessible-dialog";
 
 interface Props {
   claim: ClaimRecord;
@@ -53,11 +54,11 @@ export function ClaimVerificationQuestionModal({ claim, verification, templates,
     }
   }
 
-  return <div className="modal-backdrop verification-modal-backdrop" onClick={onClose}>
-    <div className="modal verification-modal" onClick={(e) => e.stopPropagation()}>
+  return <div className="modal-backdrop verification-modal-backdrop" onClick={() => { if (!busy) onClose(); }}>
+    <AccessibleDialog className="modal verification-modal" aria-label="Gửi câu hỏi xác minh" busy={busy} onDismiss={onClose} onClick={(e) => e.stopPropagation()}>
       <header>
         <h3>Gửi câu hỏi xác minh</h3>
-        <button type="button" onClick={onClose} title="Đóng"><X /></button>
+        <button type="button" onClick={onClose} title="Đóng" disabled={busy}><X /></button>
       </header>
       {!templates ? <div className="verification-modal-empty">
         <p>Không có mẫu câu hỏi nào.</p>
@@ -76,13 +77,13 @@ export function ClaimVerificationQuestionModal({ claim, verification, templates,
           <blockquote>{prompt}</blockquote>
         )}
         <div className="verification-form-actions">
-          <button type="button" className="secondary" onClick={() => setSelectedKey(null)}><ArrowLeft /> Quay lại</button>
-          <button type="button" className="secondary" onClick={() => setEditing((value) => !value)}><Pencil /> {editing ? "Xong" : "Chỉnh sửa"}</button>
+          <button type="button" className="secondary" disabled={busy} onClick={() => setSelectedKey(null)}><ArrowLeft /> Quay lại</button>
+          <button type="button" className="secondary" disabled={busy} onClick={() => setEditing((value) => !value)}><Pencil /> {editing ? "Xong" : "Chỉnh sửa"}</button>
           <button type="submit" disabled={busy || !prompt.trim()}><Send /> {busy ? "Đang gửi" : "Gửi câu hỏi"}</button>
         </div>
       </form>}
       {error && <div className="verification-modal-error"><AlertTriangle /> {error}</div>}
       <footer><small>Nội dung xác minh chỉ hiển thị trong conversation này.</small></footer>
-    </div>
+    </AccessibleDialog>
   </div>;
 }

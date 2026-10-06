@@ -14,26 +14,34 @@ import type { PoolConnection } from "mysql2/promise";
 
 import type { WarehouseStatus } from "../application/warehouse.dto.js";
 import { createWarehouseIntakeRepository } from "./warehouse-intake.repository.js";
+import { photoCustodyJoins, photoCustodyScope } from "./photo-custody-source.js";
 
 type DbExecutor = SqlExecutor | TransactionContext;
 
 const verifiedClaimSql = `EXISTS(SELECT 1 FROM claim_audit_events e WHERE e.claim_id = c.id AND (
-  (e.action IN ('VERIFICATION_ACCEPTED','VERIFICATION_DECISION_CORRECTED') AND JSON_UNQUOTE(JSON_EXTRACT(e.metadata_json,'$.decision')) = 'VERIFY_FOR_MEETUP')
+  (e.action IN ('VERIFICATION_ACCEPTED','VERIFICATION_DECISION_CORRECTED') AND JSON_UNQUOTE(JSON_EXTRACT(e.metadata_json,'$.decision')) = 'VERIFY_FOR_MEETUP'
+    AND COALESCE(JSON_UNQUOTE(JSON_EXTRACT(e.metadata_json,'$.communicationOnly')), 'false') <> 'true')
   OR (e.action = 'STAFF_CUSTODY_VERIFIED' AND JSON_UNQUOTE(JSON_EXTRACT(e.metadata_json,'$.decision')) = 'VERIFY_FOR_CUSTODY_RETURN'
     AND EXISTS(SELECT 1 FROM warehouse_items wi WHERE wi.id = JSON_UNQUOTE(JSON_EXTRACT(e.metadata_json,'$.warehouseItemId'))
-      AND wi.post_id = found.id AND wi.deleted_at IS NULL))
+      AND (wi.post_id = found.id OR wi.id = photo_item.id) AND wi.deleted_at IS NULL))
 ))`;
 
 const returnClaimParticipantsSql = `FROM claims c
   JOIN posts identity_post ON identity_post.id = c.post_id
-  JOIN posts found ON found.id = COALESCE(c.source_found_post_id,c.post_id) AND found.type = 'FOUND' AND found.deleted_at IS NULL
-  JOIN claim_participants recipient ON recipient.claim_id = c.id AND recipient.user_id = ${claimantIdSql} AND recipient.user_id <> found.user_id AND recipient.consent_status = 'ACCEPTED'
-  JOIN claim_participants finder ON finder.claim_id = c.id AND finder.user_id = found.user_id AND finder.user_id = ${finderIdSql} AND finder.consent_status = 'ACCEPTED'
+  LEFT JOIN posts found ON found.id = COALESCE(c.source_found_post_id,c.post_id) AND found.type = 'FOUND' AND found.deleted_at IS NULL
+  JOIN claim_participants recipient ON recipient.claim_id = c.id AND recipient.user_id = ${claimantIdSql} AND recipient.consent_status = 'ACCEPTED'
+  JOIN claim_participants finder ON finder.claim_id = c.id AND finder.user_id = ${finderIdSql} AND finder.user_id <> recipient.user_id AND finder.consent_status = 'ACCEPTED'
+  LEFT JOIN custody_requests photo_request ON photo_request.claim_id = c.id AND photo_request.post_id IS NULL AND photo_request.status = 'INTAKED'
+  LEFT JOIN warehouse_items photo_item ON photo_item.id = photo_request.warehouse_item_id AND photo_item.post_id IS NULL
+    AND photo_item.finder_user_id = finder.user_id AND photo_item.deleted_at IS NULL
+    AND EXISTS (SELECT 1 FROM claims c ${photoCustodyJoins} WHERE ${photoCustodyScope}
+      AND c.id = photo_request.claim_id AND photo_room.id = photo_request.room_id AND photo_user.id = photo_request.requester_id)
   JOIN users u ON u.id = recipient.user_id AND u.status = 'ACTIVE'`;
 
 const returnClaimReviewSql = `SELECT c.id AS claim_id,recipient.user_id AS recipient_id,u.full_name,c.description,c.status,
   (c.status = 'ACCEPTED' AND ${verifiedClaimSql}) AS verified ${returnClaimParticipantsSql}
-  WHERE found.id = ? AND c.status IN ('CONVERSATION_OPEN','NEED_MORE_INFO','ACCEPTED')`;
+  WHERE ((found.id = ? AND found.user_id = finder.user_id) OR photo_item.id = ?)
+    AND c.status IN ('CONVERSATION_OPEN','NEED_MORE_INFO','ACCEPTED')`;
 
 function mapClaimReview(row: RowDataPacket) {
   return { claimId: String(row.claim_id), recipientId: String(row.recipient_id), fullName: String(row.full_name ?? "Người nhận"), description: row.description ? String(row.description) : null, status: String(row.status), verified: Boolean(row.verified) };
@@ -296,7 +304,14 @@ export function createWarehouseRepository(pool: SqlExecutor) {
       const [rows] = await sqlExecutor(db).execute<RowDataPacket[]>("SELECT id FROM warehouse_items WHERE post_id = ? AND deleted_at IS NULL LIMIT 1", [postId]);
       return rows.length > 0;
     },
-    async hasBlockingCases(postId, db, completingClaimId) {
+    async hasBlockingCases(postId, db, completingClaimId, itemId) {
+      if (!postId && itemId) {
+        const [sources] = await sqlExecutor(db).execute<RowDataPacket[]>(`SELECT c.post_id FROM custody_requests cr
+          JOIN warehouse_items wi ON wi.id = cr.warehouse_item_id AND wi.post_id IS NULL AND wi.deleted_at IS NULL
+          JOIN claims c ON c.id = cr.claim_id WHERE wi.id = ? AND cr.post_id IS NULL AND cr.status = 'INTAKED' FOR UPDATE`, [itemId]);
+        postId = sources[0]?.post_id ?? null;
+        if (postId) await sqlExecutor(db).execute("SELECT id FROM posts WHERE id = ? FOR UPDATE", [postId]);
+      }
       if (!postId) return false;
       const [rows] = await sqlExecutor(db).execute<RowDataPacket[]>(
         `SELECT id FROM claims WHERE COALESCE(source_found_post_id,post_id) = ? AND status IN ('PENDING','CONVERSATION_OPEN','NEED_MORE_INFO','ACCEPTED') AND (? IS NULL OR id <> ?)
@@ -308,25 +323,25 @@ export function createWarehouseRepository(pool: SqlExecutor) {
             OR (r.entity_type = 'CHAT' AND r.entity_id IN (SELECT room.id FROM chat_rooms room JOIN claims c ON c.id = room.claim_id WHERE COALESCE(c.source_found_post_id,c.post_id) = ?))) LIMIT 1`, [postId,completingClaimId ?? null,completingClaimId ?? null,postId,completingClaimId ?? null,completingClaimId ?? null,postId,postId,postId,postId]);
       return rows.length > 0;
     },
-    async verifiedRecipient(claimId, postId, recipientId, db) {
+    async verifiedRecipient(claimId, postId, recipientId, db, itemId) {
       const [rows] = await sqlExecutor(db).execute<RowDataPacket[]>(
         `SELECT c.id ${returnClaimParticipantsSql}
-         WHERE recipient.user_id = ? AND c.id = ? AND found.id = ? AND c.status = 'ACCEPTED'
-         AND ${verifiedClaimSql} LIMIT 1`, [recipientId,claimId,postId]);
+         WHERE recipient.user_id = ? AND c.id = ? AND ((found.id = ? AND found.user_id = finder.user_id) OR photo_item.id = ?) AND c.status = 'ACCEPTED'
+         AND ${verifiedClaimSql} LIMIT 1`, [recipientId,claimId,postId,itemId ?? null]);
       return rows.length === 1;
     },
-    async listVerifiedRecipients(postId) {
-      if (!postId) return [];
-      const [rows] = await pool.execute<RowDataPacket[]>(`${returnClaimReviewSql} AND c.status = 'ACCEPTED' AND ${verifiedClaimSql}`, [postId]);
+    async listVerifiedRecipients(postId, itemId) {
+      if (!postId && !itemId) return [];
+      const [rows] = await pool.execute<RowDataPacket[]>(`${returnClaimReviewSql} AND c.status = 'ACCEPTED' AND ${verifiedClaimSql}`, [postId,itemId ?? null]);
       return rows.map(row => ({ claimId: String(row.claim_id), recipientId: String(row.recipient_id), fullName: String(row.full_name ?? "Người nhận") }));
     },
-    async listReturnClaimReviews(postId) {
-      if (!postId) return [];
-      const [rows] = await pool.execute<RowDataPacket[]>(`${returnClaimReviewSql} ORDER BY c.created_at,c.id`, [postId]);
+    async listReturnClaimReviews(postId, itemId) {
+      if (!postId && !itemId) return [];
+      const [rows] = await pool.execute<RowDataPacket[]>(`${returnClaimReviewSql} ORDER BY c.created_at,c.id`, [postId,itemId ?? null]);
       return rows.map(mapClaimReview);
     },
-    async lockReturnClaim(claimId, postId, db) {
-      const [rows] = await sqlExecutor(db).execute<RowDataPacket[]>(`${returnClaimReviewSql} AND c.id = ? FOR UPDATE`, [postId,claimId]);
+    async lockReturnClaim(claimId, postId, db, itemId) {
+      const [rows] = await sqlExecutor(db).execute<RowDataPacket[]>(`${returnClaimReviewSql} AND c.id = ? FOR UPDATE`, [postId,itemId ?? null,claimId]);
       return rows[0] ? mapClaimReview(rows[0]) : null;
     },
     async recordStaffVerification(input, db) {
@@ -361,8 +376,8 @@ export function createWarehouseRepository(pool: SqlExecutor) {
       }
       return appointmentId;
     },
-    async createProof(input) {
-      await pool.execute("INSERT INTO warehouse_private_proofs (id,warehouse_item_id,uploaded_by,storage_ref,format,byte_size) VALUES (?,?,?,?,?,?)", [input.id,input.itemId,input.actorId,input.storageRef,input.format,input.bytes]);
+    async createProof(input, db) {
+      await sqlExecutor(db ?? pool).execute("INSERT INTO warehouse_private_proofs (id,warehouse_item_id,uploaded_by,storage_ref,format,byte_size) VALUES (?,?,?,?,?,?)", [input.id,input.itemId,input.actorId,input.storageRef,input.format,input.bytes]);
     },
     async findProof(id, db) {
       const [rows] = await sqlExecutor(db ?? pool).execute<RowDataPacket[]>(`SELECT * FROM warehouse_private_proofs WHERE id = ? LIMIT 1${db ? " FOR UPDATE" : ""}`, [id]);

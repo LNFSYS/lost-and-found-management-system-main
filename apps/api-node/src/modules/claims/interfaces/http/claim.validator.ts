@@ -14,6 +14,7 @@ export const listClaimsQuerySchema = z.object({
 });
 
 export const createClaimSchema = z.object({
+  sourceFoundPostId: uuid.optional(),
   contactCheckId: uuid.optional(),
   postId: uuid.optional(),
   lostPostId: uuid.optional(),
@@ -93,6 +94,11 @@ export const listMessagesQuerySchema = z.object({
 
 export const uploadEvidenceSchema = z.object({
   description: z.string().trim().max(255).optional()
+});
+
+export const uploadChatImageSchema = z.object({
+  content: z.string().trim().max(255).default(""),
+  clientMessageId: safeKey
 });
 
 export type {

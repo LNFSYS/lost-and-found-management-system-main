@@ -339,8 +339,11 @@ export function StoryPostForm({
         <button className="story-analyze-button" type="button" disabled={!online || !files.length || analyzing} onClick={analyzeImage}>
           {analyzing ? <><LoaderCircle className="is-spinning" /> Đang phân tích {files.length} ảnh...</> : <><Sparkles /> Phân tích {files.length || "các"} ảnh</>}
         </button>
-        <p className="story-image-analysis-note"><strong>Lưu ý:</strong> Thông tin điền sẵn từ ảnh chỉ mang tính tham khảo, không đảm bảo chính xác 100%. Vui lòng kiểm tra kỹ và chỉnh sửa trước khi đăng.</p>
         <p>Chụp nhiều góc giúp đọc rõ hãng, model, chữ, phụ kiện và dấu hiệu riêng. Ảnh chỉ được gửi tới Gemini khi bạn chủ động phân tích.</p>
+      </div>
+      <div className="story-image-analysis-copy">
+        <p className="story-image-analysis-hint">Hãy dùng chức năng phân tích ảnh để tự động điền thông tin nhanh hơn.</p>
+        <p className="story-image-analysis-note"><strong>Lưu ý:</strong> Thông tin điền sẵn từ ảnh chỉ mang tính tham khảo, không đảm bảo chính xác 100%. Vui lòng kiểm tra kỹ và chỉnh sửa trước khi đăng.</p>
       </div>
     </div>
 

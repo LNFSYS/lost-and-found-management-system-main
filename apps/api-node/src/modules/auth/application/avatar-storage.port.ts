@@ -8,7 +8,7 @@ export interface AvatarRecord {
 }
 
 export interface AvatarStorage {
-  upload(input: { buffer: Buffer; format: string; }): Promise<AvatarRecord>;
+  upload(input: { buffer: Buffer; format: string; publicId?: string; }): Promise<AvatarRecord>;
   destroy(publicId: string): Promise<void>;
   download(input: { publicId: string; version: number; format: string; }): Promise<{ body: Buffer; contentType: string; }>;
 }

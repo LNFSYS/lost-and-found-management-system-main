@@ -1,9 +1,9 @@
-import type { TransactionRunner } from "../../../shared/application/transaction.js";
+import type { TransactionContext, TransactionRunner } from "../../../shared/application/transaction.js";
 import { AppError } from "../../../shared/domain/app-error.js";
 import { canTransitionCustodyStatus } from "../domain/custody-request-policy.js";
 import { calculateRetentionDeadline, retentionConfigKeyForCategory, retentionFallbacks } from "../domain/warehouse-policy.js";
 import type { AcceptCustodyRequestInput, CancelCustodyRequestInput, CreateCustodyRequestInput, IntakeCustodyRequestInput, ListCustodyRequestsQuery, RejectCustodyRequestInput } from "./custody-request.dto.js";
-import type { CustodyRequestRepository } from "./custody-request.repository.port.js";
+import type { CustodyRequestLock, CustodyRequestRepository } from "./custody-request.repository.port.js";
 import type { WarehouseRepository } from "./warehouse.repository.port.js";
 import { custodyNotifications, type CustodyNotifications } from "./custody-notifications.js";
 import { custodyFingerprint } from "./custody-fingerprint.js";
@@ -23,6 +23,16 @@ export function createCustodyRequestUseCases(options: CustodyRequestDependencies
   async function staff(actorId: string) {
     if (!await repo.isStaff(actorId)) throw new AppError("forbidden", "Chỉ Staff/Admin được thực hiện thao tác này");
   }
+  async function photoSource(request: Pick<CustodyRequestLock, "postId" | "claimId" | "roomId" | "requesterId" | "intakeType">, db?: TransactionContext) {
+    if (request.postId || !request.claimId || !request.roomId || request.intakeType !== "CUSTODY_TRANSFER") return null;
+    return repo.findPhotoSource(request.claimId, request.requesterId, request.roomId, db);
+  }
+  async function eligible(request: CustodyRequestLock, db: TransactionContext) {
+    return request.postId
+      ? await repo.lockEligiblePost(request.postId, request.requesterId, db)
+        && (!request.claimId || await repo.validateClaimLink(request.postId, request.requesterId, request.claimId, request.roomId, db))
+      : Boolean(await photoSource(request, db));
+  }
   return {
     async listRequests(query: ListCustodyRequestsQuery, actorId: string) {
       await staff(actorId);
@@ -39,9 +49,10 @@ export function createCustodyRequestUseCases(options: CustodyRequestDependencies
     async getIntakeContext(requestId: string, actorId: string) {
       await staff(actorId);
       const request = await repo.findById(requestId);
-      const post = request?.postId ? await warehouse.getPostInfoForIntake(request.postId) : null;
-      if (!request || !post || post.finderUserId !== request.requester.id) throw new AppError("conflict", "Yêu cầu cần kiểm tra lại nguồn FOUND");
-      return { request, post, images: (await warehouse.listSourceImages(request.postId!)).map(serializeWarehouseImage) };
+      const photo = request ? await photoSource({ ...request, requesterId: request.requester.id }) : null;
+      const post = request?.postId ? await warehouse.getPostInfoForIntake(request.postId) : photo?.post;
+      if (!request || !post || post.finderUserId !== request.requester.id) throw new AppError("conflict", "Yêu cầu cần kiểm tra lại nguồn vật phẩm hoặc ảnh đối chiếu của Finder");
+      return { request, post, images: (photo ? [photo.image] : await warehouse.listSourceImages(request.postId!)).map(serializeWarehouseImage) };
     },
     async getMyRequestByPost(postId: string, actorId: string) {
       const post = await warehouse.getPostInfoForIntake(postId);
@@ -95,9 +106,8 @@ export function createCustodyRequestUseCases(options: CustodyRequestDependencies
       const deliveries = await withTransaction(async db => {
         const lock = await repo.lockForUpdate(requestId, db);
         if (!lock) throw new AppError("not_found", "Không tìm thấy yêu cầu");
-        if (!lock.postId || !await repo.lockEligiblePost(lock.postId, lock.requesterId, db)
-          || (lock.claimId && !await repo.validateClaimLink(lock.postId, lock.requesterId, lock.claimId, lock.roomId, db))) {
-          throw new AppError("conflict", "Hồ sơ custody cần kiểm tra lại liên kết bài FOUND trước khi duyệt");
+        if (!await eligible(lock, db)) {
+          throw new AppError("conflict", "Hồ sơ custody cần kiểm tra lại nguồn vật phẩm hoặc ảnh đối chiếu trước khi duyệt");
         }
         if (lock.status === "ACCEPTED") {
           const current = await repo.findById(requestId, db);
@@ -137,11 +147,15 @@ export function createCustodyRequestUseCases(options: CustodyRequestDependencies
           return [];
         }
         if (!canTransitionCustodyStatus(lock.status, "INTAKED")) throw new AppError("conflict", "Yêu cầu không còn chờ tiếp nhận");
-        if (!lock.postId || !await repo.lockEligiblePost(lock.postId, lock.requesterId, db)) throw new AppError("conflict", "Bài FOUND không hợp lệ cho intake");
-        if (lock.claimId && !await repo.validateClaimLink(lock.postId, lock.requesterId, lock.claimId, lock.roomId, db)) throw new AppError("conflict", "Claim/phòng trao đổi không thuộc vật phẩm của Finder");
-        if (await repo.hasWarehouseItem(lock.postId, db)) throw new AppError("conflict", "Vật phẩm đã có hồ sơ kho");
+        if (!await eligible(lock, db)) throw new AppError("conflict", "Nguồn bàn giao hoặc ảnh đối chiếu của Finder không hợp lệ cho intake");
+        if (lock.postId && await repo.hasWarehouseItem(lock.postId, db)) throw new AppError("conflict", "Vật phẩm đã có hồ sơ kho");
+        if (!lock.postId && lock.claimId) {
+          const existing = await repo.findActiveByClaimId(lock.claimId, db);
+          if (existing && existing.id !== requestId) throw new AppError("conflict", "Cuộc trò chuyện đã có yêu cầu custody khác");
+        }
         if (!lock.handoverPointId || !await warehouse.findHandoverPointById(lock.handoverPointId)) throw new AppError("conflict", "Điểm bàn giao không hoạt động");
-        const post = await warehouse.getPostInfoForIntake(lock.postId, db);
+        const photo = await photoSource(lock, db);
+        const post = lock.postId ? await warehouse.getPostInfoForIntake(lock.postId, db) : photo?.post;
         if (!post || post.finderUserId !== lock.requesterId) throw new AppError("conflict", "Không tìm thấy vật phẩm của Finder");
         const replay = await prepareIntakeEvidence(warehouse, input, actorId, requestId, payload, db);
         if (replay) throw new AppError("conflict", "Phiên đối chiếu đã dùng cho vật phẩm khác");
@@ -167,7 +181,8 @@ export function createCustodyRequestUseCases(options: CustodyRequestDependencies
           conditionNotes: input.conditionNotes.trim(), storageCode, receivedAt, retentionDeadline: calculateRetentionDeadline(receivedAt, days), createdBy: actorId }, db);
         await warehouse.createStorageLog({ id: id(), warehouseItemId, postId: lock.postId, handoverPointId: lock.handoverPointId, actorId,
           action: "RECEIVED", toStatus: "RECEIVED", conditionNotes: input.conditionNotes.trim(), storageCode, note: `Custody ${requestId}` }, db);
-        await warehouse.completeIntakeSession({ id: input.intakeKey, itemId: warehouseItemId, requestPayload: payload, sourceSnapshot: post,
+        await warehouse.completeIntakeSession({ id: input.intakeKey, itemId: warehouseItemId, requestPayload: payload,
+          sourceSnapshot: photo ? { ...post, claimId: lock.claimId, roomId: lock.roomId, lostPostId: photo.lostPostId, contactPhotoId: photo.image.id } : post,
           quantity: input.receivedQuantity, accessories: input.accessories.trim() }, db);
         // Physical intake changes custody, never ownership or resolution.
         await repo.updateStatus(requestId, { status: "INTAKED", handlerId: actorId, warehouseItemId, confirmedHandoverAt: receivedAt }, db);

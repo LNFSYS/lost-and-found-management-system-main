@@ -103,9 +103,13 @@ export function createCloudinaryPrivateMediaStorage(options: {
       } catch {
         throw new AppError("upstream_failure", "Dich vu luu anh tam thoi khong kha dung");
       }
+      const expectedId = `${folder}/${ownerId}/${mediaId}`;
+      if (result.public_id && result.public_id !== expectedId) throw new AppError("upstream_failure", "Dich vu luu anh tra ve reference khong hop le");
+      if (result.existing) await download(`${prefix}${ownerId}/${mediaId}.${image}`, image);
+      else if (!result.public_id) throw new AppError("upstream_failure", "Dich vu luu anh khong xac nhan asset");
       return {
         secureUrl: `${prefix}${ownerId}/${mediaId}.${image}`,
-        publicId: result.public_id
+        publicId: expectedId
       };
     },
 

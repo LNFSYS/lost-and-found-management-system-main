@@ -135,6 +135,24 @@ for (const type of ["LOST", "FOUND"] as const) {
       const analyze = form.getByRole("button", { name: "Phân tích các ảnh" });
       await expect(upload).toBeInViewport({ ratio: 1 });
       await expect(analyze).toBeInViewport({ ratio: 1 });
+      if (width > 700) {
+        expect(await form.evaluate((element) => {
+          const uploadRect = element.querySelector(".story-image-drop")!.getBoundingClientRect();
+          const actionsRect = element.querySelector(".story-image-analysis-actions")!.getBoundingClientRect();
+          return Math.abs(uploadRect.top - actionsRect.top) < 1 && Math.abs(uploadRect.bottom - actionsRect.bottom) < 1;
+        })).toBe(true);
+      }
+      await expect(form.locator(".story-image-analysis-actions p")).toHaveText("Chụp nhiều góc giúp đọc rõ hãng, model, chữ, phụ kiện và dấu hiệu riêng. Ảnh chỉ được gửi tới Gemini khi bạn chủ động phân tích.");
+      const analysisHint = form.locator(".story-image-analysis-hint");
+      await expect(analysisHint).toBeInViewport({ ratio: 1 });
+      await expect(analysisHint).toHaveText("Hãy dùng chức năng phân tích ảnh để tự động điền thông tin nhanh hơn.");
+      expect(await form.evaluate((element) => {
+        const uploadRect = element.querySelector(".story-image-drop")!.getBoundingClientRect();
+        const actionsRect = element.querySelector(".story-image-analysis-actions")!.getBoundingClientRect();
+        const hintRect = element.querySelector(".story-image-analysis-hint")!.getBoundingClientRect();
+        const gap = hintRect.top - Math.max(uploadRect.bottom, actionsRect.bottom);
+        return Math.abs(hintRect.left - uploadRect.left) < 1 && gap >= 0 && gap <= 24;
+      })).toBe(true);
       const analysisNote = form.locator(".story-image-analysis-note");
       await expect(analysisNote).toBeInViewport({ ratio: 1 });
       await expect(analysisNote).toContainText("Thông tin điền sẵn từ ảnh chỉ mang tính tham khảo, không đảm bảo chính xác 100%");
