@@ -11,7 +11,10 @@ import type { AccessTokenPayload } from "../../../shared/domain/auth.js";
 
 async function runFixture(run:(f:Parameters<Parameters<typeof withActorJourney>[0]>[0],s:ReturnType<typeof createAppointmentUseCases>,claimId:string,advance:(ms:number)=>void)=>Promise<void>,lost=false){
   await withActorJourney(async f=>{
-    const claimId=randomUUID();const {ids,p}=f;let time=new Date();
+    const claimId=randomUUID();const {ids,p}=f;
+    // Match DATETIME(0) precision and the lease query's authoritative DB clock.
+    const [clock]=await f.pool.query<RowDataPacket[]>("SELECT UTC_TIMESTAMP() fixture_time");
+    let time=new Date(clock[0].fixture_time);
     await f.pool.execute("INSERT INTO claims (id,post_id,claimant_id,status,finder_decision) VALUES (?,?,?,'ACCEPTED','ACCEPTED')",[claimId,lost?ids.lost:ids.found,lost?ids.finder:ids.owner]);
     await f.pool.execute("INSERT INTO claim_participants (claim_id,user_id,participant_role,consent_status) VALUES (?,?,'FINDER','ACCEPTED'),(?,?,'CLAIMANT','ACCEPTED')",[claimId,ids.finder,claimId,ids.owner]);
     const emails=createNotificationEmailQueue({repository:p.notificationEmailRepository,id:randomUUID,chatDelayMinutes:5,digestDelayMinutes:15,now:()=>time});
@@ -64,7 +67,8 @@ test("SQL: contradictory acknowledgement keeps the item open and history intact"
 }));
 test("SQL: two reminder workers queue exactly two outbox rows; no-show never resolves posts",isolatedJourney,async()=>runFixture(async(f,s,c,advance)=>{
   const a=await schedule(f,s,c);const result=await Promise.all([s.queueReminders(),s.queueReminders()]);assert.equal(result.reduce((sum,r)=>sum+r.queued,0),1);
-  const [rows]=await f.pool.execute<RowDataPacket[]>("SELECT COUNT(*) total FROM notification_email_outbox WHERE entity_type='APPOINTMENT_REMINDER' AND entity_id=?",[a.id]);assert.equal(Number(rows[0].total),2);
+  const [rows]=await f.pool.execute<RowDataPacket[]>("SELECT COUNT(*) total,SUM(due_at<=UTC_TIMESTAMP()) due FROM notification_email_outbox WHERE entity_type='APPOINTMENT_REMINDER' AND entity_id=?",[a.id]);
+  assert.equal(Number(rows[0].total),2);assert.equal(Number(rows[0].due),2);
   advance(36*60_000);const noShow=await s.act(f.ids.owner,a.id,{action:"NO_SHOW",version:a.version,requestKey:randomUUID()});assert.equal(noShow.noShowUserId,f.ids.finder);assert.equal(noShow.completedAt,null);
   const lease=randomUUID();await f.p.notificationEmailRepository.claimDue({limit:50,leaseToken:lease,leaseSeconds:60});
   const reminders=(await f.p.notificationEmailRepository.listLease(lease)).filter(item=>item.entityType==="APPOINTMENT_REMINDER");
