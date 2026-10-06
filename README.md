@@ -20,11 +20,11 @@ Current repository là baseline Web + Node.js API. Native Mobile, PWA infrastruc
 - Role guard `USER`, `STUDENT`, `LECTURER`, `STAFF`, `ADMIN`; Admin và Staff có vùng vận hành khác nhau.
 - Tạo/cập nhật/đóng/xóa mềm bài `LOST` và `FOUND`, board, bài của tôi, chi tiết bài, tìm kiếm, lọc, sắp xếp và phân trang.
 - Category hai cấp, khu vực, tòa nhà và điểm bàn giao active-only; Admin quản lý điểm bàn giao, ảnh map, marker, giờ hoạt động và hard-delete guard.
-- Upload media bài đăng qua local protected media proxy, có kiểm tra loại, kích thước và file signature.
+- Upload media bài đăng qua authenticated Cloudinary/protected proxy hoặc local fallback theo cấu hình module, có kiểm tra loại, kích thước và file signature; legacy local references vẫn được đọc có quyền.
 - Gemini-assisted multi-image analysis tạo bản nháp có thể chỉnh sửa; không tự đăng bài và không tự xác minh quyền sở hữu.
 - Hybrid/rule-based matching với text normalization tiếng Việt, category, location, time, image/OCR tags, tier, score breakdown và explanation.
 - Claim peer-to-peer, participant authorization, private text/image room, guided ownership questions, explicit Finder decision, unread/read, private evidence proxy và in-app notifications đã có runtime. SSE backend có; immediate Web chat subscriber/PWA push còn thiếu.
-- Local lịch hẹn có danh sách/chi tiết, đề xuất thời gian/điểm, accept/reject/cancel, nhắc email, no-show và xác nhận bàn giao hai bên; Admin có audit search/export, User có hành trình vật phẩm từ Bài của tôi. Migration 063 chưa áp dụng Aiven; xem [rollout và bằng chứng](docs/runbooks/appointment-journey-rollout.md).
+- Lịch hẹn có danh sách/chi tiết, đề xuất thời gian/điểm, accept/reject/cancel, nhắc email, no-show và xác nhận bàn giao hai bên; Admin có audit search/export, User có hành trình vật phẩm từ Bài của tôi. Migration 063 đã áp dụng Aiven ngày 06/10/2026, CI MySQL 8.0/8.4 và shared smoke đã đạt; chưa chứng nhận inbox hoặc bàn giao ngoài đời. Xem [release receipt](docs/audits/dev-main-release-2026-10-06.md) và [runbook](docs/runbooks/appointment-journey-rollout.md).
 - Staff warehouse operations: tiếp nhận, lưu, trả, retention deadline, handover counts và storage log.
 
 Các mục trên là **current implementation baseline**, không đồng nghĩa mọi workflow trong product scope đã hoàn tất end-to-end.
@@ -35,12 +35,12 @@ Luồng nghiệp vụ mục tiêu là:
 
 `LOST/FOUND post → matching suggestion → claim/private verification chat → finder decision → meetup → dual-confirmed direct handover`
 
-Staff custody/warehouse là nhánh hỗ trợ hoặc escalation khi Finder không thể tiếp tục giữ đồ, có dispute, item nhạy cảm/nguy hiểm hoặc policy yêu cầu chuyển vào kho. Basic appointment và dual physical handover đã có local runtime; counter-proposal/rescheduling, realtime Web delivery và PWA/native mobile nâng cao vẫn chưa hoàn tất. Matching ảnh hỗ trợ trao đổi, không thay thế kiểm tra vật lý hoặc cho phép Staff trả đồ.
+Staff custody/warehouse là nhánh hỗ trợ hoặc escalation khi Finder không thể tiếp tục giữ đồ, có dispute, item nhạy cảm/nguy hiểm hoặc policy yêu cầu chuyển vào kho. Basic appointment và dual handover có code/schema/test evidence; nghiệm thu bàn giao vật lý vẫn là bước riêng. Counter-proposal/rescheduling, realtime Web delivery và PWA/native mobile nâng cao vẫn chưa hoàn tất. Matching ảnh hỗ trợ trao đổi, không thay thế kiểm tra vật lý hoặc cho phép Staff trả đồ.
 
 ## Trạng thái chưa có runtime evidence
 
 - Automated evidence confidence và multiple-claimant reservation policy end-to-end.
-- Counter-proposal và mutually agreed rescheduling; basic booking/dual-confirmation có local code, shared schema/deployment và manual UAT chưa hoàn tất.
+- Counter-proposal và mutually agreed rescheduling; basic booking/dual-confirmation đã có code/schema và test evidence, production deployment/manual UAT chưa được chứng nhận.
 - Immediate Web chat SSE subscriber và full PWA notification/push matrix; image message và persisted unread/read đã có.
 - Overdue disposition, donation/transfer/disposal document flow và dispute escalation.
 - PWA installability và browser/device verification đầy đủ; manifest, service worker, offline shell và mobile-browser flow đã có ở mức hiện tại.
@@ -93,13 +93,13 @@ Không tắt TLS verification để né lỗi certificate. Khi dùng database ch
 
 ### Migration reconciliation
 
-Với database cũ có claim được tạo trước khi participant được backfill đầy đủ, chạy lệnh idempotent sau một lần trước khi migrate:
+Với database đã có dữ liệu, kiểm tra ledger/schema read-only trước:
 
 ```bash
-npm run migrate:repair-claim-participants
+npm run migrate:preflight
 ```
 
-Lệnh chỉ bổ sung participant còn thiếu, không xóa hoặc cập nhật claim hiện có. Trường hợp self-claim (người nhận và người đăng là cùng tài khoản) được xem là hợp lệ theo khóa `(claim_id, user_id)`.
+Không tự chạy participant repair hoặc backfill consent trên shared DB. Legacy participant/self-claim records cần review history và authorization hiện tại; khóa unique không phải bằng chứng nghiệp vụ self-claim hợp lệ. Recovery write cần backup, rehearsal cô lập và phê duyệt riêng đúng scope.
 
 Trước khi migrate DB đã dùng nhánh claim cũ, chạy `npm run migrate:reconcile-claim` (mặc định **read-only dry-run**).
 Nếu kết quả là `READY`, DB còn tên `040_peer_claim_conversations.sql` trong khi source dùng `045`; không chạy lại DDL đó.

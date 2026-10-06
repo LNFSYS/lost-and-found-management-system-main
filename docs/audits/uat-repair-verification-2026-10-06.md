@@ -1,5 +1,7 @@
 # Kết quả sửa UAT - 06/10/2026
 
+Snapshot trước commit/rollout được giữ nguyên bên dưới. Trạng thái mới: code đã push `dev`, CI MySQL 8.0/8.4 và browser đúng candidate đạt; 063 đã áp dụng Aiven, shared smoke và popup follow-up đã chạy. Xem [release receipt 06/10](dev-main-release-2026-10-06.md) cho bằng chứng và các nghiệm thu inbox/vật phẩm thật còn thiếu.
+
 ## Phạm vi và kết luận
 
 Thực hiện [kế hoạch sửa UAT](../plans/uat-repair-plan-2026-10-06.md) tại `F:/ky9/fptu-lost-found-system-main`, nhánh `dev`, dirty worktree dựa trên `195b134c34c3cee559187bfee13d05e78abf3bfe`. Giữ nguyên implementation lịch hẹn/hành trình và việc tổ chức tài liệu đã có. Chưa commit, push, merge hoặc chứng nhận deployment. Không sử dụng project cũ.
