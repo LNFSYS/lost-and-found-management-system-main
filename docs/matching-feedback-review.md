@@ -46,6 +46,13 @@ Updated 4 October 2026. Matching was merged into `dev` by PR #79 (`5ab9f0d`); so
 - Full Playwright: 39 passed, 0 failed; API/Web production builds passed. Browser API calls are mocked; real SQL/HTTP contracts are covered separately.
 - Shared Aiven access in this audit was read-only preflight. No new migration is needed for the four audit fixes. Manual role/privacy QA and remote CI for the new commits remain separate gates.
 
+## Worker Diagnostics on 6 October 2026
+
+- `matching_refresh_ready` verifies the lease schema, not continuous DB availability or successful refreshes. A later `matching_refresh_tick_failed` belongs to the background refresh tick; it does not invalidate a completed evidence upload.
+- The previous handler discarded the actual error. The current local handler retains only sanitized `causeCode`, `causeType`, `syscall`, `errno`, `sqlState` and `phase` (`SCHEMA_CHECK` or `REFRESH`). Messages, stack traces, SQL/provider payloads and credentials are not logged. Uncoded closed-connection failures receive `DB_CONNECTION_CLOSED`.
+- Read-only checks during this follow-up resolved the configured DB host successfully, completed three `SELECT 1` probes and read aggregate matching-job counts. This is a point-in-time observation, not evidence of the cause of the earlier tick failure. No refresh was triggered manually, no jobs were reset and no shared migration/write was performed.
+- Normal `npm test` passed 378 tests with 20 SQL entry points skipped by default; architecture reported zero violations, and API/Web builds passed. New regressions check safe transport/schema diagnostics, malformed metadata redaction and a failed matching tick followed by a successful tick. SQL integration and browser suites were not rerun for this logging-only change. Remote CI/deployment acceptance remains separate.
+
 ## Linked Requirements
 
 FR-MATCH-06/07/08; BR-61/62/63/64; NFR-DATA-01/02.

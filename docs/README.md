@@ -1,6 +1,6 @@
 # Tài liệu FPTU Lost & Found System
 
-Cập nhật tài liệu: **21/09/2026**
+Cập nhật tài liệu: **05/10/2026**
 
 ## 1. Mục đích
 
@@ -48,6 +48,7 @@ Không đánh dấu Done chỉ vì có migration, schema, ticket, mockup, skelet
 | [warehouse-retention-and-status-rules.md](warehouse-retention-and-status-rules.md) | Project retention defaults, custody/warehouse state gates, authorization and rollout constraints |
 | [LNFS-55-SAFETY-VERIFICATION.md](LNFS-55-SAFETY-VERIFICATION.md) | Feature-branch audit fixes, verification and remaining release blockers; not dev completion |
 | [database-warehouse-recovery.md](database-warehouse-recovery.md) | Aiven forward recovery, encrypted backup/rehearsal, preserved migration history and manual linkage reviews |
+| [media-upload-reconciliation.md](media-upload-reconciliation.md) | Unknown upload outcome, stable retry, conservative compensation and protected operator review |
 | [CLEAN_ARCHITECTURE.md](CLEAN_ARCHITECTURE.md) | Node.js-only Clean Architecture, module contracts, transaction và verification |
 | [CLEAN_ARCHITECTURE_FILE_MAP.md](CLEAN_ARCHITECTURE_FILE_MAP.md) | Mapping source trước/sau refactor |
 | [LNFS_NODE_ONLY_ARCHITECTURE.drawio](LNFS_NODE_ONLY_ARCHITECTURE.drawio) | System Architecture, FE Package, BE Package |

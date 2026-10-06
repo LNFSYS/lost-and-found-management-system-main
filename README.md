@@ -137,7 +137,11 @@ Database integration test chỉ được trỏ vào MySQL local riêng có tên 
 
 ## Media và làm việc nhóm
 
-Metadata media nằm trong MySQL nhưng file hiện được lưu trên `UPLOAD_DIR` của từng máy. Dùng chung database mà chạy API trên nhiều máy có thể tạo reference tới file không tồn tại trên máy khác. Trước staging cần chuyển sang shared object storage và giữ protected/signed access cho private media.
+Metadata media nằm trong MySQL; bytes ảnh không nằm trong Aiven. Avatar và các adapter post/claim/kho dùng Cloudinary `authenticated`; private media được đọc qua proxy kiểm tra quyền, không gửi signed provider URL cho client.
+
+Ảnh tiếp nhận và ảnh trả đồ của kho trên production không ghi fallback local: thiếu cấu hình hoặc Cloudinary lỗi sẽ báo lỗi. Adapter vẫn hỗ trợ đọc reference local cũ. Đợt rollout kho đã chuyển 16 reference sau backup/restore và giữ nguyên file nguồn; không có nghĩa toàn bộ ảnh post/claim đã migrate.
+
+Post/claim còn fallback ghi local khi chưa cấu hình Cloudinary; kho chỉ cho phép fallback ghi local ngoài production. Những reference local cần đúng volume `UPLOAD_DIR`, nên chưa có bảo đảm đọc được giữa hai instance không dùng chung disk. Xem [rollout ảnh kho](docs/warehouse-media-rollout.md) và [đối soát upload chưa rõ kết quả](docs/media-upload-reconciliation.md). Bằng chứng kiểm thử có kiểm soát không thay thế nghiệm thu cấu hình/deployment thực tế.
 
 ## Tài liệu chính
 

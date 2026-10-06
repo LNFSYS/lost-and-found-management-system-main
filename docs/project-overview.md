@@ -69,6 +69,7 @@ LNFS hướng tới:
 - Warehouse có receive/store/return và retention deadline; overdue disposition/donation/transfer/disposal documents chưa đủ.
 - Manual browser/device QA cho toàn bộ admin/profile vẫn cần bổ sung evidence; Cloudinary authenticated upload/delivery/cleanup smoke test đã pass.
 - Post/claim có Cloudinary adapter và local fallback. Warehouse intake/return dùng Cloudinary authenticated, production không ghi fallback local; đã chuyển đủ 16 reference kho local sau backup/restore và giữ file gốc. Test API/provider thật qua process độc lập, restart và quyền Staff/Admin đã pass trên DB cô lập; chưa chứng nhận topology production hay toàn bộ ảnh post/claim. Xem [rollout ảnh kho](warehouse-media-rollout.md); DB Aiven không lưu bytes ảnh.
+- B1/B2/B3 đang được sửa trên worktree `dev`, chưa commit/push: upload giữ asset khi kết quả DB chưa rõ, retry dùng ID ổn định và modal vận hành có focus containment/nền inert/popup lồng nhau. Bằng chứng local và các giới hạn được ghi riêng trong [re-audit follow-up](full-system-re-audit-2026-10-05.md#repair-follow-up); quy trình đối soát ở [media upload reconciliation](media-upload-reconciliation.md). Không dùng CI của commit cũ hoặc test pass để nâng UC/điểm lịch sử hay chứng nhận production.
 - `dev@dc92525` đã push và CI đúng SHA xanh: MySQL 8.0/8.4 mỗi job 375 pass/0 skip, browser 69 pass. Bằng chứng xem receipt audit; commit sau phải kiểm tra CI riêng, không dùng run cũ. Các extension chưa nghiệm thu deployment/manual không được gọi là production-ready.
 
 ### 4.3 Planned product scope

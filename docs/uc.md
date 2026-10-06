@@ -1,13 +1,13 @@
 # 3. Business Use Case Catalogue - FPTU Lost & Found System (LNFS)
 
-Mappings reconciled on 4 October 2026 against merged `dev` baseline `fd122e6` and local physical-intake/contact-photo follow-ups documented in [warehouse-intake-evidence.md](warehouse-intake-evidence.md) and [lost-contact-photo-rules.md](lost-contact-photo-rules.md). Earlier audit fixes remain documented in [dev-main-audit-fixes.md](dev-main-audit-fixes.md). UC-098 to UC-100 remain Partial for manual role/privacy QA and operational acceptance. UC-106 has a limited safe LOST-question runtime slice; UC-114 covers post-intake Staff approval only. Custody UC-141 to UC-147 retain remaining acceptance gaps. Warehouse release history remains in [LNFS-55-SAFETY-VERIFICATION.md](LNFS-55-SAFETY-VERIFICATION.md). `Implemented` requires active runtime evidence, not schema presence alone; no existing Implemented status certifies deployment of new extensions. Additive migrations 061/062 were applied on the shared DB on 4 October 2026 after backup and isolated rehearsal; manual/provider acceptance and durable media/application deployment remain pending. See [the rollout record](database-warehouse-recovery.md).
+Current mappings reconciled on 6 October 2026 against `dev` and its local workflow follow-ups. The earlier 4 October baseline was `fd122e6`; dated audit/rollout receipts below remain historical evidence. See [warehouse intake](warehouse-intake-evidence.md), [LOST photo contact](lost-contact-photo-rules.md), [audit repairs](dev-main-audit-fixes.md) and [warehouse media rollout](warehouse-media-rollout.md). UC-098 to UC-100 retain manual role/privacy and operational gaps. UC-106 includes Finder-only photo-analysis suggestions; UC-114 covers post-intake Staff approval only. UC-120 now has private-image API/UI runtime and is Partial, not fully accepted. Custody UC-141 to UC-147 remain Partial. `Implemented` requires active runtime evidence, not schema presence alone; an existing status does not certify deployment of a new extension. Migrations 061/062 were applied on 4 October after backup and isolated rehearsal; all 16 inventoried warehouse-local references were subsequently transferred under the authorized rollout. Production/application deployment, non-warehouse legacy media and manual acceptance remain separate. See [the database rollout record](database-warehouse-recovery.md).
 
 - **Implemented:** 97 use cases
-- **Partial:** 17 use cases
-- **Planned:** 54 use cases
+- **Partial:** 18 use cases
+- **Planned:** 53 use cases
 - **Total:** 168 business use cases
 
-`Claimant` means the owner of the LOST post. `Finder` means the owner of the matched FOUND post. PWA, mobile browser, and a future native application are delivery channels, not business use cases, and are therefore excluded from this catalogue.
+`Claimant` means the LOST owner seeking the item. `Finder` means the FOUND owner or the actual non-owner contacting a LOST post through an approved photo-backed conversation; the latter does not need to publish a FOUND post. These are workflow roles, not proof of ownership or live possession. Legacy participant labels are resolved from actual post ownership and authorized participants without rewriting history. PWA, mobile browser, and a future native application are delivery channels, not business use cases, and are therefore excluded from this catalogue.
 
 ## 3.1 Historical Source-Control Ownership Audit
 
@@ -101,7 +101,7 @@ Completed UC work above is not reassigned. The 71 Partial/Planned UCs in the ret
 
 | ID | Use Case | Actors | Use Case Description | Status |
 | --- | --- | --- | --- | --- |
-| UC-017 | Analyze item images with Gemini | Authenticated User | Upload up to the allowed number of images and receive an editable draft based only on visible image content. | Implemented |
+| UC-017 | Analyze item images with Gemini | Authenticated User | Use the image upload/analysis controls before manual post fields to request an editable draft from visible image content. Analysis runs only on explicit request; the user must review and correct suggestions because accuracy is not guaranteed. | Implemented |
 | UC-101 | Collect eligible matching examples | System, Admin | Collect reviewed matching outcomes that satisfy privacy and quality rules for training preparation. | Planned |
 | UC-102 | Label matching outcomes | Admin, Staff | Label reviewed candidate pairs as positive, negative, or uncertain training examples. | Planned |
 | UC-103 | Anonymize matching training data | System | Remove or mask personal and sensitive information before examples are used for model training. | Planned |
@@ -118,22 +118,22 @@ Completed UC work above is not reassigned. The 71 Partial/Planned UCs in the ret
 | --- | --- | --- | --- | --- |
 | UC-032 | View my claim requests | Claimant / Finder | List claim requests in which the signed-in user is an authorized participant. | Implemented |
 | UC-033 | View claim request details | Claimant / Finder | View one authorized claim, its current state, participants, related posts, and allowed actions. | Implemented |
-| UC-034 | Create a claim request | Claimant / Finder | Request an exchange for an eligible post or LOST-FOUND match while preventing self-claims and duplicates. Direct non-owner LOST contact requires a server-approved photo above 60%. | Implemented |
+| UC-034 | Create a claim request | Claimant / Finder | Request an exchange for an eligible post or LOST-FOUND match while preventing self-claims and duplicates. Direct non-owner LOST contact requires server-approved photo similarity at least 50% and analysis confidence at least 60%; approval opens the conversation and attaches the checked image without sending the typed draft or verifying ownership. | Implemented |
 | UC-035 | Accept a claim request | Finder | Accept the claimant's request, grant participant consent, and open the private exchange room. | Implemented |
 | UC-036 | Request more claim information | Finder | Ask the claimant for more information and open the private room for direct clarification. | Implemented |
 | UC-037 | Decline a claim request | Finder | Reject a pending claim request and store the decision and optional reason in the audit trail. | Implemented |
 | UC-038 | Withdraw a claim request | Claimant | Cancel an owned claim when its current state permits withdrawal. | Implemented |
 | UC-039 | View private claim rooms | Claimant / Finder | List private rooms belonging to claims in which the signed-in user is a participant. | Implemented |
-| UC-040 | Open a private claim room | Claimant / Finder | Enter an authorized consented room with actual ownership roles. Direct non-owner LOST contact additionally needs a server-approved photo above 60%; reads cannot approve pending legacy consent and communication approval never verifies ownership. | Implemented |
-| UC-106 | View guided verification questions | Finder | View safe existing category prompts in a photo-approved LOST conversation without revealing expected answers. Full guided-question actor acceptance remains pending. | Partial |
-| UC-107 | Ask a guided verification question | Finder | Send a structured verification question to a claimant in the private conversation. | Partial |
+| UC-040 | Open a private claim room | Claimant / Finder | Enter an authorized consented room with actual ownership roles. Direct non-owner LOST contact enforces the server-approved 50% photo/60% confidence gate on creation and further gated writes. Reads cannot approve pending legacy consent; communication approval never verifies ownership. The receiving LOST owner sees a safety reminder to request current photos and avoid payments/sensitive disclosures. | Implemented |
+| UC-106 | View guided verification questions | Finder | View safe verification prompts without expected answers. In photo-approved LOST contact, only the Finder sees three suggestions derived from the fresh image-analysis response; ordinary reads/replays do not generate fallback suggestions. The panel collapses after use and can reopen. Full guided-question/privacy acceptance remains pending. | Partial |
+| UC-107 | Ask a guided verification question | Finder | Send a structured verification question through the existing workflow, or click a photo-analysis suggestion to send ordinary private text while preserving the typed draft. Suggested text does not create an answered assignment or verification score; failed sends reopen for idempotent retry. Full guided-question acceptance remains pending. | Partial |
 | UC-108 | Answer a guided verification question | Claimant | Answer a verification question without seeing the finder-defined expected answer. | Planned |
 | UC-109 | Review private claim evidence | Finder | Review claimant answers and protected evidence before deciding the next claim state. | Partial |
 | UC-110 | Calculate verification confidence | System | Calculate a support score from answered questions and evidence without making the ownership decision. | Planned |
 | UC-111 | Escalate a claim for staff support | Claimant, Finder | Escalate an unresolved, suspicious, or disputed verification case with a required reason. | Planned |
 | UC-112 | List escalated claims | Staff, Admin | View claims escalated for staff support, filtered by state, age, or assigned handler. | Planned |
 | UC-113 | View an escalated claim | Staff, Admin | View the permitted claim context, evidence summary, messages, and audit history for an escalated case. | Planned |
-| UC-114 | Record an escalation decision | Staff, Admin | Explicitly verify a consented claimant after physical custody intake, including LOST contact with linked FOUND and normalized legacy roles, with an in-person rationale, case/hold checks and independent Staff audit. General escalation rejection and more-information decisions remain pending. | Partial |
+| UC-114 | Record an escalation decision | Staff, Admin | Explicitly verify a consented claimant after physical intake of an eligible FOUND or the exact photo-backed LOST custody item, with an in-person rationale, case/hold checks and independent Staff audit. Preserve Finder identity and legacy history; intake/photo approval does not decide ownership. General escalation rejection and more-information decisions remain pending. | Partial |
 | UC-115 | View claimants for a found item | Finder | View all separate claim requests received for one FOUND post without merging their private evidence. | Planned |
 | UC-116 | Compare claimant verification results | Finder | Compare status and verification progress across claimants while keeping each private conversation isolated. | Planned |
 | UC-117 | Reserve an item for one claimant | Finder | Temporarily reserve the item for one accepted claimant before arranging a meetup. | Planned |
@@ -145,18 +145,20 @@ Completed UC work above is not reassigned. The 71 Partial/Planned UCs in the ret
 
 **Remaining work:** UC-119 to UC-125 are assigned to Khoa.
 
+**Local runtime follow-up - 6 October:** UC-120 now has an authenticated multipart image-message endpoint and Web composer/preview, participant-protected delivery, stable retry keys and accompanying PHOTO evidence. Both consented active participants can use it; the initial approved LOST photo is also an IMAGE message. This is runtime evidence for Partial, not proof of production/provider/manual acceptance. Unread/seen, full push delivery and report/block goals are not completed by image support.
+
 | ID | Use Case | Actors | Use Case Description | Status |
 | --- | --- | --- | --- | --- |
-| UC-041 | View direct messages | Claimant / Finder | Retrieve cursor-paginated text messages from an authorized private claim room. | Implemented |
+| UC-041 | View direct messages | Claimant / Finder | Retrieve cursor-paginated messages from an authorized private claim room; render private IMAGE messages through participant-protected media access and preview, never raw storage references. | Implemented |
 | UC-042 | Send a direct message | Claimant / Finder | Send an idempotent private text message. For non-owner LOST senders the server also enforces the contact-photo gate, including legacy rooms. | Implemented |
 | UC-043 | View claim evidence | Claimant / Finder | List private evidence belonging to an authorized claim room. | Implemented |
-| UC-044 | Upload claim evidence | Claimant / Finder | Validate and upload a private evidence image to an authorized claim room. | Implemented |
+| UC-044 | Upload claim evidence | Claimant / Finder | Both consented active participants may validate/upload private PHOTO evidence in an authorized claim room. The composer evidence action opens/focuses its upload form; it is distinct from sending an IMAGE chat message. Evidence alone does not verify ownership. | Implemented |
 | UC-045 | View protected claim evidence | Claimant / Finder | Retrieve an evidence image only after participant and room authorization. | Implemented |
 | UC-046 | View notifications | Authenticated User | View the signed-in user's notification feed and unread total. | Implemented |
 | UC-047 | Mark a notification as read | Authenticated User | Mark one owned notification as read. | Implemented |
 | UC-048 | Mark all notifications as read | Authenticated User | Clear the unread state of all notifications owned by the signed-in user. | Implemented |
 | UC-119 | Receive new private messages immediately | Claimant, Finder | Receive newly sent conversation messages without manually refreshing the page. | Partial |
-| UC-120 | Send an image in a private conversation | Claimant, Finder | Upload and send an authorized image message inside the related claim room. | Planned |
+| UC-120 | Send an image in a private conversation | Claimant, Finder | Select/preview an image and send it inside a consented active private room through the authenticated multipart endpoint. Persist IMAGE and protected PHOTO evidence atomically; replay the same request without duplication and prevent late callbacks from altering another room. Live-provider, deployment and manual role/privacy acceptance remain pending. | Partial |
 | UC-121 | View unread conversation count | Claimant, Finder | View the number of unread messages for each authorized private conversation. | Planned |
 | UC-122 | Mark a conversation as read | Claimant, Finder | Mark messages in an opened conversation as read for the current participant. | Planned |
 | UC-123 | Receive claim status notifications | Claimant, Finder | Receive notifications when a claim is created, updated, accepted, declined, withdrawn, or escalated. | Partial |
@@ -168,6 +170,8 @@ Completed UC work above is not reassigned. The 71 Partial/Planned UCs in the ret
 **Commit evidence:** The database contains appointment and return-related migrations, but `dev` has no active appointment module, route, or complete Web workflow. Migration-only evidence is not counted as implementation.
 
 **Remaining work:** UC-126 to UC-133 are assigned to Luong; UC-134 to UC-140 are assigned to Quan.
+
+**Proposal versus appointment:** The top-of-chat Finder action can explicitly propose a communication-only meetup after LOST photo approval without minimum verification answers. Its audit is marked `communicationOnly: true`, cannot authorize warehouse release and does not book a time/place or implement UC-126 to UC-140. Ordinary FOUND verification retains its answer gate. Appointment negotiation and dual physical-return confirmation remain Planned.
 
 | ID | Use Case | Actors | Use Case Description | Status |
 | --- | --- | --- | --- | --- |
@@ -193,25 +197,25 @@ Completed UC work above is not reassigned. The 71 Partial/Planned UCs in the ret
 
 **Remaining work:** UC-141 to UC-146 are assigned to Khoa; UC-147 is assigned to Dat.
 
-**Runtime evidence:** owned FOUND requests queue physical intake without pre-approval. The new reconciliation flow keeps source data separate, requires Staff intake photos and observations and creates one RECEIVED item only at confirmation. Legacy ACCEPTED requests remain receivable; accept is a compatibility API, not a required UI step. Additive migration 061 supports the new evidence contract and was applied on the shared DB on 4 October 2026. These seven UCs remain Partial; schema readiness does not complete manual acceptance. UC-142 is point/office-hours selection, not holiday-aware scheduling. See [intake evidence](warehouse-intake-evidence.md).
+**Runtime evidence:** an owned eligible FOUND or an unlinked direct LOST conversation with the actual Finder's consumed approved photo may queue physical intake without pre-approval. The no-FOUND path retains NULL physical post IDs and binds the request/item to the exact claim/room/Finder; LOST is comparison context, not a synthetic physical source. Source/contact photos remain separate from mandatory new Staff condition photos. Only physical confirmation creates one RECEIVED item. Legacy ACCEPTED requests remain receivable; accept is compatibility-only. Migration 061 was applied on 4 October; these later extensions require no new DDL. UC-141 to UC-147 stay Partial, and UC-142 is point/office-hours selection, not holiday-aware scheduling. See [intake evidence](warehouse-intake-evidence.md) and [photo custody rules](lost-contact-photo-rules.md).
 
 | ID | Use Case | Actors | Use Case Description | Status |
 | --- | --- | --- | --- | --- |
 | UC-049 | View active handover points | Guest / Authenticated User | Retrieve handover points that are currently available for public use. | Implemented |
 | UC-050 | View warehouse reference data | Staff / Admin | Retrieve categories, campus locations, handover points, and item counts used by warehouse operations. | Implemented |
-| UC-051 | Browse warehouse items | Staff / Admin | List and filter warehouse custody records. | Implemented |
+| UC-051 | Browse warehouse items | Staff / Admin | List/filter warehouse records newest physical-receipt time first. Show a responsive three-item desktop row with image, title, category, receipt time, status and operational actions; open complete information/photos/history in a detail modal instead of long card descriptions. | Implemented |
 | UC-052 | Receive a warehouse item | Staff / Admin | Receive an account-free walk-in with condition, quantity, accessories and 1-5 private Staff intake photos. Review optional image-analysis suggestions and explicitly confirm actual receipt to create one RECEIVED item; source/claim is not required. | Implemented |
 | UC-053 | Update warehouse item details | Staff / Admin | Update permitted warehouse information such as location, condition notes, and storage code. | Implemented |
 | UC-054 | Move an item to stored state | Staff / Admin | Apply the valid warehouse state transition from received to stored and append a storage log. | Implemented |
 | UC-055 | Confirm a warehouse return | Staff / Admin | Return retained RECEIVED/STORED/CLAIMED/EXPIRED property after verifying the actual recipient, recording identity/contact and private proof, and checking reservations, competing cases and legal hold. Online claims require explicit Finder or post-intake Staff verification; offline return creates no synthetic claim or feedback participant. | Implemented |
-| UC-056 | View warehouse storage logs | Staff / Admin | View the immutable action history for a warehouse item. | Implemented |
+| UC-056 | View warehouse storage logs | Staff / Admin | Open item details to view full description, permitted source/contact/intake/return photos and immutable storage/action history through protected access. | Implemented |
 | UC-057 | Calculate item retention deadline | System | Calculate and store the retention deadline from the receiving time and configured category policy. | Implemented |
-| UC-141 | Request transfer to staff custody | Finder | Ask to transfer an owned active FOUND item to an official handover point when direct return is unsuitable; request alone does not change physical custody. | Partial |
+| UC-141 | Request transfer to staff custody | Finder | Request transfer of an owned eligible FOUND or an item in the exact unlinked direct LOST room backed by the actual Finder's consumed approved contact photo. No FOUND creation is required for that route; photo/request alone does not establish possession, change physical custody or approve ownership. | Partial |
 | UC-142 | Select staff intake point and time | Finder, Staff | Select an active handover point and view office hours. Proposed-time and holiday-aware scheduling remain pending. | Partial |
 | UC-143 | List custody transfer requests | Staff, Admin | View server-paginated pending, accepted, rejected, cancelled and intaked requests with authorized details. | Partial |
-| UC-144 | Review a custody transfer request | Staff, Admin | Open authorized source information/photos for reconciliation without creating custody or requiring pre-approval. The historical accept API is compatibility-only. | Partial |
+| UC-144 | Review a custody transfer request | Staff, Admin | Open authorized original post information/photos or protected CONTACT_PHOTO context for no-FOUND custody, separately from Staff receipt observations. Review does not create custody or require pre-approval; the historical accept API is compatibility-only. | Partial |
 | UC-145 | Reject or cancel a custody transfer request | Finder, Staff, Admin | Reject or cancel a transfer with a reason before receipt, restoring escalation projections while retaining audit history. | Partial |
-| UC-146 | Confirm staff intake | Staff | Confirm physical receipt from PENDING or legacy ACCEPTED with Staff-uploaded condition photos, quantity/accessories and independent observations. Create one RECEIVED item and mark INTAKED; preserve original post/Finder/claim and exact replay history. | Partial |
+| UC-146 | Confirm staff intake | Staff, Admin | Confirm physical receipt from PENDING or legacy ACCEPTED with 1-5 new Staff condition photos, quantity/accessories and independent observations. Source/contact photos cannot substitute for receipt evidence. Create one RECEIVED item and mark INTAKED; preserve source or NULL physical-post linkage, actual Finder/claim/room and replay history. Intake is not ownership verification. | Partial |
 | UC-147 | Receive custody status notifications | Finder, Claimant | Receive authorized transactional request/intake/return updates; full movement/release/provider acceptance remains pending. | Partial |
 
 ### 3.10 Feedback & Reputation
@@ -376,3 +380,20 @@ Existing BR-06/29, FR-RT-01/FR-MEDIA-02 and private chat goals are strengthened 
 Authorized follow-up: all 16 inventoried warehouse-local references were copied and conditionally updated after encrypted database/volume backup and isolated restore. Real provider/API role, independent-process and restart checks plus post-check passed; originals and private manifests are retained. This evidence does not promote UC statuses or certify production deployment, non-warehouse legacy media or physical/manual UAT. Existing catalogue totals remain 168 (97 Implemented, 17 Partial, 54 Planned).
 
 The audited code candidate `dev@dc92525` is pushed and has exact remote CI evidence: MySQL 8.0/8.4 each 375 passed/no skips, browser 69 passed. [The receipt](full-system-audit-2026-10-05.md) records the checkout SHA and run/artifact links. Later candidates and deployment still need their own acceptance; catalogue status counts are unchanged.
+
+## Current Workflow Reconciliation - 6 October 2026
+
+This section supersedes current descriptions/counts, not the dated audit snapshots above. Existing IDs cover the requested workflows; no new actor goal requires UC-169 or another duplicate ID. UC-120 changes from Planned to Partial because an actual private-image API/UI workflow now exists, not merely because tests passed. No UC becomes Implemented. Current totals: **168 UCs: 97 Implemented, 18 Partial, 53 Planned**. The Partial/Planned work allocation still contains 71 UCs; existing assignees are retained.
+
+| Current scope | Existing UC mapping | Implementation / evidence | Remaining boundary |
+| --- | --- | --- | --- |
+| Image-first editable post analysis with accuracy/review reminder | UC-017, UC-018, UC-019 | `story-post-form.tsx`; `story-post-form.spec.ts` | Analysis is optional assistance, never automatic publication or ownership proof. |
+| >=50% LOST photo contact / >=60% confidence, immediate room and checked image | UC-034, UC-040, UC-042, UC-044, UC-120 | `contact-photo.use-cases.ts`; `contact-photo.use-cases.test.ts`; `custody-safety.integration.test.ts`; `lost-contact-photo.spec.ts` | No live-possession/ownership guarantee; physical verification remains necessary. |
+| Finder-only photo-analysis prompts, one-click text and collapse/retry | UC-106, UC-107, UC-042 | `contact-photo-questions.ts`; `claims-page.tsx`; `lost-contact-photo.spec.ts` | Safe prompts derive from AI-observed image features, not stored/free-form AI questions. No generic fallback on reads; no answered assignment or score. |
+| Protected/idempotent chat images and separate focused evidence form | UC-041, UC-044, UC-045, UC-120 | `claim.routes.ts`; `claim.use-cases.ts`; `claim-chat-image.tsx`; `lost-custody-return.integration.test.ts`; `claims-resilience.spec.ts` | Real-provider, deployment/manual privacy acceptance remain open; unread/seen and push are separate. |
+| Top Finder controls / communication-only meetup | UC-035, UC-036, UC-037, UC-106, UC-141 | `claim-verification-panel.tsx`; `claim-verification.use-cases.test.ts`; warehouse verified-recipient SQL regressions | A proposal is not ownership verification, a booked appointment or permission to release property. UC-126 to UC-140 remain Planned. |
+| No-FOUND photo custody, physical intake, explicit Staff verification and retained return | UC-114, UC-141 to UC-147, UC-052, UC-055, UC-058 to UC-060 | `photo-custody-source.ts`; `lost-custody-return.integration.test.ts`; `custody-safety.integration.test.ts`; `staff-page.spec.ts` | Preserve Finder history, dispute/hold/competing-case/proof gates. Quarantined historical links require separate review. |
+| Compact inventory and full-detail accessible modals | UC-051, UC-056, UC-052, UC-146 | `staff-page.tsx`; `warehouse-intake-dialog.tsx`; `use-modal-focus.ts`; `staff-page.spec.ts` | Keyboard regressions are not full screen-reader/device or WCAG certification. |
+| Preserve uploads when DB acknowledgement is unknown | UC-010, UC-023, UC-044, UC-052, UC-055, UC-034, UC-120 | `media-upload.ts`; `media-upload-regression.test.ts`; `media-upload-outcomes.integration.test.ts`; [reconciliation runbook](media-upload-reconciliation.md) | Retain uncertain assets/operation evidence, reconcile against authoritative data and retry safely; no success fabrication or age-only deletion. Production failover/operator acceptance remains separate. |
+
+See [BR-53/65/68/69 and media rules](business-rules.md), [FR-CHAT-01/02 and custody requirements](requirements.md), [traceability](traceability-matrix.md), [current photo workflow verification](lost-contact-photo-rules.md) and [B1/B2/B3 repair evidence](full-system-re-audit-2026-10-05.md). Matching diagnostics only improve sanitized failure reporting under UC-100; they do not prove that a past network failure is permanently resolved. Local normal tests/build/browser and isolated SQL receipts have distinct scopes; exact candidate CI, production/manual UAT and historical 053/055 acceptance remain separate gates.
