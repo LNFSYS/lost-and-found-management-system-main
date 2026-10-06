@@ -86,4 +86,10 @@ This closes the observed legacy warehouse-local references and demonstrates live
 
 `.github/workflows/ci.yml` runs for pushes/PRs and now permits manual dispatch. It records the actual checked-out commit for each MySQL 8.0/8.4 matrix job and retains browser JUnit/screenshots in an artifact named with the candidate SHA. The browser job is gated by the verification matrix.
 
-After an authorized reviewed commit/push, use the CI run for that exact commit, not an older green run. For PRs, record the merge-test SHA and source head; re-run when the candidate changes. The current request authorizes reviewed commits/push to dev under `Trần Thế Lượng`; older authors are preserved and main is not merged. Exact remote acceptance is recorded separately in the audit follow-up after the run completes.
+After a separately authorized reviewed commit/push, use the CI run for that exact commit, not an older green run. For PRs, record the merge-test SHA and source head; re-run when the candidate changes. Earlier authorized commits and their authors are preserved; the B1/B2/B3 repair request does not authorize commit, push or merge. Exact remote acceptance is recorded separately in the audit follow-up after the run completes.
+
+## Normal Upload Outcome Safety
+
+The B1 repair applies to normal intake/return uploads, not another transfer of the 16 historical images. It also covers post media, claim evidence, LOST contact checks and avatar replacement. See [media-upload-reconciliation.md](media-upload-reconciliation.md) for stable upload IDs, same-session transaction/lock fencing, conservative compensation, protected operation logs and operator review requirements. No forward migration or Aiven write is needed for this repair.
+
+Read-only preflight on the repair worktree reports no pending migration and retains the historical 053/055 warnings. The earlier protected transfer/provider receipts remain historical evidence for their original scope. New upload fault tests and keyboard tests do not certify new production/provider failover, physical-item/identity or screen-reader acceptance.
