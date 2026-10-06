@@ -215,6 +215,7 @@ function mapMessage(row: MessageRow) {
     clientMessageId: row.client_message_id,
     content: row.content,
     messageType: row.message_type,
+    mediaUrl: row.media_url,
     isRead: row.is_read === 1,
     readAt: iso(row.read_at),
     createdAt: iso(row.created_at)!
@@ -772,7 +773,14 @@ export function createClaimRepository(pool: SqlExecutor) {
       return rows[0] ? mapClaim(rows[0]) : null;
     },
 
-    async createMessage(input: { roomId: string; senderId: string; content: string; clientMessageId?: string; }, queryable: Queryable) {
+    async findMessageByClientId(roomId, senderId, clientMessageId, queryable) {
+      const [rows] = await sqlExecutor(queryable ?? pool).execute<MessageRow[]>(
+        `${messageSelect} WHERE m.room_id = ? AND m.sender_id = ? AND m.client_message_id = ? LIMIT 1`,
+        [roomId, senderId, clientMessageId]);
+      return rows[0] ? mapMessage(rows[0]) : null;
+    },
+
+    async createMessage(input: { roomId: string; senderId: string; content: string; clientMessageId?: string; mediaUrl?: string }, queryable: Queryable) {
       const executor = sqlExecutor(queryable);
       const [sequenceRows] = await executor.execute<(RowDataPacket & { sequence: number })[]>(
         "SELECT next_sequence AS sequence FROM chat_rooms WHERE id = ? LIMIT 1 FOR UPDATE",
@@ -794,10 +802,10 @@ export function createClaimRepository(pool: SqlExecutor) {
       if (advanced.affectedRows !== 1) return null;
       const messageId = id();
       await executor.execute(
-        `INSERT INTO chat_messages (id, room_id, sequence, sender_id, client_message_id, content, message_type)
-       VALUES (?, ?, ?, ?, ?, ?, 'TEXT')
+        `INSERT INTO chat_messages (id, room_id, sequence, sender_id, client_message_id, content, message_type, media_url)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
        ON DUPLICATE KEY UPDATE id = id`,
-        [messageId, input.roomId, Number(sequence), input.senderId, input.clientMessageId ?? null, input.content]
+        [messageId, input.roomId, Number(sequence), input.senderId, input.clientMessageId ?? null, input.content, input.mediaUrl ? "IMAGE" : "TEXT", input.mediaUrl ?? null]
       );
       const [rows] = await executor.execute<MessageRow[]>(
         `${messageSelect} WHERE m.id = ? OR (m.room_id = ? AND m.sender_id = ? AND m.client_message_id = ?) LIMIT 1`,

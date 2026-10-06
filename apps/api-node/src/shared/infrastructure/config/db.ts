@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { env } from "./env.js";
+import { recordTransactionOutcome } from "../../application/transaction.js";
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../../../../");
 const sslCa = env.db.sslCaPath
@@ -55,20 +56,24 @@ function isUnavailableConnectionError(error: unknown): boolean {
 
 export async function runInTransaction<T>(connection: PoolConnection, work: (connection: PoolConnection) => Promise<T>): Promise<T> {
   let transactionStarted = false;
+  let commitStarted = false;
   try {
     await connection.beginTransaction();
     transactionStarted = true;
     const result = await work(connection);
+    commitStarted = true;
     await connection.commit();
     return result;
   } catch (error) {
+    recordTransactionOutcome(error, "UNKNOWN");
     if (isUnavailableConnectionError(error)) {
       try { connection.destroy(); } catch { /* Preserve the original database error. */ }
     } else if (transactionStarted) {
       try {
         await connection.rollback();
+        if (!commitStarted) recordTransactionOutcome(error, "ROLLED_BACK");
       } catch {
-        // A failed rollback must not hide the error that caused the transaction to fail.
+        try { connection.destroy(); } catch { /* Preserve the original error; never reuse an unresolved transaction. */ }
       }
     }
     throw error;

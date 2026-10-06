@@ -77,6 +77,7 @@ export function createClaimRoutes({ claimController, auth }: {
   claimRoutes.post("/:claimId/room", (req, res, next) => claimController.getRoom(req, res).catch(next));
   claimRoutes.get("/:claimId/messages", (req, res, next) => claimController.listMessages(req, res).catch(next));
   claimRoutes.post("/:claimId/messages", messageLimit, (req, res, next) => claimController.sendMessage(req, res).catch(next));
+  claimRoutes.post("/:claimId/messages/images", evidenceLimit, uploadSingleEvidence, (req, res, next) => claimController.uploadChatImage(req, res).catch(next));
   claimRoutes.get("/:claimId/evidence", (req, res, next) => claimController.listEvidence(req, res).catch(next));
   claimRoutes.post("/:claimId/evidence", evidenceLimit, uploadSingleEvidence, (req, res, next) => claimController.uploadEvidence(req, res).catch(next));
   claimRoutes.get("/:claimId/evidence/:evidenceId", (req, res, next) => claimController.getEvidence(req, res).catch(next));

@@ -5,6 +5,7 @@ export interface ContactPhotoCheck {
   storageRef: string; publicId: string; format: string; bytes: number; expiresAt: string; claimId: string | null;
 }
 export interface ContactPhotoRepository {
+  findById(id: string): Promise<ContactPhotoCheck | null>;
   revision(postId: string, db?: TransactionContext): Promise<string | null>;
   create(input: Omit<ContactPhotoCheck,"claimId">, db: TransactionContext): Promise<void>;
   lock(id: string, db: TransactionContext): Promise<ContactPhotoCheck | null>;

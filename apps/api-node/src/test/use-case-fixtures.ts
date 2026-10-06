@@ -68,7 +68,11 @@ export function createTestAdminReportingUseCases(overrides: Partial<AdminReporti
 export const adminReportingService = createTestAdminReportingUseCases();
 export function createTestAdminCatalogUseCases(overrides: Partial<AdminCatalogDependencies> = {}) { return createAdminCatalogUseCases({ adminCatalogRepository: adminCatalogRepository, id: randomUUID, ...overrides }); }
 export const adminCatalogService = createTestAdminCatalogUseCases();
-export function createTestWarehouseUseCases(overrides: Partial<WarehouseDependencies> = {}) { return createWarehouseUseCases({ warehouseRepository: warehouseRepository, custodyRequestRepository: unexpectedPort("custody repository"), proofStorage: fakeMediaStorage, withTransaction: fakeTransaction, id: randomUUID, ...overrides }); }
+export function createTestWarehouseUseCases(overrides: Partial<WarehouseDependencies> = {}) {
+  const custodyRequestRepository = unexpectedPort<WarehouseDependencies["custodyRequestRepository"]>("custody repository");
+  custodyRequestRepository.findByWarehouseItemId = async () => null;
+  return createWarehouseUseCases({ warehouseRepository, custodyRequestRepository, proofStorage: fakeMediaStorage, withTransaction: fakeTransaction, id: randomUUID, ...overrides });
+}
 export const warehouseService = createTestWarehouseUseCases();
 export function createTestReturnFeedbackUseCases(overrides: Partial<ReturnFeedbackDependencies> = {}) { return createReturnFeedbackUseCases({ repository: returnFeedbackRepository, adminAuditRepository: adminAuditRepository, runInTransaction: fakeTransaction, id: randomUUID, ...overrides }); }
 export const returnFeedbackService = createTestReturnFeedbackUseCases();

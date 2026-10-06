@@ -269,8 +269,9 @@ test("isolated MySQL custody: authorization, concurrency, lifecycle, proof and n
           const form = new FormData(); form.set("postId",targetLost); form.set("file",new Blob([new Uint8Array([0xff,0xd8,0xff,0xe0])],{ type: "image/jpeg" }),"fixture.jpg");
           const check = await fetch(`${base}/claims/contact-photo-checks`,{ method: "POST", headers: { Authorization: `Bearer ${token}` }, body: form });
           assert.equal(check.status,200);
-          const approval = await check.json() as { checkId: string; approved: boolean; score: number };
+          const approval = await check.json() as { checkId: string; approved: boolean; score: number; questions: string[] };
           assert.equal(approval.approved,true); assert.ok(approval.score > .6);
+          assert.equal(approval.questions.length,3);
           await assert.rejects(gatedClaims.createDirectMessage(ids.outsider,{ postId: targetLost, content: "Forged", contactCheckId: approval.checkId }));
           const created = await fetch(`${base}/claims/direct-messages`,{ method: "POST", headers, body: JSON.stringify({ ...message, contactCheckId: approval.checkId }) });
           assert.equal(created.status,201);
@@ -278,15 +279,33 @@ test("isolated MySQL custody: authorization, concurrency, lifecycle, proof and n
           assert.equal(conversation.claim.status,"CONVERSATION_OPEN");
           assert.equal(conversation.claim.appointmentEligible,false);
           assert.equal(conversation.claim.contactPhoto.approved,true);
-          assert.ok(conversation.claim.contactPhoto.questions.length > 0);
+          assert.deepEqual(conversation.claim.contactPhoto.questions,[]);
           await gatedClaims.createDirectMessage(ids.finder,{ ...message, contactCheckId: approval.checkId });
           const [proof] = await pool.query<RowDataPacket[]>("SELECT evidence_type,description FROM claim_evidence WHERE claim_id = ?", [conversation.claim.id]);
           assert.equal(proof.length,1); assert.equal(proof[0].evidence_type,"PHOTO");
           const [events] = await pool.query<RowDataPacket[]>("SELECT action FROM claim_audit_events WHERE claim_id = ?", [conversation.claim.id]);
           assert.equal(events.filter(e => e.action === "CONTACT_PHOTO_MATCHED").length,1);
           assert.equal(events.some(e => e.action === "VERIFICATION_ACCEPTED" || e.action === "STAFF_CUSTODY_VERIFIED"),false);
-          const [messages] = await pool.query<RowDataPacket[]>("SELECT m.id FROM chat_messages m JOIN chat_rooms r ON r.id = m.room_id WHERE r.claim_id = ?", [conversation.claim.id]);
-          assert.equal(messages.length,1);
+          const [messages] = await pool.query<RowDataPacket[]>("SELECT m.id,m.message_type,m.media_url FROM chat_messages m JOIN chat_rooms r ON r.id = m.room_id WHERE r.claim_id = ?", [conversation.claim.id]);
+          assert.equal(messages.length,2);
+          assert.equal(messages.filter(row => row.message_type === "IMAGE").length, 1);
+          assert.ok(messages.find(row => row.message_type === "IMAGE")!.media_url.startsWith("/api/claims/"));
+          const imageKey = randomUUID();
+          let imageMessageId: string | null = null;
+          for (let attempt = 0; attempt < 2; attempt++) {
+            const imageForm = new FormData(); imageForm.set("content", "Current condition photo");
+            imageForm.set("file", new Blob([new Uint8Array([0xff,0xd8,0xff,0xe0])], { type: "image/jpeg" }), "chat.jpg");
+            const upload = await fetch(`${base}/claims/${conversation.claim.id}/messages/images`, { method: "POST",
+              headers: { Authorization: `Bearer ${token}`, "Idempotency-Key": imageKey }, body: imageForm });
+            assert.equal(upload.status, 201);
+            const sent = await upload.json() as { id: string; messageType: string; mediaUrl: string };
+            assert.equal(sent.messageType, "IMAGE");
+            if (imageMessageId) assert.equal(sent.id, imageMessageId);
+            imageMessageId = sent.id;
+            const delivery = await fetch(`http://127.0.0.1:${(server.address() as AddressInfo).port}${sent.mediaUrl}`, { headers: { Authorization: `Bearer ${token}` } });
+            assert.equal(delivery.status, 200);
+            assert.equal((await delivery.arrayBuffer()).byteLength, 4);
+          }
           const legacy = randomUUID(), legacyRoom = randomUUID();
           await pool.execute("INSERT INTO claims (id,post_id,claimant_id,status,finder_decision) VALUES (?,?,?,'CONVERSATION_OPEN','ACCEPTED')", [legacy,ids.lost,ids.outsider]);
           await pool.execute("INSERT INTO claim_participants (claim_id,user_id,participant_role,consent_status) VALUES (?,?,'CLAIMANT','ACCEPTED'), (?,?,'FINDER','ACCEPTED')", [legacy,ids.outsider,legacy,ids.owner]);
@@ -302,7 +321,7 @@ test("isolated MySQL custody: authorization, concurrency, lifecycle, proof and n
         assert.equal(context?.foundPostId,source);
         assert.equal(conversation.finderId,ids.finder);
         assert.equal(conversation.claimantId,ids.owner);
-        await httpTest.test("direct LOST verification works without a FOUND source and cannot create forged custody", async () => {
+        await httpTest.test("direct LOST custody uses the consumed Finder photo without inventing a FOUND source", async () => {
           const unlinkedLost = randomUUID();
           await pool.execute("INSERT INTO posts (id,user_id,type,title,title_normalized,description,description_normalized,category_id) VALUES (?,?,'LOST','Keys','keys','Fixture','fixture',?)", [unlinkedLost,ids.owner,categoryId]);
           const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}/api`;
@@ -335,9 +354,15 @@ test("isolated MySQL custody: authorization, concurrency, lifecycle, proof and n
           assert.equal(templates.status,200);
           const transfer = await fetch(`${base}/claims/${direct.claim.id}/verification/decision`,{ method: "POST",
             headers: { ...headers, "Idempotency-Key": randomUUID() }, body: JSON.stringify({ decision: "ESCALATE_TO_CUSTODY", reason: "No physical FOUND source", handoverPointId: point }) });
-          assert.equal(transfer.status,403);
-          const [requests] = await pool.query<RowDataPacket[]>("SELECT id FROM custody_requests WHERE claim_id = ?", [direct.claim.id]);
-          assert.equal(requests.length,0);
+          assert.equal(transfer.status,200);
+          const [requests] = await pool.query<RowDataPacket[]>("SELECT id,post_id,requester_id,warehouse_item_id FROM custody_requests WHERE claim_id = ?", [direct.claim.id]);
+          assert.equal(requests.length,1);
+          assert.equal(requests[0].post_id,null);
+          assert.equal(requests[0].requester_id,ids.finder);
+          assert.equal(requests[0].warehouse_item_id,null);
+          const [source] = await pool.query<RowDataPacket[]>("SELECT post_id,source_found_post_id FROM claims WHERE id = ?", [direct.claim.id]);
+          assert.equal(source[0].post_id,unlinkedLost);
+          assert.equal(source[0].source_found_post_id,null);
           assert.equal((await gatedClaims.getVerification(direct.claim.id,ids.finder)).status,"CONVERSATION_OPEN");
           await pool.execute("UPDATE posts SET visibility_mode = 'PRIVATE_DETAILS', custom_location = 'Private desk' WHERE id = ?", [unlinkedLost]);
           await pool.execute("INSERT INTO post_media (id,post_id,secure_url,public_id,resource_type,format,bytes,media_kind) VALUES (?,?,?,'source','image','jpg',4,'ITEM')", [randomUUID(),unlinkedLost,"private://source-test"]);

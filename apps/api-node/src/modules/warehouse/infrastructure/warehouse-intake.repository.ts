@@ -2,6 +2,7 @@ import type { RowDataPacket } from "mysql2";
 import { sqlExecutor, type SqlExecutor } from "../../../shared/infrastructure/transaction-context.js";
 import type { WarehouseRepository } from "../application/warehouse.repository.port.js";
 import type { WarehouseImageRecord } from "../application/intake-evidence.dto.js";
+import { photoCustodyJoins, photoCustodyScope } from "./photo-custody-source.js";
 
 const iso = (value: unknown) => value instanceof Date ? value.toISOString() : value == null ? null : String(value);
 function image(row: RowDataPacket): WarehouseImageRecord {
@@ -19,9 +20,14 @@ const returnSelect = `SELECT p.id,'RETURN' AS provenance,p.storage_ref,p.format,
   NULL AS captured_at,wi.post_id,NULL AS intake_id,r.id AS return_id FROM warehouse_private_proofs p
   JOIN warehouse_completed_returns r ON r.warehouse_item_id = p.warehouse_item_id AND JSON_CONTAINS(r.proof_ids,JSON_QUOTE(p.id))
   JOIN warehouse_items wi ON wi.id = p.warehouse_item_id AND wi.deleted_at IS NULL`;
+const contactSelect = `SELECT contact_photo.id,'CONTACT_PHOTO' AS provenance,contact_photo.storage_ref,contact_photo.format,
+  photo_user.id AS uploaded_by,contact_photo.consumed_at AS uploaded_at,NULL AS captured_at,c.post_id,NULL AS intake_id,NULL AS return_id
+  FROM claims c ${photoCustodyJoins} JOIN custody_requests cr ON cr.claim_id = c.id AND cr.post_id IS NULL
+    AND cr.room_id = photo_room.id AND cr.requester_id = photo_user.id AND cr.intake_type = 'CUSTODY_TRANSFER'
+  WHERE ${photoCustodyScope}`;
 
 export function createWarehouseIntakeRepository(pool: SqlExecutor): Pick<WarehouseRepository,
-  "openIntakeSession" | "lockIntakeSession" | "listIntakeImages" | "deleteDraftIntakeImage" | "listExpiredIntakeSessions" | "deleteExpiredIntakeSession" | "createIntakeImage" | "completeIntakeSession" | "listItemImages" | "listSourceImages" | "findWarehouseImage"> {
+  "openIntakeSession" | "lockIntakeSession" | "listIntakeImages" | "deleteDraftIntakeImage" | "listExpiredIntakeSessions" | "deleteExpiredIntakeSession" | "createIntakeImage" | "completeIntakeSession" | "listItemImages" | "listSourceImages" | "findWarehouseImage" | "findIntakeImage"> {
   return {
     async openIntakeSession(id, actorId, custodyRequestId, db) {
       await sqlExecutor(db).execute("INSERT INTO warehouse_intake_sessions (id,actor_id,custody_request_id) VALUES (?,?,?) ON DUPLICATE KEY UPDATE id = id", [id,actorId,custodyRequestId]);
@@ -35,6 +41,10 @@ export function createWarehouseIntakeRepository(pool: SqlExecutor): Pick<Warehou
     async listIntakeImages(key, db) {
       const [rows] = await sqlExecutor(db).execute<RowDataPacket[]>(`${intakeSelect} WHERE s.id = ? ORDER BY i.created_at,i.id`, [key]);
       return rows.map(image);
+    },
+    async findIntakeImage(id) {
+      const [rows] = await pool.execute<RowDataPacket[]>(`${intakeSelect} WHERE i.id = ?`, [id]);
+      return rows[0] ? image(rows[0]) : null;
     },
     async deleteDraftIntakeImage(id, db) {
       await sqlExecutor(db).execute(`DELETE i FROM warehouse_intake_images i JOIN warehouse_intake_sessions s ON s.id = i.intake_id
@@ -65,7 +75,8 @@ export function createWarehouseIntakeRepository(pool: SqlExecutor): Pick<Warehou
     async listItemImages(itemId) {
       const [rows] = await pool.execute<RowDataPacket[]>(`${sourceSelect} AND p.id IN (SELECT post_id FROM warehouse_items WHERE id = ? AND deleted_at IS NULL)
         UNION ALL ${intakeSelect} WHERE s.warehouse_item_id = ? AND wi.deleted_at IS NULL
-        UNION ALL ${returnSelect} WHERE wi.id = ? ORDER BY uploaded_at,id`, [itemId,itemId,itemId]);
+        UNION ALL ${returnSelect} WHERE wi.id = ?
+        UNION ALL ${contactSelect} AND cr.status = 'INTAKED' AND cr.warehouse_item_id = ? ORDER BY uploaded_at,id`, [itemId,itemId,itemId,itemId]);
       return rows.map(image);
     },
     async findWarehouseImage(id, provenance) {
@@ -74,6 +85,9 @@ export function createWarehouseIntakeRepository(pool: SqlExecutor): Pick<Warehou
         EXISTS(SELECT 1 FROM custody_requests cr WHERE cr.post_id = p.id)
         OR EXISTS(SELECT 1 FROM warehouse_items wi WHERE wi.post_id = p.id AND wi.deleted_at IS NULL))`;
       else if (provenance === "RETURN") query = `${returnSelect} WHERE p.id = ?`;
+      else if (provenance === "CONTACT_PHOTO") query = `${contactSelect} AND contact_photo.id = ?
+        AND (cr.status IN ('PENDING','ACCEPTED') OR (cr.status = 'INTAKED'
+          AND EXISTS(SELECT 1 FROM warehouse_items wi WHERE wi.id = cr.warehouse_item_id AND wi.deleted_at IS NULL))) LIMIT 1`;
       else query = `${intakeSelect} WHERE i.id = ? AND (s.warehouse_item_id IS NULL OR (wi.id IS NOT NULL AND wi.deleted_at IS NULL))`;
       const [rows] = await pool.execute<RowDataPacket[]>(query, [id]);
       return rows[0] ? image(rows[0]) : null;

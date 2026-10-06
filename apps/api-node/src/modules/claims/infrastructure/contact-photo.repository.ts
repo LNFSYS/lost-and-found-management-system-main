@@ -9,6 +9,10 @@ function check(row: RowDataPacket): ContactPhotoCheck {
 }
 export function createContactPhotoRepository(pool: SqlExecutor): ContactPhotoRepository {
   return {
+    async findById(id) {
+      const [rows] = await pool.execute<RowDataPacket[]>("SELECT * FROM lost_contact_photo_checks WHERE id = ?", [id]);
+      return rows[0] ? check(rows[0]) : null;
+    },
     async revision(postId, db) {
       const [rows] = await (db ? sqlExecutor(db) : pool).execute<RowDataPacket[]>("SELECT updated_at FROM posts WHERE id = ? AND type = 'LOST' AND status IN ('OPEN','MATCHED') AND deleted_at IS NULL" + (db ? " FOR UPDATE" : ""), [postId]);
       return rows[0] ? iso(rows[0].updated_at) : null;
@@ -33,7 +37,7 @@ export function createContactPhotoRepository(pool: SqlExecutor): ContactPhotoRep
     async hasApproval(claimId, actorId, db) {
       const [rows] = await (db ? sqlExecutor(db) : pool).execute<RowDataPacket[]>(`SELECT c.id FROM lost_contact_photo_checks c
         JOIN claims claim ON claim.id = c.claim_id AND claim.post_id = c.post_id
-        WHERE c.claim_id = ? AND c.actor_id = ? AND c.score > 0.6 AND c.consumed_at IS NOT NULL LIMIT 1`, [claimId,actorId]);
+        WHERE c.claim_id = ? AND c.actor_id = ? AND c.score >= 0.5 AND c.consumed_at IS NOT NULL LIMIT 1`, [claimId,actorId]);
       return rows.length > 0;
     },
     async expiredDrafts(db) {

@@ -269,7 +269,7 @@ export interface WarehouseItem {
 }
 export interface WarehouseImage {
   id: string;
-  provenance: "SOURCE_POST" | "INTAKE" | "RETURN";
+  provenance: "SOURCE_POST" | "CONTACT_PHOTO" | "INTAKE" | "RETURN";
   uploaderId: string;
   uploadedAt: string;
   capturedAt: string | null;
@@ -368,6 +368,7 @@ export interface CustodyRequest {
   createdAt: string;
   updatedAt: string;
   post: { id: string; title: string | null; thumbnailId?: string | null } | null;
+  photoSource?: { lostPostId: string; title: string; imageId: string } | null;
 }
 export interface CustodyRequestAuditEntry {
   id: string;
@@ -598,6 +599,7 @@ export interface ClaimMessage {
   clientMessageId: string | null;
   content: string | null;
   messageType: "TEXT" | "IMAGE" | "SYSTEM";
+  mediaUrl?: string | null;
   isRead: boolean;
   readAt: string | null;
   createdAt: string;
@@ -649,6 +651,7 @@ export interface ClaimVerificationState {
     answeredCount: number;
     matchedCount?: number;
     readyForDecision: boolean;
+    photoContactEligible?: boolean;
   };
   questions: Array<{
     id: string;
@@ -880,7 +883,7 @@ export const api = {
   },
   findConversationByPost,
   getClaim: (claimId: string, signal?: AbortSignal) => raw<ClaimRecord>(`/claims/${claimId}`, { signal }),
-  createClaim: (payload: ({ postId: string } | { lostPostId: string; foundPostId: string }) & { description?: string; requestKey?: string; contactCheckId?: string }) => {
+  createClaim: (payload: ({ postId: string } | { lostPostId: string; foundPostId: string }) & { description?: string; requestKey?: string; contactCheckId?: string; sourceFoundPostId?: string }) => {
     const requestKey = payload.requestKey ?? crypto.randomUUID();
     return raw<ClaimRecord & { idempotent: boolean }>("/claims", { method: "POST", headers: { "Idempotency-Key": requestKey }, body: JSON.stringify({ ...payload, requestKey: undefined }) });
   },
@@ -888,7 +891,7 @@ export const api = {
     raw<{ claim: ClaimRecord; message: ClaimMessage }>("/claims/direct-messages", { method: "POST", headers: { "Idempotency-Key": clientMessageId }, body: JSON.stringify({ postId, content, sourceFoundPostId, contactCheckId }) }),
   checkLostContactPhoto: (postId: string, file: File) => {
     const form = new FormData(); form.append("postId",postId); form.append("file",file);
-    return raw<{ checkId: string | null; approved: boolean; score: number; expiresAt: string | null }>("/claims/contact-photo-checks", { method: "POST", body: form });
+    return raw<{ checkId: string | null; approved: boolean; score: number; expiresAt: string | null; questions?: string[] }>("/claims/contact-photo-checks", { method: "POST", body: form });
   },
   attachContactPhoto: (claimId: string, contactCheckId: string) => raw<ClaimRecord>(`/claims/${claimId}/contact-photo`, { method: "POST", body: JSON.stringify({ contactCheckId }) }),
   decideClaim: (claimId: string, decision: "ACCEPT" | "DECLINE" | "REQUEST_MORE_INFO", note: string, idempotencyKey: string = crypto.randomUUID()) => raw<ClaimRecord>(`/claims/${claimId}/decision`, { method: "POST", headers: { "Idempotency-Key": idempotencyKey }, body: JSON.stringify({ decision, note }) }),
@@ -904,6 +907,10 @@ export const api = {
     return raw<ClaimMessagesResponse>(`/claims/${claimId}/messages${suffix}`, { signal });
   },
   sendClaimMessage: (claimId: string, content: string, clientMessageId: string = crypto.randomUUID()) => raw<ClaimMessage>(`/claims/${claimId}/messages`, { method: "POST", headers: { "Idempotency-Key": clientMessageId }, body: JSON.stringify({ content }) }),
+  sendClaimImage: (claimId: string, file: File, content: string, clientMessageId: string) => {
+    const form = new FormData(); form.append("file", file); form.append("content", content);
+    return raw<ClaimMessage>(`/claims/${claimId}/messages/images`, { method: "POST", headers: { "Idempotency-Key": clientMessageId }, body: form });
+  },
   listClaimEvidence: (claimId: string, signal?: AbortSignal) => raw<ClaimEvidenceResponse>(`/claims/${claimId}/evidence`, { signal }),
   uploadClaimEvidence: (claimId: string, file: File, description?: string) => {
     const form = new FormData();

@@ -18,6 +18,7 @@ import { createCustodyRequestRepository } from "../modules/warehouse/infrastruct
 import { createWarehouseRepository } from "../modules/warehouse/infrastructure/warehouse.repository.js";
 import { runInTransaction } from "../shared/infrastructure/config/db.js";
 import { createTransactionRunner, type SqlTransactionRunner } from "../shared/infrastructure/transaction-context.js";
+import { createMediaUploads } from "../shared/infrastructure/media-uploads.js";
 export function createPersistence(database: Pool) {
   const sqlTransaction: SqlTransactionRunner = async (work) => {
     const connection = await database.getConnection();
@@ -25,6 +26,7 @@ export function createPersistence(database: Pool) {
   };
   return {
     transaction: createTransactionRunner(sqlTransaction),
+    mediaUploads: createMediaUploads(database),
     adminAuditRepository: createAdminAuditRepository(database),
     adminCatalogRepository: createAdminCatalogRepository(database),
     adminReportingRepository: createAdminReportingRepository(database),

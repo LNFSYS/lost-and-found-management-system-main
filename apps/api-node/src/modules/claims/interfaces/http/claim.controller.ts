@@ -15,7 +15,7 @@ import {
   sendVerificationQuestionSchema,
   verificationDecisionSchema,
   verificationQuestionParamSchema,
-  uploadEvidenceSchema
+  uploadEvidenceSchema, uploadChatImageSchema
 } from "./claim.validator.js";
 
 export function createClaimController({ claimService }: {
@@ -126,6 +126,12 @@ export function createClaimController({ claimService }: {
 
     async listEvidence(request: Request, response: Response) {
       response.json(await claimService.listEvidence(claimId(request), request.auth!.sub));
+    },
+
+    async uploadChatImage(request: Request, response: Response) {
+      if (!request.file) throw new HttpError(400, "Cần chọn ảnh để gửi");
+      const input = uploadChatImageSchema.parse({ ...request.body, clientMessageId: idempotencyKey(request) ?? request.body?.clientMessageId });
+      response.status(201).json(await claimService.uploadChatImage(claimId(request), request.auth!.sub, input, request.file));
     },
 
     async uploadEvidence(request: Request, response: Response) {

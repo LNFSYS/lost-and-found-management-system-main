@@ -8,11 +8,13 @@ import { verifyClaimConversationSchema } from "../migrations/claim-schema-verifi
 import type { MigrationConnection } from "../migrations/migration-state.js";
 
 for (const legacy of [false, true]) {
-  test(`LOST -> linked FOUND -> custody -> Staff verification -> return (${legacy ? "legacy reversed roles" : "new participants"})`, isolatedJourney, async () => withActorJourney(async f => {
+ for (const photoOnly of [false, true]) {
+  test(`LOST -> ${photoOnly ? "Finder contact photo without FOUND" : "linked FOUND"} -> custody -> Staff verification -> return (${legacy ? "legacy reversed roles" : "new participants"})`, isolatedJourney, async () => withActorJourney(async f => {
     const { pool, p, ids, claims, services, point, image } = f;
     const approval = await f.contactPhotos.analyze(ids.lost, ids.finder, image);
     assert.equal(approval.approved, true);
-    const direct = await claims.createDirectMessage(ids.finder, { postId: ids.lost, sourceFoundPostId: ids.found,
+    if (photoOnly) await pool.execute("DELETE FROM posts WHERE id = ?", [ids.found]);
+    const direct = await claims.createDirectMessage(ids.finder, { postId: ids.lost, ...(photoOnly ? {} : { sourceFoundPostId: ids.found }),
       contactCheckId: approval.checkId!, content: "I found these keys", clientMessageId: randomUUID() });
     const claimId = direct.claim.id;
     if (legacy) {
@@ -26,11 +28,32 @@ for (const legacy of [false, true]) {
     finally { connection.release(); }
     assert.equal((await claims.getClaim(claimId, ids.finder)).finderId, ids.finder);
     assert.equal((await claims.getVerification(claimId, ids.owner)).participantRole, "CLAIMANT");
-    await claims.decideVerification(claimId, ids.finder, { decision: "ESCALATE_TO_CUSTODY", reason: "Transfer to Staff", handoverPointId: point, idempotencyKey: randomUUID() });
+    const decision = { decision: "ESCALATE_TO_CUSTODY" as const, reason: "Transfer to Staff", handoverPointId: point, idempotencyKey: randomUUID() };
+    await claims.decideVerification(claimId, ids.finder, decision);
+    await claims.decideVerification(claimId, ids.finder, decision);
     const [requests] = await pool.query<RowDataPacket[]>("SELECT id FROM custody_requests WHERE claim_id = ?", [claimId]);
     const requestId = String(requests[0]!.id);
+    assert.equal(requests.length, 1);
+    if (photoOnly) {
+      const context = await services.custodyRequestService.getIntakeContext(requestId, ids.staff);
+      assert.equal(context.request.postId, null);
+      assert.equal(context.post.finderUserId, ids.finder);
+      assert.equal(context.images[0]!.provenance, "CONTACT_PHOTO");
+      assert.equal(context.images[0]!.id, approval.checkId);
+      assert.equal("storageRef" in context.images[0]!, false);
+      await services.warehouseService.getImage(approval.checkId!, "CONTACT_PHOTO", ids.staff);
+      await assert.rejects(services.warehouseService.getImage(approval.checkId!, "CONTACT_PHOTO", ids.outsider));
+      const [notifications] = await pool.query<RowDataPacket[]>("SELECT user_id FROM notifications WHERE entity_id IN (?,?)", [requestId,claimId]);
+      assert.ok(notifications.some(row => row.user_id === ids.owner));
+    }
     const receipt = await services.custodyRequestService.confirmIntake(requestId, await f.evidence(requestId), ids.staff);
     const itemId = receipt!.warehouseItemId!;
+    if (photoOnly) {
+      const item = await p.warehouseRepository.findItemById(itemId);
+      assert.equal(item!.postId, null);
+      assert.equal(item!.finder.userId, ids.finder);
+      assert.ok((await services.warehouseService.listImages(itemId, ids.staff)).images.some(row => row.id === approval.checkId && row.provenance === "CONTACT_PHOTO"));
+    }
     const review = await services.warehouseService.returnClaimReviews(itemId, ids.staff);
     assert.deepEqual(review.claims.map(c => [c.claimId,c.recipientId,c.verified]), [[claimId,ids.owner,false]]);
     const proof = await services.warehouseService.uploadProof(itemId, image, ids.staff);
@@ -67,7 +90,41 @@ for (const legacy of [false, true]) {
       assert.deepEqual(participants.map(cp => [cp.user_id,cp.participant_role]), [[ids.owner,"CLAIMANT"],[ids.finder,"FINDER"]]);
     }
   }));
+ }
 }
+
+test("photo custody requires the consumed Finder image, room consent and strict score; generic custody cannot forge the photo route", isolatedJourney, async () => withActorJourney(async f => {
+  const { ids, pool, claims, services } = f;
+  const approval = await f.contactPhotos.analyze(ids.lost, ids.finder, f.image);
+  const direct = await claims.createDirectMessage(ids.finder, { postId: ids.lost, contactCheckId: approval.checkId!, content: "Found your keys", clientMessageId: randomUUID() });
+  const decision = { decision: "ESCALATE_TO_CUSTODY" as const, reason: "Please receive these keys", handoverPointId: f.point, idempotencyKey: randomUUID() };
+  await assert.rejects(claims.decideVerification(direct.claim.id, ids.owner, decision));
+  await assert.rejects(services.warehouseService.getImage(approval.checkId!, "CONTACT_PHOTO", ids.staff));
+  await assert.rejects(services.custodyRequestService.createRequest({ intakeType: "CUSTODY_TRANSFER", claimId: direct.claim.id, roomId: direct.claim.room!.id, handoverPointId: f.point }, ids.finder));
+  await pool.execute("UPDATE lost_contact_photo_checks SET score = 0.49999 WHERE id = ?", [approval.checkId]);
+  await assert.rejects(claims.decideVerification(direct.claim.id, ids.finder, decision));
+  await pool.execute("UPDATE lost_contact_photo_checks SET score = 0.5 WHERE id = ?", [approval.checkId]);
+  await pool.execute("UPDATE claim_participants SET consent_status = 'DECLINED' WHERE claim_id = ? AND user_id = ?", [direct.claim.id,ids.owner]);
+  await assert.rejects(claims.decideVerification(direct.claim.id, ids.finder, decision));
+  await pool.execute("UPDATE claim_participants SET consent_status = 'ACCEPTED' WHERE claim_id = ? AND user_id = ?", [direct.claim.id,ids.owner]);
+  await pool.execute("UPDATE lost_contact_photo_checks SET actor_id = ? WHERE id = ?", [ids.outsider,approval.checkId]);
+  await assert.rejects(claims.decideVerification(direct.claim.id, ids.finder, decision));
+  await pool.execute("UPDATE lost_contact_photo_checks SET actor_id = ?, expires_at = DATE_SUB(UTC_TIMESTAMP(),INTERVAL 1 HOUR) WHERE id = ?", [ids.finder,approval.checkId]);
+  await claims.decideVerification(direct.claim.id, ids.finder, decision);
+  const [rows] = await pool.query<RowDataPacket[]>("SELECT id FROM custody_requests WHERE claim_id = ?", [direct.claim.id]);
+  const requestId = String(rows[0]!.id);
+  await services.custodyRequestService.cancelRequest(requestId, { reason: "Cancelled before physical receipt" }, ids.finder);
+  await assert.rejects(services.warehouseService.getImage(approval.checkId!, "CONTACT_PHOTO", ids.staff));
+  await claims.decideVerification(direct.claim.id, ids.finder, { ...decision, idempotencyKey: randomUUID() });
+  const [retry] = await pool.query<RowDataPacket[]>("SELECT id FROM custody_requests WHERE claim_id = ? AND status = 'PENDING'", [direct.claim.id]);
+  const nextId = String(retry[0]!.id);
+  const evidence = await f.evidence(nextId);
+  await services.custodyRequestService.confirmIntake(nextId, evidence, ids.staff);
+  await services.custodyRequestService.confirmIntake(nextId, evidence, ids.staff);
+  await assert.rejects(claims.decideVerification(direct.claim.id, ids.finder, { ...decision, idempotencyKey: randomUUID() }));
+  const [items] = await pool.query<RowDataPacket[]>("SELECT id FROM warehouse_items WHERE post_id IS NULL AND finder_user_id = ?", [ids.finder]);
+  assert.equal(items.length, 1);
+}));
 
 test("direct LOST claim persists ownership roles while preserving requester idempotency and withdrawal", isolatedJourney, async () => withActorJourney(async f => {
   const approval = await f.contactPhotos.analyze(f.ids.lost, f.ids.finder, f.image);
@@ -86,4 +143,52 @@ test("direct LOST claim persists ownership roles while preserving requester idem
     await connection.execute("DELETE FROM claim_participants WHERE claim_id = ? AND user_id = ?", [created.id,f.ids.owner]);
     await assert.rejects(verifyClaimConversationSchema(connection as unknown as MigrationConnection), /participant backfill is incomplete/);
   } finally { connection.release(); }
+}));
+
+test("50 percent opens the real room, posts its photo once and permits a communication-only meetup", isolatedJourney, async () => withActorJourney(async f => {
+  const { ids, claims, pool, p, services } = f;
+  const check = await f.contactPhotos.analyze(ids.lost, ids.finder, f.image);
+  await pool.execute("UPDATE lost_contact_photo_checks SET score = 0.5 WHERE id = ?", [check.checkId]);
+  const request = { postId: ids.lost, contactCheckId: check.checkId!, sourceFoundPostId: ids.found, requestKey: randomUUID() };
+  const created = await claims.createClaim(ids.finder, request);
+  assert.equal((await claims.createClaim(ids.finder, request)).id, created.id);
+  const roomId = created.room!.id;
+  const initial = await p.claimRepository.listMessages(roomId, { limit: 100 });
+  assert.equal(initial.items.length, 1); assert.equal(initial.items[0]!.messageType, "IMAGE");
+  assert.ok(initial.items[0]!.mediaUrl!.startsWith(`/api/claims/${created.id}/evidence/`));
+  const verification = await claims.getVerification(created.id, ids.finder);
+  assert.equal(verification.policy.answeredCount, 0);
+  assert.equal(verification.policy.readyForDecision, true);
+  assert.equal(verification.policy.photoContactEligible, true);
+  const decision = { decision: "VERIFY_FOR_MEETUP" as const, reason: "Compare the item in person", idempotencyKey: randomUUID() };
+  await assert.rejects(claims.decideVerification(created.id, ids.owner, decision));
+  await claims.decideVerification(created.id, ids.finder, decision);
+  const [audit] = await pool.query<RowDataPacket[]>("SELECT metadata_json FROM claim_audit_events WHERE claim_id = ? AND action = 'VERIFICATION_ACCEPTED'", [created.id]);
+  assert.equal(audit[0]!.metadata_json.communicationOnly, true);
+  assert.equal(await p.transaction(db => p.warehouseRepository.verifiedRecipient(created.id, ids.found, ids.owner, db, undefined)), false);
+
+  const transfer = await services.custodyRequestService.createRequest({ postId: ids.found, claimId: created.id, roomId,
+    handoverPointId: f.point, reason: "Receive the physical item", idempotencyKey: randomUUID() }, ids.finder);
+  const receipt = await services.custodyRequestService.confirmIntake(transfer.request.id, await f.evidence(transfer.request.id), ids.staff);
+  assert.equal((await services.warehouseService.returnRecipients(receipt!.warehouseItemId!, ids.staff)).recipients.length, 0);
+}));
+
+test("chat images are private, idempotent and available to both consented participants, never outsiders", isolatedJourney, async () => withActorJourney(async f => {
+  const check = await f.contactPhotos.analyze(f.ids.lost, f.ids.finder, f.image);
+  const created = await f.claims.createClaim(f.ids.finder, { postId: f.ids.lost, contactCheckId: check.checkId!, requestKey: randomUUID() });
+  const input = { content: "Current item photo", clientMessageId: randomUUID() };
+  const sent = await f.claims.uploadChatImage(created.id, f.ids.finder, input, f.image);
+  assert.equal(sent.messageType, "IMAGE");
+  assert.equal((await f.claims.uploadChatImage(created.id, f.ids.finder, input, f.image)).id, sent.id);
+  const evidenceId = sent.mediaUrl!.split("/").at(-1)!;
+  assert.deepEqual((await f.claims.getEvidenceFile(created.id, evidenceId, f.ids.owner)).body, f.image.buffer);
+  await assert.rejects(f.claims.getEvidenceFile(created.id, evidenceId, f.ids.outsider));
+  await assert.rejects(f.claims.uploadChatImage(created.id, f.ids.outsider, input, f.image));
+  await f.claims.uploadChatImage(created.id, f.ids.owner, { ...input, clientMessageId: randomUUID() }, f.image);
+  await f.claims.uploadEvidence(created.id, f.ids.finder, { description: "Additional private photo" }, f.image);
+  const list = await f.p.claimRepository.listMessages(created.room!.id, { limit: 100 });
+  assert.equal(list.items.filter(message => message.messageType === "IMAGE").length, 3);
+  assert.equal(list.items.filter(message => message.clientMessageId === input.clientMessageId).length, 1);
+  await f.pool.execute("UPDATE claim_participants SET consent_status = 'DECLINED' WHERE claim_id = ? AND user_id = ?", [created.id, f.ids.finder]);
+  await assert.rejects(f.claims.uploadChatImage(created.id, f.ids.finder, { ...input, clientMessageId: randomUUID() }, f.image));
 }));

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { CheckCircle2, ImagePlus, LoaderCircle, ScanLine, Trash2, X } from "lucide-react";
 import { api, ApiError, type CustodyIntakeContext, type CustodyRequest, type WarehouseCatalog, type WarehouseItem } from "../services/api";
 import { WarehouseImageGallery, WarehouseImageView } from "./warehouse-images";
+import { useModalFocus } from "../hooks/use-modal-focus";
 
 const empty = { handoverPointId: "", itemName: "", description: "", categoryId: "", areaId: "", buildingId: "", roomText: "", finderName: "", finderContact: "", conditionNotes: "", accessories: "", receivedQuantity: "1", receivedAt: "" };
 type Analysis = Awaited<ReturnType<typeof api.analyzePostImage>>;
@@ -22,6 +23,8 @@ export function WarehouseIntakeDialog({ request, catalog, onClose, onReceived }:
   const [analysis, setAnalysis] = useState<Analysis | null>(null);
   const [confirmed, setConfirmed] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
+  const modal = useRef<HTMLDivElement>(null);
+  useModalFocus(modal, true, onClose, Boolean(busy));
   useEffect(() => {
     let active = true;
     if (request) void api.getCustodyIntakeContext(request.id).then(value => {
@@ -34,11 +37,6 @@ export function WarehouseIntakeDialog({ request, catalog, onClose, onReceived }:
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [request?.id]);
-  useEffect(() => {
-    const close = (event: KeyboardEvent) => { if (event.key === "Escape" && !busy) onClose(); };
-    window.addEventListener("keydown", close);
-    return () => window.removeEventListener("keydown", close);
-  }, [busy, onClose]);
   function change(field: keyof typeof empty, value: string) {
     setForm(prev => ({ ...prev, [field]: value, ...(field === "areaId" ? { buildingId: "" } : {}) }));
     setConfirmed(false);
@@ -53,7 +51,7 @@ export function WarehouseIntakeDialog({ request, catalog, onClose, onReceived }:
       for (const file of files) {
         if (file.size > 5 * 1024 * 1024) throw new Error("Mỗi ảnh không được vượt quá 5 MB.");
         const result = await api.uploadIntakeImage(file, intakeKey, request?.id);
-        setPhotos(prev => [...prev, { id: result.id, file }]);
+        setPhotos(prev => prev.some(photo => photo.id === result.id) ? prev : [...prev, { id: result.id, file }]);
       }
       setErrors(prev => ({ ...prev, intakeImageIds: "" }));
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Không thể tải ảnh tiếp nhận"); }
@@ -99,7 +97,7 @@ export function WarehouseIntakeDialog({ request, catalog, onClose, onReceived }:
     } finally { setBusy(""); }
   }
   return <div className="custody-modal-overlay" onClick={() => { if (!busy) onClose(); }}>
-    <div className="custody-modal custody-modal--lg intake-dialog" role="dialog" aria-modal="true" aria-labelledby="intake-heading" onClick={event => event.stopPropagation()}>
+    <div ref={modal} tabIndex={-1} className="custody-modal custody-modal--lg intake-dialog" role="dialog" aria-modal="true" aria-labelledby="intake-heading" onClick={event => event.stopPropagation()}>
       <div className="custody-modal__header"><CheckCircle2 size={24} /><h3 id="intake-heading">{request ? "Đối chiếu và tiếp nhận vật phẩm" : "Tiếp nhận trực tiếp (Walk-in / Tại quầy)"}</h3>
         <button type="button" className="close-btn" aria-label="Đóng tiếp nhận" disabled={Boolean(busy)} onClick={onClose}><X size={20} /></button></div>
       {loading && <p role="status">Đang tải thông tin bài gốc...</p>}

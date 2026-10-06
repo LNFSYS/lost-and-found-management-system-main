@@ -1,4 +1,6 @@
 import type { TransactionRunner } from "../../../shared/application/transaction.js";
+import { coordinateUpload, persistUpload, type MediaUploads } from "../../../shared/application/media-upload.js";
+import type { Logger } from "../../../shared/application/logger.port.js";
 import type { PrivateMediaStorage } from "../../../shared/application/media-storage.port.js";
 import type { ImageUpload } from "../../../shared/domain/upload.js";
 import { validateImageUpload } from "../../../shared/domain/media.js";
@@ -27,10 +29,13 @@ function ensureNotFuture(value: Date) {
 }
 
 export interface WarehouseDependencies extends CustodyNotifications {
+  uploads?: MediaUploads;
+  logger?: Logger;
   warehouseRepository: WarehouseRepository;
   custodyRequestRepository: CustodyRequestRepository;
   proofStorage: PrivateMediaStorage;
   sourceMediaStorage?: PrivateMediaStorage;
+  contactMediaStorage?: PrivateMediaStorage;
   withTransaction: TransactionRunner;
   id: () => string;
 }
@@ -165,19 +170,34 @@ export function createWarehouseUseCases(options: WarehouseDependencies) {
         const request = await custodyRequestRepository.findById(input.custodyRequestId);
         if (!request || !["PENDING", "ACCEPTED"].includes(request.status)) throw new AppError("conflict", "Yêu cầu không còn chờ tiếp nhận");
       }
-      const imageId = id();
-      const saved = await proofStorage.save(actorId, imageId, image.extension, file.buffer);
-      try {
-        await withTransaction(async db => {
-          await warehouseRepository.openIntakeSession(input.intakeKey, actorId, input.custodyRequestId ?? null, db);
-          const session = await warehouseRepository.lockIntakeSession(input.intakeKey, db);
-          if (!session || session.actorId !== actorId || session.custodyRequestId !== (input.custodyRequestId ?? null) || session.warehouseItemId || Date.parse(session.createdAt) < Date.now() - 72 * 3600000) throw new AppError("conflict", "Phiên tiếp nhận không còn cho phép thêm ảnh");
-          if ((await warehouseRepository.listIntakeImages(input.intakeKey, db)).length >= 5) throw new AppError("invalid_input", "Chỉ được tải tối đa 5 ảnh tiếp nhận");
-          await warehouseRepository.createIntakeImage({ id: imageId, intakeKey: input.intakeKey, actorId, storageRef: saved.secureUrl,
-            format: image.format, bytes: image.bytes, capturedAt: input.capturedAt ?? null }, db);
-        });
-      } catch (error) { await proofStorage.remove(saved.secureUrl).catch(() => undefined); throw error; }
-      return { id: imageId, url: `/staff/warehouse-images/${imageId}?provenance=INTAKE` };
+      return coordinateUpload(options.uploads, ["INTAKE", actorId, input.intakeKey, input.custodyRequestId ?? null, input.capturedAt?.toISOString() ?? null], file.buffer, id, async operation => {
+        const imageId = operation.id;
+        const read = () => warehouseRepository.findIntakeImage(imageId);
+        if (options.uploads) {
+          const existing = await read();
+          if (existing) {
+            if (existing.uploaderId !== actorId || existing.intakeKey !== input.intakeKey) throw new AppError("conflict", "Upload identity conflict");
+            const session = await (operation.transaction ?? withTransaction)(db => warehouseRepository.lockIntakeSession(input.intakeKey, db));
+            if (!session || session.actorId !== actorId || session.custodyRequestId !== (input.custodyRequestId ?? null)
+              || (!session.warehouseItemId && Date.parse(session.createdAt) < Date.now() - 72 * 3600000)) throw new AppError("conflict", "Phiên tiếp nhận không còn hợp lệ");
+            await proofStorage.resolve(existing.storageRef, existing.format);
+            return { id: imageId, url: `/staff/warehouse-images/${imageId}?provenance=INTAKE` };
+          }
+        }
+        const saved = await proofStorage.save(actorId, imageId, image.extension, file.buffer);
+        await persistUpload({ operation, kind: "INTAKE", logger: options.logger,
+          unreferenced: async () => await read() === null,
+          matches: async () => { const row = await read(); return Boolean(row && row.storageRef === saved.secureUrl && row.uploaderId === actorId && row.intakeKey === input.intakeKey); },
+          remove: () => proofStorage.remove(saved.secureUrl), write: () => (operation.transaction ?? withTransaction)(async db => {
+            await warehouseRepository.openIntakeSession(input.intakeKey, actorId, input.custodyRequestId ?? null, db);
+            const session = await warehouseRepository.lockIntakeSession(input.intakeKey, db);
+            if (!session || session.actorId !== actorId || session.custodyRequestId !== (input.custodyRequestId ?? null) || session.warehouseItemId || Date.parse(session.createdAt) < Date.now() - 72 * 3600000) throw new AppError("conflict", "Phiên tiếp nhận không còn cho phép thêm ảnh");
+            if ((await warehouseRepository.listIntakeImages(input.intakeKey, db)).length >= 5) throw new AppError("invalid_input", "Chỉ được tải tối đa 5 ảnh tiếp nhận");
+            await warehouseRepository.createIntakeImage({ id: imageId, intakeKey: input.intakeKey, actorId, storageRef: saved.secureUrl,
+              format: image.format, bytes: image.bytes, capturedAt: input.capturedAt ?? null }, db);
+          }) });
+        return { id: imageId, url: `/staff/warehouse-images/${imageId}?provenance=INTAKE` };
+      });
     },
 
     async deleteIntakeImage(intakeKey: string, imageId: string, actorId: string) {
@@ -209,7 +229,8 @@ export function createWarehouseUseCases(options: WarehouseDependencies) {
         const session = image.intakeKey ? await withTransaction(db => warehouseRepository.lockIntakeSession(image.intakeKey!, db)) : null;
         if (!session || (!session.warehouseItemId && (session.actorId !== actorId || Date.parse(image.uploadedAt) < Date.now() - 72 * 3600000))) throw new AppError("not_found", "Không tìm thấy ảnh vật phẩm");
       }
-      const storage = provenance === "SOURCE_POST" ? options.sourceMediaStorage : proofStorage;
+      const storage = provenance === "SOURCE_POST" ? options.sourceMediaStorage
+        : provenance === "CONTACT_PHOTO" ? options.contactMediaStorage : proofStorage;
       if (!storage) throw new AppError("unavailable", "Kho ảnh chưa sẵn sàng");
       return storage.resolve(image.storageRef, image.format);
     },
@@ -227,7 +248,7 @@ export function createWarehouseUseCases(options: WarehouseDependencies) {
         if (statusChanged && ["CLAIMED","RETURNED","DISPOSED","DONATED","TRANSFERRED"].includes(nextStatus)) throw new AppError("conflict", "Trạng thái này yêu cầu workflow có xác minh/phê duyệt");
         if (statusChanged && current.status === "CLAIMED") throw new AppError("conflict", "Dùng thao tác giải phóng reservation có lý do");
         if (statusChanged && nextStatus === "EXPIRED") {
-          if (current.legalHold || !current.retentionDeadline || current.retentionDeadline.getTime() > Date.now() || await warehouseRepository.hasBlockingCases(current.postId, connection)) {
+          if (current.legalHold || !current.retentionDeadline || current.retentionDeadline.getTime() > Date.now() || await warehouseRepository.hasBlockingCases(current.postId, connection, undefined, itemId)) {
             throw new AppError("conflict", "Vật phẩm chưa đủ điều kiện quá hạn hoặc có case/hold đang hoạt động");
           }
         }
@@ -290,8 +311,8 @@ export function createWarehouseUseCases(options: WarehouseDependencies) {
         }
         if (current.reservedClaimId && !claimId) throw new AppError("conflict", "Vật phẩm đang được giữ cho một claim; hãy liên kết claim khi trả hàng");
         if (current.reservedClaimId && current.reservedClaimId !== claimId) throw new AppError("conflict", "Vật phẩm đã được giữ cho claim khác");
-        if (claimId && recipientId && !await warehouseRepository.verifiedRecipient(claimId, current.postId, recipientId, connection)) throw new AppError("conflict", "Người nhận chưa được xác minh trong claim của vật phẩm");
-        if (await warehouseRepository.hasBlockingCases(current.postId, connection, claimId ?? undefined)) throw new AppError("conflict", "Vật phẩm còn claim khác hoặc dispute chưa giải quyết");
+        if (claimId && recipientId && !await warehouseRepository.verifiedRecipient(claimId, current.postId, recipientId, connection, itemId)) throw new AppError("conflict", "Người nhận chưa được xác minh trong claim của vật phẩm");
+        if (await warehouseRepository.hasBlockingCases(current.postId, connection, claimId ?? undefined, itemId)) throw new AppError("conflict", "Vật phẩm còn claim khác hoặc dispute chưa giải quyết");
         for (const proofId of proofIds) {
           const proof = await warehouseRepository.findProof(proofId, connection);
           if (!proof || proof.itemId !== itemId || proof.actorId !== actorId || proof.attached) throw new AppError("forbidden", "Proof không thuộc vật phẩm/Staff này");
@@ -328,7 +349,8 @@ export function createWarehouseUseCases(options: WarehouseDependencies) {
           storageCode: current.storageCode,
           note
         }, connection);
-        const request = current.postId ? await custodyRequestRepository.findActiveByPostId(current.postId, (await warehouseRepository.getPostInfoForIntake(current.postId, connection))?.finderUserId ?? "", connection) : null;
+        const request = current.postId ? await custodyRequestRepository.findActiveByPostId(current.postId, (await warehouseRepository.getPostInfoForIntake(current.postId, connection))?.finderUserId ?? "", connection)
+          : await custodyRequestRepository.findByWarehouseItemId(itemId, connection);
         return request ? notifications.record({ id: request.id, postId: current.postId, claimId, requesterId: request.requester.id, event: "RETURNED" }, connection) : [];
       });
       await notifications.publish(deliveries);
@@ -341,15 +363,27 @@ export function createWarehouseUseCases(options: WarehouseDependencies) {
       if (!item || !["RECEIVED","STORED","CLAIMED","EXPIRED"].includes(item.status)) throw new AppError("conflict", "Vật phẩm không thể nhận proof");
       const image = validateImageUpload(file);
       if (image.bytes > 5 * 1024 * 1024) throw new AppError("payload_too_large", "Ảnh tối đa 5MB");
-      const proofId = id();
-      const stored = await proofStorage.save(actorId, proofId, image.extension, file.buffer);
-      try {
-        await warehouseRepository.createProof({ id: proofId, itemId, actorId, storageRef: stored.secureUrl, format: image.format, bytes: image.bytes });
-      } catch (error) {
-        await proofStorage.remove(stored.secureUrl);
-        throw error;
-      }
-      return { id: proofId, url: `/api/staff/warehouse-proofs/${proofId}` };
+      return coordinateUpload(options.uploads, ["PROOF", actorId, itemId], file.buffer, id, async operation => {
+        const proofId = operation.id;
+        if (options.uploads) {
+          const existing = await warehouseRepository.findProof(proofId);
+          if (existing) {
+            if (existing.itemId !== itemId || existing.actorId !== actorId) throw new AppError("conflict", "Upload identity conflict");
+            await proofStorage.resolve(existing.storageRef, existing.format);
+            return { id: proofId, url: `/api/staff/warehouse-proofs/${proofId}` };
+          }
+        }
+        const stored = await proofStorage.save(actorId, proofId, image.extension, file.buffer);
+        await persistUpload({ operation, kind: "PROOF", logger: options.logger,
+          unreferenced: async () => await warehouseRepository.findProof(proofId) === null,
+          matches: async () => { const row = await warehouseRepository.findProof(proofId); return Boolean(row && row.itemId === itemId && row.actorId === actorId && row.storageRef === stored.secureUrl); },
+          remove: () => proofStorage.remove(stored.secureUrl), write: () => (operation.transaction ?? withTransaction)(async db => {
+            const current = await warehouseRepository.lockItemForUpdate(itemId, db);
+            if (!current || !["RECEIVED", "STORED", "CLAIMED", "EXPIRED"].includes(current.status)) throw new AppError("conflict", "Vật phẩm không thể nhận proof");
+            await warehouseRepository.createProof({ id: proofId, itemId, actorId, storageRef: stored.secureUrl, format: image.format, bytes: image.bytes }, db);
+          }) });
+        return { id: proofId, url: `/api/staff/warehouse-proofs/${proofId}` };
+      });
     },
     async getProof(proofId: string, actorId: string) {
       await staff(actorId);
@@ -361,13 +395,13 @@ export function createWarehouseUseCases(options: WarehouseDependencies) {
       await staff(actorId);
       const item = await warehouseRepository.findItemById(itemId);
       if (!item) throw new AppError("not_found", "Không tìm thấy vật phẩm");
-      return { recipients: await warehouseRepository.listVerifiedRecipients(item.postId) };
+      return { recipients: await warehouseRepository.listVerifiedRecipients(item.postId, itemId) };
     },
     async returnClaimReviews(itemId: string, actorId: string) {
       await staff(actorId);
       const item = await warehouseRepository.findItemById(itemId);
       if (!item) throw new AppError("not_found", "Không tìm thấy vật phẩm");
-      return { claims: await warehouseRepository.listReturnClaimReviews(item.postId) };
+      return { claims: await warehouseRepository.listReturnClaimReviews(item.postId, itemId) };
     },
     async verifyCustodyClaim(itemId: string, input: { claimId: string; recipientId: string; verified: boolean; reason: string; }, actorId: string) {
       await staff(actorId);
@@ -375,22 +409,23 @@ export function createWarehouseUseCases(options: WarehouseDependencies) {
       if (!input.verified || reason.length < 10 || reason.length > 1000) throw new AppError("invalid_input", "Cần xác nhận đối chiếu và ghi nội dung xác minh từ 10 đến 1000 ký tự");
       const deliveries = await withTransaction(async db => {
         const item = await warehouseRepository.lockItemForUpdate(itemId, db);
-        if (!item?.postId || item.legalHold || !["RECEIVED", "STORED", "CLAIMED", "EXPIRED"].includes(item.status)) throw new AppError("conflict", "Chỉ xác minh sau khi Staff đã tiếp nhận vật phẩm và không có legal hold");
-        await warehouseRepository.lockPhysicalPost(item.postId, db);
-        const claim = await warehouseRepository.lockReturnClaim(input.claimId, item.postId, db);
+        if (!item || item.legalHold || !["RECEIVED", "STORED", "CLAIMED", "EXPIRED"].includes(item.status)) throw new AppError("conflict", "Chỉ xác minh sau khi Staff đã tiếp nhận vật phẩm và không có legal hold");
+        if (item.postId) await warehouseRepository.lockPhysicalPost(item.postId, db);
+        const claim = await warehouseRepository.lockReturnClaim(input.claimId, item.postId, db, itemId);
         if (!claim || claim.recipientId !== input.recipientId) throw new AppError("conflict", "Claim hoặc người nhận không hợp lệ cho vật phẩm này");
         if (item.reservedClaimId && item.reservedClaimId !== claim.claimId) throw new AppError("conflict", "Vật phẩm đã được giữ cho claim khác");
-        if (await warehouseRepository.hasBlockingCases(item.postId, db, claim.claimId)) throw new AppError("conflict", "Vật phẩm còn claim khác hoặc dispute chưa giải quyết");
+        if (await warehouseRepository.hasBlockingCases(item.postId, db, claim.claimId, itemId)) throw new AppError("conflict", "Vật phẩm còn claim khác hoặc dispute chưa giải quyết");
         if (claim.verified) return [];
         await warehouseRepository.recordStaffVerification({ id: id(), itemId, claimId: claim.claimId, recipientId: claim.recipientId, actorId, fromStatus: claim.status, reason }, db);
         await warehouseRepository.createStorageLog({ id: id(), warehouseItemId: itemId, postId: item.postId, handoverPointId: item.handoverPointId, actorId, action: "CONDITION_UPDATED", fromStatus: item.status, toStatus: item.status, note: `Staff verified claim ${claim.claimId} at intake desk` }, db);
-        const source = await warehouseRepository.getPostInfoForIntake(item.postId, db);
-        const request = source ? await custodyRequestRepository.findActiveByPostId(item.postId, source.finderUserId, db) : null;
+        const source = item.postId ? await warehouseRepository.getPostInfoForIntake(item.postId, db) : null;
+        const request = item.postId ? source ? await custodyRequestRepository.findActiveByPostId(item.postId, source.finderUserId, db) : null
+          : await custodyRequestRepository.findByWarehouseItemId(itemId, db);
         return request ? notifications.record({ id: request.id, postId: item.postId, claimId: claim.claimId, requesterId: request.requester.id, event: `VERIFIED:${claim.claimId}` }, db) : [];
       });
       await notifications.publish(deliveries);
       const item = await warehouseRepository.findItemById(itemId);
-      return { claims: await warehouseRepository.listReturnClaimReviews(item?.postId ?? null) };
+      return { claims: await warehouseRepository.listReturnClaimReviews(item?.postId ?? null, itemId) };
     },
     async reserveItem(itemId: string, claimId: string, recipientId: string, actorId: string) {
       await staff(actorId);
@@ -398,7 +433,7 @@ export function createWarehouseUseCases(options: WarehouseDependencies) {
         const item = await warehouseRepository.lockItemForUpdate(itemId, db);
         if (!item || item.legalHold || !["RECEIVED","STORED"].includes(item.status)) throw new AppError("conflict", "Không thể giữ vật phẩm này");
         if (item.postId) await warehouseRepository.lockPhysicalPost(item.postId, db);
-        if (!await warehouseRepository.verifiedRecipient(claimId, item.postId, recipientId, db)) throw new AppError("conflict", "Chủ sở hữu chưa được xác minh");
+        if (!await warehouseRepository.verifiedRecipient(claimId, item.postId, recipientId, db, itemId)) throw new AppError("conflict", "Chủ sở hữu chưa được xác minh");
         await warehouseRepository.reserve(itemId, claimId, db);
         await warehouseRepository.updateItemState(itemId, { status: "CLAIMED" }, db);
         await warehouseRepository.createStorageLog({ id: id(), warehouseItemId: itemId, postId: item.postId, handoverPointId: item.handoverPointId, actorId, action: "CLAIMED", fromStatus: item.status, toStatus: "CLAIMED", note: `Verified claim ${claimId}` }, db);
@@ -411,7 +446,7 @@ export function createWarehouseUseCases(options: WarehouseDependencies) {
       await withTransaction(async db => {
         const item = await warehouseRepository.lockItemForUpdate(itemId, db);
         if (item?.postId) await warehouseRepository.lockPhysicalPost(item.postId, db);
-        if (!item || item.status !== "CLAIMED" || item.legalHold || await warehouseRepository.hasBlockingCases(item.postId, db) || !item.storageCode) throw new AppError("conflict", "Reservation còn case đang hoạt động hoặc chưa có vị trí lưu kho");
+        if (!item || item.status !== "CLAIMED" || item.legalHold || await warehouseRepository.hasBlockingCases(item.postId, db, undefined, itemId) || !item.storageCode) throw new AppError("conflict", "Reservation còn case đang hoạt động hoặc chưa có vị trí lưu kho");
         await warehouseRepository.reserve(itemId, null, db);
         await warehouseRepository.updateItemState(itemId, { status: "STORED" }, db);
         await warehouseRepository.createStorageLog({ id: id(), warehouseItemId: itemId, postId: item.postId, handoverPointId: item.handoverPointId, actorId, action: "STORED", fromStatus: "CLAIMED", toStatus: "STORED", note: reason.trim() }, db);
@@ -457,7 +492,7 @@ export function createWarehouseUseCases(options: WarehouseDependencies) {
         if (!approval || approval.status !== "APPROVED") throw new AppError("conflict", "Lệnh chưa được phê duyệt");
         const item = await warehouseRepository.lockItemForUpdate(approval.itemId, db);
         if (item?.postId) await warehouseRepository.lockPhysicalPost(item.postId, db);
-        if (!item || !["RECEIVED","STORED","EXPIRED"].includes(item.status) || item.legalHold || !item.retentionDeadline || item.retentionDeadline.getTime() > Date.now() || await warehouseRepository.hasBlockingCases(item.postId, db)) throw new AppError("conflict", "Không đủ điều kiện xử lý: retention/claim/appointment/dispute/legal hold");
+        if (!item || !["RECEIVED","STORED","EXPIRED"].includes(item.status) || item.legalHold || !item.retentionDeadline || item.retentionDeadline.getTime() > Date.now() || await warehouseRepository.hasBlockingCases(item.postId, db, undefined, approval.itemId)) throw new AppError("conflict", "Không đủ điều kiện xử lý: retention/claim/appointment/dispute/legal hold");
         if (!proofIds.length || proofIds.length > 5 || new Set(proofIds).size !== proofIds.length) throw new AppError("bad_request", "Cần chứng từ xử lý riêng tư");
         for (const proofId of proofIds) {
           const proof = await warehouseRepository.findProof(proofId, db);

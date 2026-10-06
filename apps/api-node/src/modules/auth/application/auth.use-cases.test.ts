@@ -107,7 +107,7 @@ test("avatar upload stores Cloudinary metadata and cleans up the previous asset"
   assert.deepEqual(updates[0], { publicId: "lnfs/avatars/new", assetId: "asset-new", version: 7, format: "jpg", resourceType: "image", size: 4 });
 });
 
-test("avatar upload cleans up a new Cloudinary asset when database update fails", async () => {
+test("avatar upload retains a new Cloudinary asset when database outcome is unknown", async () => {
   const destroyed: string[] = [];
   const service = createAuthService({
     avatarStorage: {
@@ -124,5 +124,5 @@ test("avatar upload cleans up a new Cloudinary asset when database update fails"
   });
 
   await assert.rejects(() => service.updateAvatar("user-id", avatarFile()), /database unavailable/);
-  assert.deepEqual(destroyed, ["lnfs/avatars/orphan"]);
+  assert.deepEqual(destroyed, []);
 });

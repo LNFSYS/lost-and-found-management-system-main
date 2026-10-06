@@ -1,5 +1,6 @@
 export type CreateClaimInput = {
   contactCheckId?: string | undefined;
+  sourceFoundPostId?: string | undefined;
   postId?: string | undefined;
   lostPostId?: string | undefined;
   foundPostId?: string | undefined;

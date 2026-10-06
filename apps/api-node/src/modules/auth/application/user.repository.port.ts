@@ -47,7 +47,7 @@ export interface UserRepository {
     format: string;
     resourceType: "image";
     size: number;
-  }): Promise<(User & {
+  }, connection?: TransactionContext): Promise<(User & {
     sessionVersion: number;
   }) | null>;
   getActivitySummary(userId: string): Promise<ActivitySummary>;

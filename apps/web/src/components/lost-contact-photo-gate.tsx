@@ -3,7 +3,7 @@ import { CheckCircle2, ImagePlus, LoaderCircle, ScanLine } from "lucide-react";
 import { api } from "../services/api";
 import "./lost-contact-photo.css";
 
-export function LostContactPhotoGate({ postId, onReady }: { postId: string; onReady: (checkId: string | null) => void }) {
+export function LostContactPhotoGate({ postId, onReady, disabled = false }: { postId: string; onReady: (checkId: string | null, questions?: string[]) => void; disabled?: boolean }) {
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState("");
   const [busy, setBusy] = useState(false);
@@ -29,7 +29,7 @@ export function LostContactPhotoGate({ postId, onReady }: { postId: string; onRe
     return () => clearTimeout(timer);
   }, [result, onReady]);
   async function analyze() {
-    if (!file || busy) return;
+    if (!file || busy || disabled) return;
     const requestGeneration = ++generation.current;
     const targetPost = postId;
     setBusy(true); setError(""); setResult(null); onReady(null);
@@ -38,8 +38,8 @@ export function LostContactPhotoGate({ postId, onReady }: { postId: string; onRe
       const value = await api.checkLostContactPhoto(targetPost,file);
       if (requestGeneration !== generation.current || currentPost.current !== targetPost) return;
       setResult(value);
-      if (value.approved && value.checkId) onReady(value.checkId);
-      else setError("Ảnh chưa đạt mức tương đồng trên 60% hoặc chưa đủ rõ. Cần đối chiếu lại vật phẩm.");
+      if (value.approved && value.checkId) onReady(value.checkId, value.questions);
+      else setError("Ảnh chưa đạt mức tương đồng từ 50% hoặc chưa đủ rõ. Cần đối chiếu lại vật phẩm.");
     } catch (reason) { if (requestGeneration === generation.current) setError(reason instanceof Error ? reason.message : "Không thể kiểm tra ảnh lúc này"); }
     finally { if (requestGeneration === generation.current) setBusy(false); }
   }
@@ -51,8 +51,8 @@ export function LostContactPhotoGate({ postId, onReady }: { postId: string; onRe
       const selected = event.currentTarget.files?.[0] ?? null; event.currentTarget.value = "";
       generation.current++; setBusy(false); setFile(selected); setResult(null); setError(""); onReady(null);
     }} />
-    <div className="contact-photo-actions"><button type="button" className="secondary-button" disabled={busy} onClick={() => input.current?.click()}><ImagePlus size={18} />{file ? "Đổi ảnh" : "Chọn ảnh"}</button>
-      <button type="button" className="primary-button" disabled={busy || !file} onClick={() => void analyze()}>{busy ? <LoaderCircle size={18} className="spin-icon" /> : <ScanLine size={18} />}{busy ? "Đang phân tích..." : "Kiểm tra ảnh"}</button></div>
+    <div className="contact-photo-actions"><button type="button" className="secondary-button" disabled={busy || disabled} onClick={() => input.current?.click()}><ImagePlus size={18} />{file ? "Đổi ảnh" : "Chọn ảnh"}</button>
+      <button type="button" className="primary-button" disabled={busy || disabled || !file} onClick={() => void analyze()}>{busy ? <LoaderCircle size={18} className="spin-icon" /> : <ScanLine size={18} />}{busy ? "Đang phân tích..." : "Kiểm tra ảnh"}</button></div>
     {result && <p className={result.approved ? "contact-photo-approved" : "field-error"} role="status">{result.approved && <CheckCircle2 size={18} />}Tương đồng {new Intl.NumberFormat("vi-VN", { style: "percent", maximumFractionDigits: 2 }).format(result.score)}{result.approved ? " · Đủ điều kiện trao đổi" : " · Chưa đủ điều kiện"}</p>}
     {error && <p className="field-error" role="alert">{error}</p>}
   </section>;
