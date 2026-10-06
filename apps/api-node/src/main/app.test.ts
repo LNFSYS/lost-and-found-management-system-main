@@ -84,6 +84,30 @@ async function withServer(checkReadiness: () => Promise<void>, run: (baseUrl: st
   }
 }
 
+test("IPv4-mapped IPv6 trust subnets cannot spoof an IPv4 client address", async () => {
+  const app = createApp({ services: testServices });
+  assert.equal(app.get("trust proxy"), false);
+  app.get("/proxy-address-regression", (request, response) => response.json({ ip: request.ip }));
+  const server = app.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  const address = server.address() as AddressInfo;
+  const headers = { "x-forwarded-for": "198.51.100.42" };
+  try {
+    for (const subnet of ["::ffff:10.0.0.0/8", "::/1"]) {
+      app.set("trust proxy", subnet);
+      const response = await fetch(`http://127.0.0.1:${address.port}/proxy-address-regression`, { headers });
+      assert.equal(response.status, 200);
+      assert.deepEqual(await response.json(), { ip: "127.0.0.1" });
+    }
+    app.set("trust proxy", "127.0.0.0/8");
+    const response = await fetch(`http://127.0.0.1:${address.port}/proxy-address-regression`, { headers });
+    assert.deepEqual(await response.json(), { ip: "198.51.100.42" });
+  } finally {
+    server.close();
+    await once(server, "close");
+  }
+});
+
 test("malformed JSON returns a JSON 400 response", async () => {
   await withServer(async () => undefined, async (baseUrl) => {
     const response = await fetch(`${baseUrl}/api/auth/login`, {
