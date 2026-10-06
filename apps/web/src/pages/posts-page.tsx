@@ -1,4 +1,4 @@
-import { ArrowLeft, ArrowRight, CalendarClock, Files, ImageOff, LockKeyhole, MapPin, MessageCircle, Plus, ScanSearch, Search, SlidersHorizontal } from "lucide-react";
+import { ArrowLeft, ArrowRight, CalendarClock, Files, History, ImageOff, LockKeyhole, MapPin, MessageCircle, Plus, ScanSearch, Search, SlidersHorizontal } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useNetworkStatus } from "../hooks/use-network-status";
@@ -56,7 +56,7 @@ export function PostImage({ post, detail = false }: { post: PostSummary; detail?
   </div>;
 }
 
-export function PostCard({ post }: { post: PostSummary }) {
+export function PostCard({ post, showJourney=false }: { post: PostSummary; showJourney?:boolean }) {
   const navigate = useNavigate();
   const canClaim = !post.canEdit && ["OPEN", "MATCHED"].includes(post.status);
 
@@ -89,6 +89,7 @@ export function PostCard({ post }: { post: PostSummary }) {
         <ArrowRight />
       </Link>}
       {canClaim && <button className="post-claim-button post-claim-button--card" type="button" onClick={claimAndChat}><MessageCircle /> Nhắn tin với người đăng</button>}
+      {showJourney&&<Link className="post-journey-link" to={`/posts/${post.id}/journey`}><History size={18}/> Xem hành trình vật phẩm</Link>}
       <footer>
         <div className="post-owner"><span>{initials(post.owner.fullName)}</span><strong>{post.owner.fullName}</strong></div>
         <Link className="post-detail-link" to={`/posts/${post.id}`}>Xem chi tiết <ArrowRight /></Link>
@@ -174,7 +175,7 @@ export function PostsPage({ initialTab = "explore" }: { initialTab?: BoardTab })
     {loading ? <div className="post-grid" aria-label="Đang tải bài đăng">{Array.from({ length: 6 }, (_, index) => <div className="post-skeleton" key={index}><i /><span /><span /><span /></div>)}</div>
       : error ? <div className="posts-state is-error"><Files /><h2>Không tải được bài đăng</h2><p>{error}</p><button onClick={() => setFilters((current) => ({ ...current }))}>Thử lại</button></div>
       : !result?.items.length ? <div className="posts-state"><Search /><h2>{tab === "mine" ? "Bạn chưa có bài đăng phù hợp" : "Không tìm thấy bài đăng phù hợp"}</h2><p>{tab === "mine" ? "Tạo một báo cáo LOST hoặc FOUND để bắt đầu theo dõi hành trình vật phẩm." : "Hãy đổi từ khóa hoặc bộ lọc để xem thêm kết quả."}</p>{tab === "mine" && <Link to="/home#two-sides">Tạo bài đầu tiên</Link>}</div>
-      : <div className="post-grid">{result.items.map((post) => <PostCard post={post} key={post.id} />)}</div>}
+      : <div className="post-grid">{result.items.map((post) => <PostCard post={post} showJourney={tab==="mine"} key={post.id} />)}</div>}
 
     {!loading && !error && totalPages > 1 && <nav className="posts-pagination" aria-label="Phân trang bài đăng"><button disabled={(filters.page ?? 1) <= 1} onClick={() => setFilters((current) => ({ ...current, page: (current.page ?? 1) - 1 }))}><ArrowLeft /> Trước</button><span>Trang <strong>{filters.page ?? 1}</strong> / {totalPages}</span><button disabled={(filters.page ?? 1) >= totalPages} onClick={() => setFilters((current) => ({ ...current, page: (current.page ?? 1) + 1 }))}>Sau <ArrowRight /></button></nav>}
   </section>;

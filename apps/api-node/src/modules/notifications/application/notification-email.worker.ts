@@ -57,16 +57,18 @@ function eventCopy(eventType: NotificationEmailEvent, count: number) {
 }
 
 function genericContent(count: number, entityId: string | null, frontendUrl: string, eventType: NotificationEmailEvent, summaryLink = false, entityType?: string | null) {
-  // Only claim/chat rows have a guaranteed participant-scoped detail route. Other
-  // categories use the authenticated notification center instead of guessing a
-  // claim URL from an appointment/custody/feedback entity id.
+  // Only explicitly supported entities get an authenticated detail link.
   const useSummaryLink = summaryLink || !["CHAT", "CLAIM"].includes(eventType);
   const deepLink = entityType === "CUSTODY_REQUEST" && entityId && !summaryLink
     ? new URL(`/notifications?custodyRequestId=${encodeURIComponent(entityId)}`, frontendUrl).toString()
+    : ["APPOINTMENT","APPOINTMENT_REMINDER"].includes(entityType ?? "") && entityId && !summaryLink
+    ? new URL(`/appointments/${encodeURIComponent(entityId)}`, frontendUrl).toString()
     : useSummaryLink
     ? new URL("/notifications", frontendUrl).toString()
     : entityId ? new URL(`/claims/${entityId}`, frontendUrl).toString() : new URL("/home", frontendUrl).toString();
-  const copy = eventCopy(eventType, count);
+  const copy = entityType === "APPOINTMENT_REMINDER"
+    ? { badge:"NHẮC LỊCH HẸN",title:"Sắp đến lịch hẹn trả đồ của bạn",description:"Mở lịch hẹn để kiểm tra giờ và điểm gặp đã được hai bên chấp nhận." }
+    : eventCopy(eventType, count);
   const safeDeepLink = escapeHtml(deepLink);
   return {
     subject: `${copy.badge[0] + copy.badge.slice(1).toLowerCase()} | FPTU Lost & Found`,

@@ -716,6 +716,9 @@ interface SessionResponse { user: CurrentUser; accessToken: string; accessTokenE
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3001/api";
 let accessToken: string | null = null;
 let refreshInFlight: Promise<SessionResponse | null> | null = null;
+let sessionGeneration = 0;
+let refreshController: AbortController | null = null;
+let refreshFailure: ApiError | null = null;
 
 function isMutation(init: RequestInit) {
   const method = (init.method ?? "GET").toUpperCase();
@@ -735,13 +738,32 @@ function normalizeSession(session: SessionResponse): SessionResponse {
 }
 
 export class ApiError extends Error {
-  constructor(message: string, public readonly status: number, public readonly fieldErrors: Record<string, string[]> = {}) {
+  readonly retryAt: number;
+  constructor(message: string, public readonly status: number, public readonly fieldErrors: Record<string, string[]> = {}, retryAfterMs = 0) {
     super(message);
     this.name = "ApiError";
+    this.retryAt = Date.now() + Math.max(0, retryAfterMs);
   }
 }
 
+function retryAfterMs(value: string | null) {
+  if (!value) return 0;
+  if (/^\d+$/.test(value)) return Number(value) * 1000;
+  const deadline = Date.parse(value);
+  return Number.isFinite(deadline) ? Math.max(0, deadline - Date.now()) : 0;
+}
+
+function invalidateSession() {
+  sessionGeneration++;
+  refreshController?.abort();
+  refreshController = null;
+  refreshInFlight = null;
+  refreshFailure = null;
+  accessToken = null;
+}
+
 async function raw<T>(path: string, init: RequestInit = {}, retry = true): Promise<T> {
+  const generation = sessionGeneration;
   if (typeof navigator !== "undefined" && !navigator.onLine && isMutation(init)) {
     throw new Error("Bạn đang offline. Thao tác này chưa được gửi và cần kết nối mạng để thực hiện.");
   }
@@ -759,7 +781,9 @@ async function raw<T>(path: string, init: RequestInit = {}, retry = true): Promi
     window.dispatchEvent(new CustomEvent("lnfs:stale-data", { detail: { path } }));
   }
   if (response.status === 401 && retry && path !== "/auth/refresh") {
+    if (generation !== sessionGeneration) throw new Error("Phiên đăng nhập đã thay đổi. Yêu cầu cũ không được gửi lại.");
     const session = await refreshSession();
+    if (generation !== sessionGeneration) throw new Error("Phiên đăng nhập đã thay đổi. Yêu cầu cũ không được gửi lại.");
     if (session) return raw<T>(path, init, false);
   }
   if (!response.ok) {
@@ -770,23 +794,54 @@ async function raw<T>(path: string, init: RequestInit = {}, retry = true): Promi
         if (Array.isArray(messages)) fieldErrors[field] = messages.filter((message): message is string => typeof message === "string");
       }
     }
-    throw new ApiError(payload.message ?? "Yêu cầu không thành công", response.status, fieldErrors);
+    throw new ApiError(payload.message ?? "Yêu cầu không thành công", response.status, fieldErrors, retryAfterMs(response.headers.get("retry-after")));
   }
   if (response.status === 204) return undefined as T;
   return response.json() as Promise<T>;
 }
 
 export async function refreshSession() {
+  if (refreshFailure && refreshFailure.retryAt > Date.now()) throw refreshFailure;
   if (!refreshInFlight) {
-    refreshInFlight = raw<SessionResponse>("/auth/refresh", { method: "POST" }, false)
-      .then((session) => { const normalized = normalizeSession(session); accessToken = normalized.accessToken; return normalized; })
-      .catch(() => { accessToken = null; return null; })
-      .finally(() => { refreshInFlight = null; });
+    const generation = sessionGeneration;
+    const controller = new AbortController();
+    refreshController = controller;
+    const timeout = window.setTimeout(() => controller.abort(), 30_000);
+    const request: Promise<SessionResponse | null> = raw<SessionResponse>("/auth/refresh", { method: "POST", signal: controller.signal }, false)
+      .then((session) => {
+        if (generation !== sessionGeneration) return null;
+        const normalized = normalizeSession(session);
+        accessToken = normalized.accessToken;
+        refreshFailure = null;
+        return normalized;
+      })
+      .catch((reason: unknown) => {
+        if (generation !== sessionGeneration) return null;
+        if (reason instanceof ApiError && (reason.status === 401 || reason.status === 403)) {
+          accessToken = null;
+          refreshFailure = null;
+          window.dispatchEvent(new Event("lnfs:session-ended"));
+          return null;
+        }
+        const delay = reason instanceof ApiError ? Math.max(2000, reason.retryAt - Date.now()) : 2000;
+        refreshFailure = new ApiError(reason instanceof Error && reason.name !== "AbortError" ? reason.message : "Chưa thể khôi phục phiên. Vui lòng thử lại.", reason instanceof ApiError ? reason.status : 503, {}, delay);
+        throw refreshFailure;
+      })
+      .finally(() => {
+        window.clearTimeout(timeout);
+        if (refreshInFlight === request) { refreshInFlight = null; refreshController = null; }
+      });
+    refreshInFlight = request;
   }
   return refreshInFlight;
 }
 
-function storeSession(session: SessionResponse) { const normalized = normalizeSession(session); accessToken = normalized.accessToken; return normalized.user; }
+function storeSession(session: SessionResponse, generation: number) {
+  if (generation !== sessionGeneration) throw new Error("Yêu cầu đăng nhập đã được thay thế.");
+  const normalized = normalizeSession(session);
+  accessToken = normalized.accessToken;
+  return normalized.user;
+}
 
 function queryString(filters: object) {
   const query = new URLSearchParams();
@@ -815,6 +870,7 @@ async function findConversationByPost(postId: string) {
 }
 
 async function mediaBlob(path: string, retry = true, errorMessage = "Khong the tai anh"): Promise<Blob> {
+  const generation = sessionGeneration;
   const headers = new Headers();
   if (accessToken) headers.set("authorization", `Bearer ${accessToken}`);
   let response: Response;
@@ -823,20 +879,40 @@ async function mediaBlob(path: string, retry = true, errorMessage = "Khong the t
   } catch {
     throw new Error(errorMessage);
   }
-  if (response.status === 401 && retry && await refreshSession()) return mediaBlob(path, false, errorMessage);
+  if (response.status === 401 && retry && generation === sessionGeneration) {
+    const session = await refreshSession();
+    if (session && generation === sessionGeneration) return mediaBlob(path, false, errorMessage);
+  }
   if (!response.ok) throw new Error(errorMessage);
   return response.blob();
 }
 
 export const api = {
+  listAppointments: (filters:{claimId?:string;page?:number}={},signal?:AbortSignal) => raw<{results:import("./workflow-types").Appointment[];total:number}>(`/appointments${queryString(filters)}`,{signal}),
+  getAppointment: (id:string,signal?:AbortSignal) => raw<import("./workflow-types").Appointment>(`/appointments/${id}`,{signal}),
+  createAppointment: (payload:{claimId:string;proposedAt:string;handoverPointId:string;requestKey:string}) => raw<import("./workflow-types").Appointment>("/appointments",{method:"POST",body:JSON.stringify(payload)}),
+  actOnAppointment: (id:string,payload:{action:import("./workflow-types").AppointmentAction;version:number;requestKey:string;physicallyChecked?:boolean;reason?:string}) => raw<import("./workflow-types").Appointment>(`/appointments/${id}/actions`,{method:"POST",body:JSON.stringify(payload)}),
+  getItemJourney: (id:string,filters:{page?:number;asOf?:string}={},signal?:AbortSignal) => raw<import("./workflow-types").Journey>(`/posts/${id}/journey${queryString(filters)}`,{signal}),
+  listAudit: (filters:import("./workflow-types").AuditFilter={},signal?:AbortSignal) => raw<{results:import("./workflow-types").ActivityEvent[];total:number}>(`/admin/audit${queryString(filters)}`,{signal}),
+  exportAudit: (filters:import("./workflow-types").AuditFilter,format:"csv"|"json") => mediaBlob(`/admin/audit/export${queryString({...filters,format})}`,true,"Không thể xuất nhật ký. Hãy kiểm tra quyền và giới hạn 5.000 sự kiện."),
   requestRegistrationOtp: (email: string) => raw<{ delivered: boolean; expiresInMinutes: number }>("/auth/register/request-otp", { method: "POST", body: JSON.stringify({ email }) }),
-  register: async (payload: { email: string; otp: string; password: string; fullName: string; audienceRole: "STUDENT" | "LECTURER"; studentCode?: string; phoneNumber?: string }) => storeSession(await raw<SessionResponse>("/auth/register", { method: "POST", body: JSON.stringify(payload) })),
-  login: async (email: string, password: string) => storeSession(await raw<SessionResponse>("/auth/login", { method: "POST", body: JSON.stringify({ email, password }) })),
+  register: async (payload: { email: string; otp: string; password: string; fullName: string; audienceRole: "STUDENT" | "LECTURER"; studentCode?: string; phoneNumber?: string }) => {
+    invalidateSession();
+    const generation = sessionGeneration;
+    return storeSession(await raw<SessionResponse>("/auth/register", { method: "POST", body: JSON.stringify(payload) }, false), generation);
+  },
+  login: async (email: string, password: string) => {
+    invalidateSession();
+    const generation = sessionGeneration;
+    return storeSession(await raw<SessionResponse>("/auth/login", { method: "POST", body: JSON.stringify({ email, password }) }, false), generation);
+  },
   logout: async () => {
+    invalidateSession();
+    const generation = sessionGeneration;
     try {
-      await raw<void>("/auth/logout", { method: "POST" });
+      await raw<void>("/auth/logout", { method: "POST" }, false);
     } finally {
-      accessToken = null;
+      if (generation === sessionGeneration) accessToken = null;
     }
   },
   forgotPassword: (email: string) => raw<{ delivered: boolean; message: string }>("/auth/forgot-password", { method: "POST", body: JSON.stringify({ email }) }),

@@ -684,3 +684,132 @@ test(`warehouse ${status} return retains server field errors and can retry an in
   expect(pageErrors).toEqual([]);
 });
 }
+
+for (const width of [1440, 390]) {
+  test(`return review loading is not a stale field error and preserves drafts at ${width}px`, async ({ page }, testInfo) => {
+    await page.setViewportSize({ width, height: 950 });
+    await prepare(page, {});
+    let release!: () => void;
+    const pending = new Promise<void>(resolve => { release = resolve; });
+    const claim = { claimId: "verified-claim", recipientId: "owner", fullName: "Nguyễn An", description: null, verified: true };
+    await page.route("**/api/staff/warehouse-items/*/return-claim-reviews", async route => { await pending; await route.fulfill({ json: { claims: [claim] } }); });
+    let submissions = 0;
+    await page.route("**/api/staff/warehouse-items/*/return", route => { submissions++; return route.fulfill({ status: 409, json: { message: "Legal hold blocks return" } }); });
+    await page.goto("/staff");
+    await page.getByRole("button", { name: "Kho tài sản", exact: true }).click();
+    const trigger = page.getByRole("button", { name: "Trả cho chủ sở hữu", exact: true });
+    await trigger.click();
+    const modal = page.getByRole("dialog", { name: "Xác nhận trả hàng cho chủ sở hữu" });
+    const submit = modal.getByRole("button", { name: "Xác nhận Đã trả hàng" });
+    await expect(submit).toBeDisabled();
+    await modal.getByLabel(/^Họ và tên người nhận/).fill("Draft recipient");
+    await modal.locator("form").evaluate((form: HTMLFormElement) => form.requestSubmit());
+    expect(submissions).toBe(0);
+    release();
+    await expect(submit).toBeEnabled();
+    await expect(modal.getByText("Đang kiểm tra claim của vật phẩm...", { exact: true })).toHaveCount(0);
+    await expect(modal.locator("#return-claimId-error")).toHaveCount(0);
+    await expect(modal.getByLabel(/^Họ và tên người nhận/)).toHaveValue("Draft recipient");
+    await modal.getByLabel(/^Số điện thoại/).fill("1234");
+    await modal.getByLabel(/^Số điện thoại/).blur();
+    await expect(modal.locator("#return-receiverPhone-error")).toBeVisible();
+    await submit.click();
+    await expect(modal.locator("#return-receiverPhone-error")).toBeVisible();
+    await modal.getByLabel("Liên kết claim trực tuyến (không bắt buộc)").selectOption(claim.claimId);
+    await expect(modal.locator("#return-receiverPhone-error")).toBeVisible();
+    await expect(modal.locator("#return-proofImage-error")).toBeVisible();
+    await page.screenshot({ path: testInfo.outputPath(`return-review-ready-${width}.png`), fullPage: true });
+    await page.keyboard.press("Escape");
+    await expect(modal).toHaveCount(0);
+    await expect(trigger).toBeFocused();
+  });
+}
+
+test("failed claim review blocks even offline returns and retry preserves the form", async ({ page }) => {
+  await prepare(page, {});
+  let attempts = 0;
+  await page.route("**/api/staff/warehouse-items/*/return-claim-reviews", route => {
+    attempts++;
+    return attempts === 1 ? route.fulfill({ status: 503, json: { message: "Review unavailable" } }) : route.fulfill({ json: { claims: [] } });
+  });
+  await page.goto("/staff");
+  await page.getByRole("button", { name: "Kho tài sản", exact: true }).click();
+  await page.getByRole("button", { name: "Trả cho chủ sở hữu", exact: true }).click();
+  const modal = page.getByRole("dialog", { name: "Xác nhận trả hàng cho chủ sở hữu" });
+  await expect(modal.getByText("Review unavailable", { exact: true })).toBeVisible();
+  await expect(modal.getByRole("button", { name: "Xác nhận Đã trả hàng" })).toBeDisabled();
+  await modal.getByLabel(/^Họ và tên người nhận/).fill("Draft kept");
+  await modal.getByRole("button", { name: "Thử lại kiểm tra claim" }).click();
+  await expect(modal.getByRole("button", { name: "Xác nhận Đã trả hàng" })).toBeEnabled();
+  await expect(modal.getByText("Review unavailable", { exact: true })).toHaveCount(0);
+  await expect(modal.getByLabel(/^Họ và tên người nhận/)).toHaveValue("Draft kept");
+});
+
+test("retrying claim review does not invalidate a pending proof upload", async ({ page }) => {
+  await prepare(page, {});
+  let attempts = 0;
+  await page.route("**/api/staff/warehouse-items/*/return-claim-reviews", route => {
+    attempts++;
+    return attempts === 1 ? route.fulfill({ status: 503, json: { message: "Review unavailable" } }) : route.fulfill({ json: { claims: [] } });
+  });
+  let release!: () => void;
+  const waiting = new Promise<void>(resolve => { release = resolve; });
+  let started!: () => void;
+  const pending = new Promise<void>(resolve => { started = resolve; });
+  await page.route("**/api/staff/warehouse-items/upload-proof", async route => {
+    started(); await waiting; await route.fulfill({ json: { id: "00000000-0000-4000-8000-000000000000" } });
+  });
+  await page.route("**/api/staff/warehouse-proofs/*", route => route.fulfill({ contentType: "image/png", body: photoBuffer }));
+  await page.goto("/staff");
+  await page.getByRole("button", { name: "Kho tài sản", exact: true }).click();
+  await page.getByRole("button", { name: "Trả cho chủ sở hữu", exact: true }).click();
+  const modal = page.getByRole("dialog", { name: "Xác nhận trả hàng cho chủ sở hữu" });
+  await expect(modal.getByText("Review unavailable", { exact: true })).toBeVisible();
+  await modal.getByLabel("Ảnh bằng chứng bàn giao", { exact: true }).setInputFiles(intakePhoto);
+  await pending;
+  await modal.getByRole("button", { name: "Thử lại kiểm tra claim" }).click();
+  await expect.poll(() => attempts).toBe(2);
+  await expect(modal.getByRole("button", { name: "Xác nhận Đã trả hàng" })).toBeDisabled();
+  await page.keyboard.press("Escape");
+  await expect(modal).toBeVisible();
+  release();
+  await expect(modal.getByText("1 ảnh đã lưu riêng tư", { exact: true })).toBeVisible();
+  await expect(modal.getByRole("button", { name: "Xác nhận Đã trả hàng" })).toBeEnabled();
+  await page.keyboard.press("Escape");
+  await expect(modal).toHaveCount(0);
+});
+
+test("late review successes and failures cannot affect a reopened A -> B -> A return", async ({ page }) => {
+  await prepare(page, {});
+  const second = { ...item, id: "item-2", itemName: "Second item" };
+  await page.route(/\/api\/staff\/warehouse-items(?:\?.*)?$/, route => route.fulfill({ json: { ...dashboard(), total: 2, items: [item, second] } }));
+  const releases: Array<() => void> = [];
+  let requests = 0;
+  await page.route("**/api/staff/warehouse-items/*/return-claim-reviews", async route => {
+    const attempt = requests++;
+    if (attempt < 2) await new Promise<void>(resolve => { releases[attempt] = resolve; });
+    await route.fulfill(attempt === 1 ? { status: 503, json: { message: "Stale failure" } } : { json: { claims: [{ claimId: `claim-${attempt}`, recipientId: "owner", fullName: attempt === 2 ? "Current recipient" : "Stale recipient", verified: true }] } });
+  });
+  await page.goto("/staff");
+  await page.getByRole("button", { name: "Kho tài sản", exact: true }).click();
+  const card = (title: string) => page.locator(".warehouse-item-card").filter({ has: page.getByRole("heading", { name: title, exact: true }) });
+  const open = async (title: string) => { await card(title).getByRole("button", { name: "Trả cho chủ sở hữu", exact: true }).click(); };
+  const modal = page.getByRole("dialog", { name: "Xác nhận trả hàng cho chủ sở hữu" });
+  await open(item.itemName);
+  await expect.poll(() => requests).toBe(1);
+  await page.keyboard.press("Escape");
+  await open(second.itemName);
+  await expect.poll(() => requests).toBe(2);
+  await page.keyboard.press("Escape");
+  await open(item.itemName);
+  await expect.poll(() => requests).toBe(3);
+  await modal.getByLabel(/^Họ và tên người nhận/).fill("Current draft");
+  await expect(modal.getByLabel("Liên kết claim trực tuyến (không bắt buộc)")).toContainText("Current recipient");
+  const settled = Promise.all([page.waitForResponse(response => response.url().includes("return-claim-reviews") && response.status() === 200), page.waitForResponse(response => response.url().includes("return-claim-reviews") && response.status() === 503)]);
+  releases.forEach(release => release());
+  await settled;
+  await expect(modal.getByLabel("Liên kết claim trực tuyến (không bắt buộc)")).not.toContainText("Stale recipient");
+  await expect(modal.getByText("Stale failure", { exact: true })).toHaveCount(0);
+  await expect(modal.getByRole("button", { name: "Xác nhận Đã trả hàng" })).toBeEnabled();
+  await expect(modal.getByLabel(/^Họ và tên người nhận/)).toHaveValue("Current draft");
+});

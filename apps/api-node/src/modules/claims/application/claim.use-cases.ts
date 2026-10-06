@@ -704,6 +704,9 @@ export function createClaimUseCases(options: ClaimDependencies) {
         if (ensureIdempotentReplay(existing, fingerprint)) return;
 
         const history = await claimRepository.listVerificationAuditEvents(claimId, connection);
+        if (history.some(event => event.action === "DIRECT_RETURN_COMPLETED")) {
+          throw new AppError("conflict", "Hai bên đã hoàn tất trả đồ; không thể sửa quyết định xác minh");
+        }
         if (history.some(event => event.action === "STAFF_CUSTODY_VERIFIED")) {
           throw new AppError("conflict", "Vật phẩm đã được Staff xác minh tại quầy; Finder không thể sửa quyết định này");
         }

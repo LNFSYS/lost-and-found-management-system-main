@@ -58,8 +58,22 @@ const matchingRefreshTimer = env.matchingRefresh.enabled
   : null;
 if (env.matchingRefresh.enabled) void matchingRefreshTask.tick();
 
+let appointmentSchemaWarning = false;
+const appointmentReminderTask = createBackgroundTask(async () => {
+  if (!await services.appointmentService.queueReminders().catch(error => {
+    if (error?.code !== "unavailable") throw error;
+    if (!appointmentSchemaWarning) console.warn("appointment_reminders_paused", { migration:"063_appointment_workflow.sql" });
+    appointmentSchemaWarning = true;
+    return null;
+  })) return;
+  appointmentSchemaWarning = false;
+}, error => console.warn("appointment_reminders_failed", notificationEmailWorkerError(error)));
+const appointmentReminderTimer = setInterval(() => { void appointmentReminderTask.tick(); },60_000);
+void appointmentReminderTask.tick();
+
 const shutdown = createShutdownHandler(async () => {
   clearInterval(warehouseMaintenanceTimer);
+  clearInterval(appointmentReminderTimer);
   if (notificationWorkerTimer) clearInterval(notificationWorkerTimer);
   if (matchingRefreshTimer) clearInterval(matchingRefreshTimer);
   const httpClosed = new Promise<void>((resolve, reject) => {
@@ -68,7 +82,7 @@ const shutdown = createShutdownHandler(async () => {
   services.realtimeService.stop();
   // Drain HTTP, schema checks, SMTP acknowledgements and lease heartbeats before DB closure.
   const drained = await Promise.allSettled([
-    httpClosed, warehouseMaintenance.stop(), matchingRefreshTask.stop(), matchingRefreshWorker.stop(),
+    httpClosed, warehouseMaintenance.stop(), matchingRefreshTask.stop(), matchingRefreshWorker.stop(), appointmentReminderTask.stop(),
     notificationEmailTask.stop(), services.notificationEmailWorker.stop()
   ]);
   await pool.end();

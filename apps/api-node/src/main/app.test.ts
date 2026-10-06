@@ -186,6 +186,25 @@ async function readSseEvent(response: Response) {
   return new TextDecoder().decode(value);
 }
 
+test("appointment, item journey and global audit routes enforce auth, roles and JSON validation",async()=>{
+  const validate=authService.validateAccessSession;
+  authService.validateAccessSession=async()=>true;
+  const application=createApp({services:{...testServices,
+    appointmentService:{...testServices.appointmentService,list:async()=>({results:[],total:0})},
+    activityService:{...testServices.activityService,audit:async()=>({results:[],total:0})}}});
+  const server=application.listen(0,"127.0.0.1");await once(server,"listening");const url=`http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  try{
+    for(const endpoint of ["/appointments",`/posts/${userId}/journey`,"/admin/audit","/admin/audit/export"]){assert.equal((await fetch(`${url}/api${endpoint}`)).status,401);}
+    assert.equal((await fetch(`${url}/api/admin/audit`,{headers:jsonHeaders(["STAFF"])})).status,403);
+    assert.equal((await fetch(`${url}/api/admin/audit/export`,{headers:jsonHeaders(["USER"])})).status,403);
+    const list=await fetch(`${url}/api/appointments`,{headers:jsonHeaders(["USER"])});assert.equal(list.status,200);assert.match(list.headers.get("cache-control")??"",/private.*no-store/);
+    assert.equal((await fetch(`${url}/api/admin/audit`,{headers:jsonHeaders()})).status,200);
+    const invalid=await fetch(`${url}/api/appointments`,{method:"POST",headers:jsonHeaders(["USER"]),body:JSON.stringify({claimId:"wrong",proposedAt:"not-a-date"})});
+    assert.equal(invalid.status,422);assert.match(invalid.headers.get("content-type")??"",/json/);
+    assert.equal((await fetch(`${url}/api/appointments?page=-1`,{headers:jsonHeaders(["USER"])})).status,422);
+  }finally{authService.validateAccessSession=validate;server.close();await once(server,"close");}
+});
+
 test("realtime route authenticates and isolates claim room subscriptions", async () => {
   const originalValidateAccessSession = authService.validateAccessSession;
   const originalFindRoomForParticipant = claimRepository.findRoomForParticipant;

@@ -32,9 +32,16 @@ export function decryptBackup(bytes: Buffer, key: Buffer): RecoveryBackup {
 export async function captureRecoveryBackup(pool: Pool): Promise<RecoveryBackup> {
   const connection = await pool.getConnection();
   let previousTimezone: string | undefined;
+  let previousSqlMode: string | undefined;
+  let previousQuoted: number | undefined;
   try {
     const [zone] = await connection.query<RowDataPacket[]>("SELECT @@SESSION.time_zone AS zone");
     previousTimezone = String(zone[0].zone);
+    const [settings] = await connection.query<RowDataPacket[]>("SELECT @@SESSION.sql_mode AS mode, @@SESSION.sql_quote_show_create AS quoted");
+    previousSqlMode = String(settings[0].mode);
+    previousQuoted = Number(settings[0].quoted);
+    // ANSI SHOW CREATE omits engine/table options; capture native DDL, then restore the session.
+    await connection.query("SET SESSION sql_mode='', sql_quote_show_create=1");
     await connection.query("SET SESSION time_zone='+00:00'");
     await connection.query("SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ");
     await connection.query("START TRANSACTION WITH CONSISTENT SNAPSHOT, READ ONLY");
@@ -68,6 +75,7 @@ export async function captureRecoveryBackup(pool: Pool): Promise<RecoveryBackup>
     return backup;
   } finally {
     await connection.query("ROLLBACK").catch(() => undefined);
+    if (previousSqlMode !== undefined) await connection.query("SET SESSION sql_mode=?, sql_quote_show_create=?", [previousSqlMode, previousQuoted]).catch(() => { connection.destroy(); });
     if (previousTimezone !== undefined) await connection.query("SET SESSION time_zone=?", [previousTimezone]).catch(() => { connection.destroy(); });
     connection.release();
   }

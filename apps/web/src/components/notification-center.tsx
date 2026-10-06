@@ -97,6 +97,7 @@ export function NotificationCenter() {
       void api.markNotificationRead(item.id).catch(() => undefined);
     }
     if (item.entityType === "CLAIM" && item.entityId) navigate(`/claims/${item.entityId}`);
+    if (["APPOINTMENT","APPOINTMENT_REMINDER"].includes(item.entityType ?? "") && item.entityId) navigate(`/appointments/${item.entityId}`);
   }
 
   function markAllRead() {

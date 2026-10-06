@@ -511,22 +511,31 @@ function WarehouseInventoryTab({
   const [returnTargetItem, setReturnTargetItem] = useState<WarehouseItem | null>(null);
   const [returnRecipients, setReturnRecipients] = useState<Array<{ claimId: string; recipientId: string; fullName: string; description: string | null; verified: boolean }>>([]);
   const [claimReviewsLoading, setClaimReviewsLoading] = useState(false);
+  const [claimReviewsReady, setClaimReviewsReady] = useState(false);
+  const [claimReviewsError, setClaimReviewsError] = useState("");
+  const [claimReviewReload, setClaimReviewReload] = useState(0);
+  const returnSequence = useRef(0);
+  const returnItemId = useRef<string | null>(null);
   const [claimReviewReason, setClaimReviewReason] = useState("");
   const [claimReviewConfirmed, setClaimReviewConfirmed] = useState(false);
   const [claimReviewBusy, setClaimReviewBusy] = useState(false);
   useEffect(() => {
     let active = true;
+    const sequence = returnSequence.current;
     setReturnRecipients([]);
+    setClaimReviewsReady(false);
+    setClaimReviewsError("");
+    setClaimReviewsLoading(Boolean(returnTargetItem));
     if (returnTargetItem) {
-      setClaimReviewsLoading(true);
       void api.getWarehouseReturnClaimReviews(returnTargetItem.id).then(value => {
-        if (active) setReturnRecipients(value.claims);
+        if (active && sequence === returnSequence.current) { setReturnRecipients(value.claims); setClaimReviewsReady(true); }
       }).catch(reason => {
-        if (active) setReturnError(messageOf(reason, "Không thể tải claim của vật phẩm"));
-      }).finally(() => { if (active) setClaimReviewsLoading(false); });
+        if (active && sequence === returnSequence.current) setClaimReviewsError(messageOf(reason, "Không thể tải claim của vật phẩm"));
+      }).finally(() => { if (active && sequence === returnSequence.current) setClaimReviewsLoading(false); });
     }
     return () => { active = false; };
-  }, [returnTargetItem?.id]);
+  }, [returnTargetItem?.id, claimReviewReload]);
+  useEffect(() => () => { returnSequence.current++; returnItemId.current = null; }, []);
   const [expandedImage, setExpandedImage] = useState<string | null>(null);
 
   async function compressImage(file: File, maxWidth: number = 800, quality: number = 0.7): Promise<string> {
@@ -677,6 +686,10 @@ function WarehouseInventoryTab({
   }
 
   function openReturnModal(item: WarehouseItem) {
+    returnSequence.current++;
+    returnItemId.current = item.id;
+    setClaimReviewsLoading(true);
+    setClaimReviewsReady(false);
     setReturnErrors({});
     setReturnError("");
     setReturnVerified(false);
@@ -686,30 +699,41 @@ function WarehouseInventoryTab({
     setReturnForm({ claimId: "", recipientId: "", receiverName: "", receiverIdentity: "", receiverPhone: "", proofImages: [], note: "" });
   }
 
+  function closeReturnModal() {
+    returnSequence.current++;
+    returnItemId.current = null;
+    setReturnTargetItem(null);
+  }
+
   async function verifyReturnClaim() {
-    if (!returnTargetItem || claimReviewBusy) return;
+    if (!returnTargetItem || claimReviewBusy || !claimReviewsReady || claimReviewsLoading) return;
     const reason = claimReviewReason.trim();
     const errors: Record<string, string> = {};
     if (reason.length < 10 || reason.length > 1000) errors.claimReviewReason = "Nội dung đối chiếu phải có từ 10 đến 1000 ký tự.";
     if (!claimReviewConfirmed) errors.claimReviewConfirmed = "Cần xác nhận đã đối chiếu quyền sở hữu tại quầy.";
-    setReturnErrors(errors);
+    setReturnErrors(previous => ({ ...previous, claimReviewReason: "", claimReviewConfirmed: "", ...errors }));
     if (Object.keys(errors).length) return;
     const itemId = returnTargetItem.id;
+    const sequence = returnSequence.current;
     setClaimReviewBusy(true);
     setReturnError("");
     try {
       const result = await api.verifyWarehouseClaim(itemId, { claimId: returnForm.claimId, recipientId: returnForm.recipientId, verified: true, reason });
+      if (sequence !== returnSequence.current || returnItemId.current !== itemId) return;
       setReturnRecipients(result.claims);
+      setReturnErrors(previous => ({ ...previous, claimId: previous.claimId === "Cần xác minh claim tại quầy trước khi trả đồ." ? "" : previous.claimId }));
     } catch (reason) {
-      setReturnError(messageOf(reason, "Không thể xác minh claim tại quầy"));
+      if (sequence === returnSequence.current && returnItemId.current === itemId) setReturnError(messageOf(reason, "Không thể xác minh claim tại quầy"));
     } finally {
-      setClaimReviewBusy(false);
+      if (sequence === returnSequence.current && returnItemId.current === itemId) setClaimReviewBusy(false);
     }
   }
 
   async function submitReturn(event: FormEvent) {
     event.preventDefault();
-    if (!returnTargetItem) return;
+    if (!returnTargetItem || !claimReviewsReady || claimReviewsLoading || claimReviewBusy || pendingAction || uploadingProof) return;
+    const sequence = returnSequence.current;
+    const itemId = returnTargetItem.id;
     const errors: Record<string, string> = {};
     for (const field of Object.keys(returnTextRules) as ReturnTextField[]) {
       const message = returnTextError(field, returnForm[field]);
@@ -718,7 +742,6 @@ function WarehouseInventoryTab({
     if (returnForm.proofImages.length < 1 || returnForm.proofImages.length > 5) errors.proofImage = "Vui lòng tải lên từ 1 đến 5 ảnh bằng chứng.";
     if (!returnVerified) errors.verified = "Vui lòng xác nhận đã đối chiếu người nhận và bằng chứng bàn giao.";
     if (returnForm.claimId && !returnRecipients.some(recipient => recipient.claimId === returnForm.claimId && recipient.verified)) errors.claimId = "Cần xác minh claim tại quầy trước khi trả đồ.";
-    if (claimReviewsLoading || claimReviewBusy) errors.claimId = "Vui lòng đợi hoàn tất kiểm tra claim.";
     setReturnErrors(errors);
     setReturnError("");
     if (Object.keys(errors).length) return;
@@ -734,19 +757,23 @@ function WarehouseInventoryTab({
         proofImage: returnForm.proofImages.join("\n") || "",
         note: clean(returnForm.note)
       });
+      if (sequence !== returnSequence.current || returnItemId.current !== itemId) return;
       onNotice("Đã hoàn tất trả hàng cho chủ sở hữu!");
-      setReturnTargetItem(null);
+      setPendingAction("");
+      closeReturnModal();
+      const detailsSequence = logsSequence.current;
       await onRefresh();
-      if (selectedItemId === returnTargetItem.id) {
+      if (returnSequence.current === sequence + 1 && logsSequence.current === detailsSequence && selectedItemId === itemId) {
         await loadLogs(returnTargetItem.id, true).catch(() => undefined);
       }
     } catch (reason) {
+      if (returnItemId.current !== itemId || sequence !== returnSequence.current) return;
       if (reason instanceof ApiError) {
         setReturnErrors(Object.fromEntries(Object.entries(reason.fieldErrors).map(([field, messages]) => [field, messages.join(" ")])));
       }
       setReturnError(messageOf(reason, "Không thể xử lý trả hàng"));
     } finally {
-      setPendingAction("");
+      if (sequence === returnSequence.current) setPendingAction("");
     }
   }
 
@@ -1034,9 +1061,9 @@ function WarehouseInventoryTab({
       )}
 
       {returnTargetItem && (
-        <div className="custody-modal-overlay" onClick={() => { if (!claimReviewBusy && !pendingAction && !uploadingProof) setReturnTargetItem(null); }}>
+        <div className="custody-modal-overlay" onClick={() => { if (!claimReviewBusy && !pendingAction && !uploadingProof) closeReturnModal(); }}>
           <AccessibleDialog
-            aria-label="Xác nhận trả hàng cho chủ sở hữu" onDismiss={() => setReturnTargetItem(null)} busy={claimReviewBusy || Boolean(pendingAction) || uploadingProof}
+            aria-label="Xác nhận trả hàng cho chủ sở hữu" onDismiss={closeReturnModal} busy={claimReviewBusy || Boolean(pendingAction) || uploadingProof}
             className="custody-modal custody-modal--warehouse-return"
             style={{ maxWidth: "760px", width: "95%", maxHeight: "90vh", display: "flex", flexDirection: "column" }}
             onClick={(e) => e.stopPropagation()}
@@ -1047,7 +1074,7 @@ function WarehouseInventoryTab({
                 <h3 style={{ margin: 0, fontSize: "1.05rem", fontWeight: 700 }}>Xác nhận trả hàng cho chủ sở hữu</h3>
                 <p style={{ margin: 0, fontSize: "0.82rem", color: "#64748b" }}>Vật phẩm: <strong style={{ color: "#0f172a" }}>{returnTargetItem.itemName}</strong></p>
               </div>
-              <button type="button" className="close-btn" aria-label="Đóng trả hàng" disabled={claimReviewBusy || Boolean(pendingAction) || uploadingProof} onClick={() => setReturnTargetItem(null)}><X size={18} /></button>
+              <button type="button" className="close-btn" aria-label="Đóng trả hàng" disabled={claimReviewBusy || Boolean(pendingAction) || uploadingProof} onClick={closeReturnModal}><X size={18} /></button>
             </div>
 
             <form noValidate className="admin-form modal-form" style={{ padding: "16px 20px", overflowY: "auto", flex: 1, display: "flex", flexDirection: "column", gap: "12px" }} onSubmit={submitReturn}>
@@ -1055,6 +1082,11 @@ function WarehouseInventoryTab({
                 <Info size={15} style={{ flexShrink: 0 }} />
                 <span>Người nhận có thể không có tài khoản hoặc không có claim trên hệ thống. Vui lòng kiểm tra giấy tờ tùy thân trước khi xác nhận; thông tin sẽ được lưu trong hồ sơ bàn giao riêng tư.</span>
               </div>
+              {claimReviewsLoading && <p role="status">Đang kiểm tra claim của vật phẩm...</p>}
+              {claimReviewsError && <div>
+                <p className="form-error" role="alert">{claimReviewsError}</p>
+                <button type="button" className="secondary-button" disabled={claimReviewsLoading} onClick={() => { setClaimReviewsLoading(true); setClaimReviewsReady(false); setClaimReviewsError(""); setClaimReviewReload(previous => previous + 1); }}><RefreshCw size={17} />Thử lại kiểm tra claim</button>
+              </div>}
 
               <div className="warehouse-return-grid">
                 <label className="input-field" style={{ margin: 0 }}>
@@ -1080,6 +1112,7 @@ function WarehouseInventoryTab({
                     const recipient = returnRecipients.find(value => value.claimId === event.target.value);
                     setClaimReviewReason("");
                     setClaimReviewConfirmed(false);
+                    setReturnErrors(previous => ({ ...previous, claimId: previous.claimId === "Cần xác minh claim tại quầy trước khi trả đồ." ? (recipient && !recipient.verified ? previous.claimId : "") : previous.claimId, claimReviewReason: "", claimReviewConfirmed: "" }));
                     setReturnForm(prev => ({ ...prev, claimId: recipient?.claimId ?? "", recipientId: recipient?.recipientId ?? "", receiverName: recipient?.fullName ?? prev.receiverName }));
                   }}>
                     <option value="">Trả trực tiếp, không có claim</option>
@@ -1162,15 +1195,18 @@ function WarehouseInventoryTab({
                         }
                         setReturnErrors(prev => ({ ...prev, proofImage: "" }));
                         setUploadingProof(true);
+                        const sequence = returnSequence.current;
+                        const itemId = returnTargetItem.id;
                         try {
                           for (const file of files) {
-                            const res = await api.uploadWarehouseProof(file, returnTargetItem.id);
+                            const res = await api.uploadWarehouseProof(file, itemId);
+                            if (sequence !== returnSequence.current || returnItemId.current !== itemId) return;
                             setReturnForm((prev) => ({ ...prev, proofImages: prev.proofImages.includes(res.id) ? prev.proofImages : [...prev.proofImages, res.id] }));
                           }
                         } catch (error) {
-                          setReturnErrors(prev => ({ ...prev, proofImage: messageOf(error, "Không thể tải lên ảnh bằng chứng") }));
+                          if (sequence === returnSequence.current && returnItemId.current === itemId) setReturnErrors(prev => ({ ...prev, proofImage: messageOf(error, "Không thể tải lên ảnh bằng chứng") }));
                         } finally {
-                          setUploadingProof(false);
+                          if (sequence === returnSequence.current && returnItemId.current === itemId) setUploadingProof(false);
                           input.value = "";
                         }
                       }}
@@ -1254,11 +1290,11 @@ function WarehouseInventoryTab({
 
               {returnError && <p className="form-error" role="alert">{returnError}</p>}
               <div className="custody-modal-actions" style={{ marginTop: "4px", paddingTop: "10px", borderTop: "1px solid #f1f5f9" }}>
-                <button className="primary-button" disabled={pendingAction === "update" || uploadingProof}>
+                <button className="primary-button" disabled={Boolean(pendingAction) || uploadingProof || claimReviewBusy || claimReviewsLoading || !claimReviewsReady}>
                   {pendingAction === "update" ? <LoaderCircle className="spin-icon" size={17} /> : <CheckCircle2 size={17} />}
                   <span>Xác nhận Đã trả hàng</span>
                 </button>
-                <button type="button" className="secondary-button" disabled={claimReviewBusy || Boolean(pendingAction) || uploadingProof} onClick={() => setReturnTargetItem(null)}>Hủy</button>
+                <button type="button" className="secondary-button" disabled={claimReviewBusy || Boolean(pendingAction) || uploadingProof} onClick={closeReturnModal}>Hủy</button>
               </div>
             </form>
           </AccessibleDialog>

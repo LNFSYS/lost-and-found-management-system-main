@@ -1,4 +1,6 @@
 import jwt from "jsonwebtoken";
+import { createAppointmentRoutes } from "../modules/appointments/interfaces/http/appointment.routes.js";
+import { createActivityRoutes } from "../modules/activity/interfaces/http/activity.routes.js";
 import { createAdminCatalogController } from "../modules/admin/interfaces/http/admin-catalog.controller.js";
 import { createAdminReportingController } from "../modules/admin/interfaces/http/admin-reporting.controller.js";
 import { createAdminUserController } from "../modules/admin/interfaces/http/admin-user.controller.js";
@@ -46,6 +48,8 @@ export function createHttpRoutes(services: ApplicationServices) {
   const warehouseController = createWarehouseController({ warehouseService: services.warehouseService });
   const custodyRequestController = createCustodyRequestController({ custodyRequestService: services.custodyRequestService });
   return {
+    appointmentRoutes: createAppointmentRoutes(services.appointmentService,auth),
+    activityRoutes: createActivityRoutes(services.activityService,auth),
     adminRoutes: createAdminRoutes({ adminCatalogController, adminReportingController, adminUserController, auth }),
     handoverRoutes: createHandoverRoutes({ adminCatalogController }),
     authRoutes: createAuthRoutes({ authController, auth }),
