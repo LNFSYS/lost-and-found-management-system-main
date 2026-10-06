@@ -1,118 +1,95 @@
 # Tài liệu FPTU Lost & Found System
 
-Cập nhật tài liệu: **05/10/2026**
+Cập nhật: **06/10/2026**. Code, tests, cấu hình và receipt đúng candidate là nguồn sự thật; implementation không tự đồng nghĩa với deployment hay nghiệm thu thực tế.
 
-## 1. Mục đích
+## Bắt đầu từ đây
 
-Bộ tài liệu này mô tả phạm vi, nghiệp vụ, requirement, kiến trúc và bằng chứng implementation của repository `fptu-lost-found-system-main`. Code, test và configuration là nguồn sự thật chính; tài liệu chỉ được nâng status khi có evidence tái lập được.
+- [Chuẩn bị PR dev vào main](audits/dev-main-release-2026-10-06.md): phạm vi lọc tài liệu, candidate/CI, rollout 063 và các giới hạn nghiệm thu.
+- [Kết quả sửa UAT](audits/uat-repair-verification-2026-10-06.md): refresh, popup trả đồ, backup/restore và regression.
+- [Kế hoạch UAT](plans/uat-repair-plan-2026-10-06.md) và [UAT thực tế](audits/real-workflow-uat-2026-10-06.md): finding gốc, checklist và evidence.
+- [Rollout lịch hẹn/hành trình](runbooks/appointment-journey-rollout.md): schema, policy, rollback và acceptance.
+- [Tổng quan dự án](overview/project-overview.md): actor, scope, architecture và giới hạn hiện tại.
 
-**Software type thống nhất:** Web Application with Progressive Web App (PWA) support and a Native Mobile Application.
+## Cấu trúc
 
-- Web là channel hiện có.
-- PWA là phần mở rộng của web responsive; manifest, service worker và offline shell đã có, còn cần device/installability evidence.
-- Native Mobile là scope mục tiêu bắt buộc theo kế hoạch, nhưng hiện chưa có project trong repository và phải ghi `Planned — project not created yet`.
-
-## 2. Thứ tự nguồn sự thật
-
-1. Code, test, configuration và deployment evidence trong repository.
-2. Jira hiện tại nếu có connector/quyền truy cập và có thể kiểm tra trực tiếp.
-3. Quyết định phạm vi, nghiệp vụ của nhóm.
-4. Tài liệu cũ.
-
-Jira connector không được cung cấp trong workspace này; sprint, assignee, lịch sử ticket và trạng thái Jira chưa được xác minh. Không tự bịa hoặc sửa lịch sử Jira.
-
-## 3. Trạng thái tài liệu
-
-| Status | Ý nghĩa |
+| Thư mục | Nội dung |
 | --- | --- |
-| `Implemented` | Có runtime code cho mục tiêu; chưa mặc định là đã kiểm tra đầy đủ mọi channel. |
-| `Verified` | Có test/build/manual evidence vừa được chạy và ghi rõ trong report. |
-| `Partial` | Có một phần runtime hoặc một phần acceptance criteria. |
-| `Planned` | Có trong scope/roadmap nhưng chưa có runtime evidence. |
-| `TBD` | Cần mentor, team hoặc đơn vị vận hành quyết định. |
-| `Historical` | Thông tin cũ chỉ để tham khảo, không dùng làm current status. |
+| [overview/](overview/) | Tổng quan và quy trình A-Z |
+| [requirements/](requirements/) | BR, FR/NFR, UC và traceability |
+| [architecture/](architecture/) | Kiến trúc Node.js, mapping source và sơ đồ |
+| [workflows/](workflows/) | Quy tắc chat, ảnh, kho và email |
+| [audits/](audits/) | Bằng chứng audit/UAT theo từng candidate |
+| [runbooks/](runbooks/) | Rollout, recovery, backup và đối soát media |
+| [plans/](plans/) | Checklist sửa lỗi và nghiệm thu |
+| [archive/](archive/) | Reconciliation lịch sử còn cần đối soát ledger |
 
-Không đánh dấu Done chỉ vì có migration, schema, ticket, mockup, skeleton hoặc test file chưa chạy.
+Root `docs/` chỉ giữ mục lục. Sáu báo cáo cũ dư thừa đã được bỏ khỏi cây hiện hành; xem [phạm vi lọc](audits/dev-main-release-2026-10-06.md). Nội dung đã commit vẫn có trong Git history. Không xóa audit tháng 10, receipt UAT/backup hoặc giới hạn migration để làm checklist trông hoàn tất.
 
-## 4. Nguồn tài liệu chính
+## Yêu cầu và phạm vi
 
 | Tài liệu | Vai trò |
 | --- | --- |
-| [project-overview.md](project-overview.md) | Định vị, scope, actor, kiến trúc, luồng và baseline hiện tại |
-| [LNFS_BUSINESS_PROCESS_A_TO_Z.md](LNFS_BUSINESS_PROCESS_A_TO_Z.md) | Nguồn nghiệp vụ đầy đủ và luồng peer-to-peer mục tiêu |
-| [requirements.md](requirements.md) | Functional/non-functional requirements và status |
-| [business-rules.md](business-rules.md) | Luật đang enforce, partial hoặc planned |
-| [traceability-matrix.md](traceability-matrix.md) | Mapping BR → FR/NFR → UC → evidence |
-| [uc.md](uc.md) | Catalogue 168 business UC, actor, mô tả, status và ownership phần việc còn lại |
-| [notification-email-rules.md](notification-email-rules.md) | Event matrix, preference, privacy, retry và chống gửi email trùng |
-| [warehouse-retention-and-status-rules.md](warehouse-retention-and-status-rules.md) | Project retention defaults, custody/warehouse state gates, authorization and rollout constraints |
-| [LNFS-55-SAFETY-VERIFICATION.md](LNFS-55-SAFETY-VERIFICATION.md) | Feature-branch audit fixes, verification and remaining release blockers; not dev completion |
-| [database-warehouse-recovery.md](database-warehouse-recovery.md) | Aiven forward recovery, encrypted backup/rehearsal, preserved migration history and manual linkage reviews |
-| [media-upload-reconciliation.md](media-upload-reconciliation.md) | Unknown upload outcome, stable retry, conservative compensation and protected operator review |
-| [CLEAN_ARCHITECTURE.md](CLEAN_ARCHITECTURE.md) | Node.js-only Clean Architecture, module contracts, transaction và verification |
-| [CLEAN_ARCHITECTURE_FILE_MAP.md](CLEAN_ARCHITECTURE_FILE_MAP.md) | Mapping source trước/sau refactor |
-| [LNFS_NODE_ONLY_ARCHITECTURE.drawio](LNFS_NODE_ONLY_ARCHITECTURE.drawio) | System Architecture, FE Package, BE Package |
-| [node-java-service-boundary.md](node-java-service-boundary.md) | Lịch sử kiến trúc Java, đã ngừng sử dụng |
+| [Business process A-Z](overview/LNFS_BUSINESS_PROCESS_A_TO_Z.md) | Luồng nghiệp vụ mục tiêu |
+| [Requirements](requirements/requirements.md) | FR/NFR và trạng thái |
+| [Business rules](requirements/business-rules.md) | Quy tắc enforce/partial/planned |
+| [Use cases](requirements/uc.md) | Catalogue 168 UC và ownership |
+| [Traceability](requirements/traceability-matrix.md) | BR → FR/NFR → UC → evidence |
 
-### Báo cáo lịch sử
+Catalogue hiện tại: **168 UC = 129 Implemented + 20 Partial + 19 Planned**. [Đối chiếu UC 06/10](audits/uc-status-review-2026-10-06.md) là snapshot trước đợt xây lịch hẹn/hành trình, không ghi đè catalogue mới.
 
-Các snapshot theo ngày đã được chuyển vào [`archive/`](archive/) để root `docs/` chỉ giữ tài liệu đang dùng. Chúng là evidence lịch sử, không phải nguồn status hiện tại:
+Web là channel hiện có; PWA có manifest/service worker/offline shell nhưng còn cần device/installability acceptance. Native Mobile thuộc scope mục tiêu, trạng thái `Planned - project not created yet`. Node.js/TypeScript là backend và business/migration write owner duy nhất; Java đã ngừng sử dụng. Không tự bịa trạng thái Jira hoặc các report bên ngoài chưa được cung cấp.
 
-- [Documentation update 01/09](archive/DOCUMENTATION_UPDATE_REPORT.md)
-- [Admin user/config implementation 02/09](archive/ADMIN_USER_CONFIG_IMPLEMENTATION_REPORT_2026-09-02.md)
-- [Audit fix report 06/09](archive/LNFS_AUDIT_FIX_REPORT_2026-09-06.md)
-- [Aiven reconciliation 07/09](archive/AIVEN_SCHEMA_RECONCILIATION_2026-09-07.md)
-- [Sprint 4 implementation audit](archive/SPRINT_4_IMPLEMENTATION_AUDIT.md)
-- [Sprint 4 PWA/profile QA](archive/SPRINT_4_PWA_PROFILE_ACTIVITY_QA.md)
+## Kiến trúc và workflow
 
-## 5. Snapshot implementation ngày 06/09/2026
+| Tài liệu | Nội dung |
+| --- | --- |
+| [Clean Architecture](architecture/CLEAN_ARCHITECTURE.md) | Module contracts và dependency rules |
+| [Source map](architecture/CLEAN_ARCHITECTURE_FILE_MAP.md) | Mapping source |
+| [Sơ đồ draw.io](architecture/LNFS_NODE_ONLY_ARCHITECTURE.drawio) | System/FE/BE packages, giữ template |
+| [LOST contact photo](workflows/lost-contact-photo-rules.md) | Finder liên hệ LOST không phải tạo FOUND giả |
+| [Warehouse intake evidence](workflows/warehouse-intake-evidence.md) | Ảnh SOURCE_POST/INTAKE/RETURN và tiếp nhận |
+| [Warehouse policy](workflows/warehouse-retention-and-status-rules.md) | Retention, hold, disposition và quyền trả đồ |
+| [Notification email](workflows/notification-email-rules.md) | Preference, retry, lease và delivery limits |
 
-**Đã có bằng chứng runtime/test:**
+Matching/Gemini chỉ hỗ trợ quyết định, không chứng nhận quyền sở hữu. Staff tiếp nhận không tự trở thành Finder hoặc tự accept claim. Dual completion cần xác nhận vật lý hợp lệ; tranh chấp/custody/legal hold vẫn phải chặn outcome không hợp lệ.
 
-- Auth email OTP/SMTP, password login, JWT access/refresh, logout, reset password và profile cơ bản.
-- Web board, my posts, post detail, create/update/close/soft-delete, search/filter/sort/pagination.
-- Category hai cấp, area, building, handover-point public active-only và Admin CRUD/map/marker.
-- Post media local protected proxy, validation và xóa media; avatar dùng Cloudinary authenticated storage và protected proxy.
-- Admin moderation/report, dashboard KPI theo kỳ, current snapshot và aggregate CSV/JSON export.
-- Gemini-assisted multi-image draft; hybrid/rule-based matching có tier và explanation.
-- Claim request/decision, participant authorization, private text room, cursor-paginated history, private evidence proxy và claim notification feed.
-- Staff warehouse receive/store/return, retention deadline, handover counts và storage log.
+## Runbooks và lịch sử DB
 
-**Partial hoặc planned:**
+| Tài liệu | Nội dung |
+| --- | --- |
+| [Appointment/journey rollout](runbooks/appointment-journey-rollout.md) | Migration 063, schema-before-app, reminder và direct return |
+| [Warehouse recovery](runbooks/database-warehouse-recovery.md) | Backup/rehearsal, ledger và liên kết cần review |
+| [Warehouse media rollout](runbooks/warehouse-media-rollout.md) | Authenticated Cloudinary, 16 reference đã chuyển, không rerun |
+| [Upload reconciliation](runbooks/media-upload-reconciliation.md) | Unknown INSERT/COMMIT outcome và cleanup an toàn |
+| [Migration history review](audits/migration-history-review-2026-10-05.md) | Giới hạn SQL gốc 053/055 |
+| [Reconciliation 07/09](archive/AIVEN_SCHEMA_RECONCILIATION_2026-09-07.md) | Snapshot lịch sử, không phải DB status hiện tại |
 
-- Guided questions, evidence review/confidence, multiple-claimant policy end-to-end, meetup và direct dual handover.
-- Socket.IO realtime, image chat, seen/unread realtime và realtime match notification; claim notification hiện là REST/in-app feed.
-- Warehouse overdue/disposition và claim/chat/appointment workflow đầy đủ.
-- PWA device matrix/installability QA và shared object storage cho media bài đăng/evidence.
-- Native Mobile Application.
-- Shared object storage. Java business endpoints không còn trong kiến trúc hiện hành.
+Không replay migration applied, sửa checksum hoặc xóa ledger. Shared DB chỉ được ghi theo phê duyệt, đúng scope, sau backup/restore/rehearsal. Receipt rollout mới nằm trong [release follow-up](audits/dev-main-release-2026-10-06.md); snapshot cũ ghi pending không chứng nhận trạng thái DB mới.
 
-## 6. Evidence đã kiểm tra
+## Audit và verification
 
-Evidence riêng cho refactor kiến trúc ngày 09/09: **156 API/unit/integration tests pass, 0 skip**, dependency check/typecheck/build pass, browser E2E **23/23**. Xem [Clean Architecture verification](CLEAN_ARCHITECTURE_VERIFICATION.md). Đây không phải xác nhận hoàn thành thêm tính năng hoặc ticket của nhóm.
+| Báo cáo | Phạm vi |
+| --- | --- |
+| [Audit 04/10](audits/full-system-audit-2026-10-04.md) | Actor journey và sửa lỗi đợt đầu |
+| [Audit 05/10](audits/full-system-audit-2026-10-05.md) | A1/A2/A3 và release gates |
+| [Re-audit 05/10](audits/full-system-re-audit-2026-10-05.md) | B1/B2/B3, media outcome và modal |
+| [UAT thực tế 06/10](audits/real-workflow-uat-2026-10-06.md) | Các lỗi đã tái hiện trên shared runtime |
+| [Sửa UAT 06/10](audits/uat-repair-verification-2026-10-06.md) | Local regression và backup rehearsal |
+| [Matching feedback review](audits/matching-feedback-review.md) | Matching, pagination và periodic refresh |
+| [Dev audit fixes](audits/dev-main-audit-fixes.md) | Candidate-specific repair evidence |
+| [Intake/contact verification](audits/physical-intake-contact-verification.md) | Intake và LOST contact |
+| [LNFS-53 verification](audits/LNFS-53-GUIDED-VERIFICATION.md) | Guided verification feature scope |
+| [LNFS-55 verification](audits/LNFS-55-SAFETY-VERIFICATION.md) | Custody safety feature scope |
+| [S4-P0 contract](audits/S4-P0-IMPLEMENTATION.md) | Contract lịch sử còn dùng đối chiếu |
+| [Architecture verification](audits/CLEAN_ARCHITECTURE_VERIFICATION.md) | Receipt refactor, không thay receipt candidate mới |
 
-Các số liệu 06/09 bên dưới là snapshot lịch sử. Evidence mới ngày 07/09: **152 API/unit/integration tests pass, 0 skip**, Web typecheck pass; real MySQL migration/feedback/chat checks và shared Aiven read-only được mô tả trong báo cáo reconciliation. Không nâng status các workflow planned từ schema test.
+Mỗi báo cáo chỉ chứng nhận scope/candidate/môi trường đã ghi. CI xanh của SHA cũ không chứng nhận dirty worktree. SQL destructive chỉ chạy trên loopback `_test`, không trỏ Aiven. Không upload toàn bộ local `test-results/`: helper datadir có thể chứa byte rehearsal riêng tư; chỉ chia sẻ log/screenshot đã review.
 
-- API unit/service/repository/validator tests: **137 pass, 1 skip an toàn** cho DB integration chưa có MySQL local `_test`.
-- `npm --workspace @lnfs/api-node run test`: pass, API **137 pass, 1 skip**.
-- `npm --workspace @lnfs/web run lint`: pass, TypeScript check.
-- `npm run build`: pass cho API và Web production build.
-- Java build thuộc snapshot lịch sử; đã gỡ ngày 09/09/2026.
-- `npm --workspace @lnfs/web run e2e:home`: **PASS 23/23**, gồm auth resilience, post creation, matching view, claim-room stale response, mobile layout, Staff warehouse và Admin handover/map.
-- `.github/workflows/ci.yml`: có job verify với MySQL service riêng và job browser Playwright; workflow chưa được chạy từ checkout này.
-- `apps/api-node/src/migrations/046_feedback_idempotency_legacy_cleanup.sql`: forward corrective migration; chưa áp dụng lên Aiven/shared DB.
-- Không chạy migration hoặc test destructive trên Aiven/shared DB.
-- Catalogue hiện có 168 business UC từ `UC-001` đến `UC-168`; channel target cũ cho Native Mobile chưa được tính vào catalogue cho tới khi có ID mapping được duyệt.
+## Trạng thái và quy tắc cập nhật
 
-## 7. Tài liệu bên ngoài còn thiếu
+- `Implemented`: có runtime cho actor goal, không mặc định được deployment/UAT nghiệm thu.
+- `Verified`: có evidence vừa chạy cho scope và candidate cụ thể.
+- `Partial` / `Planned` / `TBD`: thiếu acceptance/runtime hoặc quyết định scope.
+- `Historical`: snapshot cũ, không dùng làm status hiện hành.
 
-Không tìm thấy Report 1, Report 2, Report 3/SRS, Report 4/Design, Report 5/Implementation and Testing, DOCX, XLSX, XLS, PDF, meeting records hoặc WBS spreadsheet trong workspace hiện tại. Không tạo bản thay thế giả. Khi nhóm cung cấp, cần đồng bộ theo bộ tài liệu này và giữ style/TOC/layout gốc.
-
-## 8. Quy tắc cập nhật
-
-1. Mọi status phải trỏ tới route/service/UI/test path có thật.
-2. Peer-to-peer là luồng chính trong tài liệu mục tiêu; Staff custody/warehouse là optional hoặc escalation.
-3. Gemini/OCR và matching chỉ là decision support; không gọi custom-trained AI khi chưa có model artifact/evaluation.
-4. Node.js + TypeScript là backend duy nhất. Không khôi phục Java hoặc tạo backend ghi song song; tuân thủ Clean Architecture và public application contract.
-5. Native Mobile được giữ trong scope mục tiêu nhưng không ghi implemented khi chưa có project.
-6. Sau thay đổi lớn phải cập nhật ngày audit, report và traceability.
+Không nâng UC/điểm audit chỉ vì tests pass; không tạo ID cho bug fix. Thay đổi rule hoặc actor goal mới phải có mapping BR/FR/UC/traceability. Giữ nguyên snapshot lịch sử, ghi follow-up mới. Report 1-5/SRS/Design, DOCX/XLSX/PDF/WBS/meeting records chưa được cung cấp thì ghi thiếu, không tạo chứng cứ thay thế giả.
