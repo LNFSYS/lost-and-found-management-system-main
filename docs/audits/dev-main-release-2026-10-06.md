@@ -21,11 +21,11 @@ Nội dung đã commit trước đây vẫn tra được trong lịch sử Git; 
 
 ## Candidate, CI và rollout
 
-- Candidate commit/push và link CI: chưa chốt trong lúc soạn receipt.
+- Candidate code đã commit/push: `d7dd7fad270be493d58ca11cf05e1eb00d9f7a8e`; [CI đúng SHA](https://github.com/LNFSYS/lost-and-found-management-system-main/actions/runs/37454919148) đạt cả MySQL 8.0, 8.4 và browser.
 - Trước rollout: chỉ được có pending 063; checksum nguồn phải khớp bản đã rehearsal, target phải đúng Aiven đã review.
 - Backup được bảo vệ và restore/rehearsal phải đạt trước khi ghi shared schema. Không chạy destructive integration trên Aiven, replay migration đã applied, sửa checksum hoặc xóa ledger.
 - Schema triển khai trước app/worker sử dụng bảng mới. Rollback app giữ additive schema/history, không DROP 063.
-- Chưa áp dụng 063 tại thời điểm tạo receipt này; kết quả thực hiện được bổ sung bên dưới sau khi kiểm tra.
+- `063` đã áp dụng sau CI xanh, backup/restore và phê duyệt trong yêu cầu release; receipt và giới hạn bên dưới. Commit tài liệu receipt sau đó phải có CI riêng đúng HEAD trước khi chốt PR.
 
 ## Kiểm tra trước push
 
@@ -43,6 +43,29 @@ Nội dung đã commit trước đây vẫn tra được trong lịch sử Git; 
 Ca hai reminder workers vẫn enqueue đúng một reminder/two outbox rows, nhưng đọc lease ngay có thể thấy 0. Fixture dùng JavaScript time có milliseconds; MySQL DATETIME(0) có thể làm tròn due_at lên giây kế tiếp, trong khi claimDue so với UTC_TIMESTAMP() không có phần lẻ. Probe cô lập xác nhận 12:00:00.900 được lưu thành 12:00:01 và chưa đủ điều kiện ở 12:00:00. Không phải mất outbox hay gửi trùng.
 
 Sửa clock fixture sang UTC_TIMESTAMP() authoritative của DB và thêm assertion cả hai reminder đã đến hạn. Giữ nguyên concurrency, số outbox, lease eligibility và no-show assertions; không skip hoặc giảm yêu cầu nghiệm thu. Candidate mới phải chạy lại toàn bộ CI; chưa ghi Aiven trong lúc xử lý finding này.
+
+### CI sau sửa và rollout Aiven
+
+- `d7dd7fa`: cả hai job MySQL 8.0/8.4 có 469 PASS, 0 FAIL, 0 SKIP; browser 105 PASS, 0 FAIL. Build, architecture (204 files/0 violations), UC catalogue và audit production (0 vulnerabilities) đạt. CI candidate đầu bị đỏ được giữ làm lịch sử, không dùng thay receipt xanh.
+- Backup mới trước write: 64 bảng/4.426 dòng, AES-256-GCM, key riêng, ACL owner/SYSTEM, ngoài Git. Decrypt/restore, đối chiếu dữ liệu/schema/ledger cũ, chạy additive 063 và repeated runner trên MySQL 9.3 loopback đều PASS. Không công bố backup, key hoặc datadir như artifact.
+- Runner giữ named lock trên cùng connection, kiểm tra target/pending/checksum với rehearsal trước DDL. Chỉ áp dụng `063_appointment_workflow.sql` trên Aiven MySQL 8.4.8 lúc `2026-10-06T11:19:52.254Z`; không chạy SQL tay hoặc replay migrations cũ.
+- Checksum 063: `cb0d1fb77848364ff62aaefd521ec6ea3896e2e2715174da236fd59cf54a575f`. Hai bảng `appointment_events`, `return_appointment_workflows` đã có; ledger cũ được bảo toàn. Postflight read-only: 59 source migrations, 62 applied entries, 29 APPLIED attempts, `pending: []`, không có superseded pending.
+- Warnings 053/055 còn nguyên: scope lịch sử 053 khác runtime recovery, SQL gốc 055 chưa tìm được. Không sửa checksum/ledger, không chứng nhận effects lịch sử thiếu bằng chứng, không chạy lại rollout 16 ảnh kho.
+
+### Shared Smoke sau rollout
+
+Local API/Web trong workspace chính dùng shared Aiven; đây không phải deployment cloud production. Ba browser context đăng nhập thật bằng tài khoản UAT được người dùng cho phép; tái sử dụng fixture tổng hợp trước đó, không tạo hoặc tự xác nhận bàn giao vật lý.
+
+- Receipt chính: 69 PASS, 1 OBSERVED, 1 BLOCKED, 0 FAIL. Đã kiểm tra schema gate không còn 503, proposal/accept/reject/cancel, retry/version/participant gates, early no-show rejection, 12 refresh hợp lệ và 3 hard reload giữ phiên, journey privacy, audit search/CSV và mobile journey không tràn ngang.
+- Scheduler thật tạo đúng một `REMINDER_QUEUED` cho attempt được kiểm tra. Read-only observation thấy hai immediate email outbox rows ở trạng thái PENDING; không chứng nhận SMTP/inbox từ trạng thái đó. Ba attempt tổng hợp của lượt smoke đã được hủy/đóng rõ ràng; không còn lịch của lượt này chờ gặp, không phát sinh physical confirmation/completed return/feedback giả.
+- BLOCKED ban đầu của popup do trang kho chưa lọc không có item còn lưu. Follow-up lọc RECEIVED và mở popup trên hồ sơ hiện có đã PASS: loading claim kết thúc, không giữ lỗi loading cũ, field điện thoại lỗi đỏ, Escape/focus restoration và viewport 390px không tràn ngang. Chỉ đọc và sửa draft client; không gửi return, upload proof hoặc đổi trạng thái vật phẩm.
+- Lượt popup harness đầu timeout vì `getByLabel(..., exact: true)` lấy cả text options trong label; đã giới hạn selector vào filter select và chạy lại đạt. Không sửa code/giảm gate để tạo PASS. Không có unhandled browser page errors trong receipt xanh.
+- Receipts `063-rehearsal.json`, `063-applied.json`, `shared-smoke.json`, `shared-popup-smoke.json` và ảnh desktop/mobile ở thư mục backup được bảo vệ ngoài Git. Không đưa cookies, credentials, giấy tờ, ảnh hồ sơ hoặc raw provider references vào tài liệu/PR.
+- Helper riêng loopback 33319 đã shutdown bình thường sau kiểm tra đúng port/datadir; giữ private datadir/backup, không publish artifact hoặc xóa ảnh nguồn. Không dừng API/Vite của người dùng. Link check sau follow-up: 35 Markdown files/360 local links/0 broken; UC 168 và status giữ nguyên, diff check đạt.
+
+## PR và điều kiện Release
+
+PR `dev` vào `main` phải dùng HEAD đã push và CI đúng SHA sau commit receipt. Giữ draft khi chưa có chấp thuận nghiệm thu còn thiếu; không tự merge `main` hoặc gọi API local là production deployment. Release owner cần kiểm tra inbox reminder được phép nhận và bàn giao vật phẩm/người nhận thật. Các case dual confirmation/mismatch/no-show/race có isolated SQL/browser evidence, không thay biên bản ngoài đời.
 
 ## Giới hạn nghiệm thu
 

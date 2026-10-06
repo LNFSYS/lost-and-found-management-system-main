@@ -1,10 +1,10 @@
 # Lịch hẹn, bàn giao và hành trình vật phẩm - 06/10/2026
 
-Receipt bổ sung hiện tại: [sửa UAT 06/10](../audits/uat-repair-verification-2026-10-06.md). Các bằng chứng local bên dưới là snapshot trước lượt sửa UAT, không dùng số test cũ làm receipt cuối.
+Receipt hiện tại: [release 06/10](../audits/dev-main-release-2026-10-06.md). Code đã push `dev`; CI MySQL 8.0/8.4 và browser đạt trên `d7dd7fa`, 063 đã áp dụng Aiven và shared smoke đã chạy. [Sửa UAT](../audits/uat-repair-verification-2026-10-06.md) và bảng local bên dưới là snapshot trước rollout; không dùng số test cũ làm receipt cuối. PR vẫn cần CI đúng HEAD sau cập nhật tài liệu, nghiệm thu inbox và bàn giao vật lý riêng.
 
 ## Phạm vi hiện tại
 
-Thay đổi local trên `dev`, dựa trên `195b134c34c3cee559187bfee13d05e78abf3bfe`, tại `<workspace>`. Chưa commit/push/merge main; không ghi Aiven. Không sử dụng project cũ. Giữ nguyên công việc tài liệu đã có trong worktree, receipt và điểm audit lịch sử.
+Runtime tại `<workspace>`, nhánh `dev`; không sử dụng project cũ. Đợt release đã commit/push code/tests/tài liệu, được phép áp dụng riêng 063 sau backup/restore/CI; chưa merge `main` hoặc chứng nhận deployment production. Giữ receipt và điểm audit lịch sử.
 
 - Lịch hẹn riêng: `/appointments` và `/appointments/:id`; điểm vào từ navigation **Lịch hẹn** và **Tạo / xem lịch hẹn** trong chat.
 - Đề xuất thời gian tương lai (ít nhất 1 phút, tối đa 90 ngày), điểm bàn giao active; chỉ bên nhận đề xuất được accept/reject. Một active attempt cho mỗi claim. Hủy có lý do 3-500 ký tự, giữ lịch sử và thông báo.
@@ -33,19 +33,19 @@ Giữ preference nhóm claim hiện có, verified/active email, quiet hours, unr
 
 ## Schema và rollout
 
-New forward-only [063_appointment_workflow.sql](../../apps/api-node/src/migrations/063_appointment_workflow.sql) thêm `return_appointment_workflows` và `appointment_events`; không sửa migrations đã chạy, enum cũ hoặc ledger/checksum. Schema đã thử trên database loopback cô lập. **Chưa áp dụng migration 063 trên Aiven**; khi thiếu schema, endpoint/scheduler báo 503/paused có hướng dẫn, không pretend success.
+Forward-only [063_appointment_workflow.sql](../../apps/api-node/src/migrations/063_appointment_workflow.sql) thêm `return_appointment_workflows` và `appointment_events`; không sửa migrations đã chạy, enum cũ hoặc checksum lịch sử. **Đã áp dụng 063 trên Aiven** lúc `2026-10-06T11:19:52.254Z`, sau restore/rehearsal và CI xanh. Không chạy lại; môi trường khác còn thiếu schema vẫn phải fail closed 503/paused.
 
-Read-only `npm run migrate:preflight` chạy lại ngày 06/10: 59 source migrations, 61 applied ledger entries, 28 APPLIED attempts; pending duy nhất `063_appointment_workflow.sql`. Hai cảnh báo lịch sử vẫn nguyên: scope 053 khác recovered runtime và SQL gốc custody-time 055 chưa xác minh. Không ghi ledger/schema hay replay SQL.
+Postflight read-only `npm run migrate:preflight` sau rollout: 59 source migrations, 62 applied ledger entries, 29 APPLIED attempts; `pending: []`. Hai cảnh báo lịch sử vẫn nguyên: scope 053 khác recovered runtime và SQL gốc custody-time 055 chưa xác minh. Không ghi lại ledger/schema hay replay SQL để loại warnings.
 
 Lịch hẹn cũ không có workflow metadata giữ version 0 và chỉ đọc trên cả UI/API. Không backfill/đoán xác nhận, không tự dùng status COMPLETED cũ để chứng nhận physical receipt. Active legacy appointment có thể chặn attempt mới; cần review riêng dựa trên history trước bất kỳ conversion/cancellation write nào.
 
-Trước shared rollout: DB owner xác nhận endpoint/database, read-only preflight, protected backup và restore rehearsal cô lập, review additive SQL/schema plan rồi phê duyệt migration write riêng. Không chạy destructive integration trên Aiven hoặc `npm run migrate` mù với `.env` shared. Không replay migration applied, xóa ledger hoặc sửa checksum. Giới hạn 053/055 và các custody link lịch sử vẫn ở [history review](../audits/migration-history-review-2026-10-05.md)/[recovery](database-warehouse-recovery.md). Không rerun rollout 16 ảnh kho đã hoàn tất.
+Với target khác chưa có 063: DB owner xác nhận endpoint/database, read-only preflight, protected backup và restore rehearsal cô lập, review additive SQL/schema plan rồi phê duyệt migration write riêng. Không chạy destructive integration trên Aiven hoặc `npm run migrate` mù với `.env` shared. Không replay migration applied, xóa ledger hoặc sửa checksum. Giới hạn 053/055 và các custody link lịch sử vẫn ở [history review](../audits/migration-history-review-2026-10-05.md)/[recovery](database-warehouse-recovery.md). Không rerun rollout 16 ảnh kho đã hoàn tất.
 
-Follow-up 06/10: backup DB encrypted ngoài Git, Windows ACL owner/SYSTEM; **64 bảng/4.421 dòng** đã restore/rehearsal trên MySQL 9.3 loopback. Native DDL capture xử lý ANSI để không mất engine/collation, khôi phục settings session cả khi lỗi. Clone chỉ thêm 2 bảng và APPLIED 063; bảng/dữ liệu/ledger cũ giữ nguyên, runner lần hai không replay. Protected receipt `063-rehearsal.json` và giới hạn version ở biên bản sửa UAT. **Chưa áp dụng 063 lên Aiven**: thiếu phê duyệt riêng; preflight mới vẫn pending đúng 063. Không dùng backup ANSI thử nghiệm chưa đạt restore check.
+Backup rehearsal ban đầu là snapshot **64 bảng/4.421 dòng**; backup mới ngay trước rollout là **64 bảng/4.426 dòng**. Cả hai được mã hóa ngoài Git, Windows ACL owner/SYSTEM, restore/rehearsal trên MySQL 9.3 loopback. Native DDL capture xử lý ANSI để không mất engine/collation, khôi phục settings session cả khi lỗi. Clone chỉ thêm 2 bảng và APPLIED 063; bảng/dữ liệu/ledger cũ giữ nguyên, runner lần hai không replay. Backup mới/receipt `063-applied.json` được đối chiếu trước write Aiven. Không dùng backup ANSI thử nghiệm chưa đạt restore check.
 
 Deploy schema trước app/worker cần schema mới. Chỉ rollout app sau verification/CI đúng candidate; dừng/drain worker theo runbook hiện có. Khi rollback app, giữ schema/history mới, không DROP bảng hoặc replay 063. Không coi schema applied là deployment hay nghiệm thu nghiệp vụ.
 
-## Bằng chứng local
+## Snapshot Local Trước Sửa UAT
 
 Các command bên dưới đã hoàn tất; không dùng receipt baseline để chứng nhận code mới:
 
@@ -66,12 +66,12 @@ SQL dùng server MySQL **9.3** độc lập, `127.0.0.1:33308`, fixture database
 
 Full SQL dùng `npm --workspace @lnfs/api-node run test` với `LNFS_DB_INTEGRATION=1` và `LNFS_TEST_DB_*` chỉ vào helper loopback `_test`; final focused dùng Node với `--import tsx --import ./src/test/setup-env.ts --test` cho appointment integration/use-case tests và activity use-case tests. Không dùng `--test-force-exit`, destructive shared tests hoặc SMTP production để lấy receipt. `git diff --check` pass; UC catalogue/architecture/typecheck/build pass. SQL helper đã được dừng sau kiểm tra; không dừng API/Vite đang phục vụ người dùng.
 
-Web dev đang chạy sẵn tại `http://localhost:5173/`; giữ nguyên server đó. Công cụ chặn khởi động một server background bổ sung, nên không báo một URL mới chưa chạy. Calendar trên shared Aiven cần 063 trước khi sử dụng, dù UI và isolated workflow đã kiểm thử.
+Web dev đang chạy sẵn tại `http://localhost:5173/`; giữ nguyên server đó. Calendar trên shared Aiven đã qua schema gate sau rollout 063; đây là local API/Web dùng shared DB, không phải cloud deployment.
 
 ## UC và nghiệm thu còn lại
 
-New local implementation: UC-126/127/128/130/131/133, UC-134-140, UC-163/166/167. UC-125 chuyển Partial cho appointment producers đã có nhưng counter/reschedule/full channels còn thiếu. UC-129/132 vẫn Planned; UC-164, general Staff escalation, full disposition và delivery categories không tự nâng. Catalogue **168 = 129 Implemented + 20 Partial + 19 Planned**, còn 39 mục với assignee cũ; không thêm UC ID hay thay điểm lịch sử. Mapping FR-APPT-02/FR-AUDIT-02/FR-JOURNEY-01 và BR-72-74 dành cho yêu cầu/quy tắc nghiệp vụ thật, không tạo ID cho bug fix.
+Implementation: UC-126/127/128/130/131/133, UC-134-140, UC-163/166/167. UC-125 chuyển Partial cho appointment producers đã có nhưng counter/reschedule/full channels còn thiếu. UC-129/132 vẫn Planned; UC-164, general Staff escalation, full disposition và delivery categories không tự nâng. Catalogue **168 = 129 Implemented + 20 Partial + 19 Planned**, còn 39 mục với assignee cũ; không thêm UC ID hay thay điểm lịch sử. Mapping FR-APPT-02/FR-AUDIT-02/FR-JOURNEY-01 và BR-72-74 dành cho yêu cầu/quy tắc nghiệp vụ thật, không tạo ID cho bug fix.
 
 Manual UAT cần hai tài khoản thật cho FOUND thông thường và photo-backed LOST không FOUND: eligibility, accept/reject/cancel, hai xác nhận, mismatch/correction, no-show, pending report, chuyển custody, private journey và lịch legacy. Staff intake/verification/return tiếp tục là nhánh riêng với proof/identity/hold gates. Dùng provider-controlled recipients để kiểm tra nhắc email, preference/quiet hours, link auth, cancellation và shutdown, không gửi tới người dùng thật ngoài phạm vi chấp thuận.
 
-Cần nghiệm thu thêm authorization/privacy/security sâu, keyboard/screen-reader/device accessibility, load/failover nhiều instance và vận hành reminder khi downtime. Không tuyên bố production/main sẵn sàng từ local mocks/tests. Chưa có new candidate SHA/CI/deployment; không tự commit/push/merge trong đợt này.
+Cần nghiệm thu thêm authorization/privacy/security sâu, keyboard/screen-reader/device accessibility, load/failover nhiều instance và vận hành reminder khi downtime. Không tuyên bố production/main sẵn sàng từ local mocks/tests. CI và shared smoke hiện tại nằm trong release receipt; inbox/physical acceptance và production deployment chưa được chứng nhận. Không tự merge `main`.

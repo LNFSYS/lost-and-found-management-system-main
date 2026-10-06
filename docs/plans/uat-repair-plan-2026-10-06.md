@@ -2,17 +2,17 @@
 
 ## 1. Mục tiêu và trạng thái
 
-Trạng thái triển khai mới nằm ở [biên bản sửa UAT 06/10](../audits/uat-repair-verification-2026-10-06.md). Các mục bên dưới giữ checklist kế hoạch ban đầu; không dùng chúng thay receipt cuối. UAT-02/03 đã sửa local; UAT-01 đã backup/restore/rehearsal nhưng chưa được phép ghi shared Aiven.
+Trạng thái mới nằm ở [release receipt 06/10](../audits/dev-main-release-2026-10-06.md), bổ sung [biên bản sửa UAT](../audits/uat-repair-verification-2026-10-06.md). Code đã push `dev`, CI đúng candidate đạt, 063 đã áp dụng Aiven sau backup/restore/rehearsal và phê duyệt. Các mục bên dưới giữ checklist ban đầu; không mặc định các mục nghiệm thu vật lý/inbox đã xong.
 
 Nguồn: [báo cáo UAT thực tế 06/10](../audits/real-workflow-uat-2026-10-06.md), [rollout lịch hẹn/hành trình](../runbooks/appointment-journey-rollout.md), [re-audit và follow-up 05/10](../audits/full-system-re-audit-2026-10-05.md).
 
-Tài liệu này là kế hoạch giao việc, không phải bằng chứng đã sửa code hoặc đã rollout. Đợt tổ chức tài liệu chỉ chuyển thư mục, cập nhật liên kết và tạo checklist; không ghi Aiven, không đổi UC/status nghiệp vụ, không commit/push/merge.
+Tài liệu này là kế hoạch giao việc; receipt mới ghi bằng chứng thực hiện. Đợt tổ chức tài liệu ban đầu không ghi DB; đợt release tiếp theo được cho phép commit/push và chỉ áp dụng migration 063. Không đổi UC/status nghiệp vụ hoặc merge `main` từ việc lọc tài liệu.
 
 | Mục | Ưu tiên | Phụ trách đề xuất | Trạng thái cần xử lý |
 | --- | --- | --- | --- |
-| UAT-01: schema lịch hẹn còn thiếu | P1 | DB owner + Backend + QA | Chờ phê duyệt rollout 063 và chạy lại nhánh trả trực tiếp |
-| UAT-02: refresh 429 đưa về login | P2 | Backend + Frontend + QA | Cần sửa limiter và phân loại lỗi refresh |
-| UAT-03: cảnh báo loading claim bị cũ | P3 | Frontend + QA | Cần sửa vòng đời trạng thái trong popup trả đồ |
+| UAT-01: schema lịch hẹn còn thiếu | P1 | DB owner + Backend + QA | 063 applied, pending rỗng; shared appointment smoke đạt. Inbox và bàn giao thật còn cần nghiệm thu |
+| UAT-02: refresh 429 đưa về login | P2 | Backend + Frontend + QA | Đã sửa; CI/regression và shared 12 refresh/3 hard reload đạt. Sizing NAT/multi-instance còn riêng |
+| UAT-03: cảnh báo loading claim bị cũ | P3 | Frontend + QA | Đã sửa; CI/regression và shared popup desktop/mobile/loading/field error/focus đạt, không submit return thật |
 | Nghiệm thu bổ sung | Release gate | QA + vận hành + release owner | Chưa đủ bằng chứng email inbox, cạnh tranh claim, legal hold, tải/failover và bàn giao ngoài đời |
 
 Các vai trò trên chưa phải assignee đã xác nhận. Nhóm tự giao người thực hiện; không thay attribution Git hoặc lịch sử ticket dựa trên bảng này.
@@ -20,7 +20,7 @@ Các vai trò trên chưa phải assignee đã xác nhận. Nhóm tự giao ngư
 ## 2. Phạm vi và nguyên tắc
 
 - Chỉ làm tại `<workspace>`, nhánh `dev`; không sử dụng project cũ `<obsolete-workspace>`.
-- Đọc branch/status/diff/history trước mỗi đợt. Worktree đã có implementation lịch hẹn, audit và journey chưa commit; giữ nguyên công việc đó.
+- Đọc branch/status/diff/history trước mỗi đợt. Implementation lịch hẹn, audit và journey đã commit/push; giữ nguyên công việc khác nếu worktree có thay đổi mới.
 - Xác minh lại từng finding với code và môi trường hiện tại trước khi sửa. Trạng thái DB trong báo cáo là snapshot, không mặc định vẫn đúng ở ngày thực hiện.
 - Không bỏ xác minh người nhận, proof, consent, tranh chấp hoặc legal hold để làm luồng pass. Staff tiếp nhận không tự trở thành Finder và không tự chấp nhận claim.
 - Finder liên hệ bài LOST có thể chuyển custody mà không đăng FOUND; ảnh chỉ hỗ trợ trao đổi, không tự chứng nhận quyền sở hữu. Không tạo bài FOUND giả.
@@ -50,9 +50,9 @@ UAT ghi nhận `GET/POST /api/appointments` trả `503`; preflight có pending `
 
 ### Điều kiện đóng UAT-01
 
-- [ ] Có backup/restore receipt, rehearsal cô lập, phê duyệt write và migration receipt đúng DB.
-- [ ] API tạo/xem lịch hợp lệ không còn 503 vì thiếu schema; validation/authorization vẫn chặn yêu cầu sai.
-- [ ] Đề xuất, accept/reject/cancel và xem lịch hoạt động cho đúng participant; không tự chuyển claim sang accepted.
+- [x] Có backup/restore receipt, rehearsal cô lập, phê duyệt write và migration receipt đúng DB.
+- [x] API tạo/xem lịch hợp lệ không còn 503 vì thiếu schema; validation/authorization vẫn chặn yêu cầu sai.
+- [x] Đề xuất, accept/reject/cancel và xem lịch hoạt động cho đúng participant; không tự chuyển claim sang accepted.
 - [ ] Finder xác nhận giao và người mất xác nhận nhận: một phía không hoàn tất, hai xác nhận hợp lệ mới hoàn tất nguyên tử và resolve đúng bài liên quan.
 - [ ] Mâu thuẫn giữ pending; correction có kiểm tra vật lý/lịch sử, report đang mở vẫn chặn hoàn tất. Không mở feedback từ outcome chưa hợp lệ.
 - [ ] No-show sau thời gian cho phép được ghi là khai báo một phía, không tự xác nhận trả đồ hoặc xử phạt; attempt mới giữ lịch sử cũ.
@@ -149,15 +149,19 @@ Không nâng UC thành Implemented/Verified hoặc đổi điểm audit chỉ v�
 ### Checklist báo cáo kết quả
 
 - [x] UAT-01/02/03 có disposition riêng: đã sửa, đã kiểm chứng, còn cần nghiệm thu hoặc bị chặn và lý do.
-- [ ] Rollout có phê duyệt/backup/restore/preflight receipt; không đánh đồng schema applied với app deployed.
-- [x] Có kết quả suites/regression mới; lỗi harness/kỳ vọng sai được phân biệt với bug sản phẩm. Shared UAT vẫn chờ rollout 063, không được coi là đã PASS.
+- [x] Rollout có phê duyệt/backup/restore/preflight receipt; không đánh đồng schema applied với app deployed.
+- [x] Có kết quả suites/regression mới; lỗi harness/kỳ vọng sai được phân biệt với bug sản phẩm. Shared smoke đã chạy sau 063; physical/inbox UAT vẫn còn riêng.
 - [x] Các giới hạn lịch sử, email/provider/manual/load/failover còn lại được nêu rõ; không tuyên bố done toàn bộ hoặc main/production sẵn sàng khi chưa đủ bằng chứng.
-- [x] Không tự commit/push/merge; nếu được yêu cầu sau này, review file/attribution và CI đúng candidate trước quyết định release.
+- [x] Commit/push theo yêu cầu release sau review file/attribution; CI đúng candidate đạt. Không tự merge `main`; commit receipt mới cần CI đúng HEAD riêng.
 
-## 8. Follow-up thực hiện
+## 8. Snapshot Trước Rollout
 
 Xem [receipt chi tiết](../audits/uat-repair-verification-2026-10-06.md). Refresh đã tách quota, phân loại lỗi tạm thời/revoked và chặn phản hồi phiên cũ. Popup đã tách loading khỏi lỗi field, fail closed khi review lỗi và giữ draft/proof khi retry. Backup chụp DDL native thay vì bản ANSI thiếu options; 64 bảng/4.421 dòng đã restore và rehearsal additive 063 thành công trên helper cô lập.
 
 Shared Aiven vẫn pending 063; checklist đóng UAT-01 chưa được đánh dấu. Regression local không thay shared UAT, inbox thật, manual bàn giao, load/failover hay CI đúng candidate. Không sửa UC/điểm audit hoặc các giới hạn lịch sử 053/055.
 
 Receipt cuối: `npm test` 401 PASS/30 opt-in skips (SQL đã chạy riêng), full API/SQL 469/469, Playwright 105/105, build PASS, audit production 0 vulnerabilities; UC/architecture/link/diff checks PASS. Helper đã shutdown; generated datadir còn cần cleanup và không được public artifact. Không commit/push/merge.
+
+## 9. Follow-up Release
+
+Các câu pending/chưa commit trong mục 8 là snapshot cũ. [Release receipt](../audits/dev-main-release-2026-10-06.md) ghi CI MySQL 8.0/8.4 469/469 mỗi job và browser 105/105 trên `d7dd7fa`, backup mới 64 bảng/4.426 dòng, rollout 063 applied với ledger cũ giữ nguyên và postflight `pending: []`. Shared smoke đạt proposal/accept/reject/cancel, auth/journey/audit và scheduler enqueue reminder; follow-up popup đạt desktop/mobile. Không giả bàn giao vật lý hoặc suy ra inbox từ outbox PENDING. Giới hạn 053/055, multi-instance/load và acceptance còn thiếu giữ nguyên; PR không thay nghiệm thu production.
