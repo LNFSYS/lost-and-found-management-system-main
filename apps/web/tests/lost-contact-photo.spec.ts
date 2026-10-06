@@ -175,6 +175,8 @@ for (const width of [1440, 390]) test(`suggestions send normal text and the two 
   await openPhotoCheckedRoom(page);
   const textRequests: string[] = [];
   let images = 0, evidenceUploads = 0;
+  let releaseEvidenceResponse!: () => void;
+  const evidenceResponse = new Promise<void>(resolve => { releaseEvidenceResponse = resolve; });
   const message = (id: string, content: string, image = false) => ({ id, roomId: "room", sender: session.user, content,
     clientMessageId: id, messageType: image ? "IMAGE" : "TEXT", mediaUrl: image ? `/api/claims/${claimId}/evidence/chat-photo` : null,
     isRead: false, readAt: null, createdAt: "2026-10-01T01:00:00Z" });
@@ -189,9 +191,11 @@ for (const width of [1440, 390]) test(`suggestions send normal text and the two 
     return route.fulfill({ json: message("chat-image", "", true) });
   });
   await page.route(`**/api/claims/${claimId}/evidence/chat-photo`, route => route.fulfill({ contentType: "image/png", body: photo.buffer }));
-  await page.route(`**/api/claims/${claimId}/evidence`, route => {
+  await page.route(`**/api/claims/${claimId}/evidence`, async route => {
     if (route.request().method() !== "POST") return route.fallback();
     evidenceUploads++;
+    expect(route.request().postDataBuffer()?.includes(photo.buffer)).toBe(true);
+    await evidenceResponse;
     return route.fulfill({ json: { id: "separate-evidence", claimId, uploadedBy: session.user, mediaFormat: "png", mediaBytes: photo.buffer.length,
       evidenceType: "PHOTO", description: "Private evidence", createdAt: post.createdAt, url: `/api/claims/${claimId}/evidence/chat-photo` } });
   });
@@ -231,7 +235,15 @@ for (const width of [1440, 390]) test(`suggestions send normal text and the two 
   await expect(evidenceFile).toBeVisible(); await expect(evidenceFile).toBeFocused();
   await expect(page.locator(".evidence-panel--uploading")).toBeVisible();
   await evidenceFile.setInputFiles(photo);
-  await page.locator(".evidence-upload-compact").getByRole("button", { name: "Tải lên", exact: true }).click();
+  try {
+    await page.locator(".evidence-upload-compact").getByRole("button", { name: "Tải lên", exact: true }).click();
+    await expect.poll(() => evidenceUploads).toBe(1);
+    await expect(page.locator(".evidence-upload-compact").getByRole("button", { name: "Đang tải...", exact: true })).toBeDisabled();
+  } finally {
+    releaseEvidenceResponse();
+  }
+  await expect(page.locator(".evidence-count")).toHaveText("1 private evidence items");
+  await expect(page.locator(".evidence-upload-compact")).toHaveCount(0);
   expect(evidenceUploads).toBe(1);
   await page.screenshot({ path: testInfo.outputPath(`chat-actions-${width}.png`), fullPage: true });
   expect(errors).toEqual([]);

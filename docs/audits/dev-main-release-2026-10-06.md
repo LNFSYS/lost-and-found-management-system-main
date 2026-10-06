@@ -67,6 +67,12 @@ Local API/Web trong workspace chính dùng shared Aiven; đây không phải dep
 
 PR `dev` vào `main` phải dùng HEAD đã push và CI đúng SHA sau commit receipt. Giữ draft khi chưa có chấp thuận nghiệm thu còn thiếu; không tự merge `main` hoặc gọi API local là production deployment. Release owner cần kiểm tra inbox reminder được phép nhận và bàn giao vật phẩm/người nhận thật. Các case dual confirmation/mismatch/no-show/race có isolated SQL/browser evidence, không thay biên bản ngoài đời.
 
+[PR #81](https://github.com/LNFSYS/lost-and-found-management-system-main/pull/81) đã mở draft, không có conflict. [CI HEAD bce29f1](https://github.com/LNFSYS/lost-and-found-management-system-main/actions/runs/37457013637) đạt toàn bộ; [CI merge candidate đầu](https://github.com/LNFSYS/lost-and-found-management-system-main/actions/runs/37457117504) đạt cả SQL jobs nhưng browser 104 PASS/1 FAIL. Không coi PR đã xanh từ CI của dev.
+
+Browser finding ở `lost-contact-photo.spec.ts`: sau click upload evidence, assertion bộ đếm đọc ngay trước khi request đến route handler. Sửa test chờ đúng request, kiểm tra bytes và busy state khi response được giữ có kiểm soát, rồi chờ UI ghi nhận một evidence và đóng form; vẫn kiểm tra chỉ một upload, không skip/retry để lấy PASS. Không đổi production code, schema hoặc replay 063. HEAD sau sửa phải có CI push và merge candidate riêng; kết quả cuối nằm trong checklist PR, không thay lịch sử run đỏ.
+
+Sau sửa test: repeat-each 10 ở mỗi viewport 1440/390 đạt 20/20; toàn bộ Playwright hai workers đạt 105/105, native exit 0. Lượt gọi qua npm workspace bị Windows argument parsing thành tên test đã dừng với `No tests found`; chạy trực tiếp Playwright CLI với đúng arguments, không chọn/bỏ test trong lượt full suite.
+
 ## Giới hạn nghiệm thu
 
 CI/local SQL/browser, smoke HTTP trên shared runtime và email được SMTP tiếp nhận là các lớp bằng chứng khác nhau. Không tự xác nhận vật phẩm đã bàn giao, không tạo feedback/reputation giả, không suy ra email tới inbox từ outbox.
