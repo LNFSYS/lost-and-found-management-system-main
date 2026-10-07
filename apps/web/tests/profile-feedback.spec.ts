@@ -27,9 +27,10 @@ function activity(points = 0, receivedFeedback = 0) {
   };
 }
 
-test("profile lets an eligible participant submit return feedback once", async ({ page }) => {
+test("profile lets an eligible participant submit return feedback once", async ({ page }, testInfo) => {
   let submitted: Record<string, unknown> | null = null;
   let activityPoints = 0;
+  await page.route("**/api/returns/completed?*", route => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ items: [{ id: appointmentId, postTitle: "Ví da đã hoàn trả", completedAt: "2026-09-05T08:00:00.000Z", rating: null }], page: 1, hasMore: false }) }));
   await page.route("**/api/auth/refresh", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(session) }));
   await page.route("**/api/auth/activity", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(activity(activityPoints, activityPoints ? 1 : 0)) }));
   await page.route(`**/api/returns/${appointmentId}/feedback/eligibility`, (route) => route.fulfill({
@@ -86,8 +87,8 @@ test("profile lets an eligible participant submit return feedback once", async (
   });
 
   await page.goto("/profile");
-  await page.locator(".return-feedback-check input").fill(appointmentId);
-  await page.locator(".return-feedback-check button").click();
+  await expect(page.getByPlaceholder("UUID appointment")).toHaveCount(0);
+  await page.getByRole("button", { name: /Ví da đã hoàn trả/ }).click();
   await expect(page.locator(".return-feedback-status").first()).toContainText("Bạn có thể gửi feedback");
   await page.locator(".return-feedback-form select").selectOption("5");
   await page.locator(".return-feedback-form textarea").fill("Cảm ơn bạn đã trả đồ đúng hẹn");
@@ -100,4 +101,31 @@ test("profile lets an eligible participant submit return feedback once", async (
   await expect(page.locator(".return-feedback-status.is-done")).toContainText("5/5");
   await expect(page.locator(".profile-grid")).toContainText("6");
   expect(payload.idempotencyKey).toBe(`feedback-${appointmentId}-${session.user.id}`);
+  for (const width of [1440, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.locator(".return-feedback-panel").scrollIntoViewIfNeeded();
+    await page.screenshot({ path: testInfo.outputPath(`completed-returns-${width}.png`) });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
+  }
+});
+
+test("completed return list recovers from errors, pages and handles an empty result", async ({ page }) => {
+  await page.route("**/api/auth/refresh", route => route.fulfill({ json: session }));
+  await page.route("**/api/auth/activity", route => route.fulfill({ json: activity() }));
+  let attempts = 0;
+  await page.route("**/api/returns/completed?*", route => {
+    if (++attempts === 1) return route.fulfill({ status: 503, json: { message: "Unavailable" } });
+    const current = Number(new URL(route.request().url()).searchParams.get("page"));
+    return route.fulfill({ json: { items: current === 1 ? [{ id: appointmentId, postTitle: "Completed wallet", completedAt: "2026-01-01T00:00:00Z", rating: 5 }] : [], page: current, hasMore: current === 1 } });
+  });
+  await page.goto("/profile");
+  const panel = page.locator(".return-feedback-panel");
+  await expect(panel).toContainText("Không tải được lịch hoàn trả");
+  await panel.getByRole("button", { name: "Thử lại" }).click();
+  await expect(panel.getByRole("button", { name: /Completed wallet/ })).toContainText("Đã đánh giá 5/5");
+  await panel.getByRole("button", { name: "Sau", exact: true }).click();
+  await expect(panel).toContainText("Bạn chưa có lịch hoàn trả đã hoàn tất.");
+  await expect(panel.getByRole("button", { name: "Sau", exact: true })).toBeDisabled();
+  await panel.getByRole("button", { name: "Trước", exact: true }).click();
+  await expect(panel.getByRole("button", { name: /Completed wallet/ })).toBeVisible();
 });

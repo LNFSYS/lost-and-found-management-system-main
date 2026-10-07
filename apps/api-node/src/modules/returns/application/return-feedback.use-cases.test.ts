@@ -63,6 +63,7 @@ function createHarness(currentAppointment = appointment()) {
     score: { userId: finderId, totalPoints: 0, level: "NEW", updatedAt: null } as ReputationScoreRecord
   };
   const repository: ReturnFeedbackRepository = {
+    listCompletedForUser: async () => [],
     findAppointmentForFeedback: async () => currentAppointment,
     listFeedbackForAppointment: async () => state.feedbacks,
     findFeedbackByReviewer: async (appointmentId, reviewerId) => state.feedbacks.find((item) => item.appointmentId === appointmentId && item.reviewerId === reviewerId) ?? null,
@@ -92,8 +93,20 @@ function createHarness(currentAppointment = appointment()) {
     repository,
     runInTransaction: async (work) => work({} as TransactionContext)
   });
-  return { service, state };
+  return { service, state, repository };
 }
+
+test("completed return list is always owner-scoped with bounded pagination", async () => {
+  const f = createHarness();
+  f.repository.listCompletedForUser = async (userId, page) => {
+    assert.equal(userId, claimantId);
+    assert.equal(page, 2);
+    return Array.from({ length: 21 }, (_, index) => ({ id: String(index), postTitle: "Returned item", completedAt: "2026-01-01T00:00:00Z", rating: null }));
+  };
+  const result = await f.service.listCompleted(viewer(), 2);
+  assert.equal(result.items.length, 20);
+  assert.equal(result.hasMore, true);
+});
 
 test("dual-confirmed return feedback creates exactly one feedback and reputation event", async () => {
   const { service, state } = createHarness();

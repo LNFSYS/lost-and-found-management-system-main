@@ -948,6 +948,7 @@ export const api = {
   recalculatePostMatches: (postId: string, page = 1, pageSize = 20) => raw<PostMatchesResponse>(`/posts/${postId}/matches/recalculate${queryString({ page, pageSize })}`, { method: "POST" }),
   submitMatchFeedback: (postId: string, matchId: string, payload: { value: MatchFeedbackValue; note?: string | null; correlationKey: string }) => raw<MatchFeedbackRecord>(`/posts/${postId}/matches/${matchId}/feedback`, { method: "POST", body: JSON.stringify(payload) }),
   dismissMatch: (postId: string, matchId: string, payload: { reason?: string | null; correlationKey: string }) => raw<{ id: string; correlationKey: string; reason: string | null; createdAt: string }>(`/posts/${postId}/matches/${matchId}/dismiss`, { method: "POST", body: JSON.stringify(payload) }),
+  listCompletedReturns: (page = 1) => raw<{ items: Array<{ id: string; postTitle: string; completedAt: string; rating: number | null }>; page: number; hasMore: boolean }>(`/returns/completed?page=${page}`),
   getReturnFeedbackEligibility: (appointmentId: string) => raw<ReturnFeedbackEligibility>(`/returns/${appointmentId}/feedback/eligibility`),
   submitReturnFeedback: (appointmentId: string, payload: { rating: number; comment?: string | null; idempotencyKey: string }) => raw<SubmitReturnFeedbackResponse>(`/returns/${appointmentId}/feedback`, { method: "POST", body: JSON.stringify(payload) }),
   listClaims: (query?: { page?: number; pageSize?: number }) => {

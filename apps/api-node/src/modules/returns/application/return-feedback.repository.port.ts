@@ -46,6 +46,7 @@ export interface ReputationScoreRecord {
 }
 
 export interface ReturnFeedbackRepository {
+  listCompletedForUser(userId: string, page: number): Promise<Array<{ id: string; postTitle: string; completedAt: string; rating: number | null }>>;
   findAppointmentForFeedback(appointmentId: string, connection?: TransactionContext, forUpdate?: boolean): Promise<ReturnAppointmentForFeedback | null>;
   listFeedbackForAppointment(appointmentId: string, connection?: TransactionContext): Promise<ReturnFeedbackRecord[]>;
   findFeedbackByReviewer(appointmentId: string, reviewerId: string, connection?: TransactionContext): Promise<ReturnFeedbackRecord | null>;

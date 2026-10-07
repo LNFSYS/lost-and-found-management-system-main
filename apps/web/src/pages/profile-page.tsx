@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { type ChangeEvent, type FormEvent, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import "./profile-feedback.css";
 import { useAuth } from "../context/auth-context";
 import { api, type ProfileActivitySummary, type ReturnFeedbackEligibility } from "../services/api";
 
@@ -66,6 +67,23 @@ export function ProfilePage() {
   const [feedbackBusy, setFeedbackBusy] = useState(false);
   const [feedbackNotice, setFeedbackNotice] = useState("");
   const [feedbackError, setFeedbackError] = useState("");
+  const [completedReturns, setCompletedReturns] = useState<Awaited<ReturnType<typeof api.listCompletedReturns>> | null>(null);
+  const [returnPage, setReturnPage] = useState(1);
+  const [returnsLoading, setReturnsLoading] = useState(false);
+  const [returnsRetry, setReturnsRetry] = useState(0);
+
+  useEffect(() => {
+    let active = true;
+    setReturnsLoading(true);
+    setCompletedReturns(null);
+    setFeedbackEligibility(null);
+    setFeedbackAppointmentId("");
+    setFeedbackError("");
+    api.listCompletedReturns(returnPage).then((data) => { if (active) setCompletedReturns(data); })
+      .catch(() => { if (active) setFeedbackError("Không tải được lịch hoàn trả. Vui lòng thử lại."); })
+      .finally(() => { if (active) setReturnsLoading(false); });
+    return () => { active = false; };
+  }, [returnPage, user?.id, returnsRetry]);
 
   useEffect(() => {
     if (!user) return;
@@ -161,14 +179,16 @@ export function ProfilePage() {
     }
   }
 
-  async function checkFeedbackEligibility(event: FormEvent) {
-    event.preventDefault();
+  async function checkFeedbackEligibility(appointmentId: string) {
+    setFeedbackAppointmentId(appointmentId);
+    setFeedbackComment("");
+    setFeedbackRating(5);
     setFeedbackBusy(true);
     setFeedbackError("");
     setFeedbackNotice("");
     setFeedbackEligibility(null);
     try {
-      setFeedbackEligibility(await api.getReturnFeedbackEligibility(feedbackAppointmentId.trim()));
+      setFeedbackEligibility(await api.getReturnFeedbackEligibility(appointmentId));
     } catch (reason) {
       setFeedbackError(reason instanceof Error ? reason.message : "Không thể kiểm tra quyền gửi feedback.");
     } finally {
@@ -191,6 +211,7 @@ export function ProfilePage() {
         idempotencyKey
       });
       setFeedbackNotice(result.idempotent ? "Feedback đã được ghi nhận trước đó." : "Đã gửi feedback và cập nhật điểm uy tín.");
+      setCompletedReturns(current => current ? { ...current, items: current.items.map(item => item.id === feedbackAppointmentId ? { ...item, rating: feedbackRating } : item) } : current);
       setFeedbackEligibility(await api.getReturnFeedbackEligibility(feedbackAppointmentId.trim()));
       await loadActivity();
     } catch (reason) {
@@ -330,19 +351,25 @@ export function ProfilePage() {
           </div>
         </div>
 
-        <form className="return-feedback-check" onSubmit={checkFeedbackEligibility}>
-          <label className="input-field">
-            <span>Mã lịch hoàn trả</span>
-            <input value={feedbackAppointmentId} onChange={(event) => setFeedbackAppointmentId(event.target.value)} placeholder="UUID appointment" required />
-          </label>
-          <button type="submit" className="secondary-button" disabled={feedbackBusy || !feedbackAppointmentId.trim()}>
-            <MessageSquare size={17} /> Kiểm tra
-          </button>
-        </form>
+        {returnsLoading && <p role="status">Đang tải lịch hoàn trả...</p>}
+        {completedReturns?.items.length === 0 && <p>Bạn chưa có lịch hoàn trả đã hoàn tất.</p>}
+        <div className="return-feedback-history">
+          {completedReturns?.items.map((item) => <button key={item.id} className="secondary-button" type="button"
+            disabled={feedbackBusy} aria-pressed={feedbackAppointmentId === item.id}
+            onClick={() => void checkFeedbackEligibility(item.id)}>
+            <MessageSquare size={18} /><span><strong>{item.postTitle}</strong><small>{formatDate(item.completedAt)} · {item.rating == null ? "Xem và đánh giá" : `Đã đánh giá ${item.rating}/5`}</small></span>
+          </button>)}
+        </div>
+        {completedReturns && (returnPage > 1 || completedReturns.hasMore) && <div className="return-feedback-check">
+          <button className="secondary-button" disabled={returnPage === 1 || feedbackBusy} onClick={() => setReturnPage(returnPage - 1)}>Trước</button>
+          <span>Trang {returnPage}</span>
+          <button className="secondary-button" disabled={!completedReturns.hasMore || feedbackBusy} onClick={() => setReturnPage(returnPage + 1)}>Sau</button>
+        </div>}
+        {!returnsLoading && !completedReturns && <button className="secondary-button" onClick={() => setReturnsRetry((value) => value + 1)}><RefreshCw size={16} /> Thử lại</button>}
 
         {feedbackEligibility && (
           <div className="return-feedback-status">
-            <strong>{feedbackEligibility.eligible ? "Bạn có thể gửi feedback" : "Chưa đủ điều kiện gửi feedback"}</strong>
+            <strong>{feedbackEligibility.currentUserFeedback ? "Bạn đã gửi đánh giá" : feedbackEligibility.eligible ? "Bạn có thể gửi feedback" : "Chưa đủ điều kiện gửi feedback"}</strong>
             <span>{feedbackEligibility.reason ?? `Return đã hoàn tất, ${feedbackEligibility.feedbackCount} feedback đã ghi nhận.`}</span>
           </div>
         )}

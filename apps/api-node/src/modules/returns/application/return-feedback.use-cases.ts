@@ -83,6 +83,10 @@ export function createReturnFeedbackUseCases(options: ReturnFeedbackDependencies
   const { repository, adminAuditRepository, runInTransaction, id } = options;
 
   const returnFeedbackService = {
+    async listCompleted(viewer: AccessTokenPayload, page: number) {
+      const rows = await repository.listCompletedForUser(viewer.sub, page);
+      return { items: rows.slice(0, 20), page, hasMore: rows.length > 20 };
+    },
     async getEligibility(appointmentId: string, viewer: AccessTokenPayload): Promise<ReturnFeedbackEligibility> {
       const appointment = await repository.findAppointmentForFeedback(appointmentId);
       if (!appointment) throw new AppError("not_found", "Khong tim thay return appointment");
