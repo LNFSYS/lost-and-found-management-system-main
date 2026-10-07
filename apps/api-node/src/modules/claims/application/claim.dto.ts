@@ -1,4 +1,6 @@
 export type CreateClaimInput = {
+  contactCheckId?: string | undefined;
+  sourceFoundPostId?: string | undefined;
   postId?: string | undefined;
   lostPostId?: string | undefined;
   foundPostId?: string | undefined;
@@ -38,6 +40,7 @@ export type VerificationDecisionInput = {
 export type CreateMessageInput = { content: string; clientMessageId?: string | undefined; };
 
 export type CreateDirectMessageInput = {
+  contactCheckId?: string | undefined;
   postId: string;
   sourceFoundPostId?: string | undefined;
   content: string;

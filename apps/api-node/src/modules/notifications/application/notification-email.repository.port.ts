@@ -2,7 +2,7 @@ import type { TransactionContext } from "../../../shared/application/transaction
 
 export type NotificationEmailMode = "IMMEDIATE" | "DELAYED_UNREAD" | "DIGEST" | "DISABLED";
 export type EmailOutboxMode = Exclude<NotificationEmailMode, "DISABLED">;
-export type NotificationEmailEvent = "CHAT" | "CLAIM" | "APPOINTMENT" | "HANDOVER" | "CUSTODY" | "OVERDUE" | "FEEDBACK";
+export type NotificationEmailEvent = "CHAT" | "CLAIM" | "MATCH" | "APPOINTMENT" | "HANDOVER" | "CUSTODY" | "OVERDUE" | "FEEDBACK";
 
 export interface NotificationEmailPreferences {
   userId: string;

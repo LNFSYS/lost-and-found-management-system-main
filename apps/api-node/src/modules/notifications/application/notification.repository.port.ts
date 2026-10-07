@@ -1,5 +1,6 @@
 import type { TransactionContext } from "../../../shared/application/transaction.js";
 export type NotificationType =
+  | "MATCH_FOUND"
   | "CLAIM_REQUEST_RECEIVED"
   | "CLAIM_ACCEPTED"
   | "CLAIM_MORE_INFO_REQUESTED"

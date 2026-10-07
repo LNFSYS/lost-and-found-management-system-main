@@ -1,4 +1,5 @@
 export type { CustodyRequestStatus, CustodyIntakeType } from "../domain/custody-request-policy.js";
+import type { IntakeEvidenceInput, IntakeReconciliationInput } from "./intake-evidence.dto.js";
 
 export type CreateCustodyRequestInput = {
   claimId?: string | null | undefined;
@@ -24,14 +25,14 @@ export type CancelCustodyRequestInput = {
   reason?: string | null | undefined;
 };
 
-export type IntakeCustodyRequestInput = {
+export type IntakeCustodyRequestInput = IntakeEvidenceInput & IntakeReconciliationInput & {
   conditionNotes: string;
   storageCode?: string | null | undefined;
   confirmedHandoverAt?: Date | null | undefined;
 };
 
 export type ListCustodyRequestsQuery = {
-  status?: "PENDING" | "ACCEPTED" | "REJECTED" | "CANCELLED" | "INTAKED" | undefined;
+  status?: "AWAITING_INTAKE" | "PENDING" | "ACCEPTED" | "REJECTED" | "CANCELLED" | "INTAKED" | undefined;
   page: number;
   pageSize: number;
 };

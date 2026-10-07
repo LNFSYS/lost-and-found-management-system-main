@@ -1,6 +1,7 @@
 import type { RowDataPacket } from "mysql2";
 import { createHash } from "node:crypto";
 import { custodyFingerprint } from "../application/custody-fingerprint.js";
+import { mapPhotoCustodySource, photoCustodyScope, photoCustodySelect } from "./photo-custody-source.js";
 import type { TransactionContext } from "../../../shared/application/transaction.js";
 import { sqlExecutor, type SqlExecutor } from "../../../shared/infrastructure/transaction-context.js";
 import type { CustodyIntakeType, CustodyRequestStatus } from "../application/custody-request.dto.js";
@@ -35,6 +36,7 @@ interface CustodyRequestRow extends RowDataPacket {
   created_at: Date | string;
   updated_at: Date | string;
   post_title: string | null;
+  post_thumbnail_id: string | null;
 }
 
 interface CustodyRequestLockRow extends RowDataPacket {
@@ -76,7 +78,8 @@ const requestSelect = `SELECT cr.id, cr.claim_id, cr.room_id, cr.post_id,
   cr.handover_point_id, hp.name AS handover_point_name, hp.address AS handover_point_address,
   cr.confirmed_handover_at, cr.warehouse_item_id,
   cr.created_at, cr.updated_at,
-  p.title AS post_title
+  p.title AS post_title,
+  (SELECT pm.id FROM post_media pm WHERE pm.post_id = p.id AND pm.media_kind = 'ITEM' ORDER BY pm.sort_order,pm.id LIMIT 1) AS post_thumbnail_id
   FROM custody_requests cr
   INNER JOIN users ru ON ru.id = cr.requester_id
   LEFT JOIN users hu ON hu.id = cr.handler_id
@@ -103,7 +106,7 @@ function mapRequest(row: CustodyRequestRow): CustodyRequest {
     warehouseItemId: row.warehouse_item_id,
     createdAt: iso(row.created_at) ?? "",
     updatedAt: iso(row.updated_at) ?? "",
-    post: row.post_id ? { id: row.post_id, title: row.post_title } : null
+    post: row.post_id ? { id: row.post_id, title: row.post_title, thumbnailId: row.post_thumbnail_id ?? null } : null
   };
 }
 
@@ -126,6 +129,17 @@ function mapAudit(row: AuditRow): CustodyRequestAuditEntry {
 }
 
 export function createCustodyRequestRepository(pool: SqlExecutor) {
+  async function hydrate(row: CustodyRequestRow, db?: TransactionContext) {
+    const request = mapRequest(row);
+    if (!request.postId && request.claimId && request.roomId && request.intakeType === "CUSTODY_TRANSFER") {
+      const [sources] = await sqlExecutor(db ?? pool).execute<RowDataPacket[]>(`${photoCustodySelect}
+        WHERE ${photoCustodyScope} AND c.id = ? AND photo_user.id = ? AND photo_room.id = ?`,
+        [request.claimId,request.requester.id,request.roomId]);
+      const source = sources[0] ? mapPhotoCustodySource(sources[0]) : null;
+      request.photoSource = source ? { lostPostId: source.lostPostId, title: source.post.title, imageId: source.image.id } : null;
+    }
+    return request;
+  }
   const repository: CustodyRequestRepository = {
     async listRequests(input) {
       const pageSize = Math.max(1, Math.min(50, Number(input.pageSize) || 12));
@@ -133,7 +147,9 @@ export function createCustodyRequestRepository(pool: SqlExecutor) {
       const offset = (page - 1) * pageSize;
       const where: string[] = [];
       const values: string[] = [];
-      if (input.status) {
+      if (input.status === "AWAITING_INTAKE") {
+        where.push("cr.status IN ('PENDING','ACCEPTED')");
+      } else if (input.status) {
         where.push("cr.status = ?");
         values.push(input.status);
       }
@@ -150,14 +166,14 @@ export function createCustodyRequestRepository(pool: SqlExecutor) {
         `SELECT COUNT(*) AS total FROM custody_requests cr ${whereClause}`,
         values
       );
-      return { total: Number(countRows[0]?.total ?? 0), items: rows.map(mapRequest) };
+      return { total: Number(countRows[0]?.total ?? 0), items: await Promise.all(rows.map(row => hydrate(row))) };
     },
 
     async findById(id, db) {
       const [rows] = await sqlExecutor(db ?? pool).execute<CustodyRequestRow[]>(
         `${requestSelect} WHERE cr.id = ? LIMIT 1`, [id]
       );
-      return rows[0] ? mapRequest(rows[0]) : null;
+      return rows[0] ? hydrate(rows[0], db) : null;
     },
 
     async lockForUpdate(id, connection) {
@@ -185,14 +201,35 @@ export function createCustodyRequestRepository(pool: SqlExecutor) {
       const [rows] = await sqlExecutor(db ?? pool).execute<CustodyRequestRow[]>(
         `${requestSelect} WHERE cr.requester_id = ? AND cr.idempotency_key IN (?, ?) LIMIT 1`, [actorId, scoped, key]
       );
-      return rows[0] ? mapRequest(rows[0]) : null;
+      return rows[0] ? hydrate(rows[0], db) : null;
     },
 
     async findPendingByClaimId(claimId, db) {
       const [rows] = await sqlExecutor(db ?? pool).execute<CustodyRequestRow[]>(
         `${requestSelect} WHERE cr.claim_id = ? AND cr.status IN ('PENDING','ACCEPTED') LIMIT 1`, [claimId]
       );
-      return rows[0] ? mapRequest(rows[0]) : null;
+      return rows[0] ? hydrate(rows[0], db) : null;
+    },
+
+    async findActiveByClaimId(claimId, db) {
+      const [rows] = await sqlExecutor(db).execute<CustodyRequestRow[]>(`${requestSelect}
+        WHERE cr.claim_id = ? AND cr.status NOT IN ('CANCELLED','REJECTED') ORDER BY cr.created_at DESC LIMIT 1`, [claimId]);
+      return rows[0] ? hydrate(rows[0], db) : null;
+    },
+
+    async findByWarehouseItemId(itemId, db) {
+      const [rows] = await sqlExecutor(db).execute<CustodyRequestRow[]>(`${requestSelect}
+        WHERE cr.warehouse_item_id = ? AND cr.status = 'INTAKED' LIMIT 1`, [itemId]);
+      return rows[0] ? hydrate(rows[0], db) : null;
+    },
+
+    async findPhotoSource(claimId, requesterId, roomId, db) {
+      const [rows] = await sqlExecutor(db ?? pool).execute<RowDataPacket[]>(`${photoCustodySelect}
+        WHERE ${photoCustodyScope} AND c.id = ? AND photo_user.id = ? AND photo_room.id = ?
+          AND c.status IN ('CONVERSATION_OPEN','NEED_MORE_INFO','ACCEPTED')
+          AND identity_post.status IN ('OPEN','MATCHED') AND identity_post.deleted_at IS NULL${db ? " FOR UPDATE" : ""}`,
+        [claimId,requesterId,roomId]);
+      return rows[0] ? mapPhotoCustodySource(rows[0]) : null;
     },
 
     async findActiveByPostId(postId, requesterId, db) {
@@ -237,8 +274,9 @@ export function createCustodyRequestRepository(pool: SqlExecutor) {
     async notificationRecipients(postId, claimId, requesterId, db) {
       const [rows] = await sqlExecutor(db).execute<RowDataPacket[]>(
         `SELECT ? AS id UNION SELECT cp.user_id AS id FROM claim_participants cp JOIN claims c ON c.id = cp.claim_id
-         WHERE COALESCE(c.source_found_post_id,c.post_id) = ? AND (? IS NULL OR c.id = ?) AND cp.consent_status = 'ACCEPTED'
-         UNION SELECT ur.user_id AS id FROM user_roles ur JOIN users u ON u.id = ur.user_id WHERE ur.role_code IN ('STAFF','ADMIN') AND u.status = 'ACTIVE'`, [requesterId, postId, claimId, claimId]);
+         WHERE ((? IS NOT NULL AND COALESCE(c.source_found_post_id,c.post_id) = ?) OR (? IS NULL AND c.id = ?))
+           AND (? IS NULL OR c.id = ?) AND cp.consent_status = 'ACCEPTED'
+         UNION SELECT ur.user_id AS id FROM user_roles ur JOIN users u ON u.id = ur.user_id WHERE ur.role_code IN ('STAFF','ADMIN') AND u.status = 'ACTIVE'`, [requesterId, postId, postId, postId, claimId, claimId, claimId]);
       return [...new Set(rows.map(row => String(row.id)))];
     },
 

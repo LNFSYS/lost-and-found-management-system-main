@@ -50,6 +50,27 @@ export function createWarehouseController({ warehouseService }: {
       const { itemId } = z.object({ itemId: z.string().uuid() }).parse(request.body);
       response.json(await warehouseService.uploadProof(itemId, request.file, actorId(request)));
     },
+    async uploadIntakeImage(request: Request, response: Response) {
+      if (!request.file) throw new HttpError(400, "Cần chọn ảnh tình trạng tiếp nhận");
+      const input = z.object({ intakeKey: z.string().uuid(), custodyRequestId: z.string().uuid().optional(), capturedAt: z.coerce.date().optional() }).parse(request.body);
+      response.status(201).json(await warehouseService.uploadIntakeImage(input, request.file, actorId(request)));
+    },
+    async listImages(request: Request, response: Response) {
+      response.setHeader("Cache-Control", "private, no-store");
+      response.json(await warehouseService.listImages(routeId(request), actorId(request)));
+    },
+    async deleteIntakeImage(request: Request, response: Response) {
+      const { intakeKey } = z.object({ intakeKey: z.string().uuid() }).parse(request.body);
+      response.json(await warehouseService.deleteIntakeImage(intakeKey, routeId(request), actorId(request)));
+    },
+    async getImage(request: Request, response: Response) {
+      const { provenance } = z.object({ provenance: z.enum(["SOURCE_POST", "CONTACT_PHOTO", "INTAKE", "RETURN"]) }).parse(request.query);
+      const image = await warehouseService.getImage(routeId(request), provenance, actorId(request));
+      response.setHeader("Cache-Control", "private, no-store");
+      response.setHeader("Vary", "Authorization");
+      response.setHeader("X-Content-Type-Options", "nosniff");
+      response.type(image.contentType).send(image.body);
+    },
     async getProof(request: Request, response: Response) {
       const proof = await warehouseService.getProof(routeId(request), actorId(request));
       response.setHeader("Cache-Control", "private, no-store");

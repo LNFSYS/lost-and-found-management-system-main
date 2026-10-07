@@ -1,5 +1,13 @@
 import type { TransactionContext } from "../../../shared/application/transaction.js";
 import type { CustodyIntakeType, CustodyRequestStatus } from "./custody-request.dto.js";
+import type { WarehouseImageRecord } from "./intake-evidence.dto.js";
+import type { WarehouseRepository } from "./warehouse.repository.port.js";
+
+export interface PhotoCustodySource {
+  lostPostId: string;
+  post: NonNullable<Awaited<ReturnType<WarehouseRepository["getPostInfoForIntake"]>>>;
+  image: WarehouseImageRecord;
+}
 
 export interface CustodyRequest {
   id: string;
@@ -18,7 +26,8 @@ export interface CustodyRequest {
   warehouseItemId: string | null;
   createdAt: string;
   updatedAt: string;
-  post: { id: string; title: string | null } | null;
+  post: { id: string; title: string | null; thumbnailId?: string | null } | null;
+  photoSource?: { lostPostId: string; title: string; imageId: string } | null;
 }
 
 export interface CustodyRequestLock {
@@ -47,7 +56,7 @@ export interface CustodyRequestAuditEntry {
 
 export interface CustodyRequestRepository {
   listRequests(input: {
-    status?: CustodyRequestStatus;
+    status?: CustodyRequestStatus | "AWAITING_INTAKE";
     page: number;
     pageSize: number;
   }): Promise<{ total: number; items: CustodyRequest[] }>;
@@ -59,6 +68,9 @@ export interface CustodyRequestRepository {
   findByIdempotencyKey(key: string, actorId: string, db?: TransactionContext): Promise<CustodyRequest | null>;
 
   findPendingByClaimId(claimId: string, db?: TransactionContext): Promise<CustodyRequest | null>;
+  findActiveByClaimId(claimId: string, db: TransactionContext): Promise<CustodyRequest | null>;
+  findByWarehouseItemId(itemId: string, db: TransactionContext): Promise<CustodyRequest | null>;
+  findPhotoSource(claimId: string, requesterId: string, roomId: string, db?: TransactionContext): Promise<PhotoCustodySource | null>;
 
   findActiveByPostId(postId: string, requesterId: string, db?: TransactionContext): Promise<CustodyRequest | null>;
 

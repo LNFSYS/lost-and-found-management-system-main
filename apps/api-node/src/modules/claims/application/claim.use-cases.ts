@@ -1,6 +1,7 @@
 import type { PrivateMediaStorage } from "../../../shared/application/media-storage.port.js";
 import type { TransactionContext, TransactionRunner } from "../../../shared/application/transaction.js";
 import type { Logger } from "../../../shared/application/logger.port.js";
+import { coordinateUpload, persistUpload } from "../../../shared/application/media-upload.js";
 import { AppError } from "../../../shared/domain/app-error.js";
 import { validateImageUpload } from "../../../shared/domain/media.js";
 import type { ImageUpload } from "../../../shared/domain/upload.js";
@@ -29,6 +30,7 @@ import type {
   VerificationDecisionInput
 } from "./claim.dto.js";
 import type { ClaimRepository, ClaimStatus } from "./claim.repository.port.js";
+import type { ContactPhotoUseCases } from "./contact-photo.use-cases.js";
 
 type WorkflowNotificationKind = "CLAIM" | "CHAT" | "APPOINTMENT" | "RETURN" | "CUSTODY";
 
@@ -37,6 +39,8 @@ function claimNotFound() {
 }
 
 export interface ClaimDependencies {
+  uploads?: import("../../../shared/application/media-upload.js").MediaUploads;
+  contactPhotos?: ContactPhotoUseCases;
   claimRepository: ClaimRepository;
   matchingRepository: MatchingRepository;
   notificationRepository: NotificationRepository;
@@ -118,19 +122,6 @@ export function createClaimUseCases(options: ClaimDependencies) {
     return claimRepository.createRoom(claimId, queryable);
   }
 
-  async function repairLegacyDirectClaim(claimId: string) {
-    const claim = await claimRepository.findById(claimId);
-    if (!claim || claim.lostPostId !== null || claim.status !== "PENDING") return;
-    await withTransaction(async (connection) => {
-      const lockedClaim = await claimRepository.findByIdForUpdate(claimId, connection);
-      if (!lockedClaim || lockedClaim.lostPostId !== null || lockedClaim.status !== "PENDING") return;
-      await claimRepository.updateFinderDecision({ claimId, status: "CONVERSATION_OPEN", finderDecision: "ACCEPTED" }, connection);
-      await claimRepository.updateParticipantConsent(claimId, lockedClaim.claimantId, "ACCEPTED", connection);
-      await claimRepository.updateParticipantConsent(claimId, lockedClaim.finderId, "ACCEPTED", connection);
-      if (!await claimRepository.findRoomByClaim(claimId, connection)) await claimRepository.createRoom(claimId, connection);
-    });
-  }
-
   function counterpartId(claim: StoredClaim, userId: string) {
     if (claim.claimantId === userId) return claim.finderId;
     if (claim.finderId === userId) return claim.claimantId;
@@ -174,15 +165,17 @@ export function createClaimUseCases(options: ClaimDependencies) {
       claimRepository.listParticipants(claimId),
       claimRepository.findClaimItemContext(claimId)
     ]);
-    const seesPrivateItemContext = userId === claim.finderId;
+    const seesPrivateItemContext = userId === itemContext?.ownerId;
     const exactLocation = itemContext
       ? itemContext.handoverPointName ?? itemContext.customLocation ?? itemContext.buildingName ?? itemContext.roomText ?? itemContext.areaName
       : null;
+    const contactPhoto = await options.contactPhotos?.state(claimId,userId) ?? null;
     return {
       ...serializeClaim(claim),
       participants,
       room: claim.roomId ? { id: claim.roomId } : null,
-      canSend: canUseRoom(claim.status, participant.consentStatus),
+      canSend: canUseRoom(claim.status, participant.consentStatus) && (!contactPhoto?.required || contactPhoto.approved),
+      contactPhoto,
       item: itemContext ? {
         postId: itemContext.foundPostId,
         title: itemContext.title,
@@ -208,6 +201,8 @@ export function createClaimUseCases(options: ClaimDependencies) {
     if (!context) throw new AppError("internal", "Không thể xác định danh mục của vật phẩm");
     const template = resolveVerificationTemplate(context.categoryName, context.parentCategoryName);
     const answeredCount = questions.filter((question) => question.answer !== null).length;
+    const contactPhoto = await options.contactPhotos?.state(claimId, claim.finderId, queryable);
+    const photoContactEligible = Boolean(contactPhoto?.required && contactPhoto.approved);
     const matchedCount = questions.filter((question) => question.answer?.isMatch === true).length;
     return {
       claimId,
@@ -224,7 +219,8 @@ export function createClaimUseCases(options: ClaimDependencies) {
         templateVersion: template.version,
         minimumAnswers: template.minimumAnswers,
         answeredCount,
-        readyForDecision: answeredCount >= template.minimumAnswers
+        readyForDecision: photoContactEligible || answeredCount >= template.minimumAnswers,
+        photoContactEligible
       },
       questions: questions.map((question) => ({
         id: question.id,
@@ -256,6 +252,21 @@ export function createClaimUseCases(options: ClaimDependencies) {
   }
 
   const claimService = {
+    async cleanupContactPhotos() { await options.contactPhotos?.cleanupExpired(); },
+    async checkContactPhoto(postId: string, actorId: string, file: ImageUpload) {
+      if (!options.contactPhotos) throw new AppError("unavailable", "Kiểm tra ảnh liên hệ chưa sẵn sàng");
+      return options.contactPhotos.analyze(postId,actorId,file);
+    },
+    async attachContactPhoto(claimId: string, actorId: string, checkId: string) {
+      if (!options.contactPhotos) throw new AppError("unavailable", "Kiểm tra ảnh liên hệ chưa sẵn sàng");
+      await withTransaction(async db => {
+        const claim = await claimRepository.findByIdForUpdate(claimId,db);
+        const participant = claim ? await claimRepository.findParticipant(claimId,actorId,db) : null;
+        if (!claim || !participant || !canUseRoom(claim.status,participant.consentStatus)) throw claimNotFound();
+        await options.contactPhotos!.attach(checkId,claim.foundPostId,actorId,claimId,db);
+      });
+      return details(claimId,actorId);
+    },
     async createClaim(requesterId: string, input: CreateClaimInput) {
       const result = await withTransaction(async (connection) => {
         const requestedPostId = input.postId ?? input.foundPostId;
@@ -275,18 +286,19 @@ export function createClaimUseCases(options: ClaimDependencies) {
         let foundPostId: string;
         let claimClaimantId: string;
         let finderId: string;
+        let isLostContact = false;
 
         if (input.postId) {
           const post = await claimRepository.findClaimablePostForUpdate(input.postId, connection);
           if (!post) throw new AppError("conflict", "Bài viết không còn mở để claim");
           foundPostId = post.id;
           if (post.type === "LOST") {
-            claimClaimantId = post.ownerId;
-            finderId = requesterId;
-          } else {
-            claimClaimantId = requesterId;
-            finderId = post.ownerId;
+            isLostContact = true;
           }
+          // Store direct requests by requester/post; the repository resolves
+          // ownership roles separately for LOST conversations.
+          claimClaimantId = requesterId;
+          finderId = post.ownerId;
         } else {
           if (!input.lostPostId || !input.foundPostId) {
             throw new AppError("invalid_input", "Cần đầy đủ cặp bài viết matching");
@@ -305,19 +317,18 @@ export function createClaimUseCases(options: ClaimDependencies) {
         if (finderId === claimClaimantId) throw new AppError("conflict", "Bạn không thể tạo conversation với chính mình");
 
         const existing = await claimRepository.findByFoundPostForClaimant(foundPostId, claimClaimantId, connection);
+        if (input.sourceFoundPostId) {
+          const source = await claimRepository.findClaimablePostForUpdate(input.sourceFoundPostId, connection);
+          if (!isLostContact || !source || source.type !== "FOUND" || source.ownerId !== requesterId) throw claimNotFound();
+        }
+        if (isLostContact) {
+          if (!options.contactPhotos) throw new AppError("unavailable", "Kiểm tra ảnh liên hệ chưa sẵn sàng");
+          await options.contactPhotos.requireEligible(input.contactCheckId,foundPostId,requesterId,connection,existing?.id);
+        }
         if (existing) {
-          if (input.postId && existing.status === "PENDING") {
-            await claimRepository.updateFinderDecision({
-              claimId: existing.id,
-              status: "CONVERSATION_OPEN",
-              finderDecision: "ACCEPTED"
-            }, connection);
-            await claimRepository.updateParticipantConsent(existing.id, existing.claimantId, "ACCEPTED", connection);
-            await claimRepository.updateParticipantConsent(existing.id, existing.finderId, "ACCEPTED", connection);
-            if (!await claimRepository.findRoomByClaim(existing.id, connection)) {
-              await claimRepository.createRoom(existing.id, connection);
-            }
-          }
+          if (!await claimRepository.findParticipant(existing.id,requesterId,connection)) throw claimNotFound();
+          if (isLostContact) await options.contactPhotos!.attach(input.contactCheckId,foundPostId,requesterId,existing.id,connection);
+          if (input.sourceFoundPostId) await claimRepository.linkSourceFoundPost(existing.id, input.sourceFoundPostId, connection);
           return { claim: existing, idempotent: true };
         }
 
@@ -334,9 +345,11 @@ export function createClaimUseCases(options: ClaimDependencies) {
           approximateLostAt: input.approximateLostAt,
           approximateLocation: input.approximateLocation
         }, connection);
-        await claimRepository.addParticipant({ claimId, userId: claimClaimantId, role: "CLAIMANT", consentStatus: "ACCEPTED" }, connection);
-        await claimRepository.addParticipant({ claimId, userId: finderId, role: "FINDER", consentStatus: input.postId ? "ACCEPTED" : "PENDING" }, connection);
+        await claimRepository.addParticipant({ claimId, userId: claimClaimantId, role: isLostContact ? "FINDER" : "CLAIMANT", consentStatus: "ACCEPTED" }, connection);
+        await claimRepository.addParticipant({ claimId, userId: finderId, role: isLostContact ? "CLAIMANT" : "FINDER", consentStatus: input.postId ? "ACCEPTED" : "PENDING" }, connection);
         if (input.postId) await claimRepository.createRoom(claimId, connection);
+        if (isLostContact) await options.contactPhotos!.attach(input.contactCheckId,foundPostId,requesterId,claimId,connection);
+        if (input.sourceFoundPostId) await claimRepository.linkSourceFoundPost(claimId, input.sourceFoundPostId, connection);
         const toStatus = input.postId ? "CONVERSATION_OPEN" : "PENDING";
         await claimRepository.writeAudit({ claimId, actorId: requesterId, action: "CLAIM_CREATED", toStatus }, connection);
         const notification = await notificationRepository.create({
@@ -376,26 +389,24 @@ export function createClaimUseCases(options: ClaimDependencies) {
           if (post.type !== "LOST" || !source || source.type !== "FOUND" || source.ownerId !== requesterId) throw new AppError("forbidden", "FOUND source phải thuộc người gửi");
         }
 
-        // A direct conversation is always between the requester and the post
-        // owner. Keep the requester as claimant for both LOST and FOUND posts
-        // so an existing conversation is scoped to this user/post pair.
+        // Keep the requester key stable, but persist the actual ownership roles.
         const claimantId = requesterId;
         const finderId = post.ownerId;
         if (claimantId === finderId) throw new AppError("conflict", "Bạn không thể nhắn tin với chính mình");
 
         const existing = await claimRepository.findByFoundPostForClaimant(post.id, claimantId, connection);
+        if (post.type === "LOST") {
+          if (!options.contactPhotos) throw new AppError("unavailable", "Kiểm tra ảnh liên hệ chưa sẵn sàng");
+          await options.contactPhotos.requireEligible(input.contactCheckId,post.id,requesterId,connection,existing?.id);
+        }
         let claim: StoredClaim;
         let roomId: string;
 
         if (existing) {
-          if (existing.status === "PENDING") {
-            await claimRepository.updateFinderDecision({
-              claimId: existing.id,
-              status: "CONVERSATION_OPEN",
-              finderDecision: "ACCEPTED"
-            }, connection);
-            await claimRepository.updateParticipantConsent(existing.id, existing.claimantId, "ACCEPTED", connection);
-            await claimRepository.updateParticipantConsent(existing.id, existing.finderId, "ACCEPTED", connection);
+          const participant = await claimRepository.findParticipant(existing.id, requesterId, connection);
+          if (!participant) throw claimNotFound();
+          if (!canUseRoom(existing.status, participant.consentStatus)) {
+            throw new AppError("conflict", "Cuộc trao đổi chưa được đồng ý hoặc đã kết thúc; không thể tự mở lại");
           }
           roomId = (await openRoomIfNeeded(existing.id, connection)).id;
           const refreshed = await claimRepository.findByIdForUpdate(existing.id, connection);
@@ -411,8 +422,8 @@ export function createClaimUseCases(options: ClaimDependencies) {
             status: "CONVERSATION_OPEN",
             finderDecision: "ACCEPTED"
           }, connection);
-          await claimRepository.addParticipant({ claimId, userId: claimantId, role: "CLAIMANT", consentStatus: "ACCEPTED" }, connection);
-          await claimRepository.addParticipant({ claimId, userId: finderId, role: "FINDER", consentStatus: "ACCEPTED" }, connection);
+          await claimRepository.addParticipant({ claimId, userId: claimantId, role: post.type === "LOST" ? "FINDER" : "CLAIMANT", consentStatus: "ACCEPTED" }, connection);
+          await claimRepository.addParticipant({ claimId, userId: finderId, role: post.type === "LOST" ? "CLAIMANT" : "FINDER", consentStatus: "ACCEPTED" }, connection);
           roomId = (await claimRepository.createRoom(claimId, connection)).id;
           await claimRepository.writeAudit({ claimId, actorId: requesterId, action: "CLAIM_CREATED", toStatus: "CONVERSATION_OPEN" }, connection);
           const createdClaim = await claimRepository.findById(claimId, connection);
@@ -421,6 +432,7 @@ export function createClaimUseCases(options: ClaimDependencies) {
         }
 
         if (input.sourceFoundPostId) await claimRepository.linkSourceFoundPost(claim.id, input.sourceFoundPostId, connection);
+        if (post.type === "LOST") await options.contactPhotos!.attach(input.contactCheckId,post.id,requesterId,claim.id,connection);
         const participant = await claimRepository.findParticipant(claim.id, requesterId, connection);
         if (!participant || !canUseRoom(claim.status, participant.consentStatus)) throw claimNotFound();
 
@@ -477,12 +489,10 @@ export function createClaimUseCases(options: ClaimDependencies) {
     },
 
     async getClaim(claimId: string, userId: string) {
-      await repairLegacyDirectClaim(claimId);
       return details(claimId, userId);
     },
 
     async getVerificationTemplates(claimId: string, finderId: string) {
-      await repairLegacyDirectClaim(claimId);
       const claim = await claimRepository.findById(claimId);
       const participant = claim ? await claimRepository.findParticipant(claimId, finderId) : null;
       const denialReason = !claim
@@ -516,7 +526,6 @@ export function createClaimUseCases(options: ClaimDependencies) {
     },
 
     async getVerification(claimId: string, userId: string) {
-      await repairLegacyDirectClaim(claimId);
       return verificationDetails(claimId, userId);
     },
 
@@ -538,6 +547,7 @@ export function createClaimUseCases(options: ClaimDependencies) {
         const room = claim ? await claimRepository.findRoomByClaim(claimId, connection) : null;
         if (!claim || !participant || participant.role !== "FINDER" || claim.finderId !== finderId
           || !canUseRoom(claim.status, participant.consentStatus)) throw claimNotFound();
+        await options.contactPhotos?.requireSender(claimId,finderId,connection);
 
         const existing = await claimRepository.findAuditByIdempotencyKey(claimId, finderId, input.idempotencyKey, connection);
         if (ensureIdempotentReplay(existing, fingerprint)) return;
@@ -622,6 +632,7 @@ export function createClaimUseCases(options: ClaimDependencies) {
         const room = claim ? await claimRepository.findRoomByClaim(claimId, connection) : null;
         if (!claim || !participant || participant.role !== "CLAIMANT" || claim.claimantId !== claimantId
           || !canUseRoom(claim.status, participant.consentStatus)) throw claimNotFound();
+        await options.contactPhotos?.requireSender(claimId,claimantId,connection);
         const existing = await claimRepository.findAuditByIdempotencyKey(claimId, claimantId, input.idempotencyKey, connection);
         if (ensureIdempotentReplay(existing, fingerprint)) return;
         if (!canSubmitVerificationDecision(claim.status)) {
@@ -686,10 +697,16 @@ export function createClaimUseCases(options: ClaimDependencies) {
         const participant = claim ? await claimRepository.findParticipant(claimId, finderId, connection) : null;
         const room = claim ? await claimRepository.findRoomByClaim(claimId, connection) : null;
         if (!claim || !participant || participant.role !== "FINDER" || claim.finderId !== finderId) throw claimNotFound();
+        if (input.decision === "VERIFY_FOR_MEETUP" || input.decision === "REQUEST_MORE_INFO") {
+          await options.contactPhotos?.requireSender(claimId,finderId,connection);
+        }
         const existing = await claimRepository.findAuditByIdempotencyKey(claimId, finderId, input.idempotencyKey, connection);
         if (ensureIdempotentReplay(existing, fingerprint)) return;
 
         const history = await claimRepository.listVerificationAuditEvents(claimId, connection);
+        if (history.some(event => event.action === "DIRECT_RETURN_COMPLETED")) {
+          throw new AppError("conflict", "Hai bên đã hoàn tất trả đồ; không thể sửa quyết định xác minh");
+        }
         if (history.some(event => event.action === "STAFF_CUSTODY_VERIFIED")) {
           throw new AppError("conflict", "Vật phẩm đã được Staff xác minh tại quầy; Finder không thể sửa quyết định này");
         }
@@ -715,7 +732,9 @@ export function createClaimUseCases(options: ClaimDependencies) {
         const template = resolveVerificationTemplate(context.categoryName, context.parentCategoryName);
         const questions = await claimRepository.listVerificationQuestions(claimId, connection);
         const answeredCount = questions.filter((question) => question.answer).length;
-        if (input.decision === "VERIFY_FOR_MEETUP" && answeredCount < template.minimumAnswers) {
+        const contactPhoto = await options.contactPhotos?.state(claimId, finderId, connection);
+        const photoContactEligible = Boolean(contactPhoto?.required && contactPhoto.approved);
+        if (input.decision === "VERIFY_FOR_MEETUP" && !photoContactEligible && answeredCount < template.minimumAnswers) {
           throw new AppError("conflict", "Cần đủ số câu trả lời xác minh trước khi đề xuất gặp mặt");
         }
 
@@ -745,8 +764,14 @@ export function createClaimUseCases(options: ClaimDependencies) {
             throw new AppError("not_found", "Không tìm thấy quầy bàn giao đang hoạt động");
           }
           if (room?.escalatedAt) throw new AppError("conflict", "Yêu cầu custody đã được gửi cho claim này");
-          if (!await custodyRequestRepository.lockEligiblePost(context.foundPostId, finderId, connection)) throw new AppError("forbidden", "Custody cần bài FOUND của Finder");
-          if (await custodyRequestRepository.findActiveByPostId(context.foundPostId, finderId, connection) || await custodyRequestRepository.hasWarehouseItem(context.foundPostId, connection)) throw new AppError("conflict", "Vật phẩm đã có yêu cầu custody/hồ sơ kho");
+          const hasFoundPost = await custodyRequestRepository.lockEligiblePost(context.foundPostId, finderId, connection);
+          const photoSource = !hasFoundPost && claim.roomId
+            ? await custodyRequestRepository.findPhotoSource(claimId, finderId, claim.roomId, connection) : null;
+          if (!hasFoundPost && !photoSource) throw new AppError("forbidden", "Cần ảnh Finder đã đối chiếu từ 50% trong cuộc trò chuyện trước khi gửi custody");
+          const custodyPostId = hasFoundPost ? context.foundPostId : null;
+          if (custodyPostId
+            ? await custodyRequestRepository.findActiveByPostId(custodyPostId, finderId, connection) || await custodyRequestRepository.hasWarehouseItem(custodyPostId, connection)
+            : await custodyRequestRepository.findActiveByClaimId(claimId, connection)) throw new AppError("conflict", "Vật phẩm đã có yêu cầu custody/hồ sơ kho");
           const pendingCustody = await custodyRequestRepository.findPendingByClaimId(claimId, connection);
           if (pendingCustody) throw new AppError("conflict", "Đã có yêu cầu custody đang chờ Staff xử lý");
           await claimRepository.markRoomEscalated({ claimId, actorId: finderId, reason: input.reason }, connection);
@@ -755,7 +780,7 @@ export function createClaimUseCases(options: ClaimDependencies) {
             id: custodyRequestId,
             claimId,
             roomId: claim.roomId,
-            postId: context.foundPostId,
+            postId: custodyPostId,
             requesterId: finderId,
             intakeType: "CUSTODY_TRANSFER",
             handoverPointId: input.handoverPointId,
@@ -769,9 +794,9 @@ export function createClaimUseCases(options: ClaimDependencies) {
             action: "CREATED",
             fromStatus: null,
             toStatus: "PENDING",
-            metadata: { source: "CLAIM_ESCALATION", claimId }
+            metadata: { source: "CLAIM_ESCALATION", claimId, ...(photoSource ? { contactPhotoId: photoSource.image.id, lostPostId: photoSource.lostPostId } : {}) }
           }, connection);
-          custodyEvents = await custodyDelivery!.record({ id: custodyRequestId, postId: context.foundPostId, claimId, requesterId: finderId, event: "CREATED" }, connection);
+          custodyEvents = await custodyDelivery!.record({ id: custodyRequestId, postId: custodyPostId, claimId, requesterId: finderId, event: "CREATED" }, connection);
         } else if (isCorrection) {
           await claimRepository.clearRoomEscalation(claimId, connection);
         }
@@ -828,6 +853,7 @@ export function createClaimUseCases(options: ClaimDependencies) {
             reason: input.reason,
             answeredCount,
             minimumAnswers: template.minimumAnswers,
+            communicationOnly: photoContactEligible && input.decision === "VERIFY_FOR_MEETUP",
             appointmentEligible: isAppointmentEligible(nextStatus),
             correctsEventId: input.correctsEventId ?? null,
             idempotencyKey: input.idempotencyKey,
@@ -1042,6 +1068,7 @@ export function createClaimUseCases(options: ClaimDependencies) {
         const participant = lockedClaim ? await claimRepository.findParticipant(claimId, userId, connection) : null;
         const lockedRoom = lockedClaim ? await claimRepository.findRoomByClaim(claimId, connection) : null;
         if (!lockedClaim || !lockedRoom || !participant || !canUseRoom(lockedClaim.status, participant.consentStatus) || lockedRoom.id !== room.id) throw claimNotFound();
+        await options.contactPhotos?.requireSender(claimId,userId,connection);
         
         // Auto-detect verification answer from message content
         if (input.content.includes("✏️ Câu trả lời:") && participant.role === "CLAIMANT") {
@@ -1098,37 +1125,92 @@ export function createClaimUseCases(options: ClaimDependencies) {
       return { items: await claimRepository.listEvidence(claimId) };
     },
 
-    async uploadEvidence(claimId: string, userId: string, input: UploadEvidenceInput, file: ImageUpload) {
+    async uploadChatImage(claimId: string, userId: string, input: { content: string; clientMessageId: string }, file: ImageUpload) {
+      validateImageUpload(file);
+      const { claim, participant } = await requireClaimParticipant(claimId, userId, true);
+      if (!canUseRoom(claim.status, participant.consentStatus)) throw claimNotFound();
+      const room = await claimRepository.findRoomByClaim(claimId);
+      if (!room) throw claimNotFound();
+      const existing = await claimRepository.findMessageByClientId(room.id, userId, input.clientMessageId);
+      if (existing) return existing;
+      await this.uploadEvidence(claimId, userId, { description: input.content || "Ảnh trong cuộc trò chuyện" }, file, input);
+      const message = await claimRepository.findMessageByClientId(room.id, userId, input.clientMessageId);
+      if (!message) throw new AppError("unavailable", "Chưa xác nhận được kết quả gửi ảnh. Vui lòng thử lại.");
+      return message;
+    },
+
+    async uploadEvidence(claimId: string, userId: string, input: UploadEvidenceInput, file: ImageUpload, chat?: { content: string; clientMessageId: string }) {
       const image = validateImageUpload(file);
-      const evidenceId = id();
-      const storage = await mediaStorage.save(claimId, evidenceId, image.extension, file.buffer);
-      try {
-        await withTransaction(async (connection) => {
-          const lockedClaim = await claimRepository.findByIdForUpdate(claimId, connection);
-          const participant = lockedClaim ? await claimRepository.findParticipant(claimId, userId, connection) : null;
-          const room = lockedClaim ? await claimRepository.findRoomByClaim(claimId, connection) : null;
-          if (!lockedClaim || !room || !participant || participant.role !== "CLAIMANT" || lockedClaim.claimantId !== userId
-            || !canUseRoom(lockedClaim.status, participant.consentStatus)) throw claimNotFound();
-          await claimRepository.createEvidence({
-            id: evidenceId,
-            claimId,
-            uploadedBy: userId,
-            secureUrl: storage.secureUrl,
-            publicId: storage.publicId,
-            mediaFormat: image.format,
-            mediaBytes: image.bytes,
-            description: input.description
-          }, connection);
-          await claimRepository.writeAudit({ claimId, actorId: userId, action: "PRIVATE_EVIDENCE_UPLOADED", metadata: { evidenceId, bytes: image.bytes } }, connection);
+      const { claim, participant } = await requireClaimParticipant(claimId, userId, true);
+      if (!canUseRoom(claim.status, participant.consentStatus) || !await claimRepository.findRoomByClaim(claimId)) throw claimNotFound();
+      return coordinateUpload(options.uploads, ["EVIDENCE", userId, claimId, chat?.clientMessageId ?? null, input.description ?? null], file.buffer, id, async operation => {
+        const evidenceId = operation.id;
+        const read = () => claimRepository.findEvidence(claimId, evidenceId);
+        const existing = options.uploads ? await read() : null;
+        if (existing) {
+          if (existing.uploadedBy.id !== userId) throw claimNotFound();
+          await mediaStorage.resolve(existing.secureUrl, existing.mediaFormat ?? image.format);
+          const { secureUrl: _url, publicId: _id, ...safe } = existing;
+          return safe;
+        }
+        const storage = await mediaStorage.save(claimId, evidenceId, image.extension, file.buffer);
+        let chatDelivery: { notification: NotificationRecord; recipientId: string; roomId: string } | null = null;
+        await persistUpload({ operation, kind: "EVIDENCE", logger,
+          unreferenced: async () => await read() === null,
+          matches: async () => {
+            const row = await read();
+            if (row?.uploadedBy.id !== userId || row.secureUrl !== storage.secureUrl) return false;
+            if (!chat) return true;
+            const room = await claimRepository.findRoomByClaim(claimId);
+            const message = room ? await claimRepository.findMessageByClientId(room.id, userId, chat.clientMessageId) : null;
+            return message?.mediaUrl === `/api/claims/${claimId}/evidence/${evidenceId}`;
+          },
+          remove: () => mediaStorage.remove(storage.secureUrl),
+          write: () => (operation.transaction ?? withTransaction)(async (connection) => {
+            const lockedClaim = await claimRepository.findByIdForUpdate(claimId, connection);
+            const participant = lockedClaim ? await claimRepository.findParticipant(claimId, userId, connection) : null;
+            const room = lockedClaim ? await claimRepository.findRoomByClaim(claimId, connection) : null;
+            if (!lockedClaim || !room || !participant
+              || !canUseRoom(lockedClaim.status, participant.consentStatus)) throw claimNotFound();
+            await options.contactPhotos?.requireSender(claimId, userId, connection);
+            if (chat && await claimRepository.findMessageByClientId(room.id, userId, chat.clientMessageId, connection)) {
+              throw new AppError("conflict", "Tin nhắn ảnh đã được gửi với mã yêu cầu này. Vui lòng tải lại cuộc trò chuyện.");
+            }
+            await claimRepository.createEvidence({
+              id: evidenceId,
+              claimId,
+              uploadedBy: userId,
+              secureUrl: storage.secureUrl,
+              publicId: storage.publicId,
+              mediaFormat: image.format,
+              mediaBytes: image.bytes,
+              description: input.description
+            }, connection);
+            await claimRepository.writeAudit({ claimId, actorId: userId, action: "PRIVATE_EVIDENCE_UPLOADED", metadata: { evidenceId, bytes: image.bytes } }, connection);
+            if (chat) {
+              const message = await claimRepository.createMessage({ roomId: room.id, senderId: userId, content: chat.content,
+                clientMessageId: chat.clientMessageId, mediaUrl: `/api/claims/${claimId}/evidence/${evidenceId}` }, connection);
+              if (!message) throw new AppError("internal", "Không thể gửi ảnh");
+              const recipientId = counterpartId(lockedClaim, userId);
+              if (recipientId) {
+                const notification = await notificationRepository.create({ userId: recipientId, type: "CHAT_MESSAGE_RECEIVED",
+                  title: "Bạn có ảnh mới trong phòng trao đổi riêng", body: "Mở cuộc trò chuyện để xem ảnh.",
+                  entityType: "CLAIM", entityId: claimId, dedupeKey: `claim:${claimId}:message:${message.id}` }, connection);
+                if (notification) chatDelivery = { notification, recipientId, roomId: room.id };
+                await queueOptionalEmail({ notification, recipientUserId: recipientId, eventType: "CHAT", roomId: room.id, queryable: connection });
+              }
+            }
+          })
         });
-      } catch (error) {
-        await mediaStorage.remove(storage.secureUrl).catch(() => undefined);
-        throw error;
-      }
-      const evidence = (await claimRepository.findEvidence(claimId, evidenceId));
-      if (!evidence) throw new AppError("internal", "Không thể lưu evidence");
-      const { secureUrl: _secureUrl, publicId: _publicId, ...safeEvidence } = evidence;
-      return safeEvidence;
+        if (chatDelivery) {
+          const delivery = chatDelivery as { notification: NotificationRecord; recipientId: string; roomId: string };
+          await publishWorkflowNotification({ notification: delivery.notification, userId: delivery.recipientId, workflow: "CHAT", roomId: delivery.roomId });
+        }
+        const evidence = (await claimRepository.findEvidence(claimId, evidenceId));
+        if (!evidence) throw new AppError("internal", "Không thể lưu evidence");
+        const { secureUrl: _secureUrl, publicId: _publicId, ...safeEvidence } = evidence;
+        return safeEvidence;
+      });
     },
 
     async getEvidenceFile(claimId: string, evidenceId: string, userId: string) {

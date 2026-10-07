@@ -35,6 +35,7 @@ function sampleClaim() {
 function sampleItemContext(foundPostId = sampleClaim().foundPostId) {
   return {
     foundPostId,
+    ownerId: sampleClaim().finderId,
     title: "Ví nhặt được",
     categoryName: "Ví / bóp",
     visibilityMode: "PUBLIC" as const,
@@ -247,7 +248,7 @@ test("direct claims use the post owner as finder instead of a matching-only pair
   }
 });
 
-test("the first direct message creates and persists the conversation atomically", async () => {
+test("the first direct FOUND message creates and persists the conversation atomically", async () => {
   const foundPostId = "99999999-9999-4999-8999-999999999999";
   const finderId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
   const roomId = "88888888-8888-4888-8888-888888888888" as `${string}-${string}-${string}-${string}-${string}`;
@@ -271,7 +272,7 @@ test("the first direct message creates and persists the conversation atomically"
   let persistedContent = "";
 
   try {
-    claimRepository.findClaimablePostForUpdate = async () => ({ id: foundPostId, ownerId: finderId, type: "LOST" });
+    claimRepository.findClaimablePostForUpdate = async () => ({ id: foundPostId, ownerId: finderId, type: "FOUND" });
     claimRepository.findByFoundPostForClaimant = async () => null;
     claimRepository.createClaim = async () => undefined;
     claimRepository.addParticipant = async () => undefined;

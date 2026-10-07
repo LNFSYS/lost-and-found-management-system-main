@@ -194,9 +194,28 @@ export function createNotificationEmailRepository(pool: SqlExecutor) {
       const [rows] = await pool.execute<OutboxRow[]>(
         `SELECT ${outboxColumns}, u.email, (u.email_verified_at IS NOT NULL) AS email_verified,
           (u.status = 'ACTIVE') AS account_active, (n.is_read = FALSE) AS notification_unread,
-          CASE WHEN o.entity_type = 'CUSTODY_REQUEST' THEN EXISTS (
+          CASE WHEN o.event_type = 'MATCH' THEN o.entity_type = 'POST_MATCH' AND EXISTS (
+              SELECT 1 FROM match_results mr
+              JOIN posts lost_post ON lost_post.id = mr.lost_post_id
+              JOIN posts found_post ON found_post.id = mr.found_post_id
+              WHERE n.dedupe_key = CONCAT('matching:', mr.id, ':', o.recipient_user_id)
+                AND mr.total_score >= 0.6 AND lost_post.user_id <> found_post.user_id
+                AND lost_post.type = 'LOST' AND found_post.type = 'FOUND'
+                AND lost_post.deleted_at IS NULL AND found_post.deleted_at IS NULL
+                AND lost_post.status IN ('OPEN','MATCHED') AND found_post.status IN ('OPEN','MATCHED')
+                AND ((lost_post.id = o.entity_id AND lost_post.user_id = o.recipient_user_id)
+                  OR (found_post.id = o.entity_id AND found_post.user_id = o.recipient_user_id))
+                AND NOT EXISTS(SELECT 1 FROM match_suggestion_dismissals d WHERE d.match_id = mr.id
+                  AND d.user_id = o.recipient_user_id AND d.source_post_id = o.entity_id))
+            WHEN o.entity_type = 'CUSTODY_REQUEST' THEN EXISTS (
               SELECT 1 FROM custody_requests cr WHERE cr.id = o.entity_id AND (cr.requester_id = o.recipient_user_id
                 OR EXISTS(SELECT 1 FROM user_roles ur WHERE ur.user_id = o.recipient_user_id AND ur.role_code IN ('STAFF','ADMIN'))))
+            WHEN o.entity_type IN ('APPOINTMENT','APPOINTMENT_REMINDER') THEN EXISTS (
+              SELECT 1 FROM return_appointments a JOIN claim_participants cp ON cp.claim_id=a.claim_id
+              WHERE a.id=o.entity_id AND cp.user_id=o.recipient_user_id AND cp.consent_status='ACCEPTED'
+                AND (o.entity_type='APPOINTMENT' OR (a.status='ACCEPTED' AND a.proposed_at>UTC_TIMESTAMP()
+                  AND a.custody_authorized_at IS NULL
+                  AND NOT EXISTS(SELECT 1 FROM custody_requests cr WHERE cr.claim_id=a.claim_id AND cr.status IN ('PENDING','ACCEPTED','INTAKED')))))
             WHEN o.entity_type <> 'CLAIM' THEN TRUE
             WHEN EXISTS (SELECT 1 FROM claim_participants cp WHERE cp.claim_id = o.entity_id AND cp.user_id = o.recipient_user_id) THEN TRUE
             ELSE FALSE END AS entity_accessible

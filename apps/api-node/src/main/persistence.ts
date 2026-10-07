@@ -1,4 +1,6 @@
 import type { Pool } from "mysql2/promise";
+import { createAppointmentRepository } from "../modules/appointments/infrastructure/appointment.repository.js";
+import { createActivityRepository } from "../modules/activity/infrastructure/activity.repository.js";
 import { createAdminAuditRepository } from "../modules/admin/infrastructure/admin-audit.repository.js";
 import { createAdminCatalogRepository } from "../modules/admin/infrastructure/admin-catalog.repository.js";
 import { createAdminReportingRepository } from "../modules/admin/infrastructure/admin-reporting.repository.js";
@@ -6,6 +8,7 @@ import { createAdminUserRepository } from "../modules/admin/infrastructure/admin
 import { createAuthRepository } from "../modules/auth/infrastructure/auth.repository.js";
 import { createUserRepository } from "../modules/auth/infrastructure/user.repository.js";
 import { createClaimRepository } from "../modules/claims/infrastructure/claim.repository.js";
+import { createContactPhotoRepository } from "../modules/claims/infrastructure/contact-photo.repository.js";
 import { createMatchingRepository } from "../modules/matching/infrastructure/matching.repository.js";
 import { createNotificationRepository } from "../modules/notifications/infrastructure/notification.repository.js";
 import { createNotificationEmailRepository } from "../modules/notifications/infrastructure/notification-email.repository.js";
@@ -17,6 +20,7 @@ import { createCustodyRequestRepository } from "../modules/warehouse/infrastruct
 import { createWarehouseRepository } from "../modules/warehouse/infrastructure/warehouse.repository.js";
 import { runInTransaction } from "../shared/infrastructure/config/db.js";
 import { createTransactionRunner, type SqlTransactionRunner } from "../shared/infrastructure/transaction-context.js";
+import { createMediaUploads } from "../shared/infrastructure/media-uploads.js";
 export function createPersistence(database: Pool) {
   const sqlTransaction: SqlTransactionRunner = async (work) => {
     const connection = await database.getConnection();
@@ -24,12 +28,16 @@ export function createPersistence(database: Pool) {
   };
   return {
     transaction: createTransactionRunner(sqlTransaction),
+    appointmentRepository: createAppointmentRepository(database),
+    activityRepository: createActivityRepository(database),
+    mediaUploads: createMediaUploads(database),
     adminAuditRepository: createAdminAuditRepository(database),
     adminCatalogRepository: createAdminCatalogRepository(database),
     adminReportingRepository: createAdminReportingRepository(database),
     adminUserRepository: createAdminUserRepository(database),
     authRepository: createAuthRepository(database),
     claimRepository: createClaimRepository(database),
+    contactPhotoRepository: createContactPhotoRepository(database),
     matchingRepository: createMatchingRepository(database, sqlTransaction),
     notificationRepository: createNotificationRepository(database),
     notificationEmailRepository: createNotificationEmailRepository(database),

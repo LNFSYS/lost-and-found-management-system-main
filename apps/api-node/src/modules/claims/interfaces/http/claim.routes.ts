@@ -63,6 +63,8 @@ export function createClaimRoutes({ claimController, auth }: {
   claimRoutes.get("/", (req, res, next) => claimController.listClaims(req, res).catch(next));
   claimRoutes.post("/", claimCreateLimit, (req, res, next) => claimController.createClaim(req, res).catch(next));
   claimRoutes.post("/direct-messages", messageLimit, (req, res, next) => claimController.createDirectMessage(req, res).catch(next));
+  claimRoutes.post("/contact-photo-checks", evidenceLimit, uploadSingleEvidence, (req, res, next) => claimController.checkContactPhoto(req, res).catch(next));
+  claimRoutes.post("/:claimId/contact-photo", verificationWriteLimit, (req, res, next) => claimController.attachContactPhoto(req, res).catch(next));
   claimRoutes.get("/:claimId", (req, res, next) => claimController.getClaim(req, res).catch(next));
   claimRoutes.post("/:claimId/decision", verificationWriteLimit, (req, res, next) => claimController.decide(req, res).catch(next));
   claimRoutes.post("/:claimId/withdraw", (req, res, next) => claimController.withdraw(req, res).catch(next));
@@ -75,6 +77,7 @@ export function createClaimRoutes({ claimController, auth }: {
   claimRoutes.post("/:claimId/room", (req, res, next) => claimController.getRoom(req, res).catch(next));
   claimRoutes.get("/:claimId/messages", (req, res, next) => claimController.listMessages(req, res).catch(next));
   claimRoutes.post("/:claimId/messages", messageLimit, (req, res, next) => claimController.sendMessage(req, res).catch(next));
+  claimRoutes.post("/:claimId/messages/images", evidenceLimit, uploadSingleEvidence, (req, res, next) => claimController.uploadChatImage(req, res).catch(next));
   claimRoutes.get("/:claimId/evidence", (req, res, next) => claimController.listEvidence(req, res).catch(next));
   claimRoutes.post("/:claimId/evidence", evidenceLimit, uploadSingleEvidence, (req, res, next) => claimController.uploadEvidence(req, res).catch(next));
   claimRoutes.get("/:claimId/evidence/:evidenceId", (req, res, next) => claimController.getEvidence(req, res).catch(next));

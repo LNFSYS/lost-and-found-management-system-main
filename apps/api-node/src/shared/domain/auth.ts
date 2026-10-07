@@ -44,4 +44,5 @@ export interface AccessTokenPayload {
   email: string;
   roles: Role[];
   sessionVersion: number;
+  exp?: number;
 }

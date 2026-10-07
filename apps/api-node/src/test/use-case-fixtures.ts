@@ -68,7 +68,11 @@ export function createTestAdminReportingUseCases(overrides: Partial<AdminReporti
 export const adminReportingService = createTestAdminReportingUseCases();
 export function createTestAdminCatalogUseCases(overrides: Partial<AdminCatalogDependencies> = {}) { return createAdminCatalogUseCases({ adminCatalogRepository: adminCatalogRepository, id: randomUUID, ...overrides }); }
 export const adminCatalogService = createTestAdminCatalogUseCases();
-export function createTestWarehouseUseCases(overrides: Partial<WarehouseDependencies> = {}) { return createWarehouseUseCases({ warehouseRepository: warehouseRepository, custodyRequestRepository: unexpectedPort("custody repository"), proofStorage: fakeMediaStorage, withTransaction: fakeTransaction, id: randomUUID, ...overrides }); }
+export function createTestWarehouseUseCases(overrides: Partial<WarehouseDependencies> = {}) {
+  const custodyRequestRepository = unexpectedPort<WarehouseDependencies["custodyRequestRepository"]>("custody repository");
+  custodyRequestRepository.findByWarehouseItemId = async () => null;
+  return createWarehouseUseCases({ warehouseRepository, custodyRequestRepository, proofStorage: fakeMediaStorage, withTransaction: fakeTransaction, id: randomUUID, ...overrides });
+}
 export const warehouseService = createTestWarehouseUseCases();
 export function createTestReturnFeedbackUseCases(overrides: Partial<ReturnFeedbackDependencies> = {}) { return createReturnFeedbackUseCases({ repository: returnFeedbackRepository, adminAuditRepository: adminAuditRepository, runInTransaction: fakeTransaction, id: randomUUID, ...overrides }); }
 export const returnFeedbackService = createTestReturnFeedbackUseCases();
@@ -80,13 +84,15 @@ export function createTestPostUseCases(overrides: Partial<PostDependencies> = {}
 export const postService = createTestPostUseCases();
 export function createTestClaimUseCases(overrides: Partial<ClaimDependencies> = {}) { return createClaimUseCases({ claimRepository: claimRepository, matchingRepository: matchingRepository, notificationRepository: notificationRepository, custodyRequestRepository: {} as any, warehouseRepository, withTransaction: fakeTransaction, id: randomUUID, mediaStorage: fakeMediaStorage, hashIdempotencyPayload: fakeSecurity.hashToken, logger: { warn() {} }, ...overrides }); }
 export const claimService = createTestClaimUseCases();
-export const realtimeService = createRealtimeUseCases({ claimRepository, id: randomUUID });
 export function createTestAuthUseCases(overrides: Partial<AuthDependencies> = {}) { return createAuthUseCases({ authRepository: authRepository, userRepository: userRepository, avatarStorage: fakeAvatarStorage, security: fakeSecurity, policy: { refreshTokenDays: 30, otpTtlMinutes: 10, otpMaxAttempts: 5 }, emailService: fakeEmail, withTransaction: fakeTransaction, logger: { warn() {} }, ...overrides }); }
 export const authService = createTestAuthUseCases();
+export const realtimeService = createRealtimeUseCases({ claimRepository, id: randomUUID, validateSession: session => authService.validateAccessSession(session) });
 export const geminiImageService = createImageAnalysisUseCases({ postRepository, analyzer: unexpectedPort<ImageAnalyzer>("image analyzer") });
 export function createTestCustodyRequestUseCases(overrides: Partial<import("../modules/warehouse/application/custody-request.use-cases.js").CustodyRequestDependencies> = {}) { return import("../modules/warehouse/application/custody-request.use-cases.js").then(m => m.createCustodyRequestUseCases({ custodyRequestRepository: {} as any, warehouseRepository: {} as any, id: randomUUID, withTransaction: fakeTransaction, ...overrides })); }
 export const custodyRequestService = {} as any; // Fake it for now since we just need it to compile
 export const testServices = {
+  appointmentService: unexpectedPort<import("../main/services.js").ApplicationServices["appointmentService"]>("appointmentService"),
+  activityService: unexpectedPort<import("../main/services.js").ApplicationServices["activityService"]>("activityService"),
   notificationService,
   notificationEmailWorker: { runOnce: async () => ({ sent: 0, skipped: 0, deferred: 0, failed: 0 }), stop: async () => undefined },
   systemConfigService, adminUserService, adminReportingService, adminCatalogService, warehouseService, returnFeedbackService,

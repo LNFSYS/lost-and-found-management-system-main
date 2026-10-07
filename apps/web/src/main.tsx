@@ -27,6 +27,9 @@ const HomePage = lazy(async () => {
   const module = await import("./pages/home-page");
   return { default: module.HomePage };
 });
+const AppointmentsPage=lazy(async()=>({default:(await import("./pages/appointments-page")).AppointmentsPage}));
+const ItemJourneyPage=lazy(async()=>({default:(await import("./pages/item-journey-page")).ItemJourneyPage}));
+const AdminAuditPage=lazy(async()=>({default:(await import("./pages/admin-audit-page")).AdminAuditPage}));
 
 function AdminHome() {
   const { user } = useAuth();
@@ -52,6 +55,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
               <Route element={<AdminLayout />}>
                 <Route path="/admin" element={<AdminHome />} />
                 <Route path="/admin/staff" element={<StaffPage />} />
+                <Route element={<RouteGuard roles={["ADMIN"]} />}><Route path="/admin/audit" element={<Suspense fallback={<p role="status">Đang tải nhật ký...</p>}><AdminAuditPage /></Suspense>} /></Route>
               </Route>
               <Route path="/staff" element={<StaffRedirect />} />
             </Route>
@@ -62,6 +66,9 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
               <Route path="/notifications" element={<NotificationsPage />} />
               <Route path="/posts" element={<PostsPage />} />
               <Route path="/my-posts" element={<PostsPage initialTab="mine" />} />
+              <Route path="/appointments" element={<Suspense fallback={<p role="status">Đang tải lịch hẹn...</p>}><AppointmentsPage /></Suspense>} />
+              <Route path="/appointments/:appointmentId" element={<Suspense fallback={<p role="status">Đang tải lịch hẹn...</p>}><AppointmentsPage /></Suspense>} />
+              <Route path="/posts/:postId/journey" element={<Suspense fallback={<p role="status">Đang tải hành trình...</p>}><ItemJourneyPage /></Suspense>} />
               <Route path="/posts/:postId/matches" element={<PostMatchesPage />} />
               <Route path="/posts/:postId" element={<PostDetailPage />} />
               <Route path="/claims" element={<ClaimsPage />} />

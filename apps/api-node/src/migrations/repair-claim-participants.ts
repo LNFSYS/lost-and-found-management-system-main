@@ -1,5 +1,6 @@
 import { createDatabasePool } from "../shared/infrastructure/config/db.js";
 import { runInTransaction } from "../shared/infrastructure/config/db.js";
+import { missingClaimParticipantsSql } from "./claim-participant-integrity.js";
 
 type CountRow = { total: number };
 
@@ -14,13 +15,7 @@ async function repair() {
     const result = await runInTransaction(connection, async (transaction) => {
       const [beforeRows] = await transaction.query(`
         SELECT COUNT(*) AS total FROM claims c JOIN posts p ON p.id = c.post_id
-        WHERE NOT EXISTS (
-          SELECT 1 FROM claim_participants cp
-          WHERE cp.claim_id = c.id AND cp.user_id = c.claimant_id AND cp.participant_role = 'CLAIMANT'
-        ) OR (p.user_id <> c.claimant_id AND NOT EXISTS (
-          SELECT 1 FROM claim_participants cp
-          WHERE cp.claim_id = c.id AND cp.user_id = p.user_id AND cp.participant_role = 'FINDER'
-        ))`);
+        WHERE ${missingClaimParticipantsSql}`);
 
       await transaction.query(`
         INSERT IGNORE INTO claim_participants
@@ -42,13 +37,7 @@ async function repair() {
 
       const [afterRows] = await transaction.query(`
         SELECT COUNT(*) AS total FROM claims c JOIN posts p ON p.id = c.post_id
-        WHERE NOT EXISTS (
-          SELECT 1 FROM claim_participants cp
-          WHERE cp.claim_id = c.id AND cp.user_id = c.claimant_id AND cp.participant_role = 'CLAIMANT'
-        ) OR (p.user_id <> c.claimant_id AND NOT EXISTS (
-          SELECT 1 FROM claim_participants cp
-          WHERE cp.claim_id = c.id AND cp.user_id = p.user_id AND cp.participant_role = 'FINDER'
-        ))`);
+        WHERE ${missingClaimParticipantsSql}`);
       const [unresolvedRows] = await transaction.query(`
         SELECT c.id, c.claimant_id, p.user_id AS finder_id,
           NOT EXISTS (
@@ -60,13 +49,7 @@ async function repair() {
             WHERE cp.claim_id = c.id AND cp.user_id = p.user_id AND cp.participant_role = 'FINDER'
           ) AS missing_finder
         FROM claims c JOIN posts p ON p.id = c.post_id
-        WHERE NOT EXISTS (
-          SELECT 1 FROM claim_participants cp
-          WHERE cp.claim_id = c.id AND cp.user_id = c.claimant_id AND cp.participant_role = 'CLAIMANT'
-        ) OR (p.user_id <> c.claimant_id AND NOT EXISTS (
-          SELECT 1 FROM claim_participants cp
-          WHERE cp.claim_id = c.id AND cp.user_id = p.user_id AND cp.participant_role = 'FINDER'
-        )) LIMIT 20`);
+        WHERE ${missingClaimParticipantsSql} LIMIT 20`);
       return {
         before: Number((beforeRows as CountRow[])[0]?.total ?? 0),
         after: Number((afterRows as CountRow[])[0]?.total ?? 0),

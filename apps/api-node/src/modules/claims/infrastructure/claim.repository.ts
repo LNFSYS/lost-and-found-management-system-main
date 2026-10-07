@@ -5,6 +5,7 @@ export type { ClaimRepository, ClaimStatus, ConsentStatus, FinderDecision, Parti
 import type { TransactionContext } from "../../../shared/application/transaction.js";
 
 import { sqlExecutor, type SqlExecutor } from "../../../shared/infrastructure/transaction-context.js";
+import { claimantIdSql, finderIdSql, participantRoleSql } from "../../../shared/infrastructure/claim-identity-sql.js";
 
 import type { ResultSetHeader, RowDataPacket } from "mysql2";
 
@@ -96,6 +97,7 @@ interface VerificationContextRow extends RowDataPacket {
 
 interface ClaimItemContextRow extends RowDataPacket {
   found_post_id: string;
+  owner_id: string;
   title: string;
   category_name: string | null;
   visibility_mode: "PUBLIC" | "PRIVATE_DETAILS";
@@ -213,6 +215,7 @@ function mapMessage(row: MessageRow) {
     clientMessageId: row.client_message_id,
     content: row.content,
     messageType: row.message_type,
+    mediaUrl: row.media_url,
     isRead: row.is_read === 1,
     readAt: iso(row.read_at),
     createdAt: iso(row.created_at)!
@@ -293,37 +296,19 @@ function mapAuditEvent(row: ClaimAuditRow): ClaimAuditEventRecord {
 
 const claimSelect = `SELECT
   c.id, c.lost_post_id, c.post_id AS found_post_id,
-  CASE
-    WHEN c.lost_post_id IS NULL AND found.type = 'LOST' THEN found.user_id
-    WHEN c.lost_post_id IS NULL AND found.type = 'FOUND' THEN COALESCE((
-      SELECT cp.user_id FROM claim_participants cp
-      WHERE cp.claim_id = c.id AND cp.user_id <> found.user_id LIMIT 1
-    ), c.claimant_id)
-    ELSE c.claimant_id
-  END AS claimant_id,
-  CASE
-    WHEN c.lost_post_id IS NULL AND found.type = 'LOST' THEN COALESCE((
-      SELECT cp.user_id FROM claim_participants cp
-      WHERE cp.claim_id = c.id AND cp.user_id <> found.user_id LIMIT 1
-    ), c.claimant_id)
-    ELSE found.user_id
-  END AS finder_id,
+  ${claimantIdSql} AS claimant_id,
+  ${finderIdSql} AS finder_id,
   c.status, c.finder_decision, c.description,
   c.approximate_lost_at, c.approximate_location, c.rejection_reason,
   c.more_info_request, c.accepted_at, c.rejected_at, c.cancelled_at,
   c.created_at, c.updated_at,
   claimant.full_name AS claimant_name, claimant.email AS claimant_email,
   finder.full_name AS finder_name, finder.email AS finder_email,
-  lost.title AS lost_title, found.title AS found_title, room.id AS room_id
+  lost.title AS lost_title, identity_post.title AS found_title, room.id AS room_id
 FROM claims c
-INNER JOIN posts found ON found.id = c.post_id
-INNER JOIN users claimant ON claimant.id = CASE
-  WHEN c.lost_post_id IS NULL AND found.type = 'LOST' THEN found.user_id
-  WHEN c.lost_post_id IS NULL AND found.type = 'FOUND' THEN COALESCE((SELECT cp.user_id FROM claim_participants cp WHERE cp.claim_id = c.id AND cp.user_id <> found.user_id LIMIT 1), c.claimant_id)
-  ELSE c.claimant_id END
-INNER JOIN users finder ON finder.id = CASE
-  WHEN c.lost_post_id IS NULL AND found.type = 'LOST' THEN COALESCE((SELECT cp.user_id FROM claim_participants cp WHERE cp.claim_id = c.id AND cp.user_id <> found.user_id LIMIT 1), c.claimant_id)
-  ELSE found.user_id END
+INNER JOIN posts identity_post ON identity_post.id = c.post_id
+INNER JOIN users claimant ON claimant.id = ${claimantIdSql}
+INNER JOIN users finder ON finder.id = ${finderIdSql}
 LEFT JOIN posts lost ON lost.id = c.lost_post_id
 LEFT JOIN chat_rooms room ON room.claim_id = c.id`;
 
@@ -453,13 +438,11 @@ export function createClaimRepository(pool: SqlExecutor) {
     async findParticipant(claimId: string, userId: string, queryable: Queryable = pool) {
       const [rows] = await sqlExecutor(queryable).execute<ParticipantRow[]>(
         `SELECT cp.claim_id, cp.user_id,
-          CASE WHEN c.lost_post_id IS NULL AND post.type = 'LOST'
-            THEN CASE WHEN cp.user_id = post.user_id THEN 'CLAIMANT' ELSE 'FINDER' END
-            ELSE cp.participant_role END AS participant_role,
+          ${participantRoleSql} AS participant_role,
           cp.consent_status, cp.joined_at, u.full_name
        FROM claim_participants cp INNER JOIN users u ON u.id = cp.user_id
        INNER JOIN claims c ON c.id = cp.claim_id
-       INNER JOIN posts post ON post.id = c.post_id
+       INNER JOIN posts identity_post ON identity_post.id = c.post_id
        WHERE cp.claim_id = ? AND cp.user_id = ? LIMIT 1`,
         [claimId, userId]
       );
@@ -471,7 +454,7 @@ export function createClaimRepository(pool: SqlExecutor) {
         `SELECT found.id AS found_post_id, category.name_normalized AS category_name,
           parent.name_normalized AS parent_category_name
          FROM claims c
-         INNER JOIN posts found ON found.id = COALESCE(c.source_found_post_id,c.post_id) AND found.type = 'FOUND' AND found.deleted_at IS NULL
+         INNER JOIN posts found ON found.id = COALESCE(c.source_found_post_id,c.post_id) AND found.type IN ('FOUND', 'LOST') AND found.deleted_at IS NULL
          INNER JOIN item_categories category ON category.id = found.category_id
          LEFT JOIN item_categories parent ON parent.id = category.parent_id
          WHERE c.id = ? LIMIT 1`,
@@ -487,14 +470,14 @@ export function createClaimRepository(pool: SqlExecutor) {
 
     async findClaimItemContext(claimId: string, queryable: Queryable = pool) {
       const [rows] = await sqlExecutor(queryable).execute<ClaimItemContextRow[]>(
-        `SELECT found.id AS found_post_id, found.title, category.name AS category_name,
+        `SELECT found.id AS found_post_id, found.user_id AS owner_id, found.title, category.name AS category_name,
           found.visibility_mode, area.name AS area_name, building.name AS building_name,
           found.room_text, found.custom_location, handover.name AS handover_point_name,
           (SELECT media.id FROM post_media media
            WHERE media.post_id = found.id AND media.media_kind = 'ITEM'
            ORDER BY media.sort_order ASC, media.created_at ASC, media.id ASC LIMIT 1) AS media_id
          FROM claims c
-         INNER JOIN posts found ON found.id = COALESCE(c.source_found_post_id,c.post_id) AND found.type = 'FOUND' AND found.deleted_at IS NULL
+         INNER JOIN posts found ON found.id = COALESCE(c.source_found_post_id,c.post_id) AND found.type IN ('FOUND', 'LOST') AND found.deleted_at IS NULL
          LEFT JOIN item_categories category ON category.id = found.category_id
          LEFT JOIN campus_areas area ON area.id = found.area_id
          LEFT JOIN campus_buildings building ON building.id = found.building_id
@@ -505,6 +488,7 @@ export function createClaimRepository(pool: SqlExecutor) {
       const row = rows[0];
       return row ? {
         foundPostId: row.found_post_id,
+        ownerId: row.owner_id,
         title: row.title,
         categoryName: row.category_name,
         visibilityMode: row.visibility_mode,
@@ -520,13 +504,11 @@ export function createClaimRepository(pool: SqlExecutor) {
     async listParticipants(claimId: string, queryable: Queryable = pool) {
       const [rows] = await sqlExecutor(queryable).execute<ParticipantRow[]>(
         `SELECT cp.claim_id, cp.user_id,
-          CASE WHEN c.lost_post_id IS NULL AND post.type = 'LOST'
-            THEN CASE WHEN cp.user_id = post.user_id THEN 'CLAIMANT' ELSE 'FINDER' END
-            ELSE cp.participant_role END AS participant_role,
+          ${participantRoleSql} AS participant_role,
           cp.consent_status, cp.joined_at, u.full_name
        FROM claim_participants cp INNER JOIN users u ON u.id = cp.user_id
        INNER JOIN claims c ON c.id = cp.claim_id
-       INNER JOIN posts post ON post.id = c.post_id
+       INNER JOIN posts identity_post ON identity_post.id = c.post_id
        WHERE cp.claim_id = ? ORDER BY cp.participant_role`,
         [claimId]
       );
@@ -538,13 +520,11 @@ export function createClaimRepository(pool: SqlExecutor) {
       const placeholders = claimIds.map(() => "?").join(", ");
       const [rows] = await pool.execute<ParticipantRow[]>(
         `SELECT cp.claim_id, cp.user_id,
-          CASE WHEN c.lost_post_id IS NULL AND post.type = 'LOST'
-            THEN CASE WHEN cp.user_id = post.user_id THEN 'CLAIMANT' ELSE 'FINDER' END
-            ELSE cp.participant_role END AS participant_role,
+          ${participantRoleSql} AS participant_role,
           cp.consent_status, cp.joined_at, u.full_name
        FROM claim_participants cp INNER JOIN users u ON u.id = cp.user_id
        INNER JOIN claims c ON c.id = cp.claim_id
-       INNER JOIN posts post ON post.id = c.post_id
+       INNER JOIN posts identity_post ON identity_post.id = c.post_id
        WHERE cp.claim_id IN (${placeholders}) ORDER BY cp.claim_id, cp.participant_role`,
         claimIds
       );
@@ -639,16 +619,19 @@ export function createClaimRepository(pool: SqlExecutor) {
 
     async updateFinderParticipant(claimId: string, userId: string, status: ConsentStatus, queryable: Queryable) {
       await sqlExecutor(queryable).execute(
-        `UPDATE claim_participants SET consent_status = ?, joined_at = CASE WHEN ? = 'ACCEPTED' THEN UTC_TIMESTAMP() ELSE joined_at END
-       WHERE claim_id = ? AND user_id = ? AND participant_role = 'FINDER'`,
+        `UPDATE claim_participants cp JOIN claims c ON c.id = cp.claim_id
+         JOIN posts identity_post ON identity_post.id = c.post_id
+         SET cp.consent_status = ?, cp.joined_at = CASE WHEN ? = 'ACCEPTED' THEN UTC_TIMESTAMP() ELSE cp.joined_at END
+         WHERE cp.claim_id = ? AND cp.user_id = ? AND ${participantRoleSql} = 'FINDER'`,
         [status, status, claimId, userId]
       );
     },
 
     async withdrawClaim(claimId: string, claimantId: string, queryable: Queryable) {
       const [result] = await sqlExecutor(queryable).execute<ResultSetHeader>(
-        `UPDATE claims SET status = 'CANCELLED', cancelled_at = UTC_TIMESTAMP(), updated_at = UTC_TIMESTAMP()
-       WHERE id = ? AND claimant_id = ? AND status IN ('PENDING', 'CONVERSATION_OPEN', 'NEED_MORE_INFO')`,
+        `UPDATE claims c JOIN posts identity_post ON identity_post.id = c.post_id
+         SET c.status = 'CANCELLED', c.cancelled_at = UTC_TIMESTAMP(), c.updated_at = UTC_TIMESTAMP()
+         WHERE c.id = ? AND ${claimantIdSql} = ? AND c.status IN ('PENDING', 'CONVERSATION_OPEN', 'NEED_MORE_INFO')`,
         [claimId, claimantId]
       );
       return result.affectedRows > 0;
@@ -756,7 +739,7 @@ export function createClaimRepository(pool: SqlExecutor) {
     async listVerificationAuditEvents(claimId: string, queryable: Queryable = pool) {
       const actions = [
         "CONVERSATION_OPENED", "QUESTION_SENT", "ANSWER_SUBMITTED", "MORE_INFO_REQUESTED", "VERIFICATION_ACCEPTED",
-        "VERIFICATION_DECLINED", "CUSTODY_ESCALATED", "VERIFICATION_DECISION_CORRECTED", "STAFF_CUSTODY_VERIFIED"
+        "VERIFICATION_DECLINED", "CUSTODY_ESCALATED", "VERIFICATION_DECISION_CORRECTED", "STAFF_CUSTODY_VERIFIED", "DIRECT_RETURN_COMPLETED"
       ];
       const placeholders = actions.map(() => "?").join(", ");
       const [rows] = await sqlExecutor(queryable).execute<ClaimAuditRow[]>(
@@ -790,7 +773,14 @@ export function createClaimRepository(pool: SqlExecutor) {
       return rows[0] ? mapClaim(rows[0]) : null;
     },
 
-    async createMessage(input: { roomId: string; senderId: string; content: string; clientMessageId?: string; }, queryable: Queryable) {
+    async findMessageByClientId(roomId, senderId, clientMessageId, queryable) {
+      const [rows] = await sqlExecutor(queryable ?? pool).execute<MessageRow[]>(
+        `${messageSelect} WHERE m.room_id = ? AND m.sender_id = ? AND m.client_message_id = ? LIMIT 1`,
+        [roomId, senderId, clientMessageId]);
+      return rows[0] ? mapMessage(rows[0]) : null;
+    },
+
+    async createMessage(input: { roomId: string; senderId: string; content: string; clientMessageId?: string; mediaUrl?: string }, queryable: Queryable) {
       const executor = sqlExecutor(queryable);
       const [sequenceRows] = await executor.execute<(RowDataPacket & { sequence: number })[]>(
         "SELECT next_sequence AS sequence FROM chat_rooms WHERE id = ? LIMIT 1 FOR UPDATE",
@@ -812,10 +802,10 @@ export function createClaimRepository(pool: SqlExecutor) {
       if (advanced.affectedRows !== 1) return null;
       const messageId = id();
       await executor.execute(
-        `INSERT INTO chat_messages (id, room_id, sequence, sender_id, client_message_id, content, message_type)
-       VALUES (?, ?, ?, ?, ?, ?, 'TEXT')
+        `INSERT INTO chat_messages (id, room_id, sequence, sender_id, client_message_id, content, message_type, media_url)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
        ON DUPLICATE KEY UPDATE id = id`,
-        [messageId, input.roomId, Number(sequence), input.senderId, input.clientMessageId ?? null, input.content]
+        [messageId, input.roomId, Number(sequence), input.senderId, input.clientMessageId ?? null, input.content, input.mediaUrl ? "IMAGE" : "TEXT", input.mediaUrl ?? null]
       );
       const [rows] = await executor.execute<MessageRow[]>(
         `${messageSelect} WHERE m.id = ? OR (m.room_id = ? AND m.sender_id = ? AND m.client_message_id = ?) LIMIT 1`,

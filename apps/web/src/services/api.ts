@@ -263,6 +263,32 @@ export interface WarehouseItem {
   createdAt: string;
   updatedAt: string;
   logCount: number;
+  receivedQuantity?: number | null;
+  accessories?: string | null;
+  thumbnail?: { id: string; provenance: WarehouseImage["provenance"] } | null;
+}
+export interface WarehouseImage {
+  id: string;
+  provenance: "SOURCE_POST" | "CONTACT_PHOTO" | "INTAKE" | "RETURN";
+  uploaderId: string;
+  uploadedAt: string;
+  capturedAt: string | null;
+  postId: string | null;
+  intakeKey: string | null;
+  returnId: string | null;
+  url: string;
+}
+export interface IntakeEvidencePayload {
+  physicalReviewConfirmed: true;
+  intakeKey: string;
+  intakeImageIds: string[];
+  receivedQuantity: number;
+  accessories: string;
+}
+export interface CustodyIntakeContext {
+  request: CustodyRequest;
+  post: { title: string; description: string | null; categoryId: string | null; areaId: string | null; buildingId: string | null; roomText: string | null; finderUserId: string; finderName: string | null; finderContact: string | null };
+  images: WarehouseImage[];
 }
 export interface WarehouseStorageLog {
   id: string;
@@ -293,7 +319,7 @@ export interface WarehouseFilters {
   page?: number;
   pageSize?: number;
 }
-export interface CreateWarehouseItemPayload {
+export interface CreateWarehouseItemPayload extends IntakeEvidencePayload {
   postId?: string | null;
   handoverPointId: string;
   itemName: string;
@@ -341,7 +367,8 @@ export interface CustodyRequest {
   warehouseItemId: string | null;
   createdAt: string;
   updatedAt: string;
-  post: { id: string; title: string | null } | null;
+  post: { id: string; title: string | null; thumbnailId?: string | null } | null;
+  photoSource?: { lostPostId: string; title: string; imageId: string } | null;
 }
 export interface CustodyRequestAuditEntry {
   id: string;
@@ -366,7 +393,7 @@ export interface CustodyRequestDetailResponse {
   audit: CustodyRequestAuditEntry[];
 }
 export interface CustodyRequestFilters {
-  status?: CustodyRequestStatus | "";
+  status?: CustodyRequestStatus | "AWAITING_INTAKE" | "";
   page?: number;
   pageSize?: number;
 }
@@ -390,7 +417,7 @@ export interface RejectCustodyRequestPayload {
 export interface CancelCustodyRequestPayload {
   reason?: string | null;
 }
-export interface IntakeCustodyRequestPayload {
+export interface IntakeCustodyRequestPayload extends IntakeEvidencePayload, Partial<Pick<CreateWarehouseItemPayload, "itemName" | "description" | "categoryId" | "areaId" | "buildingId" | "roomText" | "finderName" | "finderContact">> {
   conditionNotes: string;
   storageCode?: string | null;
   confirmedHandoverAt?: string | null;
@@ -547,6 +574,7 @@ export interface ClaimRecord {
   participants?: ClaimParticipant[];
   room?: { id: string } | null;
   canSend?: boolean;
+  contactPhoto?: { required: boolean; approved: boolean; postId: string; questions: string[] } | null;
   item?: {
     postId: string;
     title: string;
@@ -571,6 +599,7 @@ export interface ClaimMessage {
   clientMessageId: string | null;
   content: string | null;
   messageType: "TEXT" | "IMAGE" | "SYSTEM";
+  mediaUrl?: string | null;
   isRead: boolean;
   readAt: string | null;
   createdAt: string;
@@ -622,6 +651,7 @@ export interface ClaimVerificationState {
     answeredCount: number;
     matchedCount?: number;
     readyForDecision: boolean;
+    photoContactEligible?: boolean;
   };
   questions: Array<{
     id: string;
@@ -643,7 +673,7 @@ export interface ClaimVerificationState {
     createdAt: string;
   }>;
 }
-export type NotificationType = "CLAIM_REQUEST_RECEIVED" | "CLAIM_ACCEPTED" | "CLAIM_MORE_INFO_REQUESTED" | "CLAIM_REJECTED" | "CLAIM_WITHDRAWN" | "CUSTODY_REQUEST_CREATED";
+export type NotificationType = "MATCH_FOUND" | "CLAIM_REQUEST_RECEIVED" | "CLAIM_ACCEPTED" | "CLAIM_MORE_INFO_REQUESTED" | "CLAIM_REJECTED" | "CLAIM_WITHDRAWN" | "CUSTODY_REQUEST_CREATED";
 export interface AppNotification {
   id: string;
   type: NotificationType;
@@ -686,6 +716,9 @@ interface SessionResponse { user: CurrentUser; accessToken: string; accessTokenE
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3001/api";
 let accessToken: string | null = null;
 let refreshInFlight: Promise<SessionResponse | null> | null = null;
+let sessionGeneration = 0;
+let refreshController: AbortController | null = null;
+let refreshFailure: ApiError | null = null;
 
 function isMutation(init: RequestInit) {
   const method = (init.method ?? "GET").toUpperCase();
@@ -705,13 +738,32 @@ function normalizeSession(session: SessionResponse): SessionResponse {
 }
 
 export class ApiError extends Error {
-  constructor(message: string, public readonly status: number, public readonly fieldErrors: Record<string, string[]> = {}) {
+  readonly retryAt: number;
+  constructor(message: string, public readonly status: number, public readonly fieldErrors: Record<string, string[]> = {}, retryAfterMs = 0) {
     super(message);
     this.name = "ApiError";
+    this.retryAt = Date.now() + Math.max(0, retryAfterMs);
   }
 }
 
+function retryAfterMs(value: string | null) {
+  if (!value) return 0;
+  if (/^\d+$/.test(value)) return Number(value) * 1000;
+  const deadline = Date.parse(value);
+  return Number.isFinite(deadline) ? Math.max(0, deadline - Date.now()) : 0;
+}
+
+function invalidateSession() {
+  sessionGeneration++;
+  refreshController?.abort();
+  refreshController = null;
+  refreshInFlight = null;
+  refreshFailure = null;
+  accessToken = null;
+}
+
 async function raw<T>(path: string, init: RequestInit = {}, retry = true): Promise<T> {
+  const generation = sessionGeneration;
   if (typeof navigator !== "undefined" && !navigator.onLine && isMutation(init)) {
     throw new Error("Bạn đang offline. Thao tác này chưa được gửi và cần kết nối mạng để thực hiện.");
   }
@@ -729,7 +781,9 @@ async function raw<T>(path: string, init: RequestInit = {}, retry = true): Promi
     window.dispatchEvent(new CustomEvent("lnfs:stale-data", { detail: { path } }));
   }
   if (response.status === 401 && retry && path !== "/auth/refresh") {
+    if (generation !== sessionGeneration) throw new Error("Phiên đăng nhập đã thay đổi. Yêu cầu cũ không được gửi lại.");
     const session = await refreshSession();
+    if (generation !== sessionGeneration) throw new Error("Phiên đăng nhập đã thay đổi. Yêu cầu cũ không được gửi lại.");
     if (session) return raw<T>(path, init, false);
   }
   if (!response.ok) {
@@ -740,23 +794,54 @@ async function raw<T>(path: string, init: RequestInit = {}, retry = true): Promi
         if (Array.isArray(messages)) fieldErrors[field] = messages.filter((message): message is string => typeof message === "string");
       }
     }
-    throw new ApiError(payload.message ?? "Yêu cầu không thành công", response.status, fieldErrors);
+    throw new ApiError(payload.message ?? "Yêu cầu không thành công", response.status, fieldErrors, retryAfterMs(response.headers.get("retry-after")));
   }
   if (response.status === 204) return undefined as T;
   return response.json() as Promise<T>;
 }
 
 export async function refreshSession() {
+  if (refreshFailure && refreshFailure.retryAt > Date.now()) throw refreshFailure;
   if (!refreshInFlight) {
-    refreshInFlight = raw<SessionResponse>("/auth/refresh", { method: "POST" }, false)
-      .then((session) => { const normalized = normalizeSession(session); accessToken = normalized.accessToken; return normalized; })
-      .catch(() => { accessToken = null; return null; })
-      .finally(() => { refreshInFlight = null; });
+    const generation = sessionGeneration;
+    const controller = new AbortController();
+    refreshController = controller;
+    const timeout = window.setTimeout(() => controller.abort(), 30_000);
+    const request: Promise<SessionResponse | null> = raw<SessionResponse>("/auth/refresh", { method: "POST", signal: controller.signal }, false)
+      .then((session) => {
+        if (generation !== sessionGeneration) return null;
+        const normalized = normalizeSession(session);
+        accessToken = normalized.accessToken;
+        refreshFailure = null;
+        return normalized;
+      })
+      .catch((reason: unknown) => {
+        if (generation !== sessionGeneration) return null;
+        if (reason instanceof ApiError && (reason.status === 401 || reason.status === 403)) {
+          accessToken = null;
+          refreshFailure = null;
+          window.dispatchEvent(new Event("lnfs:session-ended"));
+          return null;
+        }
+        const delay = reason instanceof ApiError ? Math.max(2000, reason.retryAt - Date.now()) : 2000;
+        refreshFailure = new ApiError(reason instanceof Error && reason.name !== "AbortError" ? reason.message : "Chưa thể khôi phục phiên. Vui lòng thử lại.", reason instanceof ApiError ? reason.status : 503, {}, delay);
+        throw refreshFailure;
+      })
+      .finally(() => {
+        window.clearTimeout(timeout);
+        if (refreshInFlight === request) { refreshInFlight = null; refreshController = null; }
+      });
+    refreshInFlight = request;
   }
   return refreshInFlight;
 }
 
-function storeSession(session: SessionResponse) { const normalized = normalizeSession(session); accessToken = normalized.accessToken; return normalized.user; }
+function storeSession(session: SessionResponse, generation: number) {
+  if (generation !== sessionGeneration) throw new Error("Yêu cầu đăng nhập đã được thay thế.");
+  const normalized = normalizeSession(session);
+  accessToken = normalized.accessToken;
+  return normalized.user;
+}
 
 function queryString(filters: object) {
   const query = new URLSearchParams();
@@ -785,6 +870,7 @@ async function findConversationByPost(postId: string) {
 }
 
 async function mediaBlob(path: string, retry = true, errorMessage = "Khong the tai anh"): Promise<Blob> {
+  const generation = sessionGeneration;
   const headers = new Headers();
   if (accessToken) headers.set("authorization", `Bearer ${accessToken}`);
   let response: Response;
@@ -793,20 +879,40 @@ async function mediaBlob(path: string, retry = true, errorMessage = "Khong the t
   } catch {
     throw new Error(errorMessage);
   }
-  if (response.status === 401 && retry && await refreshSession()) return mediaBlob(path, false, errorMessage);
+  if (response.status === 401 && retry && generation === sessionGeneration) {
+    const session = await refreshSession();
+    if (session && generation === sessionGeneration) return mediaBlob(path, false, errorMessage);
+  }
   if (!response.ok) throw new Error(errorMessage);
   return response.blob();
 }
 
 export const api = {
+  listAppointments: (filters:{claimId?:string;page?:number}={},signal?:AbortSignal) => raw<{results:import("./workflow-types").Appointment[];total:number}>(`/appointments${queryString(filters)}`,{signal}),
+  getAppointment: (id:string,signal?:AbortSignal) => raw<import("./workflow-types").Appointment>(`/appointments/${id}`,{signal}),
+  createAppointment: (payload:{claimId:string;proposedAt:string;handoverPointId:string;requestKey:string}) => raw<import("./workflow-types").Appointment>("/appointments",{method:"POST",body:JSON.stringify(payload)}),
+  actOnAppointment: (id:string,payload:{action:import("./workflow-types").AppointmentAction;version:number;requestKey:string;physicallyChecked?:boolean;reason?:string}) => raw<import("./workflow-types").Appointment>(`/appointments/${id}/actions`,{method:"POST",body:JSON.stringify(payload)}),
+  getItemJourney: (id:string,filters:{page?:number;asOf?:string}={},signal?:AbortSignal) => raw<import("./workflow-types").Journey>(`/posts/${id}/journey${queryString(filters)}`,{signal}),
+  listAudit: (filters:import("./workflow-types").AuditFilter={},signal?:AbortSignal) => raw<{results:import("./workflow-types").ActivityEvent[];total:number}>(`/admin/audit${queryString(filters)}`,{signal}),
+  exportAudit: (filters:import("./workflow-types").AuditFilter,format:"csv"|"json") => mediaBlob(`/admin/audit/export${queryString({...filters,format})}`,true,"Không thể xuất nhật ký. Hãy kiểm tra quyền và giới hạn 5.000 sự kiện."),
   requestRegistrationOtp: (email: string) => raw<{ delivered: boolean; expiresInMinutes: number }>("/auth/register/request-otp", { method: "POST", body: JSON.stringify({ email }) }),
-  register: async (payload: { email: string; otp: string; password: string; fullName: string; audienceRole: "STUDENT" | "LECTURER"; studentCode?: string; phoneNumber?: string }) => storeSession(await raw<SessionResponse>("/auth/register", { method: "POST", body: JSON.stringify(payload) })),
-  login: async (email: string, password: string) => storeSession(await raw<SessionResponse>("/auth/login", { method: "POST", body: JSON.stringify({ email, password }) })),
+  register: async (payload: { email: string; otp: string; password: string; fullName: string; audienceRole: "STUDENT" | "LECTURER"; studentCode?: string; phoneNumber?: string }) => {
+    invalidateSession();
+    const generation = sessionGeneration;
+    return storeSession(await raw<SessionResponse>("/auth/register", { method: "POST", body: JSON.stringify(payload) }, false), generation);
+  },
+  login: async (email: string, password: string) => {
+    invalidateSession();
+    const generation = sessionGeneration;
+    return storeSession(await raw<SessionResponse>("/auth/login", { method: "POST", body: JSON.stringify({ email, password }) }, false), generation);
+  },
   logout: async () => {
+    invalidateSession();
+    const generation = sessionGeneration;
     try {
-      await raw<void>("/auth/logout", { method: "POST" });
+      await raw<void>("/auth/logout", { method: "POST" }, false);
     } finally {
-      accessToken = null;
+      if (generation === sessionGeneration) accessToken = null;
     }
   },
   forgotPassword: (email: string) => raw<{ delivered: boolean; message: string }>("/auth/forgot-password", { method: "POST", body: JSON.stringify({ email }) }),
@@ -853,12 +959,17 @@ export const api = {
   },
   findConversationByPost,
   getClaim: (claimId: string, signal?: AbortSignal) => raw<ClaimRecord>(`/claims/${claimId}`, { signal }),
-  createClaim: (payload: ({ postId: string } | { lostPostId: string; foundPostId: string }) & { description?: string; requestKey?: string }) => {
+  createClaim: (payload: ({ postId: string } | { lostPostId: string; foundPostId: string }) & { description?: string; requestKey?: string; contactCheckId?: string; sourceFoundPostId?: string }) => {
     const requestKey = payload.requestKey ?? crypto.randomUUID();
     return raw<ClaimRecord & { idempotent: boolean }>("/claims", { method: "POST", headers: { "Idempotency-Key": requestKey }, body: JSON.stringify({ ...payload, requestKey: undefined }) });
   },
-  createDirectMessage: (postId: string, content: string, clientMessageId: string = crypto.randomUUID(), sourceFoundPostId?: string) =>
-    raw<{ claim: ClaimRecord; message: ClaimMessage }>("/claims/direct-messages", { method: "POST", headers: { "Idempotency-Key": clientMessageId }, body: JSON.stringify({ postId, content, sourceFoundPostId }) }),
+  createDirectMessage: (postId: string, content: string, clientMessageId: string = crypto.randomUUID(), sourceFoundPostId?: string, contactCheckId?: string) =>
+    raw<{ claim: ClaimRecord; message: ClaimMessage }>("/claims/direct-messages", { method: "POST", headers: { "Idempotency-Key": clientMessageId }, body: JSON.stringify({ postId, content, sourceFoundPostId, contactCheckId }) }),
+  checkLostContactPhoto: (postId: string, file: File) => {
+    const form = new FormData(); form.append("postId",postId); form.append("file",file);
+    return raw<{ checkId: string | null; approved: boolean; score: number; expiresAt: string | null; questions?: string[] }>("/claims/contact-photo-checks", { method: "POST", body: form });
+  },
+  attachContactPhoto: (claimId: string, contactCheckId: string) => raw<ClaimRecord>(`/claims/${claimId}/contact-photo`, { method: "POST", body: JSON.stringify({ contactCheckId }) }),
   decideClaim: (claimId: string, decision: "ACCEPT" | "DECLINE" | "REQUEST_MORE_INFO", note: string, idempotencyKey: string = crypto.randomUUID()) => raw<ClaimRecord>(`/claims/${claimId}/decision`, { method: "POST", headers: { "Idempotency-Key": idempotencyKey }, body: JSON.stringify({ decision, note }) }),
   withdrawClaim: (claimId: string, idempotencyKey: string = crypto.randomUUID()) => raw<ClaimRecord>(`/claims/${claimId}/withdraw`, { method: "POST", headers: { "Idempotency-Key": idempotencyKey } }),
   listClaimRooms: () => raw<ClaimRoomsResponse>("/claims/rooms"),
@@ -872,6 +983,10 @@ export const api = {
     return raw<ClaimMessagesResponse>(`/claims/${claimId}/messages${suffix}`, { signal });
   },
   sendClaimMessage: (claimId: string, content: string, clientMessageId: string = crypto.randomUUID()) => raw<ClaimMessage>(`/claims/${claimId}/messages`, { method: "POST", headers: { "Idempotency-Key": clientMessageId }, body: JSON.stringify({ content }) }),
+  sendClaimImage: (claimId: string, file: File, content: string, clientMessageId: string) => {
+    const form = new FormData(); form.append("file", file); form.append("content", content);
+    return raw<ClaimMessage>(`/claims/${claimId}/messages/images`, { method: "POST", headers: { "Idempotency-Key": clientMessageId }, body: form });
+  },
   listClaimEvidence: (claimId: string, signal?: AbortSignal) => raw<ClaimEvidenceResponse>(`/claims/${claimId}/evidence`, { signal }),
   uploadClaimEvidence: (claimId: string, file: File, description?: string) => {
     const form = new FormData();
@@ -962,6 +1077,17 @@ export const api = {
     return raw<{ id: string; url: string }>("/staff/warehouse-items/upload-proof", { method: "POST", body: form });
   },
   getWarehouseProof: (id: string) => mediaBlob(`/staff/warehouse-proofs/${id}`),
+  getWarehouseImage: (id: string, provenance: WarehouseImage["provenance"]) => mediaBlob(`/staff/warehouse-images/${id}?provenance=${provenance}`),
+  getWarehouseImages: (id: string) => raw<{ images: WarehouseImage[] }>(`/staff/warehouse-items/${id}/images`),
+  getCustodyIntakeContext: (id: string) => raw<CustodyIntakeContext>(`/staff/custody-requests/${id}/intake-context`),
+  uploadIntakeImage: (file: File, intakeKey: string, custodyRequestId?: string) => {
+    const form = new FormData();
+    form.append("file", file);
+    form.append("intakeKey", intakeKey);
+    if (custodyRequestId) form.append("custodyRequestId", custodyRequestId);
+    return raw<{ id: string; url: string }>("/staff/warehouse-intake-images", { method: "POST", body: form });
+  },
+  deleteIntakeImage: (id: string, intakeKey: string) => raw<{ removed: boolean }>(`/staff/warehouse-intake-images/${id}`, { method: "DELETE", body: JSON.stringify({ intakeKey }) }),
   getWarehouseReturnRecipients: (id: string) => raw<{ recipients: Array<{ claimId: string; recipientId: string; fullName: string }> }>(`/staff/warehouse-items/${id}/return-recipients`),
   getWarehouseReturnClaimReviews: (id: string) => raw<{ claims: Array<{ claimId: string; recipientId: string; fullName: string; description: string | null; status: string; verified: boolean }> }>(`/staff/warehouse-items/${id}/return-claim-reviews`),
   verifyWarehouseClaim: (id: string, payload: { claimId: string; recipientId: string; verified: boolean; reason: string }) => raw<{ claims: Array<{ claimId: string; recipientId: string; fullName: string; description: string | null; status: string; verified: boolean }> }>(`/staff/warehouse-items/${id}/verify-claim`, { method: "POST", body: JSON.stringify(payload) }),

@@ -20,8 +20,9 @@ test("allows PENDING → CANCELLED transition", () => {
   assert.equal(canTransitionCustodyStatus("PENDING", "CANCELLED"), true);
 });
 
-test("blocks PENDING → INTAKED direct transition", () => {
-  assert.equal(canTransitionCustodyStatus("PENDING", "INTAKED"), false);
+test("allows physical PENDING intake without pre-approval", () => {
+  assert.equal(canTransitionCustodyStatus("PENDING", "INTAKED"), true);
+  assert.equal(canTransitionCustodyStatus("ACCEPTED", "REJECTED"), true);
 });
 
 test("allows ACCEPTED → INTAKED transition", () => {

@@ -31,8 +31,6 @@ import {
 import {
   api,
   ApiError,
-  type AcceptCustodyRequestPayload,
-  type CreateWarehouseItemPayload,
   type CustodyRequest,
   type CustodyRequestListResponse,
   type CustodyRequestStatus,
@@ -40,8 +38,14 @@ import {
   type WarehouseDashboard,
   type WarehouseItem,
   type WarehouseStatus,
-  type WarehouseStorageLog
+  type WarehouseStorageLog,
+  type WarehouseImage
 } from "../services/api";
+
+import { WarehouseIntakeDialog } from "../components/warehouse-intake-dialog";
+import { AccessibleDialog } from "../components/accessible-dialog";
+import { useModalFocus } from "../hooks/use-modal-focus";
+import { WarehouseImageGallery, WarehouseImageView } from "../components/warehouse-images";
 
 type StaffTab = "custody" | "warehouse" | "dashboard" | "logs";
 type PendingAction = "" | "load" | "create" | "update" | "logs" | "custody" | "custody-action";
@@ -72,32 +76,15 @@ const statusOptions: Array<{ value: WarehouseStatus; label: string }> = [
 ];
 
 const custodyStatusLabels: Record<CustodyRequestStatus, { label: string; icon: ReactNode }> = {
-  PENDING: { label: "Chờ duyệt", icon: <Clock3 size={14} /> },
-  ACCEPTED: { label: "Đã duyệt – Chờ bàn giao", icon: <UserCheck size={14} /> },
+  PENDING: { label: "Chờ tiếp nhận", icon: <Clock3 size={14} /> },
+  ACCEPTED: { label: "Chờ tiếp nhận (yêu cầu cũ)", icon: <UserCheck size={14} /> },
   REJECTED: { label: "Từ chối", icon: <XCircle size={14} /> },
   CANCELLED: { label: "Đã hủy", icon: <XCircle size={14} /> },
   INTAKED: { label: "Đã tiếp nhận", icon: <CheckCircle2 size={14} /> }
 };
 
-const emptyCreateForm = {
-  handoverPointId: "",
-  itemName: "",
-  description: "",
-  categoryId: "",
-  areaId: "",
-  buildingId: "",
-  roomText: "",
-  finderName: "",
-  finderContact: "",
-  conditionNotes: "",
-  storageCode: "",
-  receivedAt: ""
-};
-
 const emptyFilters = { q: "", status: "", handoverPointId: "" };
-const emptyAcceptForm = { handoverPointId: "", confirmedHandoverAt: "", reason: "" };
 const emptyRejectForm = { reason: "" };
-const emptyIntakeForm = { conditionNotes: "", storageCode: "", confirmedHandoverAt: "" };
 
 function messageOf(reason: unknown, fallback: string) {
   return reason instanceof Error ? reason.message : fallback;
@@ -190,38 +177,12 @@ function CustodyQueueTab({
   onError: (msg: string) => void;
   setPendingAction: (action: PendingAction) => void;
 }) {
-  const [acceptModal, setAcceptModal] = useState<CustodyRequest | null>(null);
   const [rejectModal, setRejectModal] = useState<CustodyRequest | null>(null);
   const [intakeModal, setIntakeModal] = useState<CustodyRequest | null>(null);
   const [walkInModalOpen, setWalkInModalOpen] = useState(false);
-  const [acceptForm, setAcceptForm] = useState(emptyAcceptForm);
   const [rejectForm, setRejectForm] = useState(emptyRejectForm);
-  const [intakeForm, setIntakeForm] = useState(emptyIntakeForm);
-  const [createForm, setCreateForm] = useState(emptyCreateForm);
   const [statusFilter, updateStatusFilter] = useState<string>("ALL");
   function setStatusFilter(status: string) { updateStatusFilter(status); void onRefreshCustody(status, 1); }
-
-  const allCategories = useMemo(() => {
-    if (!catalog?.categories) return [];
-    return [...catalog.categories].sort((a, b) => a.name.localeCompare(b.name, "vi"));
-  }, [catalog]);
-
-  const availableBuildings = useMemo(() => {
-    if (!catalog?.buildings) return [];
-    if (!createForm.areaId) return catalog.buildings;
-    const filtered = catalog.buildings.filter((item) => item.areaId === createForm.areaId);
-    return filtered.length > 0 ? filtered : catalog.buildings;
-  }, [catalog, createForm.areaId]);
-
-  // Default handover point selection
-  useEffect(() => {
-    if (catalog?.handoverPoints.length) {
-      setCreateForm((prev) => ({
-        ...prev,
-        handoverPointId: prev.handoverPointId || catalog.handoverPoints[0]?.id || ""
-      }));
-    }
-  }, [catalog]);
 
   const filteredRequests = useMemo(() => {
     if (!custodyData?.items) return [];
@@ -229,62 +190,6 @@ function CustodyQueueTab({
   }, [custodyData, statusFilter]);
 
   const [createdWalkInItem, setCreatedWalkInItem] = useState<WarehouseItem | null>(null);
-
-  async function submitWalkIn(event: FormEvent) {
-    event.preventDefault();
-    setPendingAction("create");
-    onError("");
-    onNotice("");
-    try {
-      const payload: CreateWarehouseItemPayload = {
-        handoverPointId: createForm.handoverPointId,
-        itemName: createForm.itemName,
-        description: clean(createForm.description),
-        categoryId: clean(createForm.categoryId),
-        areaId: clean(createForm.areaId),
-        buildingId: clean(createForm.buildingId),
-        roomText: clean(createForm.roomText),
-        finderName: clean(createForm.finderName),
-        finderContact: clean(createForm.finderContact),
-        conditionNotes: createForm.conditionNotes,
-        receivedAt: createForm.receivedAt ? new Date(createForm.receivedAt).toISOString() : undefined
-      };
-      const created = await api.createWarehouseItem(payload);
-      setCreatedWalkInItem(created);
-      onNotice("Đã tiếp nhận vật phẩm thành công (Walk-in)");
-      setCreateForm({ ...emptyCreateForm, handoverPointId: createForm.handoverPointId });
-      setWalkInModalOpen(false);
-      await onRefreshCustody();
-    } catch (reason) {
-      onError(messageOf(reason, "Không thể tiếp nhận vật phẩm"));
-    } finally {
-      setPendingAction("");
-    }
-  }
-
-  async function submitAccept(event: FormEvent) {
-    event.preventDefault();
-    if (!acceptModal) return;
-    setPendingAction("custody-action");
-    onError("");
-    onNotice("");
-    try {
-      const payload: AcceptCustodyRequestPayload = {
-        handoverPointId: acceptForm.handoverPointId,
-        confirmedHandoverAt: acceptForm.confirmedHandoverAt ? new Date(acceptForm.confirmedHandoverAt).toISOString() : null,
-        reason: clean(acceptForm.reason)
-      };
-      await api.acceptCustodyRequest(acceptModal.id, payload);
-      onNotice("Đã duyệt yêu cầu bàn giao thành công");
-      setAcceptModal(null);
-      setAcceptForm(emptyAcceptForm);
-      await onRefreshCustody();
-    } catch (reason) {
-      onError(messageOf(reason, "Không thể duyệt yêu cầu"));
-    } finally {
-      setPendingAction("");
-    }
-  }
 
   async function submitReject(event: FormEvent) {
     event.preventDefault();
@@ -305,79 +210,11 @@ function CustodyQueueTab({
     }
   }
 
-  async function submitCancel(requestId: string) {
-    setPendingAction("custody-action");
-    onError("");
-    onNotice("");
-    try {
-      await api.cancelCustodyRequest(requestId, { reason: "Hủy bởi nhân viên" });
-      onNotice("Đã hủy yêu cầu custody");
-      await onRefreshCustody();
-    } catch (reason) {
-      onError(messageOf(reason, "Không thể hủy yêu cầu"));
-    } finally {
-      setPendingAction("");
-    }
-  }
-
-  async function submitIntake(event: FormEvent) {
-    event.preventDefault();
-    if (!intakeModal) return;
-    setPendingAction("custody-action");
-    onError("");
-    onNotice("");
-    try {
-      await api.confirmCustodyIntake(intakeModal.id, {
-        conditionNotes: intakeForm.conditionNotes,
-        storageCode: clean(intakeForm.storageCode),
-        confirmedHandoverAt: intakeForm.confirmedHandoverAt ? new Date(intakeForm.confirmedHandoverAt).toISOString() : null
-      });
-      onNotice("Đã xác nhận bàn giao thực tế & Nhập kho tài sản");
-      setIntakeModal(null);
-      setIntakeForm(emptyIntakeForm);
-      await onRefreshCustody();
-    } catch (reason) {
-      onError(messageOf(reason, "Không thể xác nhận bàn giao"));
-    } finally {
-      setPendingAction("");
-    }
-  }
-
-function currentLocalTime() {
-  const date = new Date();
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  const hours = String(date.getHours()).padStart(2, "0");
-  const minutes = String(date.getMinutes()).padStart(2, "0");
-  return `${year}-${month}-${day}T${hours}:${minutes}`;
-}
-
-function defaultHandoverTime() {
-  const date = new Date(Date.now() + 60 * 60 * 1000);
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  const hours = String(date.getHours()).padStart(2, "0");
-  const minutes = String(date.getMinutes()).padStart(2, "0");
-  return `${year}-${month}-${day}T${hours}:${minutes}`;
-}
-
-  function openAcceptModal(request: CustodyRequest) {
-    setAcceptForm({
-      ...emptyAcceptForm,
-      handoverPointId: request.handoverPoint?.id ?? catalog?.handoverPoints[0]?.id ?? "",
-      confirmedHandoverAt: defaultHandoverTime()
-    });
-    setAcceptModal(request);
-  }
-
   return (
     <>
       {/* Stats summary banner */}
       <div className="admin-stats warehouse-stats" aria-label="Thống kê custody">
-        <StatCard icon={<Clock3 size={20} />} value={custodyData?.counts.PENDING ?? 0} label="Chờ duyệt" tone="orange" />
-        <StatCard icon={<UserCheck size={20} />} value={custodyData?.counts.ACCEPTED ?? 0} label="Chờ bàn giao" tone="blue" />
+        <StatCard icon={<Clock3 size={20} />} value={(custodyData?.counts.PENDING ?? 0) + (custodyData?.counts.ACCEPTED ?? 0)} label="Chờ tiếp nhận" tone="orange" />
         <StatCard icon={<CheckCircle2 size={20} />} value={custodyData?.counts.INTAKED ?? 0} label="Đã tiếp nhận" tone="green" />
         <StatCard icon={<XCircle size={20} />} value={(custodyData?.counts.REJECTED ?? 0) + (custodyData?.counts.CANCELLED ?? 0)} label="Từ chối / Hủy" tone="red" />
       </div>
@@ -411,9 +248,8 @@ function defaultHandoverTime() {
             {/* Filter chips */}
             <div className="custody-filter-chips">
               <button type="button" className={`chip ${statusFilter === "ALL" ? "chip--active" : ""}`} onClick={() => setStatusFilter("ALL")}>Tất cả</button>
-              <button type="button" className={`chip ${statusFilter === "PENDING" ? "chip--active" : ""}`} onClick={() => setStatusFilter("PENDING")}>Chờ duyệt ({custodyData?.counts.PENDING ?? 0})</button>
-              <button type="button" className={`chip ${statusFilter === "ACCEPTED" ? "chip--active" : ""}`} onClick={() => setStatusFilter("ACCEPTED")}>Chờ bàn giao ({custodyData?.counts.ACCEPTED ?? 0})</button>
-              <button type="button" className={`chip ${statusFilter === "INTAKED" ? "chip--active" : ""}`} onClick={() => setStatusFilter("INTAKED")}>Đã nhập kho ({custodyData?.counts.INTAKED ?? 0})</button>
+              <button type="button" className={`chip ${statusFilter === "AWAITING_INTAKE" ? "chip--active" : ""}`} onClick={() => setStatusFilter("AWAITING_INTAKE")}>Chờ tiếp nhận ({(custodyData?.counts.PENDING ?? 0) + (custodyData?.counts.ACCEPTED ?? 0)})</button>
+              <button type="button" className={`chip ${statusFilter === "INTAKED" ? "chip--active" : ""}`} onClick={() => setStatusFilter("INTAKED")}>Đã tiếp nhận ({custodyData?.counts.INTAKED ?? 0})</button>
             </div>
 
             {/* Walk-in Intake Trigger Button */}
@@ -449,7 +285,9 @@ function defaultHandoverTime() {
 
                 <div className="custody-request-card__body">
                   <div className="custody-item-preview">
-                    <h3>{request.post?.title ?? "Bàn giao vật phẩm tìm thấy"}</h3>
+                    <WarehouseImageView image={request.post?.thumbnailId ? { id: request.post.thumbnailId, provenance: "SOURCE_POST" }
+                      : request.photoSource ? { id: request.photoSource.imageId, provenance: "CONTACT_PHOTO" } : null} />
+                    <h3>{request.post?.title ?? request.photoSource?.title ?? "Bàn giao vật phẩm tìm thấy"}</h3>
                     {request.reason && <p className="custody-reason">"{request.reason}"</p>}
                   </div>
 
@@ -495,10 +333,10 @@ function defaultHandoverTime() {
                       <button
                         type="button"
                         className="primary-button custody-action-btn"
-                        onClick={() => openAcceptModal(request)}
+                        onClick={() => setIntakeModal(request)}
                         disabled={Boolean(pendingAction)}
                       >
-                        <CheckCircle2 size={15} /> Chấp nhận yêu cầu
+                        <PackageCheck size={16} /> Tiếp nhận vật phẩm
                       </button>
                       <button
                         type="button"
@@ -516,18 +354,18 @@ function defaultHandoverTime() {
                       <button
                         type="button"
                         className="primary-button custody-action-btn custody-action-btn--success"
-                        onClick={() => { setIntakeForm(emptyIntakeForm); setIntakeModal(request); }}
+                        onClick={() => setIntakeModal(request)}
                         disabled={Boolean(pendingAction)}
                       >
-                        <PackageCheck size={16} /> Xác nhận tiếp nhận
+                        <PackageCheck size={16} /> Tiếp nhận vật phẩm
                       </button>
                       <button
                         type="button"
                         className="secondary-button custody-action-btn custody-action-btn--danger"
-                        onClick={() => { if (window.confirm('Bạn có chắc chắn muốn hủy yêu cầu bàn giao này do người dùng không đến?')) submitCancel(request.id); }}
+                        onClick={() => { setRejectForm(emptyRejectForm); setRejectModal(request); }}
                         disabled={Boolean(pendingAction)}
                       >
-                        <XCircle size={15} /> Hủy
+                        <XCircle size={15} /> Từ chối tiếp nhận
                       </button>
                     </>
                   )}
@@ -546,117 +384,17 @@ function defaultHandoverTime() {
         </div>
       </section>
 
-      {/* Modal Walk-in Receive Form */}
-      {walkInModalOpen && (
-        <div className="custody-modal-overlay" onClick={() => setWalkInModalOpen(false)}>
-          <div className="custody-modal custody-modal--lg" onClick={(e) => e.stopPropagation()}>
-            <div className="custody-modal__header">
-              <span className="modal-badge modal-badge--blue"><ClipboardCheck size={20} /></span>
-              <div>
-                <h3>Tiếp nhận trực tiếp (Walk-in / Tại quầy)</h3>
-                <p>Nhập kho tài sản trực tiếp do người nhặt đem tới bàn tiếp nhận mà không qua yêu cầu trực tuyến.</p>
-              </div>
-              <button type="button" className="close-btn" onClick={() => setWalkInModalOpen(false)}><X size={18} /></button>
-            </div>
-
-            <form className="admin-form modal-form" onSubmit={submitWalkIn}>
-              <label className="input-field">
-                <span>Điểm bàn giao <strong className="required-star">*</strong></span>
-                <select value={createForm.handoverPointId} onChange={(event) => setCreateForm({ ...createForm, handoverPointId: event.target.value })} required>
-                  <option value="">Chọn điểm bàn giao</option>
-                  {catalog?.handoverPoints.map((point) => (
-                    <option key={point.id} value={point.id}>{point.name} - {point.address}</option>
-                  ))}
-                </select>
-              </label>
-
-              <label className="input-field">
-                <span>Tên vật phẩm <strong className="required-star">*</strong></span>
-                <input value={createForm.itemName} onChange={(event) => setCreateForm({ ...createForm, itemName: event.target.value })} placeholder="Ví dụ: Ví da màu nâu, Chìa khóa xe..." required />
-              </label>
-
-              <label className="input-field">
-                <span>Danh mục</span>
-                <select value={createForm.categoryId} onChange={(event) => setCreateForm({ ...createForm, categoryId: event.target.value })}>
-                  <option value="">-- Chọn danh mục --</option>
-                  {allCategories.map((category) => (
-                    <option key={category.id} value={category.id}>
-                      {category.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <label className="input-field">
-                <span>Mô tả chi tiết</span>
-                <textarea value={createForm.description} onChange={(event) => setCreateForm({ ...createForm, description: event.target.value })} rows={2} placeholder="Mô tả đặc điểm nhận dạng, nhãn hiệu, màu sắc..." />
-              </label>
-
-              <label className="input-field">
-                <span>Tình trạng khi nhận <strong className="required-star">*</strong></span>
-                <textarea value={createForm.conditionNotes} onChange={(event) => setCreateForm({ ...createForm, conditionNotes: event.target.value })} rows={2} placeholder="Vết trầy xước, phụ kiện kèm theo..." required />
-              </label>
-
-              <div className="warehouse-form-pair">
-                <label className="input-field">
-                  <span>Khu vực</span>
-                  <select value={createForm.areaId} onChange={(event) => setCreateForm({ ...createForm, areaId: event.target.value, buildingId: "" })}>
-                    <option value="">-- Chọn khu vực --</option>
-                    {catalog?.areas.map((area) => (
-                      <option key={area.id} value={area.id}>{area.name}</option>
-                    ))}
-                  </select>
-                </label>
-
-                <label className="input-field">
-                  <span>Tòa nhà / Địa điểm</span>
-                  <select value={createForm.buildingId} onChange={(event) => setCreateForm({ ...createForm, buildingId: event.target.value })}>
-                    <option value="">-- Chọn tòa nhà / địa điểm --</option>
-                    {availableBuildings.map((building) => (
-                      <option key={building.id} value={building.id}>{building.name}</option>
-                    ))}
-                  </select>
-                </label>
-              </div>
-
-              <label className="input-field">
-                <span>Vị trí nhặt được</span>
-                <input value={createForm.roomText} onChange={(event) => setCreateForm({ ...createForm, roomText: event.target.value })} placeholder="Sảnh tầng 1, Phòng 203..." />
-              </label>
-
-              <div className="warehouse-form-pair">
-                <label className="input-field">
-                  <span>Người bàn giao</span>
-                  <input value={createForm.finderName} onChange={(event) => setCreateForm({ ...createForm, finderName: event.target.value })} placeholder="Họ và tên" />
-                </label>
-
-                <label className="input-field">
-                  <span>Liên hệ người giao</span>
-                  <input value={createForm.finderContact} onChange={(event) => setCreateForm({ ...createForm, finderContact: event.target.value })} placeholder="Số điện thoại / Email" />
-                </label>
-              </div>
-
-              <label className="input-field">
-                <span>Thời gian nhận thực tế</span>
-                <input type="datetime-local" max={currentLocalTime()} value={createForm.receivedAt} onChange={(event) => setCreateForm({ ...createForm, receivedAt: event.target.value })} />
-              </label>
-
-              <div className="custody-modal-actions">
-                <button className="primary-button" disabled={pendingAction === "create"}>
-                  {pendingAction === "create" ? <LoaderCircle className="spin-icon" size={17} /> : <ClipboardCheck size={17} />}
-                  <span>Tạo hồ sơ kho (Walk-in)</span>
-                </button>
-                <button type="button" className="secondary-button" onClick={() => setWalkInModalOpen(false)}>Hủy</button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      {walkInModalOpen && <WarehouseIntakeDialog catalog={catalog} onClose={() => setWalkInModalOpen(false)} onReceived={async item => {
+        setCreatedWalkInItem(item ?? null);
+        setWalkInModalOpen(false);
+        onNotice("Đã tiếp nhận thực tế, chưa lưu kho.");
+        await onRefreshCustody();
+      }} />}
 
       {/* Walk-in Intake Success Modal */}
       {createdWalkInItem && (
         <div className="custody-modal-overlay" onClick={() => setCreatedWalkInItem(null)}>
-          <div className="custody-modal custody-modal--success" onClick={(e) => e.stopPropagation()}>
+          <AccessibleDialog className="custody-modal custody-modal--success" aria-label="Đã tiếp nhận trực tiếp" onDismiss={() => setCreatedWalkInItem(null)} onClick={(e) => e.stopPropagation()}>
             <div className="custody-modal__header">
               <span className="modal-badge modal-badge--green"><CheckCircle2 size={24} /></span>
               <div>
@@ -686,68 +424,21 @@ function defaultHandoverTime() {
                 <CheckCircle2 size={16} /> Đã hiểu & Đóng
               </button>
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* Accept Modal */}
-      {acceptModal && (
-        <div className="custody-modal-overlay" onClick={() => setAcceptModal(null)}>
-          <div className="custody-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="custody-modal__header">
-              <span className="modal-badge modal-badge--blue"><CheckCircle2 size={18} /></span>
-              <div>
-                <h3>Chấp nhận yêu cầu Custody</h3>
-                <p>Xác nhận duyệt chuyển giao từ <strong>{acceptModal.requester.fullName}</strong></p>
-              </div>
-              <button type="button" className="close-btn" onClick={() => setAcceptModal(null)}><X size={18} /></button>
-            </div>
-
-            <form className="admin-form modal-form" onSubmit={submitAccept}>
-              <label className="input-field">
-                <span>Điểm hẹn bàn giao <strong className="required-star">*</strong></span>
-                <select value={acceptForm.handoverPointId} onChange={(e) => setAcceptForm({ ...acceptForm, handoverPointId: e.target.value })} required>
-                  <option value="">Chọn điểm bàn giao</option>
-                  {catalog?.handoverPoints.map((point) => (
-                    <option key={point.id} value={point.id}>{point.name} - {point.address}</option>
-                  ))}
-                </select>
-              </label>
-
-              <label className="input-field">
-                <span>Thời gian hẹn bàn giao (dự kiến)</span>
-                <input type="datetime-local" min={currentLocalTime()} value={acceptForm.confirmedHandoverAt} onChange={(e) => setAcceptForm({ ...acceptForm, confirmedHandoverAt: e.target.value })} />
-                <small className="field-hint">Thời gian này giúp thông báo người nhặt thời gian quầy tiếp nhận mở cửa.</small>
-              </label>
-
-              <label className="input-field">
-                <span>Ghi chú hướng dẫn (gửi cho người nhặt)</span>
-                <textarea value={acceptForm.reason} onChange={(e) => setAcceptForm({ ...acceptForm, reason: e.target.value })} rows={2} placeholder="Vui lòng mang theo MSSV khi đến bàn giao tại quầy..." />
-              </label>
-
-              <div className="custody-modal-actions">
-                <button className="primary-button" disabled={pendingAction === "custody-action"}>
-                  {pendingAction === "custody-action" ? <LoaderCircle className="spin-icon" size={17} /> : <CheckCircle2 size={17} />}
-                  <span>Chấp nhận yêu cầu</span>
-                </button>
-                <button type="button" className="secondary-button" onClick={() => setAcceptModal(null)}>Đóng</button>
-              </div>
-            </form>
-          </div>
+          </AccessibleDialog>
         </div>
       )}
 
       {/* Reject Modal */}
       {rejectModal && (
-        <div className="custody-modal-overlay" onClick={() => setRejectModal(null)}>
-          <div className="custody-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="custody-modal-overlay" onClick={() => { if (!pendingAction) setRejectModal(null); }}>
+          <AccessibleDialog className="custody-modal" aria-label="Từ chối bàn giao" busy={Boolean(pendingAction)} onDismiss={() => setRejectModal(null)} onClick={(e) => e.stopPropagation()}>
             <div className="custody-modal__header">
               <span className="modal-badge modal-badge--red"><XCircle size={18} /></span>
               <div>
                 <h3>Từ chối yêu cầu Custody</h3>
                 <p>Từ chối yêu cầu từ người dùng <strong>{rejectModal.requester.fullName}</strong></p>
               </div>
-              <button type="button" className="close-btn" onClick={() => setRejectModal(null)}><X size={18} /></button>
+              <button type="button" className="close-btn" aria-label="Đóng từ chối" disabled={Boolean(pendingAction)} onClick={() => setRejectModal(null)}><X size={18} /></button>
             </div>
 
             <form className="admin-form modal-form" onSubmit={submitReject}>
@@ -761,49 +452,18 @@ function defaultHandoverTime() {
                   {pendingAction === "custody-action" ? <LoaderCircle className="spin-icon" size={17} /> : <XCircle size={17} />}
                   <span>Xác nhận từ chối</span>
                 </button>
-                <button type="button" className="secondary-button" onClick={() => setRejectModal(null)}>Đóng</button>
+                <button type="button" className="secondary-button" disabled={Boolean(pendingAction)} onClick={() => setRejectModal(null)}>Đóng</button>
               </div>
             </form>
-          </div>
+          </AccessibleDialog>
         </div>
       )}
 
-      {/* Intake Physical Handoff Modal */}
-      {intakeModal && (
-        <div className="custody-modal-overlay" onClick={() => setIntakeModal(null)}>
-          <div className="custody-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="custody-modal__header">
-              <span className="modal-badge modal-badge--green"><PackageCheck size={18} /></span>
-              <div>
-                <h3>Xác nhận tiếp nhận</h3>
-                <p>Yêu cầu <strong>#{intakeModal.id.slice(0, 8)}</strong> - Người bàn giao: <strong>{intakeModal.requester.fullName}</strong></p>
-              </div>
-              <button type="button" className="close-btn" onClick={() => setIntakeModal(null)}><X size={18} /></button>
-            </div>
-
-            <form className="admin-form modal-form" onSubmit={submitIntake}>
-              <label className="input-field">
-                <span>Tình trạng vật phẩm kiểm tra thực tế <strong className="required-star">*</strong></span>
-                <textarea value={intakeForm.conditionNotes} onChange={(e) => setIntakeForm({ ...intakeForm, conditionNotes: e.target.value })} rows={3} placeholder="Ghi rõ tình trạng thực tế khi nhận: hoạt động, vết xước, phụ kiện kèm theo..." required />
-              </label>
-
-              <label className="input-field">
-                <span>Thời gian bàn giao thực tế</span>
-                <input type="datetime-local" max={currentLocalTime()} value={intakeForm.confirmedHandoverAt} onChange={(e) => setIntakeForm({ ...intakeForm, confirmedHandoverAt: e.target.value })} />
-                <small className="field-hint">Để trống nếu tính theo thời gian hiện tại.</small>
-              </label>
-
-              <div className="custody-modal-actions">
-                <button className="primary-button primary-button--success" disabled={pendingAction === "custody-action"}>
-                  {pendingAction === "custody-action" ? <LoaderCircle className="spin-icon" size={17} /> : <PackageCheck size={17} />}
-                  <span>Xác nhận tiếp nhận</span>
-                </button>
-                <button type="button" className="secondary-button" onClick={() => setIntakeModal(null)}>Hủy</button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      {intakeModal && <WarehouseIntakeDialog request={intakeModal} catalog={catalog} onClose={() => setIntakeModal(null)} onReceived={async () => {
+        setIntakeModal(null);
+        onNotice("Đã tiếp nhận thực tế. Vật phẩm ở trạng thái Đã tiếp nhận, chưa lưu kho.");
+        await onRefreshCustody();
+      }} />}
     </>
   );
 }
@@ -834,26 +494,48 @@ function WarehouseInventoryTab({
   const [filters, setFilters] = useState(emptyFilters);
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [logs, setLogs] = useState<WarehouseStorageLog[]>([]);
+  const [logsError, setLogsError] = useState("");
+  const [logsLoading, setLogsLoading] = useState(false);
+  const logsSequence = useRef(0);
+  const detailsModalRef = useRef<HTMLDivElement>(null);
+  const [itemImages, setItemImages] = useState<WarehouseImage[]>([]);
+  const [imagesError, setImagesError] = useState("");
+  useEffect(() => {
+    let active = true;
+    setItemImages([]); setImagesError("");
+    if (selectedItemId) void api.getWarehouseImages(selectedItemId).then(value => { if (active) setItemImages(value.images ?? []); })
+      .catch(reason => { if (active) setImagesError(messageOf(reason, "Không thể tải ảnh vật phẩm")); });
+    return () => { active = false; };
+  }, [selectedItemId]);
   const [updateModalOpen, setUpdateModalOpen] = useState(false);
   const [returnTargetItem, setReturnTargetItem] = useState<WarehouseItem | null>(null);
   const [returnRecipients, setReturnRecipients] = useState<Array<{ claimId: string; recipientId: string; fullName: string; description: string | null; verified: boolean }>>([]);
   const [claimReviewsLoading, setClaimReviewsLoading] = useState(false);
+  const [claimReviewsReady, setClaimReviewsReady] = useState(false);
+  const [claimReviewsError, setClaimReviewsError] = useState("");
+  const [claimReviewReload, setClaimReviewReload] = useState(0);
+  const returnSequence = useRef(0);
+  const returnItemId = useRef<string | null>(null);
   const [claimReviewReason, setClaimReviewReason] = useState("");
   const [claimReviewConfirmed, setClaimReviewConfirmed] = useState(false);
   const [claimReviewBusy, setClaimReviewBusy] = useState(false);
   useEffect(() => {
     let active = true;
+    const sequence = returnSequence.current;
     setReturnRecipients([]);
+    setClaimReviewsReady(false);
+    setClaimReviewsError("");
+    setClaimReviewsLoading(Boolean(returnTargetItem));
     if (returnTargetItem) {
-      setClaimReviewsLoading(true);
       void api.getWarehouseReturnClaimReviews(returnTargetItem.id).then(value => {
-        if (active) setReturnRecipients(value.claims);
+        if (active && sequence === returnSequence.current) { setReturnRecipients(value.claims); setClaimReviewsReady(true); }
       }).catch(reason => {
-        if (active) setReturnError(messageOf(reason, "Không thể tải claim của vật phẩm"));
-      }).finally(() => { if (active) setClaimReviewsLoading(false); });
+        if (active && sequence === returnSequence.current) setClaimReviewsError(messageOf(reason, "Không thể tải claim của vật phẩm"));
+      }).finally(() => { if (active && sequence === returnSequence.current) setClaimReviewsLoading(false); });
     }
     return () => { active = false; };
-  }, [returnTargetItem?.id]);
+  }, [returnTargetItem?.id, claimReviewReload]);
+  useEffect(() => () => { returnSequence.current++; returnItemId.current = null; }, []);
   const [expandedImage, setExpandedImage] = useState<string | null>(null);
 
   async function compressImage(file: File, maxWidth: number = 800, quality: number = 0.7): Promise<string> {
@@ -923,6 +605,22 @@ function WarehouseInventoryTab({
     [dashboard, selectedItemId]
   );
 
+  useEffect(() => {
+    if (!selectedItem) return;
+    const overflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = overflow; };
+  }, [selectedItem?.id]);
+
+  useModalFocus(detailsModalRef, Boolean(selectedItem), closeDetails, Boolean(pendingAction));
+
+  function closeDetails() {
+    if (pendingAction) return;
+    logsSequence.current++;
+    setSelectedItemId(null);
+    setLogsLoading(false);
+  }
+
   async function submitFilters(event: FormEvent) {
     event.preventDefault();
     setPendingAction("load");
@@ -937,18 +635,22 @@ function WarehouseInventoryTab({
   }
 
   async function loadLogs(itemId: string, silent = false) {
-    if (!silent) setPendingAction("logs");
-    onError("");
+    const sequence = ++logsSequence.current;
+    if (!silent) setLogsLoading(true);
+    setLogsError("");
     try {
-      setLogs(await api.getWarehouseLogs(itemId));
+      const result = await api.getWarehouseLogs(itemId);
+      if (sequence === logsSequence.current) setLogs(result);
     } catch (reason) {
-      onError(messageOf(reason, "Không thể tải nhật ký kho"));
+      if (sequence === logsSequence.current) setLogsError(messageOf(reason, "Không thể tải nhật ký kho"));
     } finally {
-      if (!silent) setPendingAction("");
+      if (sequence === logsSequence.current) setLogsLoading(false);
     }
   }
 
   function selectItem(item: WarehouseItem) {
+    setLogs([]);
+    setLogsError("");
     setSelectedItemId(item.id);
     setUpdateForm({
       status: item.status,
@@ -984,6 +686,10 @@ function WarehouseInventoryTab({
   }
 
   function openReturnModal(item: WarehouseItem) {
+    returnSequence.current++;
+    returnItemId.current = item.id;
+    setClaimReviewsLoading(true);
+    setClaimReviewsReady(false);
     setReturnErrors({});
     setReturnError("");
     setReturnVerified(false);
@@ -993,30 +699,41 @@ function WarehouseInventoryTab({
     setReturnForm({ claimId: "", recipientId: "", receiverName: "", receiverIdentity: "", receiverPhone: "", proofImages: [], note: "" });
   }
 
+  function closeReturnModal() {
+    returnSequence.current++;
+    returnItemId.current = null;
+    setReturnTargetItem(null);
+  }
+
   async function verifyReturnClaim() {
-    if (!returnTargetItem || claimReviewBusy) return;
+    if (!returnTargetItem || claimReviewBusy || !claimReviewsReady || claimReviewsLoading) return;
     const reason = claimReviewReason.trim();
     const errors: Record<string, string> = {};
     if (reason.length < 10 || reason.length > 1000) errors.claimReviewReason = "Nội dung đối chiếu phải có từ 10 đến 1000 ký tự.";
     if (!claimReviewConfirmed) errors.claimReviewConfirmed = "Cần xác nhận đã đối chiếu quyền sở hữu tại quầy.";
-    setReturnErrors(errors);
+    setReturnErrors(previous => ({ ...previous, claimReviewReason: "", claimReviewConfirmed: "", ...errors }));
     if (Object.keys(errors).length) return;
     const itemId = returnTargetItem.id;
+    const sequence = returnSequence.current;
     setClaimReviewBusy(true);
     setReturnError("");
     try {
       const result = await api.verifyWarehouseClaim(itemId, { claimId: returnForm.claimId, recipientId: returnForm.recipientId, verified: true, reason });
+      if (sequence !== returnSequence.current || returnItemId.current !== itemId) return;
       setReturnRecipients(result.claims);
+      setReturnErrors(previous => ({ ...previous, claimId: previous.claimId === "Cần xác minh claim tại quầy trước khi trả đồ." ? "" : previous.claimId }));
     } catch (reason) {
-      setReturnError(messageOf(reason, "Không thể xác minh claim tại quầy"));
+      if (sequence === returnSequence.current && returnItemId.current === itemId) setReturnError(messageOf(reason, "Không thể xác minh claim tại quầy"));
     } finally {
-      setClaimReviewBusy(false);
+      if (sequence === returnSequence.current && returnItemId.current === itemId) setClaimReviewBusy(false);
     }
   }
 
   async function submitReturn(event: FormEvent) {
     event.preventDefault();
-    if (!returnTargetItem) return;
+    if (!returnTargetItem || !claimReviewsReady || claimReviewsLoading || claimReviewBusy || pendingAction || uploadingProof) return;
+    const sequence = returnSequence.current;
+    const itemId = returnTargetItem.id;
     const errors: Record<string, string> = {};
     for (const field of Object.keys(returnTextRules) as ReturnTextField[]) {
       const message = returnTextError(field, returnForm[field]);
@@ -1025,7 +742,6 @@ function WarehouseInventoryTab({
     if (returnForm.proofImages.length < 1 || returnForm.proofImages.length > 5) errors.proofImage = "Vui lòng tải lên từ 1 đến 5 ảnh bằng chứng.";
     if (!returnVerified) errors.verified = "Vui lòng xác nhận đã đối chiếu người nhận và bằng chứng bàn giao.";
     if (returnForm.claimId && !returnRecipients.some(recipient => recipient.claimId === returnForm.claimId && recipient.verified)) errors.claimId = "Cần xác minh claim tại quầy trước khi trả đồ.";
-    if (claimReviewsLoading || claimReviewBusy) errors.claimId = "Vui lòng đợi hoàn tất kiểm tra claim.";
     setReturnErrors(errors);
     setReturnError("");
     if (Object.keys(errors).length) return;
@@ -1041,19 +757,23 @@ function WarehouseInventoryTab({
         proofImage: returnForm.proofImages.join("\n") || "",
         note: clean(returnForm.note)
       });
+      if (sequence !== returnSequence.current || returnItemId.current !== itemId) return;
       onNotice("Đã hoàn tất trả hàng cho chủ sở hữu!");
-      setReturnTargetItem(null);
+      setPendingAction("");
+      closeReturnModal();
+      const detailsSequence = logsSequence.current;
       await onRefresh();
-      if (selectedItemId === returnTargetItem.id) {
+      if (returnSequence.current === sequence + 1 && logsSequence.current === detailsSequence && selectedItemId === itemId) {
         await loadLogs(returnTargetItem.id, true).catch(() => undefined);
       }
     } catch (reason) {
+      if (returnItemId.current !== itemId || sequence !== returnSequence.current) return;
       if (reason instanceof ApiError) {
         setReturnErrors(Object.fromEntries(Object.entries(reason.fieldErrors).map(([field, messages]) => [field, messages.join(" ")])));
       }
       setReturnError(messageOf(reason, "Không thể xử lý trả hàng"));
     } finally {
-      setPendingAction("");
+      if (sequence === returnSequence.current) setPendingAction("");
     }
   }
 
@@ -1128,39 +848,28 @@ function WarehouseInventoryTab({
           {dashboard && <Pagination page={dashboard.page} pageSize={dashboard.pageSize} total={dashboard.total} busy={Boolean(pendingAction)} onPage={page => void onRefresh(filters, page)} />}
           <div className="warehouse-item-list">
             {dashboard?.items.map((item) => (
-              <article className={`warehouse-item-card ${selectedItemId === item.id ? "is-selected" : ""}`} key={item.id}>
-                <div className="warehouse-item-card__top">
+              <article className="warehouse-item-card" key={item.id}>
+                <WarehouseImageView image={item.thumbnail} />
+                <div className="warehouse-card-body">
                   <span className={`warehouse-status warehouse-status--${item.status.toLowerCase()}`}>
                     {statusLabel(item.status)}
                   </span>
-                  <div className="warehouse-card-actions">
-                    <button type="button" className="secondary-button warehouse-select-button" onClick={() => selectItem(item)}>
-                      <History size={14} /> Chi tiết & Nhật ký
-                    </button>
-                    {["RECEIVED", "STORED", "CLAIMED", "EXPIRED"].includes(item.status) && (
-                      <button type="button" className="primary-button warehouse-select-button" onClick={() => openReturnModal(item)}>
-                        <UserCheck size={14} /> Trả cho chủ sở hữu
-                      </button>
-                    )}
-                  </div>
+                  <h2 title={item.itemName}>{item.itemName}</h2>
+                  <dl className="warehouse-card-meta">
+                    <ItemMeta label="Danh mục" value={item.category?.name ?? "Chưa ghi nhận"} />
+                    <ItemMeta label="Tiếp nhận" value={<time dateTime={item.receivedAt}>{formatDateTime(item.receivedAt)}</time>} />
+                  </dl>
                 </div>
-
-                <h2>{item.itemName}</h2>
-                <p>{item.description || "Không có mô tả chi tiết."}</p>
-
-                <dl className="warehouse-item-meta">
-                  <ItemMeta
-                    label="Hạn lưu giữ"
-                    value={
-                      <span className={isOverdue(item) ? "warehouse-deadline is-overdue" : "warehouse-deadline"}>
-                        {formatDate(item.retentionDeadline)}
-                      </span>
-                    }
-                  />
-                  <ItemMeta label="Mã lưu kho" value={<code className="code-badge">{item.storageCode || "Chưa gán"}</code>} />
-                  <ItemMeta label="Điểm nhận" value={item.handoverPoint?.name ?? "Chưa rõ"} />
-                  <ItemMeta label="Lịch sử" value={`${item.logCount} nhật ký`} />
-                </dl>
+                <div className="warehouse-card-actions">
+                  <button type="button" className="secondary-button warehouse-select-button" onClick={() => selectItem(item)}>
+                    <History size={16} /> Xem chi tiết
+                  </button>
+                  {["RECEIVED", "STORED", "CLAIMED", "EXPIRED"].includes(item.status) && (
+                    <button type="button" className="primary-button warehouse-select-button" onClick={() => openReturnModal(item)}>
+                      <UserCheck size={16} /> Trả cho chủ sở hữu
+                    </button>
+                  )}
+                </div>
               </article>
             ))}
 
@@ -1173,19 +882,20 @@ function WarehouseInventoryTab({
             )}
           </div>
         </section>
+      </div>
 
-        {/* Details & History Panel (No embedded form; Clean detail view + Update Status Button) */}
-        <aside className="admin-panel warehouse-detail-panel">
-          <div className="admin-panel-heading">
-            <span className="panel-icon-badge"><History size={18} /></span>
-            <div>
-              <p className="eyebrow">CHI TIẾT VẬT PHẨM KHO</p>
-              <h2>Chi tiết & Lịch sử</h2>
-            </div>
-          </div>
+      {selectedItem && (
+        <div className="custody-modal-overlay warehouse-detail-overlay" onClick={closeDetails}>
+          <div ref={detailsModalRef} tabIndex={-1} className="warehouse-detail-modal" role="dialog" aria-modal="true" aria-labelledby="warehouse-detail-title" onClick={event => event.stopPropagation()}>
+            <header className="warehouse-detail-modal__header">
+              <span className="panel-icon-badge"><History size={18} /></span>
+              <div>
+                <h2 id="warehouse-detail-title">Chi tiết vật phẩm kho</h2>
+              </div>
+              <button type="button" className="close-btn" aria-label="Đóng chi tiết" title="Đóng chi tiết" onClick={closeDetails}><X size={20} /></button>
+            </header>
 
-          {selectedItem ? (
-            <>
+            <div className="warehouse-detail-modal__body">
               <div className="warehouse-selected-summary">
                 <div className="summary-header">
                   <span className={`warehouse-status warehouse-status--${selectedItem.status.toLowerCase()}`}>
@@ -1195,14 +905,28 @@ function WarehouseInventoryTab({
                 </div>
 
                 <h3>{selectedItem.itemName}</h3>
+                {itemImages.length ? <WarehouseImageGallery images={itemImages} /> : <WarehouseImageView image={selectedItem.thumbnail} />}
+                {imagesError && <p className="field-error" role="alert">{imagesError}</p>}
+                <h4>Mô tả vật phẩm</h4>
                 <p className="summary-desc">{selectedItem.description || "Không có mô tả thêm."}</p>
 
-                <div className="item-detail-grid">
-                  <div><strong>Hạn lưu giữ:</strong> {formatDate(selectedItem.retentionDeadline)}</div>
-                  <div><strong>Tiếp nhận lúc:</strong> {formatDateTime(selectedItem.receivedAt)}</div>
-                  {selectedItem.handoverPoint && <div><strong>Điểm bàn giao:</strong> {selectedItem.handoverPoint.name}</div>}
-                  {selectedItem.conditionNotes && <div><strong>Tình trạng nhận:</strong> {selectedItem.conditionNotes}</div>}
-                </div>
+                <dl className="warehouse-detail-meta">
+                  <ItemMeta label="Danh mục" value={selectedItem.category?.name ?? "Chưa ghi nhận"} />
+                  <ItemMeta label="Hạn lưu giữ" value={<span className={isOverdue(selectedItem) ? "warehouse-deadline is-overdue" : "warehouse-deadline"}>{formatDate(selectedItem.retentionDeadline)}</span>} />
+                  <ItemMeta label="Tiếp nhận lúc" value={formatDateTime(selectedItem.receivedAt)} />
+                  <ItemMeta label="Điểm bàn giao" value={selectedItem.handoverPoint?.name ?? "Chưa ghi nhận"} />
+                  <ItemMeta label="Địa chỉ điểm nhận" value={selectedItem.handoverPoint?.address ?? "Chưa ghi nhận"} />
+                  <ItemMeta label="Vị trí nhặt" value={[selectedItem.location.area?.name, selectedItem.location.building?.name, selectedItem.location.roomText].filter(Boolean).join(" · ") || "Chưa ghi nhận"} />
+                  <ItemMeta label="Người nhặt / bàn giao" value={selectedItem.finder.userName ?? selectedItem.finder.name ?? "Chưa ghi nhận"} />
+                  <ItemMeta label="Liên hệ người nhặt" value={selectedItem.finder.contact ?? "Chưa ghi nhận"} />
+                  <ItemMeta label="Tình trạng nhận" value={selectedItem.conditionNotes ?? "Chưa ghi nhận"} />
+                  <ItemMeta label="Số lượng thực nhận" value={selectedItem.receivedQuantity ?? "Hồ sơ cũ chưa ghi nhận"} />
+                  <ItemMeta label="Phụ kiện thực nhận" value={selectedItem.accessories ?? "Hồ sơ cũ chưa ghi nhận"} />
+                  <ItemMeta label="Đã trả lúc" value={formatDateTime(selectedItem.returnedAt)} />
+                  <ItemMeta label="Nhân viên tiếp nhận" value={selectedItem.createdBy.fullName ?? "Chưa ghi nhận"} />
+                  <ItemMeta label="Tạo hồ sơ lúc" value={formatDateTime(selectedItem.createdAt)} />
+                  <ItemMeta label="Cập nhật lúc" value={formatDateTime(selectedItem.updatedAt)} />
+                </dl>
 
                 <div className="summary-action-bar">
                   <button
@@ -1225,9 +949,13 @@ function WarehouseInventoryTab({
                   </div>
                 </div>
 
-                {pendingAction === "logs" && (
+                {logsLoading && (
                   <div className="loading-inline"><LoaderCircle className="spin-icon" size={16} /> Đang tải nhật ký...</div>
                 )}
+                {logsError && <div className="warehouse-log-error" role="alert">
+                  <p className="field-error">{logsError}</p>
+                  <button type="button" className="secondary-button" onClick={() => void loadLogs(selectedItem.id)}><RefreshCw size={16} /> Thử lại</button>
+                </div>}
 
                 <div className="timeline-log">
                   {logs.map((log) => {
@@ -1272,33 +1000,27 @@ function WarehouseInventoryTab({
                       </article>
                     );
                   })}
-                  {!logs.length && pendingAction !== "logs" && (
+                  {!logs.length && !logsError && !logsLoading && (
                     <p className="admin-hint">Chưa có nhật ký ghi nhận cho vật phẩm này.</p>
                   )}
                 </div>
               </div>
-            </>
-          ) : (
-            <div className="warehouse-empty warehouse-empty--compact">
-              <History size={40} className="empty-icon" />
-              <h3>Chưa chọn vật phẩm</h3>
-              <p>Chọn một vật phẩm trong danh sách bên trái để xem chi tiết và lịch sử nhật ký.</p>
             </div>
-          )}
-        </aside>
-      </div>
+          </div>
+        </div>
+      )}
 
       {/* Update Warehouse Item Status Modal */}
       {updateModalOpen && selectedItem && (
-        <div className="custody-modal-overlay" onClick={() => setUpdateModalOpen(false)}>
-          <div className="custody-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="custody-modal-overlay" onClick={() => { if (!pendingAction) setUpdateModalOpen(false); }}>
+          <AccessibleDialog className="custody-modal" aria-label="Cập nhật trạng thái kho" busy={Boolean(pendingAction)} onDismiss={() => setUpdateModalOpen(false)} onClick={(e) => e.stopPropagation()}>
             <div className="custody-modal__header">
               <span className="modal-badge modal-badge--blue"><Save size={18} /></span>
               <div>
                 <h3>Cập nhật trạng thái kho</h3>
                 <p>Vật phẩm: <strong>{selectedItem.itemName}</strong></p>
               </div>
-              <button type="button" className="close-btn" onClick={() => setUpdateModalOpen(false)}><X size={18} /></button>
+              <button type="button" className="close-btn" aria-label="Đóng cập nhật" disabled={Boolean(pendingAction)} onClick={() => setUpdateModalOpen(false)}><X size={18} /></button>
             </div>
 
             <form className="admin-form modal-form" onSubmit={submitUpdate}>
@@ -1331,16 +1053,17 @@ function WarehouseInventoryTab({
                   {pendingAction === "update" ? <LoaderCircle className="spin-icon" size={17} /> : <CheckCircle2 size={17} />}
                   <span>Lưu trạng thái mới</span>
                 </button>
-                <button type="button" className="secondary-button" onClick={() => setUpdateModalOpen(false)}>Đóng</button>
+                <button type="button" className="secondary-button" disabled={Boolean(pendingAction)} onClick={() => setUpdateModalOpen(false)}>Đóng</button>
               </div>
             </form>
-          </div>
+          </AccessibleDialog>
         </div>
       )}
 
       {returnTargetItem && (
-        <div className="custody-modal-overlay" onClick={() => { if (!claimReviewBusy && !pendingAction) setReturnTargetItem(null); }}>
-          <div
+        <div className="custody-modal-overlay" onClick={() => { if (!claimReviewBusy && !pendingAction && !uploadingProof) closeReturnModal(); }}>
+          <AccessibleDialog
+            aria-label="Xác nhận trả hàng cho chủ sở hữu" onDismiss={closeReturnModal} busy={claimReviewBusy || Boolean(pendingAction) || uploadingProof}
             className="custody-modal custody-modal--warehouse-return"
             style={{ maxWidth: "760px", width: "95%", maxHeight: "90vh", display: "flex", flexDirection: "column" }}
             onClick={(e) => e.stopPropagation()}
@@ -1351,7 +1074,7 @@ function WarehouseInventoryTab({
                 <h3 style={{ margin: 0, fontSize: "1.05rem", fontWeight: 700 }}>Xác nhận trả hàng cho chủ sở hữu</h3>
                 <p style={{ margin: 0, fontSize: "0.82rem", color: "#64748b" }}>Vật phẩm: <strong style={{ color: "#0f172a" }}>{returnTargetItem.itemName}</strong></p>
               </div>
-              <button type="button" className="close-btn" aria-label="Đóng trả hàng" disabled={claimReviewBusy || Boolean(pendingAction)} onClick={() => setReturnTargetItem(null)}><X size={18} /></button>
+              <button type="button" className="close-btn" aria-label="Đóng trả hàng" disabled={claimReviewBusy || Boolean(pendingAction) || uploadingProof} onClick={closeReturnModal}><X size={18} /></button>
             </div>
 
             <form noValidate className="admin-form modal-form" style={{ padding: "16px 20px", overflowY: "auto", flex: 1, display: "flex", flexDirection: "column", gap: "12px" }} onSubmit={submitReturn}>
@@ -1359,6 +1082,11 @@ function WarehouseInventoryTab({
                 <Info size={15} style={{ flexShrink: 0 }} />
                 <span>Người nhận có thể không có tài khoản hoặc không có claim trên hệ thống. Vui lòng kiểm tra giấy tờ tùy thân trước khi xác nhận; thông tin sẽ được lưu trong hồ sơ bàn giao riêng tư.</span>
               </div>
+              {claimReviewsLoading && <p role="status">Đang kiểm tra claim của vật phẩm...</p>}
+              {claimReviewsError && <div>
+                <p className="form-error" role="alert">{claimReviewsError}</p>
+                <button type="button" className="secondary-button" disabled={claimReviewsLoading} onClick={() => { setClaimReviewsLoading(true); setClaimReviewsReady(false); setClaimReviewsError(""); setClaimReviewReload(previous => previous + 1); }}><RefreshCw size={17} />Thử lại kiểm tra claim</button>
+              </div>}
 
               <div className="warehouse-return-grid">
                 <label className="input-field" style={{ margin: 0 }}>
@@ -1384,6 +1112,7 @@ function WarehouseInventoryTab({
                     const recipient = returnRecipients.find(value => value.claimId === event.target.value);
                     setClaimReviewReason("");
                     setClaimReviewConfirmed(false);
+                    setReturnErrors(previous => ({ ...previous, claimId: previous.claimId === "Cần xác minh claim tại quầy trước khi trả đồ." ? (recipient && !recipient.verified ? previous.claimId : "") : previous.claimId, claimReviewReason: "", claimReviewConfirmed: "" }));
                     setReturnForm(prev => ({ ...prev, claimId: recipient?.claimId ?? "", recipientId: recipient?.recipientId ?? "", receiverName: recipient?.fullName ?? prev.receiverName }));
                   }}>
                     <option value="">Trả trực tiếp, không có claim</option>
@@ -1466,15 +1195,18 @@ function WarehouseInventoryTab({
                         }
                         setReturnErrors(prev => ({ ...prev, proofImage: "" }));
                         setUploadingProof(true);
+                        const sequence = returnSequence.current;
+                        const itemId = returnTargetItem.id;
                         try {
                           for (const file of files) {
-                            const res = await api.uploadWarehouseProof(file, returnTargetItem.id);
-                            setReturnForm((prev) => ({ ...prev, proofImages: [...prev.proofImages, res.id] }));
+                            const res = await api.uploadWarehouseProof(file, itemId);
+                            if (sequence !== returnSequence.current || returnItemId.current !== itemId) return;
+                            setReturnForm((prev) => ({ ...prev, proofImages: prev.proofImages.includes(res.id) ? prev.proofImages : [...prev.proofImages, res.id] }));
                           }
                         } catch (error) {
-                          setReturnErrors(prev => ({ ...prev, proofImage: messageOf(error, "Không thể tải lên ảnh bằng chứng") }));
+                          if (sequence === returnSequence.current && returnItemId.current === itemId) setReturnErrors(prev => ({ ...prev, proofImage: messageOf(error, "Không thể tải lên ảnh bằng chứng") }));
                         } finally {
-                          setUploadingProof(false);
+                          if (sequence === returnSequence.current && returnItemId.current === itemId) setUploadingProof(false);
                           input.value = "";
                         }
                       }}
@@ -1558,20 +1290,20 @@ function WarehouseInventoryTab({
 
               {returnError && <p className="form-error" role="alert">{returnError}</p>}
               <div className="custody-modal-actions" style={{ marginTop: "4px", paddingTop: "10px", borderTop: "1px solid #f1f5f9" }}>
-                <button className="primary-button" disabled={pendingAction === "update" || uploadingProof}>
+                <button className="primary-button" disabled={Boolean(pendingAction) || uploadingProof || claimReviewBusy || claimReviewsLoading || !claimReviewsReady}>
                   {pendingAction === "update" ? <LoaderCircle className="spin-icon" size={17} /> : <CheckCircle2 size={17} />}
                   <span>Xác nhận Đã trả hàng</span>
                 </button>
-                <button type="button" className="secondary-button" onClick={() => setReturnTargetItem(null)}>Hủy</button>
+                <button type="button" className="secondary-button" disabled={claimReviewBusy || Boolean(pendingAction) || uploadingProof} onClick={closeReturnModal}>Hủy</button>
               </div>
             </form>
-          </div>
+          </AccessibleDialog>
         </div>
       )}
 
       {previewImageUrl && (
         <div className="custody-modal-overlay" onClick={() => setPreviewImageUrl(null)} style={{ zIndex: 9999, background: "rgba(15, 23, 42, 0.75)", backdropFilter: "blur(4px)" }}>
-          <div onClick={(e) => e.stopPropagation()} style={{ position: "relative", maxWidth: "90vw", maxHeight: "90vh", display: "flex", flexDirection: "column", alignItems: "center" }}>
+          <AccessibleDialog aria-label="Ảnh bằng chứng bàn giao" onDismiss={() => setPreviewImageUrl(null)} onClick={(e) => e.stopPropagation()} style={{ position: "relative", maxWidth: "90vw", maxHeight: "90vh", display: "flex", flexDirection: "column", alignItems: "center" }}>
             <img src={previewImageUrl} alt="Ảnh bằng chứng bàn giao" style={{ maxWidth: "100%", maxHeight: "82vh", borderRadius: 8, boxShadow: "0 24px 48px rgba(15, 23, 42, 0.4)", border: "2px solid #fff" }} />
             <button
               type="button"
@@ -1582,7 +1314,7 @@ function WarehouseInventoryTab({
               ×
             </button>
             <span style={{ marginTop: 8, fontSize: "0.82rem", color: "#f8fafc", fontWeight: 500, textShadow: "0 1px 3px rgba(0,0,0,0.8)" }}>Ảnh bằng chứng bàn giao vật phẩm</span>
-          </div>
+          </AccessibleDialog>
         </div>
       )}
     </>

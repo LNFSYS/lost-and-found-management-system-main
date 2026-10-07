@@ -422,8 +422,44 @@ export function createPostRepository(pool: SqlExecutor) {
       await sqlExecutor(queryable).execute(`UPDATE posts SET ${fields.join(", ")} WHERE id = ?`, [...values, postId]);
     },
 
-    async softDeletePost(postId: string, ownerId: string) {
-      const [result] = await pool.execute<ResultSetHeader>(
+    async lockOwnedPostForDeletion(postId: string, ownerId: string, queryable: Queryable) {
+      const [rows] = await sqlExecutor(queryable).execute<RowDataPacket[]>(
+        "SELECT id FROM posts WHERE id = ? AND user_id = ? AND deleted_at IS NULL LIMIT 1 FOR UPDATE", [postId, ownerId]
+      );
+      return rows.length === 1;
+    },
+
+    async hasDeletionBlockers(postId: string, queryable: Queryable) {
+      // Intake and claim creation lock the same post before committing. Keep
+      // these reads non-locking to avoid reversing the item/claim lock order.
+      const [rows] = await sqlExecutor(queryable).execute<RowDataPacket[]>(
+        `WITH related_claims AS (
+           SELECT id FROM claims WHERE post_id = ? OR lost_post_id = ? OR source_found_post_id = ?
+         ), physical_posts AS (
+           SELECT COALESCE(source_found_post_id,post_id) AS id FROM claims WHERE id IN (SELECT id FROM related_claims)
+         )
+         SELECT wi.id FROM warehouse_items wi
+           WHERE (wi.post_id = ? OR wi.post_id IN (SELECT id FROM physical_posts)
+             OR wi.id IN (SELECT warehouse_item_id FROM custody_requests WHERE claim_id IN (SELECT id FROM related_claims) AND status = 'INTAKED')) AND wi.deleted_at IS NULL
+             AND (wi.status IN ('RECEIVED','STORED','CLAIMED','EXPIRED') OR wi.legal_hold = TRUE)
+         UNION SELECT cr.id FROM custody_requests cr
+           WHERE (cr.post_id = ? OR cr.claim_id IN (SELECT id FROM related_claims)) AND cr.status IN ('PENDING','ACCEPTED')
+         UNION SELECT c.id FROM claims c WHERE c.id IN (SELECT id FROM related_claims)
+           AND c.status IN ('PENDING','CONVERSATION_OPEN','NEED_MORE_INFO','ACCEPTED')
+           AND NOT EXISTS (SELECT 1 FROM return_appointments completed WHERE completed.claim_id = c.id AND completed.status = 'COMPLETED')
+         UNION SELECT a.id FROM return_appointments a WHERE a.claim_id IN (SELECT id FROM related_claims)
+           AND a.status IN ('PENDING','ACCEPTED','RESCHEDULED')
+         UNION SELECT r.id FROM reports r WHERE r.status = 'PENDING' AND (
+           (r.entity_type = 'POST' AND r.entity_id = ?) OR r.source_id IN (SELECT id FROM related_claims)
+           OR (r.entity_type = 'CHAT' AND r.entity_id IN (SELECT id FROM chat_rooms WHERE claim_id IN (SELECT id FROM related_claims)))
+           OR (r.entity_type = 'HANDOVER' AND r.entity_id IN (SELECT id FROM return_appointments WHERE claim_id IN (SELECT id FROM related_claims)))
+         ) LIMIT 1`, [postId,postId,postId,postId,postId,postId]
+      );
+      return rows.length > 0;
+    },
+
+    async softDeletePost(postId: string, ownerId: string, queryable: Queryable = pool) {
+      const [result] = await sqlExecutor(queryable).execute<ResultSetHeader>(
         "UPDATE posts SET status = 'HIDDEN', deleted_at = UTC_TIMESTAMP() WHERE id = ? AND user_id = ? AND deleted_at IS NULL",
         [postId, ownerId]
       );

@@ -55,14 +55,26 @@ export function createCloudinaryAvatarStorage(options: {
 
   return {
     async upload(input) {
-      const result = await uploadBuffer(configuredClient(client, options.config), input.buffer, {
-        folder: "lnfs/avatars",
-        resource_type: "image",
-        type: "authenticated",
-        format: input.format,
-        overwrite: false,
-        unique_filename: true
-      });
+      const configured = configuredClient(client, options.config);
+      let result: UploadApiResponse;
+      try {
+        result = await uploadBuffer(configured, input.buffer, {
+          folder: "lnfs/avatars",
+          ...(input.publicId ? { public_id: input.publicId } : {}),
+          resource_type: "image",
+          type: "authenticated",
+          format: input.format,
+          overwrite: false,
+          unique_filename: !input.publicId
+        });
+        if (result.existing && input.publicId) {
+          result = await client.api.resource(`lnfs/avatars/${input.publicId}`, { resource_type: "image", type: "authenticated" });
+        }
+      } catch { throw new AppError("upstream_failure", "Dich vu luu anh dai dien tam thoi khong kha dung"); }
+      if (!result.public_id || !Number.isFinite(result.version) || !result.format || !Number.isFinite(result.bytes)
+        || (input.publicId && result.public_id !== `lnfs/avatars/${input.publicId}`)) {
+        throw new AppError("upstream_failure", "Dich vu luu anh dai dien khong xac nhan asset");
+      }
       return {
         publicId: result.public_id,
         assetId: result.asset_id ?? null,

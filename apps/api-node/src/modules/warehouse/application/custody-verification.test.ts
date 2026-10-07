@@ -39,7 +39,7 @@ for (const scenario of ["non-staff", "no physical post", "legal hold", "terminal
   test(`Staff custody verification rejects ${scenario} without a decision`, async () => {
     const f = fixture();
     if (scenario === "non-staff") f.repository.isStaff = async () => false;
-    if (scenario === "no physical post") f.item.postId = null;
+    if (scenario === "no physical post") { f.item.postId = null; f.repository.lockReturnClaim = async () => null; }
     if (scenario === "legal hold") f.item.legalHold = true;
     if (scenario === "terminal") f.item.status = "DONATED";
     if (scenario === "other reservation") f.item.reservedClaimId = randomUUID();

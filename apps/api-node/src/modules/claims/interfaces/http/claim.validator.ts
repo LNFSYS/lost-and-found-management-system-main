@@ -14,6 +14,8 @@ export const listClaimsQuerySchema = z.object({
 });
 
 export const createClaimSchema = z.object({
+  sourceFoundPostId: uuid.optional(),
+  contactCheckId: uuid.optional(),
   postId: uuid.optional(),
   lostPostId: uuid.optional(),
   foundPostId: uuid.optional(),
@@ -70,6 +72,7 @@ export const createMessageSchema = z.object({
 });
 
 export const createDirectMessageSchema = z.object({
+  contactCheckId: uuid.optional(),
   postId: uuid,
   sourceFoundPostId: uuid.optional(),
   content: z.string().trim().min(1).max(5000),
@@ -91,6 +94,11 @@ export const listMessagesQuerySchema = z.object({
 
 export const uploadEvidenceSchema = z.object({
   description: z.string().trim().max(255).optional()
+});
+
+export const uploadChatImageSchema = z.object({
+  content: z.string().trim().max(255).default(""),
+  clientMessageId: safeKey
 });
 
 export type {

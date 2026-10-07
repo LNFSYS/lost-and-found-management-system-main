@@ -82,6 +82,7 @@ export const env = {
     workerPollSeconds: boundedNumber("NOTIFICATION_EMAIL_WORKER_POLL_SECONDS", 30, 5, 300),
     workerEnabled: bool("NOTIFICATION_EMAIL_WORKER_ENABLED", true)
   },
+  appointmentReminderMinutes: boundedNumber("APPOINTMENT_REMINDER_MINUTES",30,1,1440),
   matchingRefresh: {
     enabled: bool("MATCHING_REFRESH_ENABLED", true),
     pollSeconds: boundedNumber("MATCHING_REFRESH_POLL_SECONDS", 300, 30, 3_600),

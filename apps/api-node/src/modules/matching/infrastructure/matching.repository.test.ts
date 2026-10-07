@@ -71,3 +71,17 @@ test("worker completion, failure and heartbeat require the unexpired current lea
     assert.deepEqual(values?.slice(-2), [job.postId, job.leaseToken]);
   }
 });
+
+test("matching notifications lock active cross-owner pairs above the threshold using the business transaction", async () => {
+  const { query, values } = await captureQuery(() => matchingRepository.lockUnnotifiedMatches("found", 0.6, pool as never));
+  assert.match(query, /mr.is_notified = FALSE/);
+  assert.match(query, /mr.total_score >= \?/);
+  assert.match(query, /lost_post.user_id <> found_post.user_id/);
+  assert.match(query, /lost_post.type = 'LOST' AND found_post.type = 'FOUND'/);
+  assert.match(query, /lost_post.status IN \('OPEN', 'MATCHED'\)/);
+  assert.match(query, /found_post.status IN \('OPEN', 'MATCHED'\)/);
+  assert.match(query, /lost_post.deleted_at IS NULL/);
+  assert.match(query, /found_post.deleted_at IS NULL/);
+  assert.match(query, /LIMIT 100 FOR UPDATE$/);
+  assert.deepEqual(values, ["found", "found", 0.6]);
+});

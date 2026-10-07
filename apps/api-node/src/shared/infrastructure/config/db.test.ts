@@ -2,6 +2,7 @@ import type { PoolConnection } from "mysql2/promise";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { databasePoolOptions, runInTransaction } from "./db.js";
+import { transactionWasRolledBack } from "../../application/transaction.js";
 
 function fakeConnection(events: string[]) {
   return {
@@ -28,6 +29,17 @@ test("runInTransaction rolls back failed work", async () => {
     throw new Error("analysis-tag insert failed");
   }), /analysis-tag insert failed/);
   assert.deepEqual(events, ["begin", "post-insert", "rollback"]);
+});
+
+test("only an acknowledged rollback before COMMIT permits compensation", async () => {
+  const business = new Error("business failure");
+  await assert.rejects(runInTransaction(fakeConnection([]), async () => { throw business; }));
+  assert.equal(transactionWasRolledBack(business), true);
+  const lostAck = new Error("COMMIT acknowledgement lost");
+  const connection = fakeConnection([]);
+  connection.commit = async () => { throw lostAck; };
+  await assert.rejects(runInTransaction(connection, async () => "persisted"));
+  assert.equal(transactionWasRolledBack(lostAck), false);
 });
 
 test("multiple statements are disabled for the application pool and explicit for migrations", () => {

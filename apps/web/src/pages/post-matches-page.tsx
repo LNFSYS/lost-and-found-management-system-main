@@ -21,7 +21,9 @@ import {
   X
 } from "lucide-react";
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
+import { AccessibleDialog } from "../components/accessible-dialog";
+import { useAuth } from "../context/auth-context";
 import { PostImage } from "./posts-page";
 import {
   api,
@@ -38,6 +40,8 @@ const tierLabels: Record<MatchTier, string> = {
   NOTIFY: "Nên chú ý",
   HIGH_CONFIDENCE: "Tương đồng cao"
 };
+
+const noMatchesMessage = "Bài đăng của bạn đã được lưu. Khi có kết quả mới khớp từ 60% trở lên, chúng tôi sẽ thông báo đến email của bạn theo cài đặt thông báo. Trong thời gian chờ, bạn có thể kiểm tra các bài đăng cộng đồng. Bài đã đóng sẽ không nhận thông báo matching mới.";
 
 const scoreLabels: Array<{ key: keyof PostMatchResult["scores"]; label: string }> = [
   { key: "text", label: "Mô tả" },
@@ -128,6 +132,13 @@ function MatchCandidateCard({ result, rank, weights, onClaim, claiming, canMessa
 export function PostMatchesPage() {
   const { postId = "" } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
+  const { user } = useAuth();
+  const creationState = location.state as { createdPostId?: string } | null;
+  const handledCreation = useRef<string | null>(null);
+  const emptyHeading = useRef<HTMLHeadingElement>(null);
+  const pageHeading = useRef<HTMLHeadingElement>(null);
+  const [noMatchesPopupPostId, setNoMatchesPopupPostId] = useState<string | null>(null);
   const [data, setData] = useState<PostMatchesResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [recalculating, setRecalculating] = useState(false);
@@ -164,7 +175,22 @@ export function PostMatchesPage() {
     return () => { active = false; };
   }, [postId, page]);
 
-  useEffect(() => { setPage(1); }, [postId]);
+  useEffect(() => { setPage(1); setNoMatchesPopupPostId(null); }, [postId]);
+
+  useEffect(() => {
+    if (creationState?.createdPostId !== postId || handledCreation.current === postId
+      || loading || error || data?.source.id !== postId || page !== 1 || data.page !== 1) return;
+    handledCreation.current = postId;
+    const noSuitableMatches = (data.total === 0 && data.results.length === 0)
+      || (data.results.length > 0 && data.results.every(result => result.totalScore < 0.6));
+    if (data.source.owner.id === user?.id && ["OPEN", "MATCHED"].includes(data.source.status)
+      && noSuitableMatches) {
+      (emptyHeading.current ?? pageHeading.current)?.focus({ preventScroll: true });
+      setNoMatchesPopupPostId(postId);
+    }
+    const { createdPostId: _createdPostId, ...remainingState } = creationState;
+    navigate(`${location.pathname}${location.search}${location.hash}`, { replace: true, state: remainingState });
+  }, [creationState, postId, page, loading, error, data, user?.id, location.pathname, location.search, location.hash, navigate]);
 
   useEffect(() => {
     let active = true;
@@ -307,7 +333,7 @@ export function PostMatchesPage() {
     <header className="matches-hero">
       <div>
         <p className="eyebrow">Phân tích matching đã lưu</p>
-        <h1>So sánh bài “{data.source.title}”</h1>
+        <h1 ref={pageHeading} tabIndex={-1}>So sánh bài “{data.source.title}”</h1>
         <p>Điểm số là gợi ý từ thuật toán hybrid/rule-based. Mọi claim vẫn cần bằng chứng và Staff/Admin xác minh.</p>
       </div>
       <div className="matches-hero__actions">
@@ -357,13 +383,28 @@ export function PostMatchesPage() {
     </section> : <section className="matches-empty">
       <ScanSearch />
       <p className="eyebrow">Lượt quét đã hoàn tất</p>
-      <h2>{hiddenOwnedLostCount ? "Không có bài đối ứng để hiển thị" : "Chưa có gợi ý phù hợp"}</h2>
+      <h2 ref={emptyHeading} tabIndex={-1}>{hiddenOwnedLostCount ? "Không có bài đối ứng để hiển thị" : "Chưa có gợi ý phù hợp"}</h2>
       <p>{hiddenOwnedLostCount ? "Các bài LOST do bạn đăng được ẩn khỏi kết quả matching. Những bài đối ứng khác, kể cả bài đã đóng, vẫn được hiển thị." : "Bài vẫn ở trạng thái mở. Bạn có thể tính lại khi có báo cáo mới hoặc bổ sung mô tả rõ hơn cho bài đăng."}</p>
       <div><Link to={`/posts/${data.source.id}`}>Xem bài của tôi</Link><Link to="/posts">Mở bảng tin</Link></div>
     </section>}
 
     {data.total > data.pageSize && <nav className="match-pagination" aria-label="Phân trang gợi ý matching"><button type="button" disabled={data.page <= 1 || loading} onClick={() => setPage(page - 1)}><ArrowLeft /> Trước</button><span>Trang {data.page} / {Math.ceil(data.total / data.pageSize)}</span><button type="button" disabled={!data.hasMore || loading} onClick={() => setPage(page + 1)}>Sau <ArrowRight /></button></nav>}
     <aside className="matching-safety-note"><ShieldCheck /><div><strong>Human verification required</strong><p>Điểm cao không tự động đổi trạng thái bài, chấp nhận claim hay cho phép nhận đồ.</p></div></aside>
+
+    {noMatchesPopupPostId === postId && <div className="custody-modal-overlay" onClick={() => setNoMatchesPopupPostId(null)}>
+      <AccessibleDialog className="custody-modal no-matches-dialog" aria-labelledby="no-matches-title" aria-describedby="no-matches-message" onDismiss={() => setNoMatchesPopupPostId(null)} onClick={(event) => event.stopPropagation()}>
+        <header className="custody-modal__header">
+          <span className="modal-badge modal-badge--blue"><ScanSearch size={22} /></span>
+          <h2 id="no-matches-title">Chưa có gợi ý phù hợp</h2>
+          <button type="button" className="close-btn" aria-label="Đóng thông báo" onClick={() => setNoMatchesPopupPostId(null)}><X size={20} /></button>
+        </header>
+        <p id="no-matches-message">{noMatchesMessage}</p>
+        <footer className="custody-modal-actions">
+          <Link className="primary-button" to="/posts"><ScanSearch size={18} /> Xem bài đăng cộng đồng</Link>
+          <button type="button" className="secondary-button" onClick={() => setNoMatchesPopupPostId(null)}><Check size={18} /> Đã hiểu</button>
+        </footer>
+      </AccessibleDialog>
+    </div>}
 
     {custodyModalOpen && <div className="custody-modal-overlay" onClick={() => setCustodyModalOpen(false)}>
       <section className="custody-modal" role="dialog" aria-modal="true" aria-labelledby="matches-custody-title" onClick={(event) => event.stopPropagation()}>

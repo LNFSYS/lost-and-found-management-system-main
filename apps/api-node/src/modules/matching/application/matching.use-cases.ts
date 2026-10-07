@@ -1,5 +1,7 @@
 import { AppError } from "../../../shared/domain/app-error.js";
 import type { PostRepository } from "../../posts/application/index.js";
+import { transactionWasRolledBack, type TransactionRunner } from "../../../shared/application/transaction.js";
+import type { NotificationRepository, NotificationEmailQueue } from "../../notifications/application/index.js";
 import {
   defaultMatchingConfig,
   scoreMatchCandidates,
@@ -9,6 +11,17 @@ import type { MatchFeedbackValue, MatchingRefreshJob, MatchingRepository } from 
 
 function isUnitInterval(value: number) {
   return Number.isFinite(value) && value >= 0 && value <= 1;
+}
+
+async function retryConfirmedDeadlock<T>(work: () => Promise<T>): Promise<T> {
+  for (let attempt = 0; ; attempt++) {
+    try { return await work(); }
+    catch (error) {
+      if (attempt >= 2 || (error as { code?: unknown })?.code !== "ER_LOCK_DEADLOCK"
+        || !transactionWasRolledBack(error)) throw error;
+      await new Promise(resolve => setTimeout(resolve, (attempt + 1) * 25 + Math.floor(Math.random() * 25)));
+    }
+  }
 }
 
 export function sanitizeMatchingConfig(config: MatchingConfig): MatchingConfig {
@@ -37,9 +50,36 @@ export interface MatchingDependencies {
   matchingRepository: MatchingRepository;
   postRepository: PostRepository;
   idFactory: () => string;
+  delivery?: { transaction: TransactionRunner; notifications: NotificationRepository; emails: NotificationEmailQueue };
 }
 export function createMatchingUseCases(options: MatchingDependencies) {
   const { matchingRepository, postRepository, idFactory } = options;
+
+  async function notifyNewMatches(postId: string) {
+    const delivery = options.delivery;
+    if (!delivery) return;
+    await retryConfirmedDeadlock(() => delivery.transaction(async transaction => {
+      const matches = await matchingRepository.lockUnnotifiedMatches(postId, 0.6, transaction);
+      for (const match of matches) {
+        for (const recipient of [
+          { userId: match.lostUserId, postId: match.lostPostId, dismissed: match.lostDismissed },
+          { userId: match.foundUserId, postId: match.foundPostId, dismissed: match.foundDismissed }
+        ]) {
+          if (recipient.dismissed) continue;
+          const notification = await delivery.notifications.create({
+            userId: recipient.userId, type: "MATCH_FOUND", title: "Có gợi ý phù hợp mới cho bài đăng của bạn",
+            body: "Mở kết quả matching để kiểm tra. Điểm tương đồng không xác nhận quyền sở hữu vật phẩm.",
+            entityType: "POST_MATCH", entityId: recipient.postId,
+            dedupeKey: `matching:${match.id}:${recipient.userId}`
+          }, transaction);
+          if (!notification) throw new Error("Matching notification was not persisted");
+          await delivery.emails.enqueue({ notification, recipientUserId: recipient.userId, eventType: "MATCH" }, transaction);
+        }
+        // The marker and both recipients' outboxes commit together, including replay.
+        await matchingRepository.markNotified(match.id, transaction);
+      }
+    }));
+  }
 
   async function loadConfig(): Promise<MatchingConfig> {
     const [
@@ -102,9 +142,10 @@ export function createMatchingUseCases(options: MatchingDependencies) {
       const candidates = await matchingRepository.listOppositeCandidates(source, candidateLimit, candidateWindowDays);
       const matches = scoreMatchCandidates(source, candidates, config)
         .filter((match) => match.totalScore >= config.weakThreshold);
-      if (await matchingRepository.persistForSource(source, matches, job) === false) {
+      if (await retryConfirmedDeadlock(() => matchingRepository.persistForSource(source, matches, job)) === false) {
         throw new AppError("conflict", "Matching refresh lease or source eligibility changed");
       }
+      await notifyNewMatches(postId);
       return matchingService.getStoredResults(postId, config, viewerId, page, pageSize);
     },
 

@@ -7,6 +7,7 @@ import { checkWarehouseMaintenanceSchema } from "./warehouse-maintenance-schema.
 import { createWarehouseMaintenanceTask } from "./warehouse-maintenance.js";
 import { notificationEmailWorkerError } from "./notification-email-worker-error.js";
 import { checkMatchingRefreshSchema } from "./matching-refresh-schema.js";
+import { matchingRefreshWorkerError, type MatchingRefreshPhase } from "./matching-refresh-worker-error.js";
 import { createBackgroundTask, createShutdownHandler } from "./background-task.js";
 
 const app = createApp();
@@ -23,7 +24,7 @@ const notificationWorkerTimer = env.notificationEmail.workerEnabled
 if (env.notificationEmail.workerEnabled) void notificationEmailTask.tick();
 const warehouseMaintenance = createWarehouseMaintenanceTask({
   checkSchema: () => checkWarehouseMaintenanceSchema(pool),
-  runOnce: () => services.warehouseService.runMaintenance(),
+  runOnce: async () => { await services.warehouseService.runMaintenance(); await services.claimService.cleanupContactPhotos(); },
   logger: console
 });
 const warehouseMaintenanceTimer = setInterval(() => { void warehouseMaintenance.tick(); }, 60_000);
@@ -32,8 +33,10 @@ void warehouseMaintenance.tick();
 const matchingRefreshWorker = createMatchingRefreshWorker(services.matchingService, env.matchingRefresh);
 let matchingSchemaReady = false;
 let matchingSchemaWarning = false;
+let matchingRefreshPhase: MatchingRefreshPhase = "SCHEMA_CHECK";
 const matchingRefreshTask = createBackgroundTask(
   async () => {
+    matchingRefreshPhase = matchingSchemaReady ? "REFRESH" : "SCHEMA_CHECK";
     if (!matchingSchemaReady) {
       matchingSchemaReady = await checkMatchingRefreshSchema(pool);
       if (!matchingSchemaReady) {
@@ -43,10 +46,11 @@ const matchingRefreshTask = createBackgroundTask(
       }
       console.info("matching_refresh_ready", { schemaChecked: true });
     }
+    matchingRefreshPhase = "REFRESH";
     await matchingRefreshWorker.runOnce();
   },
-  () => {
-    console.warn("matching_refresh_tick_failed", { errorCode: "MATCH_REFRESH_TICK_FAILED" });
+  error => {
+    console.warn("matching_refresh_tick_failed", matchingRefreshWorkerError(error, matchingRefreshPhase));
   }
 );
 const matchingRefreshTimer = env.matchingRefresh.enabled
@@ -54,8 +58,22 @@ const matchingRefreshTimer = env.matchingRefresh.enabled
   : null;
 if (env.matchingRefresh.enabled) void matchingRefreshTask.tick();
 
+let appointmentSchemaWarning = false;
+const appointmentReminderTask = createBackgroundTask(async () => {
+  if (!await services.appointmentService.queueReminders().catch(error => {
+    if (error?.code !== "unavailable") throw error;
+    if (!appointmentSchemaWarning) console.warn("appointment_reminders_paused", { migration:"063_appointment_workflow.sql" });
+    appointmentSchemaWarning = true;
+    return null;
+  })) return;
+  appointmentSchemaWarning = false;
+}, error => console.warn("appointment_reminders_failed", notificationEmailWorkerError(error)));
+const appointmentReminderTimer = setInterval(() => { void appointmentReminderTask.tick(); },60_000);
+void appointmentReminderTask.tick();
+
 const shutdown = createShutdownHandler(async () => {
   clearInterval(warehouseMaintenanceTimer);
+  clearInterval(appointmentReminderTimer);
   if (notificationWorkerTimer) clearInterval(notificationWorkerTimer);
   if (matchingRefreshTimer) clearInterval(matchingRefreshTimer);
   const httpClosed = new Promise<void>((resolve, reject) => {
@@ -64,7 +82,7 @@ const shutdown = createShutdownHandler(async () => {
   services.realtimeService.stop();
   // Drain HTTP, schema checks, SMTP acknowledgements and lease heartbeats before DB closure.
   const drained = await Promise.allSettled([
-    httpClosed, warehouseMaintenance.stop(), matchingRefreshTask.stop(), matchingRefreshWorker.stop(),
+    httpClosed, warehouseMaintenance.stop(), matchingRefreshTask.stop(), matchingRefreshWorker.stop(), appointmentReminderTask.stop(),
     notificationEmailTask.stop(), services.notificationEmailWorker.stop()
   ]);
   await pool.end();

@@ -5,6 +5,8 @@ import type { ClaimAuditEventRecord, ClaimRepository, ClaimStatus, FinderDecisio
 import type { CustodyRequestRepository } from "../../warehouse/application/custody-request.repository.port.js";
 import type { WarehouseRepository } from "../../warehouse/application/index.js";
 import type { NotificationRepository } from "../../notifications/application/notification.repository.port.js";
+import type { ContactPhotoUseCases } from "./contact-photo.use-cases.js";
+import { unexpectedPort } from "../../../test/unexpected-port.js";
 
 const claimId = "11111111-1111-4111-8111-111111111111";
 const claimantId = "22222222-2222-4222-8222-222222222222";
@@ -96,6 +98,7 @@ function commonRepository(overrides: Partial<ClaimRepository> = {}) {
     listParticipants: async () => [participant(claimantId), participant(finderId)],
     findClaimItemContext: async () => ({
       foundPostId: claim("CONVERSATION_OPEN").foundPostId,
+      ownerId: finderId,
       title: "Found phone",
       categoryName: "Điện thoại",
       visibilityMode: "PUBLIC",
@@ -144,6 +147,79 @@ function commonRepository(overrides: Partial<ClaimRepository> = {}) {
   } as unknown as ClaimRepository;
   return { repository, audits, status: () => currentStatus };
 }
+
+test("an approved LOST Finder may explicitly propose a meetup without answers, not a custody return", async () => {
+  const harness = commonRepository({ listVerificationQuestions: async () => [] });
+  const contactPhotos = unexpectedPort<ContactPhotoUseCases>("contact photo");
+  contactPhotos.state = async (_id, actor) => ({ required: actor === finderId, approved: true, postId: claim("CONVERSATION_OPEN").foundPostId, questions: [] });
+  contactPhotos.requireSender = async () => undefined;
+  const service = createTestClaimUseCases({ claimRepository: harness.repository, contactPhotos });
+  const before = await service.getVerification(claimId, finderId);
+  assert.equal(before.policy.answeredCount, 0); assert.equal(before.policy.readyForDecision, true);
+  assert.equal(harness.status(), "CONVERSATION_OPEN");
+  await service.decideVerification(claimId, finderId, { decision: "VERIFY_FOR_MEETUP", reason: "Compare item in person", idempotencyKey: "photo-meetup-key" });
+  assert.equal(harness.status(), "ACCEPTED");
+  assert.equal(harness.audits.at(-1)!.metadata!.communicationOnly, true);
+  assert.equal(harness.audits.some(event => event.action === "STAFF_CUSTODY_VERIFIED"), false);
+});
+
+test("direct LOST verification keeps the participant roles and does not approve ownership", async () => {
+  const harness = commonRepository({
+    findVerificationContext: async () => ({ foundPostId: claim("CONVERSATION_OPEN").foundPostId, categoryName: "balo", parentCategoryName: null }),
+    listVerificationQuestions: async () => []
+  });
+  const service = createTestClaimUseCases({ claimRepository: harness.repository });
+  for (const [actor, role] of [[finderId, "FINDER"], [claimantId, "CLAIMANT"]]) {
+    const result = await service.getVerification(claimId, actor);
+    assert.equal(result.participantRole, role);
+    assert.equal(result.policy.templateId, "wallet-bag");
+    assert.equal(result.policy.readyForDecision, false);
+    assert.equal(result.appointmentEligible, false);
+    assert.equal(result.status, "CONVERSATION_OPEN");
+  }
+  assert.equal(harness.audits.length, 0);
+});
+
+test("direct LOST private item details belong to the post owner, not the Finder role", async () => {
+  const harness = commonRepository();
+  const context = await harness.repository.findClaimItemContext(claimId);
+  assert.ok(context);
+  harness.repository.findClaimItemContext = async () => ({ ...context, ownerId: claimantId, visibilityMode: "PRIVATE_DETAILS", buildingName: "Private building", mediaId: "private-item-photo" });
+  const service = createTestClaimUseCases({ claimRepository: harness.repository });
+  const owner = await service.getClaim(claimId, claimantId);
+  const finder = await service.getClaim(claimId, finderId);
+  assert.equal(owner.item?.locationLabel, "Private building");
+  assert.ok(owner.item?.imageUrl?.endsWith("/media/private-item-photo"));
+  assert.equal(finder.item?.locationLabel, "FPTU Đà Nẵng");
+  assert.equal(finder.item?.imageUrl, null);
+  assert.equal(finder.item?.categoryName, "Điện thoại");
+});
+
+test("LOST conversation without an approved Finder photo cannot request custody", async () => {
+  let requests = 0;
+  let escalation = 0;
+  const harness = commonRepository({
+    findVerificationContext: async () => ({ foundPostId: "lost-source", categoryName: "balo", parentCategoryName: null }),
+    listVerificationQuestions: async () => [],
+    markRoomEscalated: async () => { escalation++; }
+  });
+  const service = createTestClaimUseCases({
+    claimRepository: harness.repository,
+    custodyRequestRepository: {
+      lockEligiblePost: async (postId: string) => { assert.equal(postId, "lost-source"); return false; },
+      findPhotoSource: async () => null,
+      createRequest: async () => { requests++; }
+    } as unknown as CustodyRequestRepository,
+    warehouseRepository: { findHandoverPointById: async () => "point" } as unknown as WarehouseRepository
+  });
+  await assert.rejects(service.decideVerification(claimId, finderId, {
+    decision: "ESCALATE_TO_CUSTODY", reason: "Request physical custody", handoverPointId: "point", idempotencyKey: "lost-custody-gate"
+  }), error => (error as { code: string }).code === "forbidden");
+  assert.equal(requests, 0);
+  assert.equal(escalation, 0);
+  assert.equal(harness.audits.length, 0);
+  assert.equal(harness.status(), "CONVERSATION_OPEN");
+});
 
 test("Finder cannot correct or impersonate a Staff custody verification decision", async () => {
   const eventId = "staff-decision";

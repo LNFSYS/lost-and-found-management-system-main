@@ -1,4 +1,5 @@
 import type { Logger } from "../../../shared/application/logger.port.js";
+import { coordinateUpload, persistUpload, type MediaUploads } from "../../../shared/application/media-upload.js";
 import type { PrivateMediaStorage } from "../../../shared/application/media-storage.port.js";
 import type { TransactionRunner } from "../../../shared/application/transaction.js";
 import { AppError } from "../../../shared/domain/app-error.js";
@@ -97,6 +98,7 @@ function mergeForValidation(current: PostRecord, input: UpdatePostInput) {
 }
 
 export interface PostDependencies {
+  uploads?: MediaUploads;
   postRepository: PostRepository;
   matchingRepository: MatchingRepository;
   matchingService: MatchingUseCases;
@@ -333,50 +335,70 @@ export function createPostUseCases(options: PostDependencies) {
     },
 
     async softDeletePost(postId: string, ownerId: string) {
-      const deleted = await postRepository.softDeletePost(postId, ownerId);
-      if (!deleted) throw new AppError("not_found", "Khong tim thay bai dang cua ban");
+      await withTransaction(async connection => {
+        if (!await postRepository.lockOwnedPostForDeletion(postId, ownerId, connection)) {
+          throw new AppError("not_found", "Không tìm thấy bài đăng của bạn");
+        }
+        if (await postRepository.hasDeletionBlockers(postId, connection)) {
+          throw new AppError("conflict", "Không thể xóa bài đang có bàn giao, vật phẩm trong kho, claim, lịch hẹn, tranh chấp hoặc legal hold chưa kết thúc");
+        }
+        if (!await postRepository.softDeletePost(postId, ownerId, connection)) {
+          throw new AppError("not_found", "Không tìm thấy bài đăng của bạn");
+        }
+      });
     },
 
     async uploadMedia(postId: string, ownerId: string, input: UploadMediaInput, file: ImageUpload, viewer: AccessTokenPayload) {
       const post = await requireOwnedPost(postId, ownerId);
       ensureWritableStatus(post);
       const image = validateImageUpload(file);
-      const mediaId = id();
-      const storage = await mediaStorage.save(postId, mediaId, image.extension, file.buffer);
-      let mediaCount = 0;
-      try {
-        await withTransaction(async (connection) => {
-          const lockedPost = await postRepository.lockOwnedPostForMedia(postId, ownerId, connection);
-          if (!lockedPost) throw new AppError("not_found", "Không tìm thấy bài đăng của bạn");
-          ensureWritableStatus(lockedPost);
-          mediaCount = await postRepository.countMedia(postId, connection);
-          if (mediaCount >= mediaPolicy.maxPerPost) throw new AppError("conflict", `Mỗi bài đăng chỉ được tối đa ${mediaPolicy.maxPerPost} ảnh`);
-          await postRepository.createMedia({
-            id: mediaId,
-            postId,
-            secureUrl: storage.secureUrl,
-            publicId: storage.publicId,
-            mediaKind: input.mediaKind as MediaKind,
-            format: image.format,
-            bytes: image.bytes,
-            sortOrder: input.sortOrder ?? mediaCount
-          }, connection);
+      return coordinateUpload(options.uploads, ["POST", ownerId, postId, input.mediaKind, input.sortOrder ?? null], file.buffer, id, async operation => {
+        const mediaId = operation.id;
+        const read = () => postRepository.findMedia(postId, mediaId);
+        const existing = options.uploads ? await read() : null;
+        if (existing) {
+          if (existing.ownerId !== ownerId) throw new AppError("conflict", "Media không thuộc người tải lên");
+          await mediaStorage.resolve(existing.secureUrl, existing.format ?? image.format);
+          return { id: mediaId, mediaKind: input.mediaKind, resourceType: "image", format: existing.format,
+            bytes: existing.bytes, sortOrder: existing.sortOrder, url: mediaUrl(postId, mediaId), post: serializePost(post, viewer) };
+        }
+        const storage = await mediaStorage.save(postId, mediaId, image.extension, file.buffer);
+        let mediaCount = 0;
+        await persistUpload({ operation, kind: "POST", logger: options.logger,
+          unreferenced: async () => await read() === null,
+          matches: async () => { const row = await read(); return row?.ownerId === ownerId && row.secureUrl === storage.secureUrl; },
+          remove: () => mediaStorage.remove(storage.secureUrl),
+          write: () => (operation.transaction ?? withTransaction)(async (connection) => {
+            const lockedPost = await postRepository.lockOwnedPostForMedia(postId, ownerId, connection);
+            if (!lockedPost) throw new AppError("not_found", "Không tìm thấy bài đăng của bạn");
+            ensureWritableStatus(lockedPost);
+            mediaCount = await postRepository.countMedia(postId, connection);
+            if (mediaCount >= mediaPolicy.maxPerPost) throw new AppError("conflict", `Mỗi bài đăng chỉ được tối đa ${mediaPolicy.maxPerPost} ảnh`);
+            await postRepository.createMedia({
+              id: mediaId,
+              postId,
+              secureUrl: storage.secureUrl,
+              publicId: storage.publicId,
+              mediaKind: input.mediaKind as MediaKind,
+              format: image.format,
+              bytes: image.bytes,
+              sortOrder: input.sortOrder ?? mediaCount
+            }, connection);
+          })
         });
-      } catch (error) {
-        await mediaStorage.remove(storage.secureUrl).catch(() => undefined);
-        throw error;
-      }
-
-      return {
-        id: mediaId,
-        mediaKind: input.mediaKind,
-        resourceType: "image",
-        format: image.format,
-        bytes: image.bytes,
-        sortOrder: input.sortOrder ?? mediaCount,
-        url: mediaUrl(postId, mediaId),
-        post: serializePost(post, viewer)
-      };
+        const persisted = await read();
+        if (!persisted) throw new AppError("unavailable", "Chưa thể đối soát ảnh đã lưu; vui lòng thử lại");
+        return {
+          id: mediaId,
+          mediaKind: input.mediaKind,
+          resourceType: "image",
+          format: image.format,
+          bytes: image.bytes,
+          sortOrder: persisted.sortOrder,
+          url: mediaUrl(postId, mediaId),
+          post: serializePost(post, viewer)
+        };
+      });
     },
 
     async getMediaFile(postId: string, mediaId: string, viewer?: AccessTokenPayload) {

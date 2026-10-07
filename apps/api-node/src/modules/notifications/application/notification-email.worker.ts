@@ -46,6 +46,7 @@ function escapeHtml(value: string) {
 function eventCopy(eventType: NotificationEmailEvent, count: number) {
   const countLabel = count > 1 ? `${count} ` : "một ";
   switch (eventType) {
+    case "MATCH": return { badge: "GỢI Ý PHÙ HỢP MỚI", title: `Bạn có ${countLabel}gợi ý phù hợp mới`, description: "Có bài đăng tương đồng với vật phẩm của bạn. Hãy mở matching để kiểm tra; điểm số không xác nhận quyền sở hữu." };
     case "CHAT": return { badge: "TIN NHẮN MỚI", title: `Bạn có ${countLabel}tin nhắn mới`, description: "Có tin nhắn mới trong phòng trao đổi riêng của bạn." };
     case "CLAIM": return { badge: "CẬP NHẬT CLAIM", title: `Bạn có ${countLabel}cập nhật về yêu cầu trao đổi`, description: "Yêu cầu trao đổi riêng của bạn vừa có thay đổi cần xem." };
     case "APPOINTMENT": return { badge: "CẬP NHẬT LỊCH HẸN", title: `Bạn có ${countLabel}cập nhật về lịch hẹn`, description: "Lịch hẹn trao nhận của bạn vừa được cập nhật." };
@@ -57,16 +58,20 @@ function eventCopy(eventType: NotificationEmailEvent, count: number) {
 }
 
 function genericContent(count: number, entityId: string | null, frontendUrl: string, eventType: NotificationEmailEvent, summaryLink = false, entityType?: string | null) {
-  // Only claim/chat rows have a guaranteed participant-scoped detail route. Other
-  // categories use the authenticated notification center instead of guessing a
-  // claim URL from an appointment/custody/feedback entity id.
+  // Only explicitly supported entities get an authenticated detail link.
   const useSummaryLink = summaryLink || !["CHAT", "CLAIM"].includes(eventType);
   const deepLink = entityType === "CUSTODY_REQUEST" && entityId && !summaryLink
     ? new URL(`/notifications?custodyRequestId=${encodeURIComponent(entityId)}`, frontendUrl).toString()
+    : entityType === "POST_MATCH" && eventType === "MATCH" && entityId && !summaryLink
+    ? new URL(`/posts/${encodeURIComponent(entityId)}/matches`, frontendUrl).toString()
+    : ["APPOINTMENT","APPOINTMENT_REMINDER"].includes(entityType ?? "") && entityId && !summaryLink
+    ? new URL(`/appointments/${encodeURIComponent(entityId)}`, frontendUrl).toString()
     : useSummaryLink
     ? new URL("/notifications", frontendUrl).toString()
     : entityId ? new URL(`/claims/${entityId}`, frontendUrl).toString() : new URL("/home", frontendUrl).toString();
-  const copy = eventCopy(eventType, count);
+  const copy = entityType === "APPOINTMENT_REMINDER"
+    ? { badge:"NHẮC LỊCH HẸN",title:"Sắp đến lịch hẹn trả đồ của bạn",description:"Mở lịch hẹn để kiểm tra giờ và điểm gặp đã được hai bên chấp nhận." }
+    : eventCopy(eventType, count);
   const safeDeepLink = escapeHtml(deepLink);
   return {
     subject: `${copy.badge[0] + copy.badge.slice(1).toLowerCase()} | FPTU Lost & Found`,
@@ -139,16 +144,28 @@ export function createNotificationEmailWorker(options: {
       await options.repository.deferLease(leaseToken, quietEnd);
       return { sent: 0, deferred: leased.length };
     }
-    const eligible = leased.filter((entry) => entry.accountActive && entry.emailVerified
+    let eligible = leased.filter((entry) => entry.accountActive && entry.emailVerified
       && (entry.notificationUnread || item.deliveryMode === "IMMEDIATE") && entry.entityAccessible);
     if (!eligible.length) {
       await options.repository.cancelLease(leaseToken);
       return { sent: 0, skipped: leased.length };
     }
+    if (leaseLost() || !await options.repository.renewLease(leaseToken, leaseSeconds)) return { sent: 0, skipped: leased.length };
+    if (item.eventType === "MATCH") {
+      // A post can close while preferences or lease renewal are awaited.
+      const current = await options.repository.listLease(leaseToken);
+      const originalIds = new Set(eligible.map(entry => entry.id));
+      eligible = current.filter(entry => originalIds.has(entry.id) && entry.accountActive && entry.emailVerified
+        && (entry.notificationUnread || item.deliveryMode === "IMMEDIATE") && entry.entityAccessible);
+      if (!eligible.length) {
+        await options.repository.cancelLease(leaseToken);
+        return { sent: 0, skipped: leased.length };
+      }
+    }
+    if (leaseLost()) return { sent: 0, skipped: leased.length };
     const distinctEntities = new Set(eligible.map((entry) => entry.entityId).filter(Boolean)).size;
     const content = genericContent(eligible.length, eligible[0]!.entityId, options.frontendUrl, item.eventType,
       item.deliveryMode === "DIGEST" && distinctEntities > 1, eligible[0]!.entityType);
-    if (leaseLost() || !await options.repository.renewLease(leaseToken, leaseSeconds)) return { sent: 0, skipped: leased.length };
     try {
       await options.emailDelivery.send({
         to: eligible[0]!.email,

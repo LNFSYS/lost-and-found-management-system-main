@@ -1,4 +1,6 @@
 import { createAdminCatalogUseCases } from "../modules/admin/application/admin-catalog.use-cases.js";
+import { createAppointmentUseCases } from "../modules/appointments/application/appointment.use-cases.js";
+import { createActivityUseCases } from "../modules/activity/application/activity.use-cases.js";
 import { createAdminReportingUseCases } from "../modules/admin/application/admin-reporting.use-cases.js";
 import { createAdminUserUseCases } from "../modules/admin/application/admin-user.use-cases.js";
 import { createAuthUseCases } from "../modules/auth/application/auth.use-cases.js";
@@ -6,6 +8,7 @@ import { createAuthSecurity } from "../modules/auth/infrastructure/auth-security
 import { createCloudinaryAvatarStorage } from "../modules/auth/infrastructure/cloudinary-avatar-storage.js";
 import { createEmailDelivery } from "../modules/auth/infrastructure/email.service.js";
 import { createClaimUseCases } from "../modules/claims/application/claim.use-cases.js";
+import { createContactPhotoUseCases } from "../modules/claims/application/contact-photo.use-cases.js";
 import { createMatchingUseCases } from "../modules/matching/application/matching.use-cases.js";
 import { createNotificationUseCases } from "../modules/notifications/application/notification.use-cases.js";
 import { createNotificationEmailQueue } from "../modules/notifications/application/notification-email.queue.js";
@@ -28,7 +31,7 @@ import type { Persistence } from "./persistence.js";
 
 export function createServices(persistence: Persistence, config: typeof env = env) {
   const {
-    transaction, adminAuditRepository, adminCatalogRepository, adminReportingRepository,
+    transaction, mediaUploads, adminAuditRepository, adminCatalogRepository, adminReportingRepository,
     adminUserRepository, authRepository, claimRepository, matchingRepository,
     notificationRepository, notificationEmailRepository, postRepository, returnFeedbackRepository, reportRepository,
     systemConfigRepository, userRepository, warehouseRepository, custodyRequestRepository
@@ -68,6 +71,9 @@ export function createServices(persistence: Persistence, config: typeof env = en
     id, frontendUrl: config.frontendUrl, logger: console
   });
   const notificationService = createNotificationUseCases({ notificationRepository, notificationEmailRepository, notificationEmailQueue });
+  const appointmentService = createAppointmentUseCases({ repository:persistence.appointmentRepository,transaction,id,
+    hash:security.hashToken,notifications:notificationRepository,emails:notificationEmailQueue,reminderLeadMinutes:config.appointmentReminderMinutes });
+  const activityService = createActivityUseCases({ repository:persistence.activityRepository,audit:adminAuditRepository,transaction,id });
   const systemConfigService = createSystemConfigUseCases({
     repository: systemConfigRepository, auditRepository: adminAuditRepository, transaction, idFactory: id
   });
@@ -80,14 +86,21 @@ export function createServices(persistence: Persistence, config: typeof env = en
     transaction, idFactory: id, clock: () => new Date()
   });
   const adminCatalogService = createAdminCatalogUseCases({ adminCatalogRepository, id });
-  const realtimeService = createRealtimeUseCases({ claimRepository, id });
+  const authService = createAuthUseCases({
+    authRepository, userRepository, avatarStorage, security,
+    policy: config, emailService, withTransaction: transaction, logger: console, uploads: mediaUploads
+  });
+  const realtimeService = createRealtimeUseCases({ claimRepository, id, validateSession: session => authService.validateAccessSession(session) });
   const custodyDelivery = { notificationRepository, notificationEmailQueue,
     publishCustodyNotification: async (userId: string, notification: import("../modules/notifications/application/index.js").NotificationRecord) => {
-      realtimeService.publishNotification({ userId, notification, workflow: "CUSTODY" });
+      await realtimeService.publishNotification({ userId, notification, workflow: "CUSTODY" });
     }
   };
-  const proofStorage = createPrivateMediaStorage({ uploadDir: config.uploadDir, namespace: "warehouse-proof", invalidPathMessage: "Invalid proof path", notFoundMessage: "Proof not found" });
-  const warehouseService = createWarehouseUseCases({ warehouseRepository, custodyRequestRepository, proofStorage, ...custodyDelivery, withTransaction: transaction, id });
+  const proofStorage = createCloudinaryPrivateMediaStorage({
+    config: config.cloudinary, namespace: "warehouse-proof", allowLocalWrites: config.nodeEnv !== "production",
+    fallback: createPrivateMediaStorage({ uploadDir: config.uploadDir, namespace: "warehouse-proof", invalidPathMessage: "Invalid proof path", notFoundMessage: "Proof not found" })
+  });
+  const warehouseService = createWarehouseUseCases({ warehouseRepository, custodyRequestRepository, proofStorage, sourceMediaStorage: postMediaStorage, contactMediaStorage: claimMediaStorage, ...custodyDelivery, withTransaction: transaction, id, uploads: mediaUploads, logger: console });
   const custodyRequestService = createCustodyRequestUseCases({ custodyRequestRepository, warehouseRepository, ...custodyDelivery, withTransaction: transaction, id });
   const returnFeedbackService = createReturnFeedbackUseCases({
     repository: returnFeedbackRepository, adminAuditRepository, runInTransaction: transaction, id
@@ -95,23 +108,24 @@ export function createServices(persistence: Persistence, config: typeof env = en
   const reportService = createReportUseCases({
     repository: reportRepository, transaction, id, hashPayload: security.hashToken
   });
-  const matchingService = createMatchingUseCases({ matchingRepository, postRepository, idFactory: id });
+  const matchingService = createMatchingUseCases({ matchingRepository, postRepository, idFactory: id,
+    delivery: { transaction, notifications: notificationRepository, emails: notificationEmailQueue } });
   const postService = createPostUseCases({
     postRepository, matchingRepository, matchingService,
-    withTransaction: transaction, id, mediaStorage: postMediaStorage, logger: console
+    withTransaction: transaction, id, mediaStorage: postMediaStorage, logger: console, uploads: mediaUploads
   });
   const claimService = createClaimUseCases({
+    contactPhotos: createContactPhotoUseCases({ repository: persistence.contactPhotoRepository, claims: claimRepository, matching: matchingRepository,
+      imageAnalysis: createImageAnalysisUseCases({ postRepository, analyzer: createGeminiImageAnalyzer(config.gemini) }),
+      authorizeTarget: postId => postService.getPost(postId), mediaStorage: claimMediaStorage, transaction, id, uploads: mediaUploads, logger: console }),
     claimRepository, matchingRepository, notificationRepository, custodyRequestRepository, warehouseRepository, notificationEmailQueue,
     realtimeNotifier: realtimeService,
     withTransaction: transaction, id, mediaStorage: claimMediaStorage,
-    hashIdempotencyPayload: security.hashToken, logger: console
-  });
-  const authService = createAuthUseCases({
-    authRepository, userRepository, avatarStorage, security,
-    policy: config, emailService, withTransaction: transaction, logger: console
+    hashIdempotencyPayload: security.hashToken, logger: console, uploads: mediaUploads
   });
   const geminiImageService = createImageAnalysisUseCases({ postRepository, analyzer: createGeminiImageAnalyzer(config.gemini) });
   return {
+    appointmentService, activityService,
     notificationService, notificationEmailWorker, systemConfigService, adminUserService, adminReportingService,
     adminCatalogService, warehouseService, custodyRequestService, returnFeedbackService, matchingService,
     postService, claimService, realtimeService, reportService, authService, geminiImageService

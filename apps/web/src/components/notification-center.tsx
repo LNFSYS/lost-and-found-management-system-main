@@ -1,10 +1,12 @@
-import { Bell, CheckCheck, CheckCircle2, MessageCircle, X } from "lucide-react";
+import { Bell, CheckCheck, CheckCircle2, MessageCircle, ScanSearch, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/auth-context";
 import { api, type AppNotification } from "../services/api";
+import { notificationDestination } from "../services/notification-destination";
 
 function notificationIcon(type: AppNotification["type"]) {
+  if (type === "MATCH_FOUND") return <ScanSearch size={17} />;
   return type === "CLAIM_ACCEPTED" ? <CheckCircle2 size={17} /> : <MessageCircle size={17} />;
 }
 
@@ -96,7 +98,7 @@ export function NotificationCenter() {
       setUnreadTotal((current) => Math.max(0, current - 1));
       void api.markNotificationRead(item.id).catch(() => undefined);
     }
-    if (item.entityType === "CLAIM" && item.entityId) navigate(`/claims/${item.entityId}`);
+    navigate(notificationDestination(item));
   }
 
   function markAllRead() {

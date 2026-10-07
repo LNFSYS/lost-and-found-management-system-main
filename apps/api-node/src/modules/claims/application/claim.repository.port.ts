@@ -246,6 +246,7 @@ export interface ClaimRepository {
   } | null>;
   findClaimItemContext(claimId: string, queryable?: TransactionContext): Promise<{
     foundPostId: string;
+    ownerId: string;
     title: string;
     categoryName: string | null;
     visibilityMode: "PUBLIC" | "PRIVATE_DETAILS";
@@ -464,6 +465,7 @@ export interface ClaimRepository {
     senderId: string;
     content: string;
     clientMessageId?: string;
+    mediaUrl?: string;
   }, queryable: TransactionContext): Promise<{
     id: string;
     roomId: string;
@@ -474,10 +476,12 @@ export interface ClaimRepository {
     clientMessageId: string | null;
     content: string | null;
     messageType: "TEXT" | "IMAGE" | "SYSTEM";
+    mediaUrl?: string | null;
     isRead: boolean;
     readAt: string | null;
     createdAt: string;
   } | null>;
+  findMessageByClientId(roomId: string, senderId: string, clientMessageId: string, queryable?: TransactionContext): ReturnType<ClaimRepository["createMessage"]>;
   listMessages(roomId: string, query: {
     before?: Date;
     beforeId?: string;
@@ -493,6 +497,7 @@ export interface ClaimRepository {
       clientMessageId: string | null;
       content: string | null;
       messageType: "TEXT" | "IMAGE" | "SYSTEM";
+      mediaUrl?: string | null;
       isRead: boolean;
       readAt: string | null;
       createdAt: string;

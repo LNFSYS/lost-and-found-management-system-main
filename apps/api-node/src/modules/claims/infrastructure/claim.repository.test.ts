@@ -71,3 +71,31 @@ test("chat message persistence uses a server-side idempotency key", async () => 
   assert.match(statements[3], /room_id, sequence, sender_id/);
   assert.match(statements[3], /ON DUPLICATE KEY UPDATE/);
 });
+
+test("verification and item context support direct LOST rooms without inventing a FOUND source", async () => {
+  const statements: string[] = [];
+  const lostId = "11111111-1111-4111-8111-111111111111";
+  const ownerId = "22222222-2222-4222-8222-222222222222";
+  const queryable = {
+    execute: async (sql: string) => {
+      statements.push(sql);
+      return [[{
+        found_post_id: lostId, owner_id: ownerId, title: "Lost backpack", category_name: "balo",
+        parent_category_name: null, visibility_mode: "PRIVATE_DETAILS", area_name: "Campus",
+        building_name: "Private room", room_text: null, custom_location: null,
+        handover_point_name: null, media_id: "image-id"
+      }], []];
+    }
+  } as unknown as Pick<PoolConnection, "execute">;
+  const verification = await claimRepository.findVerificationContext("claim-id", queryable as never);
+  const item = await claimRepository.findClaimItemContext("claim-id", queryable as never);
+  assert.equal(verification?.foundPostId, lostId);
+  assert.equal(verification?.categoryName, "balo");
+  assert.equal(item?.ownerId, ownerId);
+  for (const sql of statements) {
+    assert.match(sql, /COALESCE\(c.source_found_post_id,c.post_id\)/);
+    assert.match(sql, /found.type IN \('FOUND', 'LOST'\)/);
+    assert.match(sql, /found.deleted_at IS NULL/);
+    assert.doesNotMatch(sql, /UPDATE|INSERT/);
+  }
+});

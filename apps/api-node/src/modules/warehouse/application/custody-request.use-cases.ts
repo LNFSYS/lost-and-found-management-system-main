@@ -1,12 +1,13 @@
-import type { TransactionRunner } from "../../../shared/application/transaction.js";
+import type { TransactionContext, TransactionRunner } from "../../../shared/application/transaction.js";
 import { AppError } from "../../../shared/domain/app-error.js";
 import { canTransitionCustodyStatus } from "../domain/custody-request-policy.js";
 import { calculateRetentionDeadline, retentionConfigKeyForCategory, retentionFallbacks } from "../domain/warehouse-policy.js";
 import type { AcceptCustodyRequestInput, CancelCustodyRequestInput, CreateCustodyRequestInput, IntakeCustodyRequestInput, ListCustodyRequestsQuery, RejectCustodyRequestInput } from "./custody-request.dto.js";
-import type { CustodyRequestRepository } from "./custody-request.repository.port.js";
+import type { CustodyRequestLock, CustodyRequestRepository } from "./custody-request.repository.port.js";
 import type { WarehouseRepository } from "./warehouse.repository.port.js";
 import { custodyNotifications, type CustodyNotifications } from "./custody-notifications.js";
 import { custodyFingerprint } from "./custody-fingerprint.js";
+import { intakeFingerprint, prepareIntakeEvidence, serializeWarehouseImage, validateIntakeEvidence } from "./intake-evidence.js";
 
 const clean = (value: string | null | undefined) => value?.trim() || null;
 export interface CustodyRequestDependencies extends CustodyNotifications {
@@ -22,6 +23,16 @@ export function createCustodyRequestUseCases(options: CustodyRequestDependencies
   async function staff(actorId: string) {
     if (!await repo.isStaff(actorId)) throw new AppError("forbidden", "Chỉ Staff/Admin được thực hiện thao tác này");
   }
+  async function photoSource(request: Pick<CustodyRequestLock, "postId" | "claimId" | "roomId" | "requesterId" | "intakeType">, db?: TransactionContext) {
+    if (request.postId || !request.claimId || !request.roomId || request.intakeType !== "CUSTODY_TRANSFER") return null;
+    return repo.findPhotoSource(request.claimId, request.requesterId, request.roomId, db);
+  }
+  async function eligible(request: CustodyRequestLock, db: TransactionContext) {
+    return request.postId
+      ? await repo.lockEligiblePost(request.postId, request.requesterId, db)
+        && (!request.claimId || await repo.validateClaimLink(request.postId, request.requesterId, request.claimId, request.roomId, db))
+      : Boolean(await photoSource(request, db));
+  }
   return {
     async listRequests(query: ListCustodyRequestsQuery, actorId: string) {
       await staff(actorId);
@@ -34,6 +45,14 @@ export function createCustodyRequestUseCases(options: CustodyRequestDependencies
         throw new AppError("not_found", "Không tìm thấy yêu cầu custody");
       }
       return { request, audit: await repo.listAudit(requestId) };
+    },
+    async getIntakeContext(requestId: string, actorId: string) {
+      await staff(actorId);
+      const request = await repo.findById(requestId);
+      const photo = request ? await photoSource({ ...request, requesterId: request.requester.id }) : null;
+      const post = request?.postId ? await warehouse.getPostInfoForIntake(request.postId) : photo?.post;
+      if (!request || !post || post.finderUserId !== request.requester.id) throw new AppError("conflict", "Yêu cầu cần kiểm tra lại nguồn vật phẩm hoặc ảnh đối chiếu của Finder");
+      return { request, post, images: (photo ? [photo.image] : await warehouse.listSourceImages(request.postId!)).map(serializeWarehouseImage) };
     },
     async getMyRequestByPost(postId: string, actorId: string) {
       const post = await warehouse.getPostInfoForIntake(postId);
@@ -87,9 +106,8 @@ export function createCustodyRequestUseCases(options: CustodyRequestDependencies
       const deliveries = await withTransaction(async db => {
         const lock = await repo.lockForUpdate(requestId, db);
         if (!lock) throw new AppError("not_found", "Không tìm thấy yêu cầu");
-        if (!lock.postId || !await repo.lockEligiblePost(lock.postId, lock.requesterId, db)
-          || (lock.claimId && !await repo.validateClaimLink(lock.postId, lock.requesterId, lock.claimId, lock.roomId, db))) {
-          throw new AppError("conflict", "Hồ sơ custody cần kiểm tra lại liên kết bài FOUND trước khi duyệt");
+        if (!await eligible(lock, db)) {
+          throw new AppError("conflict", "Hồ sơ custody cần kiểm tra lại nguồn vật phẩm hoặc ảnh đối chiếu trước khi duyệt");
         }
         if (lock.status === "ACCEPTED") {
           const current = await repo.findById(requestId, db);
@@ -110,34 +128,62 @@ export function createCustodyRequestUseCases(options: CustodyRequestDependencies
       return close(requestId, "REJECTED", input.reason, actorId);
     },
     async cancelRequest(requestId: string, input: CancelCustodyRequestInput, actorId: string) {
+      if (!clean(input.reason)) throw new AppError("bad_request", "Cần lý do hủy yêu cầu");
       return close(requestId, "CANCELLED", input.reason, actorId);
     },
     async confirmIntake(requestId: string, input: IntakeCustodyRequestInput, actorId: string) {
       await staff(actorId);
+      validateIntakeEvidence(input);
+      const payload = intakeFingerprint({ ...input, accessories: input.accessories.trim(), intakeImageIds: [...input.intakeImageIds].sort(), confirmedHandoverAt: input.confirmedHandoverAt?.toISOString() ?? null });
       const receivedAt = input.confirmedHandoverAt ?? new Date();
       if (!Number.isFinite(receivedAt.getTime()) || receivedAt.getTime() > Date.now()) throw new AppError("bad_request", "Thời gian tiếp nhận không được ở tương lai");
       if (!clean(input.conditionNotes)) throw new AppError("bad_request", "Cần tình trạng vật phẩm");
       const deliveries = await withTransaction(async db => {
         const lock = await repo.lockForUpdate(requestId, db);
         if (!lock) throw new AppError("not_found", "Không tìm thấy yêu cầu");
-        if (lock.status === "INTAKED" && lock.warehouseItemId) return [];
-        if (!canTransitionCustodyStatus(lock.status, "INTAKED")) throw new AppError("conflict", "Yêu cầu phải được duyệt trước khi tiếp nhận");
-        if (!lock.postId || !await repo.lockEligiblePost(lock.postId, lock.requesterId, db)) throw new AppError("conflict", "Bài FOUND không hợp lệ cho intake");
-        if (await repo.hasWarehouseItem(lock.postId, db)) throw new AppError("conflict", "Vật phẩm đã có hồ sơ kho");
+        if (lock.status === "INTAKED" && lock.warehouseItemId) {
+          const replay = await prepareIntakeEvidence(warehouse, input, actorId, requestId, payload, db);
+          if (replay !== lock.warehouseItemId) throw new AppError("conflict", "Yêu cầu đã được tiếp nhận bằng phiên khác");
+          return [];
+        }
+        if (!canTransitionCustodyStatus(lock.status, "INTAKED")) throw new AppError("conflict", "Yêu cầu không còn chờ tiếp nhận");
+        if (!await eligible(lock, db)) throw new AppError("conflict", "Nguồn bàn giao hoặc ảnh đối chiếu của Finder không hợp lệ cho intake");
+        if (lock.postId && await repo.hasWarehouseItem(lock.postId, db)) throw new AppError("conflict", "Vật phẩm đã có hồ sơ kho");
+        if (!lock.postId && lock.claimId) {
+          const existing = await repo.findActiveByClaimId(lock.claimId, db);
+          if (existing && existing.id !== requestId) throw new AppError("conflict", "Cuộc trò chuyện đã có yêu cầu custody khác");
+        }
         if (!lock.handoverPointId || !await warehouse.findHandoverPointById(lock.handoverPointId)) throw new AppError("conflict", "Điểm bàn giao không hoạt động");
-        const post = await warehouse.getPostInfoForIntake(lock.postId, db);
+        const photo = await photoSource(lock, db);
+        const post = lock.postId ? await warehouse.getPostInfoForIntake(lock.postId, db) : photo?.post;
         if (!post || post.finderUserId !== lock.requesterId) throw new AppError("conflict", "Không tìm thấy vật phẩm của Finder");
-        const category = post.categoryId ? await warehouse.findCategoryNames(post.categoryId) : null;
+        const replay = await prepareIntakeEvidence(warehouse, input, actorId, requestId, payload, db);
+        if (replay) throw new AppError("conflict", "Phiên đối chiếu đã dùng cho vật phẩm khác");
+        const categoryId = input.categoryId !== undefined ? input.categoryId : post.categoryId;
+        const category = categoryId ? await warehouse.findCategoryNames(categoryId) : null;
+        if (categoryId && !category) throw new AppError("bad_request", "Danh mục tiếp nhận không hợp lệ");
+        let areaId = input.areaId !== undefined ? input.areaId : post.areaId;
+        const buildingId = input.buildingId !== undefined ? input.buildingId : post.buildingId;
+        if (buildingId) {
+          const building = await warehouse.findBuildingById(buildingId);
+          if (!building || (areaId && building.areaId !== areaId)) throw new AppError("bad_request", "Địa điểm không thuộc khu vực đã chọn");
+          areaId = building.areaId;
+        }
+        if (areaId && !await warehouse.findAreaById(areaId)) throw new AppError("bad_request", "Khu vực tiếp nhận không hợp lệ");
         const key = retentionConfigKeyForCategory(category);
         const days = await warehouse.getConfigInt(key, retentionFallbacks[key]);
         const warehouseItemId = id();
         const storageCode = clean(input.storageCode) ?? await warehouse.generateNextStorageCode(db);
         await warehouse.createItem({ id: warehouseItemId, postId: lock.postId, handoverPointId: lock.handoverPointId,
-          itemName: post.title, description: post.description, categoryId: post.categoryId, areaId: post.areaId, buildingId: post.buildingId,
-          roomText: post.roomText, finderUserId: post.finderUserId, finderName: post.finderName, finderContact: post.finderContact,
+          itemName: clean(input.itemName) ?? post.title, description: input.description !== undefined ? clean(input.description) : post.description, categoryId, areaId, buildingId,
+          roomText: input.roomText !== undefined ? clean(input.roomText) : post.roomText, finderUserId: post.finderUserId,
+          finderName: input.finderName !== undefined ? clean(input.finderName) : post.finderName, finderContact: input.finderContact !== undefined ? clean(input.finderContact) : post.finderContact,
           conditionNotes: input.conditionNotes.trim(), storageCode, receivedAt, retentionDeadline: calculateRetentionDeadline(receivedAt, days), createdBy: actorId }, db);
         await warehouse.createStorageLog({ id: id(), warehouseItemId, postId: lock.postId, handoverPointId: lock.handoverPointId, actorId,
           action: "RECEIVED", toStatus: "RECEIVED", conditionNotes: input.conditionNotes.trim(), storageCode, note: `Custody ${requestId}` }, db);
+        await warehouse.completeIntakeSession({ id: input.intakeKey, itemId: warehouseItemId, requestPayload: payload,
+          sourceSnapshot: photo ? { ...post, claimId: lock.claimId, roomId: lock.roomId, lostPostId: photo.lostPostId, contactPhotoId: photo.image.id } : post,
+          quantity: input.receivedQuantity, accessories: input.accessories.trim() }, db);
         // Physical intake changes custody, never ownership or resolution.
         await repo.updateStatus(requestId, { status: "INTAKED", handlerId: actorId, warehouseItemId, confirmedHandoverAt: receivedAt }, db);
         await repo.writeAudit({ id: id(), custodyRequestId: requestId, actorId, action: "INTAKED", fromStatus: lock.status, toStatus: "INTAKED", metadata: { warehouseItemId, receivedAt: receivedAt.toISOString(), retentionDays: days } }, db);

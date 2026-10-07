@@ -15,11 +15,23 @@ export interface MatchFeedbackRecord {
 }
 export interface MatchingRefreshJob { postId: string; requestedVersion: number; correlationKey: string; leaseToken: string; }
 
+export interface UnnotifiedMatch {
+  id: string;
+  lostPostId: string;
+  foundPostId: string;
+  lostUserId: string;
+  foundUserId: string;
+  lostDismissed: boolean;
+  foundDismissed: boolean;
+}
+
 export interface MatchingRepository {
   getConfigNumber(key: string, fallback: number): Promise<number>;
   findCandidate(postId: string): Promise<MatchCandidate | null>;
   listOppositeCandidates(source: MatchCandidate, candidateLimit: number, candidateWindowDays: number): Promise<MatchCandidate[]>;
   persistForSource(source: MatchCandidate, matches: ScoredMatch[], job?: MatchingRefreshJob): Promise<boolean | void>;
+  lockUnnotifiedMatches(postId: string, minimumScore: number, transaction: TransactionContext): Promise<UnnotifiedMatch[]>;
+  markNotified(matchId: string, transaction: TransactionContext): Promise<void>;
   listForPost(postId: string, minimumScore: number, viewerId?: string): Promise<{
     id: string;
     lostPostId: string;

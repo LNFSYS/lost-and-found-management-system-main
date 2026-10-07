@@ -1,4 +1,5 @@
 import type { Request, Response } from "express";
+import { z } from "zod";
 import { HttpError } from "../../../../shared/interfaces/http/http-error.js";
 import type { ClaimUseCases } from "../../application/claim.use-cases.js";
 import {
@@ -14,7 +15,7 @@ import {
   sendVerificationQuestionSchema,
   verificationDecisionSchema,
   verificationQuestionParamSchema,
-  uploadEvidenceSchema
+  uploadEvidenceSchema, uploadChatImageSchema
 } from "./claim.validator.js";
 
 export function createClaimController({ claimService }: {
@@ -28,6 +29,15 @@ export function createClaimController({ claimService }: {
     return value || undefined;
   }
   const claimController = {
+    async checkContactPhoto(request: Request, response: Response) {
+      if (!request.file) throw new HttpError(400, "Cần tải một ảnh vật phẩm trước khi liên hệ LOST");
+      const { postId } = z.object({ postId: z.string().uuid() }).parse(request.body);
+      response.json(await claimService.checkContactPhoto(postId,request.auth!.sub,request.file));
+    },
+    async attachContactPhoto(request: Request, response: Response) {
+      const { contactCheckId } = z.object({ contactCheckId: z.string().uuid() }).parse(request.body);
+      response.json(await claimService.attachContactPhoto(claimId(request),request.auth!.sub,contactCheckId));
+    },
     async listClaims(request: Request, response: Response) {
       response.json(await claimService.listClaims(request.auth!.sub, listClaimsQuerySchema.parse(request.query)));
     },
@@ -116,6 +126,12 @@ export function createClaimController({ claimService }: {
 
     async listEvidence(request: Request, response: Response) {
       response.json(await claimService.listEvidence(claimId(request), request.auth!.sub));
+    },
+
+    async uploadChatImage(request: Request, response: Response) {
+      if (!request.file) throw new HttpError(400, "Cần chọn ảnh để gửi");
+      const input = uploadChatImageSchema.parse({ ...request.body, clientMessageId: idempotencyKey(request) ?? request.body?.clientMessageId });
+      response.status(201).json(await claimService.uploadChatImage(claimId(request), request.auth!.sub, input, request.file));
     },
 
     async uploadEvidence(request: Request, response: Response) {

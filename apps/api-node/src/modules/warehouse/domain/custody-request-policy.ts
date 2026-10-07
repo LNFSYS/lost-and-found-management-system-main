@@ -2,8 +2,8 @@ export type CustodyRequestStatus = "PENDING" | "ACCEPTED" | "REJECTED" | "CANCEL
 export type CustodyIntakeType = "CUSTODY_TRANSFER" | "WALK_IN";
 
 export const custodyRequestStatusLabels: Record<CustodyRequestStatus, string> = {
-  PENDING: "Chờ duyệt",
-  ACCEPTED: "Đã duyệt – chờ bàn giao",
+  PENDING: "Chờ tiếp nhận",
+  ACCEPTED: "Chờ tiếp nhận (yêu cầu cũ)",
   REJECTED: "Từ chối",
   CANCELLED: "Đã hủy",
   INTAKED: "Đã tiếp nhận"
@@ -14,18 +14,10 @@ export const custodyIntakeTypeLabels: Record<CustodyIntakeType, string> = {
   WALK_IN: "Tiếp nhận trực tiếp"
 };
 
-/**
- * Valid custody request state transitions.
- *
- * PENDING  → ACCEPTED | REJECTED | CANCELLED
- * ACCEPTED → INTAKED  | CANCELLED
- *
- * PENDING → INTAKED is explicitly forbidden (must go through ACCEPTED).
- * Terminal states (REJECTED, CANCELLED, INTAKED) have no outgoing transitions.
- */
+// ACCEPTED is retained for historical clients; physical receipt needs no pre-approval.
 export const custodyTransitionMap: Record<CustodyRequestStatus, CustodyRequestStatus[]> = {
-  PENDING: ["ACCEPTED", "REJECTED", "CANCELLED"],
-  ACCEPTED: ["INTAKED", "CANCELLED"],
+  PENDING: ["ACCEPTED", "INTAKED", "REJECTED", "CANCELLED"],
+  ACCEPTED: ["INTAKED", "REJECTED", "CANCELLED"],
   REJECTED: [],
   CANCELLED: [],
   INTAKED: []

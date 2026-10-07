@@ -19,7 +19,7 @@ const reportId = "33333333-3333-4333-8333-333333333333";
 const appointmentId = "44444444-4444-4444-8444-444444444444";
 
 function makeAccessToken(roles: Role[] = ["USER", "ADMIN"]) {
-  return jwt.sign({ sub: "admin-id", email: "admin@example.com", roles, sessionVersion: 0 }, env.jwtAccessSecret);
+  return jwt.sign({ sub: "admin-id", email: "admin@example.com", roles, sessionVersion: 0 }, env.jwtAccessSecret, { expiresIn: "1h" });
 }
 
 function jsonHeaders(roles: Role[] = ["USER", "ADMIN"]) {
@@ -83,6 +83,30 @@ async function withServer(checkReadiness: () => Promise<void>, run: (baseUrl: st
     await once(server, "close");
   }
 }
+
+test("IPv4-mapped IPv6 trust subnets cannot spoof an IPv4 client address", async () => {
+  const app = createApp({ services: testServices });
+  assert.equal(app.get("trust proxy"), false);
+  app.get("/proxy-address-regression", (request, response) => response.json({ ip: request.ip }));
+  const server = app.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  const address = server.address() as AddressInfo;
+  const headers = { "x-forwarded-for": "198.51.100.42" };
+  try {
+    for (const subnet of ["::ffff:10.0.0.0/8", "::/1"]) {
+      app.set("trust proxy", subnet);
+      const response = await fetch(`http://127.0.0.1:${address.port}/proxy-address-regression`, { headers });
+      assert.equal(response.status, 200);
+      assert.deepEqual(await response.json(), { ip: "127.0.0.1" });
+    }
+    app.set("trust proxy", "127.0.0.0/8");
+    const response = await fetch(`http://127.0.0.1:${address.port}/proxy-address-regression`, { headers });
+    assert.deepEqual(await response.json(), { ip: "198.51.100.42" });
+  } finally {
+    server.close();
+    await once(server, "close");
+  }
+});
 
 test("malformed JSON returns a JSON 400 response", async () => {
   await withServer(async () => undefined, async (baseUrl) => {
@@ -161,6 +185,25 @@ async function readSseEvent(response: Response) {
   reader.releaseLock();
   return new TextDecoder().decode(value);
 }
+
+test("appointment, item journey and global audit routes enforce auth, roles and JSON validation",async()=>{
+  const validate=authService.validateAccessSession;
+  authService.validateAccessSession=async()=>true;
+  const application=createApp({services:{...testServices,
+    appointmentService:{...testServices.appointmentService,list:async()=>({results:[],total:0})},
+    activityService:{...testServices.activityService,audit:async()=>({results:[],total:0})}}});
+  const server=application.listen(0,"127.0.0.1");await once(server,"listening");const url=`http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  try{
+    for(const endpoint of ["/appointments",`/posts/${userId}/journey`,"/admin/audit","/admin/audit/export"]){assert.equal((await fetch(`${url}/api${endpoint}`)).status,401);}
+    assert.equal((await fetch(`${url}/api/admin/audit`,{headers:jsonHeaders(["STAFF"])})).status,403);
+    assert.equal((await fetch(`${url}/api/admin/audit/export`,{headers:jsonHeaders(["USER"])})).status,403);
+    const list=await fetch(`${url}/api/appointments`,{headers:jsonHeaders(["USER"])});assert.equal(list.status,200);assert.match(list.headers.get("cache-control")??"",/private.*no-store/);
+    assert.equal((await fetch(`${url}/api/admin/audit`,{headers:jsonHeaders()})).status,200);
+    const invalid=await fetch(`${url}/api/appointments`,{method:"POST",headers:jsonHeaders(["USER"]),body:JSON.stringify({claimId:"wrong",proposedAt:"not-a-date"})});
+    assert.equal(invalid.status,422);assert.match(invalid.headers.get("content-type")??"",/json/);
+    assert.equal((await fetch(`${url}/api/appointments?page=-1`,{headers:jsonHeaders(["USER"])})).status,422);
+  }finally{authService.validateAccessSession=validate;server.close();await once(server,"close");}
+});
 
 test("realtime route authenticates and isolates claim room subscriptions", async () => {
   const originalValidateAccessSession = authService.validateAccessSession;

@@ -1,4 +1,5 @@
 import type { Logger } from "../../../shared/application/logger.port.js";
+import { coordinateUpload, persistUpload, type MediaUploads } from "../../../shared/application/media-upload.js";
 import type { TransactionRunner } from "../../../shared/application/transaction.js";
 import { AppError } from "../../../shared/domain/app-error.js";
 import type { AccessTokenPayload, ActivitySummary, AudienceRole, User } from "../../../shared/domain/auth.js";
@@ -28,6 +29,7 @@ class InvalidCredentialAttemptError extends AppError {
 }
 
 export interface AuthDependencies {
+  uploads?: MediaUploads;
   authRepository: AuthRepository;
   userRepository: UserRepository;
   avatarStorage: AvatarStorage;
@@ -176,30 +178,45 @@ export function createAuthUseCases(options: AuthDependencies) {
 
     async updateAvatar(userId: string, file: ImageUpload) {
       const image = validateAvatarUpload(file);
-      const previous = await avatarRepository.findAvatarById(userId);
-      const uploaded = await avatarStorage.upload({ buffer: file.buffer, format: image.format });
-      try {
-        const updated = await avatarRepository.updateAvatar(userId, {
-          publicId: uploaded.publicId,
-          assetId: uploaded.assetId,
-          version: uploaded.version,
-          format: uploaded.format,
-          resourceType: uploaded.resourceType,
-          size: uploaded.bytes
+      return coordinateUpload(options.uploads, ["AVATAR", userId], file.buffer, id, async operation => {
+        const previous = await avatarRepository.findAvatarById(userId);
+        const publicId = `lnfs/avatars/${operation.id}`;
+        if (options.uploads && previous?.publicId === publicId) {
+          await avatarStorage.download({ publicId, version: previous.version, format: previous.format });
+          const user = await userRepository.findById(userId);
+          if (!user || user.status !== "ACTIVE") throw new AppError("unauthenticated", "Phiên đăng nhập không hợp lệ");
+          return publicUser(user);
+        }
+        const uploaded = await avatarStorage.upload({ buffer: file.buffer, format: image.format,
+          ...(options.uploads ? { publicId: operation.id } : {}) });
+        let updated: User | null = null;
+        await persistUpload({ operation, kind: "AVATAR", logger: options.logger,
+          unreferenced: async () => (await avatarRepository.findAvatarById(userId))?.publicId !== uploaded.publicId,
+          matches: async () => { const row = await avatarRepository.findAvatarById(userId); return row?.publicId === uploaded.publicId && row.version === uploaded.version; },
+          remove: () => avatarStorage.destroy(uploaded.publicId),
+          write: () => (operation.transaction ?? withTransaction)(async connection => {
+            updated = await avatarRepository.updateAvatar(userId, {
+              publicId: uploaded.publicId,
+              assetId: uploaded.assetId,
+              version: uploaded.version,
+              format: uploaded.format,
+              resourceType: uploaded.resourceType,
+              size: uploaded.bytes
+            }, connection);
+            if (!updated) throw new AppError("not_found", "Khong tim thay tai khoan");
+          })
         });
-        if (!updated) throw new AppError("not_found", "Khong tim thay tai khoan");
-        if (previous?.publicId) {
+        if (!updated) updated = await userRepository.findById(userId);
+        if (!updated) throw new AppError("unavailable", "Chưa thể đối soát ảnh đại diện; vui lòng thử lại");
+        if (previous?.publicId && previous.publicId !== uploaded.publicId && await operation.canCompensate().catch(() => false)) {
           try {
             await avatarStorage.destroy(previous.publicId);
           } catch {
-            options.logger.warn(`[avatar] old avatar cleanup skipped for user ${userId}`);
+            options.logger.warn(JSON.stringify({ event: "media_upload_cleanup_required", kind: "AVATAR_PREVIOUS", operationId: operation.id }));
           }
         }
         return publicUser(updated);
-      } catch (error) {
-        await avatarStorage.destroy(uploaded.publicId).catch(() => undefined);
-        throw error;
-      }
+      });
     },
 
     async getAvatarFile(userId: string): Promise<AvatarFile> {

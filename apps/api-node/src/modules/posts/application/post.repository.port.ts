@@ -81,7 +81,9 @@ export interface PostRepository {
     status?: PostStatus;
     resolvedAt?: Date | null;
   }, queryable?: TransactionContext): Promise<void>;
-  softDeletePost(postId: string, ownerId: string): Promise<boolean>;
+  lockOwnedPostForDeletion(postId: string, ownerId: string, queryable: TransactionContext): Promise<boolean>;
+  hasDeletionBlockers(postId: string, queryable: TransactionContext): Promise<boolean>;
+  softDeletePost(postId: string, ownerId: string, queryable?: TransactionContext): Promise<boolean>;
   lockOwnedPostForMedia(postId: string, ownerId: string, queryable: TransactionContext): Promise<{
     id: string;
     status: PostStatus;
