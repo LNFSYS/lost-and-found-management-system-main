@@ -6,6 +6,7 @@ export interface Appointment {
   id: string; claimId: string; postId: string; title: string; proposerId: string;
   finderId: string; ownerId: string; status: AppointmentStatus; proposedAt: string;
   handoverPointId: string | null; location: string | null; version: number;
+  itemImageUrl: string | null;
   finderResponse: HandoverResponse; ownerResponse: HandoverResponse;
   noShowUserId: string | null; custodyAuthorized: boolean; completedAt: string | null;
   events: Array<{ id: string; action: string; actorId: string | null; createdAt: string; note?: string | null }>;

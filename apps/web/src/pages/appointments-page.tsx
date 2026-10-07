@@ -1,10 +1,54 @@
-import { CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, RotateCw, ShieldAlert, XCircle } from "lucide-react";
+import { ArrowRight, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, ImageOff, MapPin, MessageCircle, PackageCheck, RotateCw, ShieldAlert, UserRound, X, XCircle, ZoomIn } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useAuth } from "../context/auth-context";
+import { AccessibleDialog } from "../components/accessible-dialog";
 import { api } from "../services/api";
 import { appointmentStatus, displayTime, eventLabel, responseLabel, type Appointment, type AppointmentAction } from "../services/workflow-types";
 import "./workflow-pages.css";
+
+function AppointmentImage({ appointment }: { appointment: Appointment }) {
+  const path = appointment.itemImageUrl ?? null;
+  const [image, setImage] = useState<{ path: string; source: string } | null>(null);
+  const [attempt, setAttempt] = useState(0);
+  const [expanded, setExpanded] = useState(false);
+  const source = image?.path === path ? image.source : null;
+  useEffect(() => {
+    let active = true, objectUrl = "";
+    setImage(null); setExpanded(false);
+    if (path) void api.getPostMedia(path).then(blob => {
+      if (!active) return;
+      objectUrl = URL.createObjectURL(blob); setImage({ path, source: objectUrl });
+    }).catch(() => { if (active) setImage({ path, source: "" }); });
+    return () => { active = false; if (objectUrl) URL.revokeObjectURL(objectUrl); };
+  }, [path, attempt]);
+  return <>
+    <div className="appointment-image">
+      {source ? <button type="button" className="appointment-image__open" title="Phóng to ảnh vật phẩm" aria-label={`Phóng to ảnh ${appointment.title}`} onClick={() => setExpanded(true)}>
+        <img src={source} alt={`Ảnh ${appointment.title}`} onError={() => { if (path) setImage({ path, source: "" }); }} />
+        <span className="appointment-image__zoom" aria-hidden="true"><ZoomIn size={18} /></span>
+      </button> : <div className="appointment-image__placeholder"><ImageOff size={30} />
+        <span>{source === "" ? "Không tải được ảnh" : path ? "Đang tải ảnh..." : "Chưa có ảnh công khai"}</span>
+        {source === "" && <button type="button" title="Tải lại ảnh vật phẩm" aria-label={`Tải lại ảnh ${appointment.title}`} onClick={() => setAttempt(value => value + 1)}><RotateCw size={16} /></button>}
+      </div>}
+    </div>
+    {expanded && source && <div className="custody-modal-overlay" onMouseDown={event => { if (event.target === event.currentTarget) setExpanded(false); }}>
+      <AccessibleDialog className="custody-modal appointment-image-dialog" aria-label="Ảnh vật phẩm" onDismiss={() => setExpanded(false)}>
+        <header><h2>{appointment.title}</h2><button type="button" title="Đóng ảnh" aria-label="Đóng ảnh" onClick={() => setExpanded(false)}><X size={18} /></button></header>
+        <img src={source} alt={`Ảnh ${appointment.title}`} />
+      </AccessibleDialog>
+    </div>}
+  </>;
+}
+
+function AppointmentSchedule({ proposedAt }: { proposedAt: string }) {
+  const date = new Date(proposedAt);
+  return <div className="appointment-schedule">
+    <div className="appointment-date" aria-hidden="true"><strong>{date.getDate().toString().padStart(2, "0")}</strong><small>Tháng {date.getMonth() + 1}</small></div>
+    <time dateTime={proposedAt}><strong>{date.toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit", hour12: false })}</strong>
+      <span>{date.toLocaleDateString("vi-VN", { weekday: "long", day: "2-digit", month: "2-digit", year: "numeric" })}</span></time>
+  </div>;
+}
 
 export function AppointmentsPage() {
   const { appointmentId }=useParams();const [query]=useSearchParams();const claimId=query.get("claimId") ?? undefined;
@@ -55,14 +99,24 @@ export function AppointmentsPage() {
   const ended=selected&&["COMPLETED","CANCELLED","REJECTED"].includes(selected.status);
   const occurred=selected&&new Date(selected.proposedAt).getTime()<=clock;
   const finder=selected?.finderId===user?.id;
-  return <section className="workflow-page">
+  return <section className="workflow-page appointments-page">
     <header className="workflow-heading"><h1><CalendarDays/> Lịch hẹn trả đồ</h1><div><Link to="/appointments">Tất cả lịch</Link><button type="button" title="Tải lại lịch hẹn" aria-label="Tải lại lịch hẹn" disabled={busy} onClick={()=>setReload(v=>v+1)}><RotateCw size={18}/></button></div></header>
     {error&&<p className="workflow-error" role="alert">{error}</p>}
     {loading?<p role="status">Đang tải lịch hẹn...</p>:selected?<>
-      <h2>{selected.title}</h2><span className="workflow-status">{appointmentStatus[selected.status]}</span>
-      <dl className="workflow-facts"><div><dt>Thời gian</dt><dd>{displayTime(selected.proposedAt)}</dd></div><div><dt>Điểm hẹn</dt><dd>{selected.location??"Chưa ghi nhận"}</dd></div>
-        <div><dt>Finder</dt><dd>{responseLabel[selected.finderResponse]}</dd></div><div><dt>Người mất</dt><dd>{responseLabel[selected.ownerResponse]}</dd></div></dl>
-      <Link to={`/claims/${selected.claimId}`}>Mở cuộc trao đổi</Link>
+      <section className="appointment-overview" aria-label="Thông tin lịch hẹn">
+        <AppointmentImage appointment={selected} />
+        <div className="appointment-overview__content">
+          <span className={`workflow-status appointment-status appointment-status--${selected.status.toLowerCase()}`}>{appointmentStatus[selected.status]}</span>
+          <h2>{selected.title}</h2>
+          <AppointmentSchedule proposedAt={selected.proposedAt} />
+          <p className="appointment-location"><MapPin size={18} /><span>{selected.location ?? "Chưa ghi nhận điểm hẹn"}</span></p>
+          <dl className="appointment-responses">
+            <div><dt><UserRound size={16} /> Người nhặt</dt><dd>{responseLabel[selected.finderResponse]}</dd></div>
+            <div><dt><UserRound size={16} /> Người mất</dt><dd>{responseLabel[selected.ownerResponse]}</dd></div>
+          </dl>
+          <Link className="appointment-conversation" to={`/claims/${selected.claimId}`}><MessageCircle size={18} /> Mở cuộc trao đổi <ArrowRight size={16} /></Link>
+        </div>
+      </section>
       {selected.custodyAuthorized&&<p>Staff đã hoàn tất trả đồ tại quầy. Lịch này không dùng xác nhận bàn giao trực tiếp.</p>}
       {selected.version===0&&!selected.custodyAuthorized&&<p className="workflow-error" role="status">Đây là lịch sử cũ, chỉ có thể xem. Cần quản trị đối soát trước khi dùng quy trình xác nhận bàn giao mới; hệ thống không tự chuyển đổi xác nhận cũ.</p>}
       <p><Link to={`/reports?targetType=HANDOVER&targetId=${selected.id}`}>Báo cáo vấn đề bàn giao</Link></p>
@@ -87,7 +141,20 @@ export function AppointmentsPage() {
         <label>Thời gian hẹn<input required type="datetime-local" value={date} disabled={busy} onChange={e=>setDate(e.target.value)}/></label>
         <label>Điểm hẹn<select required value={point} disabled={busy} onChange={e=>setPoint(e.target.value)}><option value="">Chọn điểm hẹn</option>{points.map(p=><option key={p.id} value={p.id}>{p.name} · {p.address}</option>)}</select></label>
         <button type="submit" disabled={busy}><CalendarDays/> Gửi đề xuất</button></form>}
-      {items.length?<ul className="appointment-list">{items.map(a=><li key={a.id}><div><Link to={`/appointments/${a.id}`}><strong>{a.title}</strong></Link><p>{displayTime(a.proposedAt)} · {a.location??"Chưa ghi nhận"}</p></div><span className="workflow-status">{appointmentStatus[a.status]}</span></li>)}</ul>:<p>Chưa có lịch hẹn.</p>}
+      {!error && <p className="appointment-list-count">{total} lịch hẹn</p>}
+      {items.length ? <ul className="appointment-list">{items.map(a => <li key={a.id}>
+        <article className="appointment-card">
+          <AppointmentImage appointment={a} />
+          <div className="appointment-card__body">
+            <div className="appointment-card__meta"><span className={`workflow-status appointment-status appointment-status--${a.status.toLowerCase()}`}>{appointmentStatus[a.status]}</span>
+              <span className="appointment-channel">{a.custodyAuthorized ? <PackageCheck size={15} /> : <UserRound size={15} />}{a.custodyAuthorized ? "Tại kho" : "Trực tiếp"}</span></div>
+            <h2><Link to={`/appointments/${a.id}`}>{a.title}</Link></h2>
+            <AppointmentSchedule proposedAt={a.proposedAt} />
+            <p className="appointment-location"><MapPin size={17} /><span>{a.location ?? "Chưa ghi nhận điểm hẹn"}</span></p>
+          </div>
+          <footer className="appointment-card__footer"><span>{a.finderId === user?.id ? "Bạn là người nhặt" : "Bạn là người mất"}</span><Link to={`/appointments/${a.id}`} aria-label={`Xem lịch hẹn ${a.title}`}>Xem lịch hẹn <ArrowRight size={16} /></Link></footer>
+        </article>
+      </li>)}</ul> : !error && <div className="appointment-empty"><CalendarDays size={36} /><h2>Chưa có lịch hẹn</h2></div>}
       <div className="workflow-pagination"><button aria-label="Trang trước" disabled={page===1||busy} onClick={()=>setPage(p=>p-1)}><ChevronLeft/></button><span>Trang {page} · {total} lịch</span><button aria-label="Trang sau" disabled={page*20>=total||busy} onClick={()=>setPage(p=>p+1)}><ChevronRight/></button></div>
     </>}
   </section>;

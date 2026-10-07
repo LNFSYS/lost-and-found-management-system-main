@@ -28,6 +28,31 @@ async function schedule(f:Parameters<Parameters<typeof withActorJourney>[0]>[0],
 }
 function viewer(id:string,admin=false):AccessTokenPayload{return {sub:id,email:"fixture@example.invalid",roles:[admin?"ADMIN":"STUDENT"],sessionVersion:0};}
 
+test("SQL: appointment previews select public ITEM media only and preserve participant access",isolatedJourney,async()=>runFixture(async(f,s,c)=>{
+  const a=await schedule(f,s,c);
+  const image=randomUUID();const evidence=randomUUID();
+  for(const [id,kind,order] of [[image,"ITEM",1],[evidence,"EVIDENCE",0]] as const){
+    await f.pool.execute(`INSERT INTO post_media (id,post_id,secure_url,public_id,resource_type,media_kind,format,bytes,sort_order)
+      VALUES (?,?,?,?,'image',?,'png',10,?)`,[id,f.ids.found,`private-storage-${id}`,`provider-id-${id}`,kind,order]);
+  }
+  const expected=`/api/posts/${f.ids.found}/media/${image}`;
+  assert.equal((await s.get(f.ids.finder,a.id)).itemImageUrl,expected);
+  assert.equal((await s.get(f.ids.owner,a.id)).itemImageUrl,expected);
+  const list=await s.list(f.ids.owner);assert.equal(list.results[0].itemImageUrl,expected);
+  assert.ok(!JSON.stringify(list).includes("private-storage"));assert.ok(!JSON.stringify(list).includes("provider-id"));
+  assert.equal((await s.list(f.ids.outsider)).total,0);
+  await assert.rejects(s.get(f.ids.outsider,a.id),{code:"forbidden"});
+  await f.pool.execute("UPDATE posts SET visibility_mode='PRIVATE_DETAILS' WHERE id=?",[f.ids.found]);
+  assert.equal((await s.get(f.ids.owner,a.id)).itemImageUrl,null);
+  await f.pool.execute("UPDATE posts SET visibility_mode='PUBLIC',status='HIDDEN' WHERE id=?",[f.ids.found]);
+  assert.equal((await s.get(f.ids.finder,a.id)).itemImageUrl,null);
+  await f.pool.execute("UPDATE posts SET status='OPEN',deleted_at=UTC_TIMESTAMP() WHERE id=?",[f.ids.found]);
+  assert.equal((await s.get(f.ids.finder,a.id)).itemImageUrl,null);
+  await f.pool.execute("UPDATE posts SET deleted_at=NULL WHERE id=?",[f.ids.found]);
+  await f.pool.execute("DELETE FROM post_media WHERE id=?",[image]);
+  assert.equal((await s.get(f.ids.owner,a.id)).itemImageUrl,null);
+}));
+
 test("SQL: appointment actions and reminder enqueue finish with a one-connection pool",isolatedJourney,async()=>runFixture(async(f,_s,c)=>{
   const [rows]=await f.pool.query<RowDataPacket[]>("SELECT DATABASE() name");
   const pool=mysql.createPool({host:"127.0.0.1",port:Number(process.env.LNFS_TEST_DB_PORT),database:rows[0].name,

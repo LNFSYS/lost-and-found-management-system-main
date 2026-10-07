@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { readFileSync } from "node:fs";
 import type { Appointment } from "../src/services/workflow-types";
 
 const finder="11111111-1111-4111-8111-111111111111";
@@ -7,13 +8,15 @@ const claim="33333333-3333-4333-8333-333333333333";
 const id="44444444-4444-4444-8444-444444444444";
 const post="55555555-5555-4555-8555-555555555555";
 const point="66666666-6666-4666-8666-666666666666";
+const itemImage=readFileSync(new URL("./fixtures/appointment-item.png",import.meta.url));
 function appointment(overrides:Partial<Appointment>={}):Appointment{return {id,claimId:claim,postId:post,title:"Điện thoại Apple iPhone màu đỏ mận",proposerId:finder,finderId:finder,ownerId:owner,
   status:"ACCEPTED",proposedAt:new Date(Date.now()-40*60000).toISOString(),handoverPointId:point,location:"Campus Lost & Found Desk",version:2,finderResponse:"PENDING",ownerResponse:"PENDING",noShowUserId:null,custodyAuthorized:false,completedAt:null,
-  events:[{id:"proposal",action:"PROPOSED",actorId:finder,createdAt:new Date().toISOString()}],...overrides};}
+  itemImageUrl:`/api/posts/${post}/media/item-image`,events:[{id:"proposal",action:"PROPOSED",actorId:finder,createdAt:new Date().toISOString()}],...overrides};}
 async function prepare(page:Page,userId=finder,admin=false){
   await page.route("**/api/**",async route=>{const path=new URL(route.request().url()).pathname;
     if(path==="/api/auth/refresh")return route.fulfill({json:{accessToken:"fixture-token",accessTokenExpiresIn:"15m",user:{id:userId,email:"fixture@example.invalid",fullName:"Người dùng thử",roles:admin?["USER","ADMIN"]:["USER"],status:"ACTIVE",studentCode:null,phoneNumber:null,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()}}});
     if(path==="/api/notifications")return route.fulfill({json:{items:[],unreadTotal:0}});
+    if(path===`/api/posts/${post}/media/item-image`)return route.fulfill({contentType:"image/png",body:itemImage});
     if(path==="/api/handover-points")return route.fulfill({json:{handoverPoints:[{id:point,name:"Campus Lost & Found Desk",address:"Sảnh A",isActive:true}]}});
     if(path==="/api/appointments")return route.fulfill({json:{results:[appointment()],total:1}});
     if(path.startsWith("/api/appointments/"))return route.fulfill({json:appointment()});
@@ -80,3 +83,67 @@ test("late acknowledgement from A cannot replace B or unlock B's pending action"
   }finally{releaseA();releaseB();}
 });
 test("User cannot open the Admin audit workspace",async({page})=>{await prepare(page);let called=false;await page.route("**/api/admin/audit*",route=>{called=true;return route.fulfill({status:403,json:{message:"Không được phép"}});});await page.goto("/admin/audit");await expect(page).not.toHaveURL("/admin/audit");expect(called).toBe(false);});
+
+for(const width of [1440,768,390,320])test(`appointment cards show real media, schedule and status without overlap at ${width}px`,async({page},info)=>{
+  await page.setViewportSize({width,height:900});await prepare(page);
+  const records=[
+    appointment({title:"Bình nước màu đỏ nắp đen",proposedAt:"2026-10-08T02:30:00Z"}),
+    appointment({id:"pending",title:"Bình nước thể thao 500 ml",status:"PENDING",proposedAt:"2026-10-09T06:00:00Z"}),
+    appointment({id:"completed",title:"Bình nước màu đỏ đã nhận tại kho",status:"COMPLETED",custodyAuthorized:true,completedAt:"2026-10-06T06:00:00Z"})
+  ];
+  let authorizedMedia=0;
+  await page.route(`**/api/posts/${post}/media/item-image`,route=>{
+    if(route.request().headers().authorization==="Bearer fixture-token")authorizedMedia++;
+    return route.fulfill({contentType:"image/png",body:itemImage});
+  });
+  await page.route(/\/api\/appointments(?:\?.*)?$/,route=>route.fulfill({json:{results:records,total:3}}));
+  await page.route(`**/api/appointments/${id}`,route=>route.fulfill({json:records[0]}));
+  await page.goto("/appointments");
+  const cards=page.locator(".appointment-card");await expect(cards).toHaveCount(3);
+  for(const record of records){
+    const card=cards.filter({has:page.getByRole("heading",{name:record.title,exact:true})});
+    await expect(card.getByRole("img",{name:`Ảnh ${record.title}`,exact:true})).toBeVisible();
+    await expect.poll(()=>card.locator("img").evaluate((image:HTMLImageElement)=>image.complete&&image.naturalWidth===600)).toBe(true);
+    await expect(card.locator("time")).toHaveAttribute("datetime",record.proposedAt);
+    await expect(card.locator(".appointment-location")).toContainText("Campus Lost & Found Desk");
+  }
+  await expect(cards.nth(0).getByText("Đã chấp nhận",{exact:true})).toBeVisible();
+  await expect(cards.nth(1).getByText("Chờ phản hồi",{exact:true})).toBeVisible();
+  await expect(cards.nth(2).getByText("Đã trả đồ",{exact:true})).toBeVisible();
+  const tops=await cards.evaluateAll(elements=>elements.map(element=>element.getBoundingClientRect().top));
+  if(width===1440)expect(tops).toEqual([tops[0],tops[0],tops[0]]);
+  else if(width===768){expect(tops[0]).toBe(tops[1]);expect(tops[2]).toBeGreaterThan(tops[1]);}
+  else{expect(tops[1]).toBeGreaterThan(tops[0]);expect(tops[2]).toBeGreaterThan(tops[1]);}
+  await expect.poll(()=>authorizedMedia).toBe(3);
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
+  await page.screenshot({path:info.outputPath(`appointment-cards-${width}.png`),fullPage:true});
+  await cards.nth(0).getByRole("link",{name:`Xem lịch hẹn ${records[0].title}`,exact:true}).click();
+  await expect(page).toHaveURL(`/appointments/${id}`);
+  await expect(page.locator(".appointment-overview").getByRole("img",{name:`Ảnh ${records[0].title}`,exact:true})).toBeVisible();
+  await expect(page.locator(".appointment-overview").getByRole("heading",{name:records[0].title})).toBeVisible();
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
+  await page.screenshot({path:info.outputPath(`appointment-item-detail-${width}.png`),fullPage:true});
+});
+
+test("appointment media failure is recoverable and image preview supports Escape/focus restoration",async({page})=>{
+  await prepare(page);let attempts=0;
+  await page.route(`**/api/posts/${post}/media/item-image`,route=>++attempts===1
+    ?route.fulfill({status:404,json:{message:"Image unavailable"}}):route.fulfill({contentType:"image/png",body:itemImage}));
+  await page.goto(`/appointments/${id}`);
+  await expect(page.getByText("Không tải được ảnh",{exact:true})).toBeVisible();
+  await page.getByRole("button",{name:`Tải lại ảnh ${appointment().title}`,exact:true}).click();
+  const open=page.getByRole("button",{name:`Phóng to ảnh ${appointment().title}`,exact:true});
+  await expect(open).toBeVisible();await open.focus();await page.keyboard.press("Enter");
+  const dialog=page.getByRole("dialog",{name:"Ảnh vật phẩm",exact:true});await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole("img",{name:`Ảnh ${appointment().title}`,exact:true})).toBeVisible();await page.keyboard.press("Escape");
+  await expect(dialog).toHaveCount(0);await expect(open).toBeFocused();expect(attempts).toBe(2);
+  await expect(page.getByRole("button",{name:"Xác nhận đã giao đồ",exact:true})).toBeDisabled();
+});
+
+test("missing or private appointment media shows an honest placeholder without fetching evidence",async({page})=>{
+  await prepare(page);let mediaReads=0;
+  await page.route("**/api/posts/*/media/*",route=>{mediaReads++;return route.fulfill({status:403});});
+  await page.route(/\/api\/appointments(?:\?.*)?$/,route=>route.fulfill({json:{results:[appointment({itemImageUrl:null})],total:1}}));
+  await page.goto("/appointments");await expect(page.getByText("Chưa có ảnh công khai",{exact:true})).toBeVisible();
+  await expect(page.locator(".appointment-card img")).toHaveCount(0);expect(mediaReads).toBe(0);
+});

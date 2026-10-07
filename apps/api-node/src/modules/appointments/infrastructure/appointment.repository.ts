@@ -9,6 +9,10 @@ const joins = `FROM return_appointments a JOIN claims c ON c.id=a.claim_id
   LEFT JOIN return_appointment_workflows w ON w.appointment_id=a.id
   LEFT JOIN handover_points hp ON hp.id=a.handover_point_id`;
 const select = `SELECT a.*, identity_post.title, ${claimantIdSql} owner_id, ${finderIdSql} finder_id,
+  identity_post.id item_post_id,
+  (SELECT pm.id FROM post_media pm WHERE pm.post_id=identity_post.id AND pm.media_kind='ITEM' AND pm.resource_type='image'
+    AND identity_post.visibility_mode='PUBLIC' AND identity_post.status<>'HIDDEN' AND identity_post.deleted_at IS NULL
+    ORDER BY pm.sort_order,pm.created_at,pm.id LIMIT 1) item_media_id,
   hp.name location, COALESCE(w.version,0) version, COALESCE(w.finder_response,'PENDING') finder_response,
   COALESCE(w.owner_response,'PENDING') owner_response,w.no_show_user_id ${joins}`;
 function iso(value: Date | string | null): string | null { return value == null ? null : new Date(value).toISOString(); }
@@ -16,6 +20,7 @@ function map(r: RowDataPacket): Appointment {
   return { id: r.id, claimId: r.claim_id, postId: r.post_id, title: r.title, proposerId: r.proposer_id,
     finderId: r.finder_id, ownerId: r.owner_id, status: r.status, proposedAt: iso(r.proposed_at)!,
     handoverPointId: r.handover_point_id, location: r.location ?? r.custom_location, version: Number(r.version),
+    itemImageUrl: r.item_media_id ? `/api/posts/${r.item_post_id}/media/${r.item_media_id}` : null,
     finderResponse: r.finder_confirmed_at ? "CONFIRMED" : r.finder_response,
     ownerResponse: r.owner_confirmed_at ? "CONFIRMED" : r.owner_response,
     noShowUserId: r.no_show_user_id, custodyAuthorized: Boolean(r.custody_authorized_at), completedAt: iso(r.completed_at), events: [] };

@@ -9,7 +9,7 @@ import type { NotificationEmailQueue, NotificationRepository } from "../../notif
 function fixture() {
   let time=new Date("2026-10-06T01:00:00Z");let safe=true;let ready=true;let inTransaction=false;
   const a:Appointment={id:"appointment",claimId:"claim",postId:"post",title:"Keys",finderId:"finder",ownerId:"owner",proposerId:"finder",status:"ACCEPTED",
-    proposedAt:"2026-10-06T00:30:00Z",handoverPointId:"point",location:"Desk",version:1,finderResponse:"PENDING",ownerResponse:"PENDING",noShowUserId:null,custodyAuthorized:false,completedAt:null,events:[]};
+    proposedAt:"2026-10-06T00:30:00Z",handoverPointId:"point",location:"Desk",itemImageUrl:null,version:1,finderResponse:"PENDING",ownerResponse:"PENDING",noShowUserId:null,custodyAuthorized:false,completedAt:null,events:[]};
   const requests=new Map<string,{appointmentId:string;hash:string}>();let updates=0;let reminders=0;const emails:string[]=[];
   const repo:AppointmentRepository={schemaReady:async()=>ready,context:async()=>({claimId:"claim",postId:"post",finderId:"finder",ownerId:"owner",eligible:true,blocked:false}),assertSafe:async()=>safe,
     find:async(_id,tx)=>{assert.ok(!inTransaction||tx,"Never reacquire a pool connection while holding a transaction");return structuredClone(a);},list:async()=>({results:[a],total:1}),replay:async(user,key)=>requests.get(`${user}:${key}`)??null,
