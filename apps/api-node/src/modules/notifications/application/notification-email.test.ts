@@ -58,6 +58,42 @@ function repository(overrides: Partial<NotificationEmailRepository> = {}) {
   } satisfies NotificationEmailRepository;
 }
 
+for (const closedDuringDelivery of [false, true]) {
+  test(`matching email revalidates open posts before sending (closed=${closedDuringDelivery})`, async () => {
+    const item = { id: "match-outbox", notificationId: "match-notification", recipientUserId: "user-a",
+      eventType: "MATCH" as const, entityType: "POST_MATCH", entityId: "post-a", roomId: null,
+      deliveryMode: "IMMEDIATE" as const, idempotencyKey: "matching-key", attemptCount: 1 };
+    let claimed = false, reads = 0, cancelled = false;
+    let sent: { text: string; html: string } | undefined;
+    const worker = createNotificationEmailWorker({ repository: repository({
+      claimDue: async () => { if (claimed) return []; claimed = true; return [item]; },
+      listLease: async () => [{ ...item, email: "fixture@example.invalid", emailVerified: true, accountActive: true,
+        notificationUnread: true, entityAccessible: ++reads === 1 || !closedDuringDelivery }],
+      cancelLease: async () => { cancelled = true; }
+    }), emailDelivery: { send: async input => { sent = input; return {}; } }, id: () => "lease",
+    frontendUrl: "https://lnfs.example", logger: { warn() {} } });
+    const result = await worker.runOnce();
+    assert.equal(reads, 2);
+    assert.equal(result.sent, closedDuringDelivery ? 0 : 1);
+    assert.equal(cancelled, closedDuringDelivery);
+    if (!closedDuringDelivery) {
+      assert.match(sent!.text, /https:\/\/lnfs.example\/posts\/post-a\/matches/);
+      assert.match(sent!.html, /GỢI Ý PHÙ HỢP MỚI/);
+      assert.doesNotMatch(sent!.html, /wallet|evidence|private body/i);
+    }
+  });
+}
+
+test("disabled matching email preference creates no optional email", async () => {
+  let enqueued = false;
+  const queue = createNotificationEmailQueue({ repository: repository({
+    getPreferences: async () => ({ ...preferences, claimMode: "DISABLED" }),
+    enqueue: async () => { enqueued = true; }
+  }), id: () => "outbox", chatDelayMinutes: 5, digestDelayMinutes: 60 });
+  await queue.enqueue({ notification: { ...notification, type: "MATCH_FOUND", entityType: "POST_MATCH" }, recipientUserId: "user-a", eventType: "MATCH" }, {} as never);
+  assert.equal(enqueued, false);
+});
+
 test("notification email queue clamps chat delay to the required five-to-ten minute window", async () => {
   let dueAt: Date | undefined;
   const queue = createNotificationEmailQueue({

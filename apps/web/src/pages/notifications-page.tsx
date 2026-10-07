@@ -1,9 +1,11 @@
-import { Bell, CheckCheck, CheckCircle2, MessageCircle, XCircle } from "lucide-react";
+import { Bell, CheckCheck, CheckCircle2, MessageCircle, ScanSearch, XCircle } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { api, type AppNotification, type CustodyRequestDetailResponse } from "../services/api";
+import { notificationDestination } from "../services/notification-destination";
 
 function icon(type: AppNotification["type"]) {
+  if (type === "MATCH_FOUND") return <ScanSearch size={18} />;
   if (type === "CLAIM_ACCEPTED") return <CheckCircle2 size={18} />;
   if (type === "CLAIM_REJECTED" || type === "CLAIM_WITHDRAWN") return <XCircle size={18} />;
   return <MessageCircle size={18} />;
@@ -34,10 +36,7 @@ export function NotificationsPage() {
       setItems((current) => current.map((entry) => entry.id === item.id ? { ...entry, isRead: true } : entry));
       void api.markNotificationRead(item.id).catch(() => undefined);
     }
-    if (item.entityType === "CLAIM" && item.entityId) navigate(`/claims/${item.entityId}`);
-    if (["APPOINTMENT","APPOINTMENT_REMINDER"].includes(item.entityType ?? "") && item.entityId) navigate(`/appointments/${item.entityId}`);
-    if (item.entityType === "POST" && item.entityId) navigate(`/posts/${item.entityId}`);
-    if (item.entityType === "CUSTODY_REQUEST" && item.entityId) setSearch({ custodyRequestId: item.entityId });
+    navigate(notificationDestination(item));
   }
 
   function markAllRead() {

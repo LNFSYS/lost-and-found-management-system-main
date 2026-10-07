@@ -108,7 +108,8 @@ export function createServices(persistence: Persistence, config: typeof env = en
   const reportService = createReportUseCases({
     repository: reportRepository, transaction, id, hashPayload: security.hashToken
   });
-  const matchingService = createMatchingUseCases({ matchingRepository, postRepository, idFactory: id });
+  const matchingService = createMatchingUseCases({ matchingRepository, postRepository, idFactory: id,
+    delivery: { transaction, notifications: notificationRepository, emails: notificationEmailQueue } });
   const postService = createPostUseCases({
     postRepository, matchingRepository, matchingService,
     withTransaction: transaction, id, mediaStorage: postMediaStorage, logger: console, uploads: mediaUploads

@@ -74,7 +74,7 @@ export function NotificationPreferencesPage() {
           </label>)}</div>
         </fieldset>
         <fieldset>
-          <legend><MailCheck size={18} /> Cập nhật trạng thái claim</legend>
+          <legend><MailCheck size={18} /> Gợi ý matching và trạng thái yêu cầu</legend>
           <div className="notification-mode-grid">{modes.map((mode) => <label key={`claim-${mode.value}`} className={preferences.claimMode === mode.value ? "selected" : ""}>
             <input type="radio" name="claimMode" value={mode.value} checked={preferences.claimMode === mode.value} onChange={() => setPreferences({ ...preferences, claimMode: mode.value })} />
             <strong>{mode.label}</strong><small>{mode.detail}</small>

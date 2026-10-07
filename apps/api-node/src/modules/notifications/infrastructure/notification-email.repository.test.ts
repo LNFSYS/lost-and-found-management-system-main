@@ -43,3 +43,17 @@ test("expired PROCESSING emails are quarantined, never reclaimed or revived by s
     assert.match(sql, /lease_expires_at > UTC_TIMESTAMP\(\)/);
   }
 });
+
+test("matching email access requires the exact pair, active owned post and no dismissal", async () => {
+  let query = "";
+  const repository = createNotificationEmailRepository({ execute: async (sql: string) => { query = sql; return [[], []] as never; } } as unknown as SqlExecutor);
+  await repository.listLease("lease");
+  assert.match(query, /o.event_type = 'MATCH'/);
+  assert.match(query, /n.dedupe_key = CONCAT\('matching:', mr.id, ':', o.recipient_user_id\)/);
+  assert.match(query, /mr.total_score >= 0.6/);
+  assert.match(query, /lost_post.user_id = o.recipient_user_id/);
+  assert.match(query, /found_post.user_id = o.recipient_user_id/);
+  assert.match(query, /lost_post.status IN \('OPEN','MATCHED'\)/);
+  assert.match(query, /found_post.status IN \('OPEN','MATCHED'\)/);
+  assert.match(query, /NOT EXISTS\(SELECT 1 FROM match_suggestion_dismissals/);
+});

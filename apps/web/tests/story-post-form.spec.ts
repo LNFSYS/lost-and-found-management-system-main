@@ -212,14 +212,115 @@ test("creates a private FOUND post with a handover point", async ({ page }) => {
   expect(payload.visibilityMode).toBe("PRIVATE_DETAILS");
 });
 
-test("opens the persisted matching analysis after a no-match scan", async ({ page }) => {
+for (const type of ["LOST", "FOUND"] as const) {
+  for (const width of [1440, 390]) {
+    test(`shows a one-time no-match popup after creating ${type} at ${width}px`, async ({ page }, testInfo) => {
+      await page.setViewportSize({ width, height: 844 });
+      await page.emulateMedia({ reducedMotion: "reduce" });
+      await prepare(page, () => undefined);
+      await page.route(/\/api\/posts\/post-1\/matches(?:\?.*)?$/, route => route.fulfill({
+        status: 200, contentType: "application/json", body: JSON.stringify({ ...matchResponse(), source: { ...sourcePost, type } })
+      }));
+      await page.route("**/api/staff/custody-requests/mine/post/post-1", route => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ request: null }) }));
+      if (type === "FOUND") await page.locator("#two-sides").getByRole("button", { name: /Tôi nhặt được đồ/i }).click();
+      await fillCommonForm(page);
+      await page.locator(".story-post-form button[type=submit]").click();
+
+      await expect(page).toHaveURL(/\/posts\/post-1\/matches$/, { timeout: 6_000 });
+      const dialog = page.getByRole("dialog", { name: "Chưa có gợi ý phù hợp" });
+      await expect(dialog).toBeVisible();
+      await expect(dialog).toContainText("chúng tôi sẽ thông báo đến email của bạn theo cài đặt thông báo");
+      await expect(dialog).toContainText("Bài đã đóng sẽ không nhận thông báo matching mới");
+      const close = dialog.getByRole("button", { name: "Đóng thông báo" });
+      const understood = dialog.getByRole("button", { name: "Đã hiểu" });
+      await expect(close).toBeFocused();
+      await page.keyboard.press("Shift+Tab");
+      await expect(understood).toBeFocused();
+      await page.keyboard.press("Tab");
+      await expect(close).toBeFocused();
+      await expect(dialog.getByRole("link", { name: "Xem bài đăng cộng đồng" })).toBeInViewport({ ratio: 1 });
+      expect(await dialog.evaluate(element => {
+        const rect = element.getBoundingClientRect();
+        return rect.left >= 0 && rect.top >= 0 && rect.right <= innerWidth && rect.bottom <= innerHeight
+          && element.scrollWidth <= element.clientWidth;
+      })).toBe(true);
+      await page.screenshot({ path: testInfo.outputPath("no-matches-popup.png") });
+      await page.keyboard.press("Escape");
+      await expect(dialog).toHaveCount(0);
+      await expect(page.locator(".matches-empty h2")).toBeFocused();
+      await page.getByRole("button", { name: "Tính lại matching" }).click();
+      await expect(page.getByRole("button", { name: "Tính lại matching" })).toBeEnabled();
+      await expect(dialog).toHaveCount(0);
+      await page.reload();
+      await expect(page.locator(".matches-empty")).toBeVisible();
+      await expect(dialog).toHaveCount(0);
+    });
+  }
+}
+
+test("opens community posts from the no-match popup", async ({ page }) => {
   await prepare(page, () => undefined);
   await fillCommonForm(page);
   await page.locator(".story-post-form button[type=submit]").click();
+  const dialog = page.getByRole("dialog", { name: "Chưa có gợi ý phù hợp" });
+  await dialog.getByRole("link", { name: "Xem bài đăng cộng đồng" }).click();
+  await expect(page).toHaveURL(/\/posts$/);
+  await expect(dialog).toHaveCount(0);
+  await page.goBack();
+  await expect(page.locator(".matches-empty")).toBeVisible();
+  await expect(dialog).toHaveCount(0);
+});
 
-  await expect(page).toHaveURL(/\/posts\/post-1\/matches$/, { timeout: 6_000 });
-  await expect(page.getByRole("heading", { name: /So sánh bài/i })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Chưa có gợi ý phù hợp" })).toBeVisible();
+test("does not show a no-match popup when creation has a candidate", async ({ page }) => {
+  await prepare(page, () => undefined, true);
+  await fillCommonForm(page);
+  await page.locator(".story-post-form button[type=submit]").click();
+  await expect(page.locator(".match-analysis-card")).toBeVisible();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+});
+
+test("weak-only results still show the no-suitable-match popup without hiding saved candidates", async ({ page }) => {
+  await prepare(page, () => undefined, true);
+  const response = matchResponse(true);
+  await page.route(/\/api\/posts\/post-1\/matches(?:\?.*)?$/, route => route.fulfill({ status: 200, contentType: "application/json",
+    body: JSON.stringify({ ...response, results: [{ ...response.results[0], totalScore: 0.59, scoreTier: "WEAK" }] }) }));
+  await fillCommonForm(page);
+  await page.locator(".story-post-form button[type=submit]").click();
+  const dialog = page.getByRole("dialog", { name: "Chưa có gợi ý phù hợp" });
+  await dialog.getByRole("button", { name: "Đã hiểu" }).click();
+  await expect(page.locator(".match-analysis-card")).toBeVisible();
+  await expect(page.getByRole("heading", { name: /So sánh bài/ })).toBeFocused();
+});
+
+test("opens owned matching results from a new-match notification", async ({ page }) => {
+  await prepare(page, () => undefined, true);
+  await page.route(/\/api\/notifications(?:\?.*)?$/, route => route.fulfill({ status: 200, contentType: "application/json",
+    body: JSON.stringify({ items: [{ id: "match-notification", type: "MATCH_FOUND", title: "Có gợi ý phù hợp mới cho bài đăng của bạn",
+      body: "Mở kết quả matching để kiểm tra.", entityType: "POST_MATCH", entityId: "post-1", isRead: false, readAt: null, createdAt: "2026-10-07T08:00:00.000Z" }] }) }));
+  await page.route("**/api/notifications/match-notification/read", route => route.fulfill({ status: 200, contentType: "application/json", body: "{}" }));
+  await page.goto("/notifications");
+  await page.getByRole("button", { name: /Có gợi ý phù hợp mới cho bài đăng của bạn/ }).click();
+  await expect(page).toHaveURL(/\/posts\/post-1\/matches$/);
+  await expect(page.locator(".match-analysis-card")).toBeVisible();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+});
+
+test("does not show a no-match popup for existing posts or failed matching reads", async ({ page }) => {
+  await prepare(page, () => undefined);
+  await page.goto("/posts/post-1/matches");
+  await expect(page.locator(".matches-empty")).toBeVisible();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  let reads = 0;
+  await page.route(/\/api\/posts\/post-1\/matches(?:\?.*)?$/, route => {
+    reads += 1;
+    return route.fulfill({ status: reads === 1 ? 200 : 503, contentType: "application/json",
+      body: JSON.stringify(reads === 1 ? matchResponse() : { error: { code: "unavailable", message: "Không đọc được matching" } }) });
+  });
+  await page.goto("/home");
+  await fillCommonForm(page);
+  await page.locator(".story-post-form button[type=submit]").click();
+  await expect(page.getByRole("heading", { name: "Không mở được kết quả matching" })).toBeVisible();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
 });
 
 test("hides the viewer's own LOST match but keeps inactive matching posts visible", async ({ page }) => {
@@ -255,6 +356,7 @@ test("opens My Posts from the top navigation after matching", async ({ page }) =
   await page.locator(".story-post-form button[type=submit]").click();
 
   await expect(page).toHaveURL(/\/posts\/post-1\/matches$/, { timeout: 6_000 });
+  await page.getByRole("dialog", { name: "Chưa có gợi ý phù hợp" }).getByRole("button", { name: "Đã hiểu" }).click();
   await page.locator(".topbar").getByRole("link", { name: "Bài của tôi" }).click();
   await expect(page).toHaveURL(/\/my-posts$/);
   await expect(page.getByRole("tab", { name: "Bài đăng của tôi" })).toHaveAttribute("aria-selected", "true");

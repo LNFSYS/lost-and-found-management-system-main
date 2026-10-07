@@ -336,7 +336,9 @@ export function HomePage() {
       setSuggestions(items);
       setWorkflowPhase(items.length ? "results" : "no-results");
       window.setTimeout(() => {
-        if (requestId === workflowRequest.current) navigate(`/posts/${event.post.id}/matches`);
+        if (requestId === workflowRequest.current) navigate(`/posts/${event.post.id}/matches`, {
+          state: { createdPostId: event.post.id }
+        });
       }, 650);
     } catch (reason) {
       if (requestId !== workflowRequest.current) return;

@@ -1,4 +1,4 @@
-import type { MatchingRefreshJob, MatchingRepository } from "../application/matching.repository.port.js";
+import type { MatchingRefreshJob, MatchingRepository, UnnotifiedMatch } from "../application/matching.repository.port.js";
 import { AppError } from "../../../shared/domain/app-error.js";
 
 export type { MatchingRepository } from "../application/matching.repository.port.js";
@@ -301,6 +301,33 @@ export function createMatchingRepository(pool: SqlExecutor, withTransaction: Sql
         for (const match of matches) await upsertResult(connection, source, match);
         return true;
       });
+    },
+
+    async lockUnnotifiedMatches(postId: string, minimumScore: number, transaction: TransactionContext): Promise<UnnotifiedMatch[]> {
+      const [rows] = await sqlExecutor(transaction).execute<RowDataPacket[]>(
+        `SELECT mr.id, mr.lost_post_id, mr.found_post_id,
+          lost_post.user_id AS lost_user_id, found_post.user_id AS found_user_id,
+          EXISTS(SELECT 1 FROM match_suggestion_dismissals d WHERE d.match_id = mr.id
+            AND d.user_id = lost_post.user_id AND d.source_post_id = lost_post.id) AS lost_dismissed,
+          EXISTS(SELECT 1 FROM match_suggestion_dismissals d WHERE d.match_id = mr.id
+            AND d.user_id = found_post.user_id AND d.source_post_id = found_post.id) AS found_dismissed
+         FROM match_results mr ${activeMatchJoin}
+         WHERE (mr.lost_post_id = ? OR mr.found_post_id = ?) AND mr.is_notified = FALSE
+           AND mr.total_score >= ? AND ${activeMatchWhere}
+           AND lost_post.type = 'LOST' AND found_post.type = 'FOUND'
+           AND lost_post.user_id <> found_post.user_id
+         ORDER BY mr.id ASC LIMIT 100 FOR UPDATE`,
+        [postId, postId, minimumScore]
+      );
+      return rows.map(row => ({
+        id: row.id, lostPostId: row.lost_post_id, foundPostId: row.found_post_id,
+        lostUserId: row.lost_user_id, foundUserId: row.found_user_id,
+        lostDismissed: Boolean(row.lost_dismissed), foundDismissed: Boolean(row.found_dismissed)
+      }));
+    },
+
+    async markNotified(matchId: string, transaction: TransactionContext) {
+      await sqlExecutor(transaction).execute("UPDATE match_results SET is_notified = TRUE WHERE id = ?", [matchId]);
     },
 
     async listForPost(postId: string, minimumScore: number, viewerId?: string) {

@@ -4887,6 +4887,16 @@ textarea {
 }
 
 @media (max-width: 900px) {
+  .topbar .notification-center {
+    position: static;
+  }
+
+  .topbar .notification-popover {
+    top: calc(100% + 8px);
+    right: 14px;
+    z-index: 60;
+  }
+
   .topbar {
     flex-wrap: wrap;
     gap: 12px;
@@ -9308,6 +9318,25 @@ textarea {
   background: #fff;
   box-shadow: 0 24px 48px rgba(15, 23, 42, 0.22);
   animation: modalPop 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.custody-modal.no-matches-dialog {
+  width: min(100%, 560px);
+  max-height: calc(100dvh - 48px);
+  overflow-y: auto;
+  border-radius: 8px;
+}
+
+.no-matches-dialog .custody-modal__header { align-items: center; padding-right: 34px; }
+.no-matches-dialog h2 { margin: 0; color: #17324d; font-size: 20px; line-height: 1.35; overflow-wrap: anywhere; }
+.no-matches-dialog > p { margin: 0 0 24px; color: #52677b; font-size: 15px; line-height: 1.7; }
+.no-matches-dialog .close-btn { width: 32px; height: 32px; display: grid; place-items: center; }
+.no-matches-dialog .custody-modal-actions { flex-wrap: wrap; }
+.no-matches-dialog .custody-modal-actions > * { min-height: 44px; justify-content: center; white-space: normal; text-align: center; }
+
+@media (max-width: 600px) {
+  .custody-modal.no-matches-dialog { padding: 20px; max-height: calc(100dvh - 28px); }
+  .no-matches-dialog .custody-modal-actions { display: grid; grid-template-columns: minmax(0, 1fr); }
 }
 
 @keyframes modalPop {
