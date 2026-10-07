@@ -137,6 +137,10 @@ export interface WarehouseClaimReview {
 }
 
 export interface WarehouseRepository {
+  listApprovals(itemId: string, db?: TransactionContext): Promise<Array<{ id: string; itemId: string; requesterId: string; requesterName: string; approverName: string | null; target: "DISPOSED" | "DONATED" | "TRANSFERRED"; reason: string; status: string; createdAt: string; approvedAt: string | null; executedAt: string | null }>>;
+  listAttachedProofs(itemId: string): Promise<Array<{ id: string }>>;
+  listRetentionAlerts(days: number, db: TransactionContext): Promise<Array<{ id: string; deadline: string; overdue: boolean }>>;
+  listStaffIds(db: TransactionContext): Promise<string[]>;
   openIntakeSession(id: string, actorId: string, custodyRequestId: string | null, db: TransactionContext): Promise<void>;
   lockIntakeSession(id: string, db: TransactionContext): Promise<IntakeSession | null>;
   listIntakeImages(intakeKey: string, db: TransactionContext): Promise<WarehouseImageRecord[]>;
@@ -167,6 +171,7 @@ export interface WarehouseRepository {
   lockFoundPost(postId: string, db: TransactionContext): Promise<boolean>;
   hasItemForPost(postId: string, db: TransactionContext): Promise<boolean>;
   hasBlockingCases(postId: string | null, db: TransactionContext, completingClaimId?: string, itemId?: string): Promise<boolean>;
+  blockingCaseKinds(postId: string | null, db: TransactionContext, completingClaimId?: string, itemId?: string): Promise<string[]>;
   verifiedRecipient(claimId: string, postId: string | null, recipientId: string, db: TransactionContext, itemId?: string): Promise<boolean>;
   listVerifiedRecipients(postId: string | null, itemId?: string): Promise<Array<{ claimId: string; recipientId: string; fullName: string; }>>;
   listReturnClaimReviews(postId: string | null, itemId?: string): Promise<WarehouseClaimReview[]>;
@@ -197,6 +202,7 @@ export interface WarehouseRepository {
   getStats(): Promise<WarehouseDashboardStats>;
   listHandoverCounts(): Promise<HandoverItemCount[]>;
   listItems(input: {
+    overdue?: boolean;
     q?: string;
     status?: WarehouseStatus;
     handoverPointId?: string;

@@ -51,9 +51,10 @@ export function createStaffRoutes({ warehouseController, custodyRequestControlle
   staffRoutes.get("/warehouse-proofs/:id", (req, res, next) => warehouseController.getProof(req, res).catch(next));
   staffRoutes.post("/warehouse-items/:id/reserve", (req, res, next) => warehouseController.reserveItem(req, res).catch(next));
   staffRoutes.post("/warehouse-items/:id/release-reservation", (req, res, next) => warehouseController.releaseReservation(req, res).catch(next));
-  staffRoutes.post("/warehouse-items/:id/legal-hold", (req, res, next) => warehouseController.legalHold(req, res).catch(next));
-  staffRoutes.post("/warehouse-items/:id/disposition", (req, res, next) => warehouseController.requestDisposition(req, res).catch(next));
-  staffRoutes.post("/warehouse-approvals/:id/approve", (req, res, next) => warehouseController.approveDisposition(req, res).catch(next));
+  staffRoutes.post("/warehouse-items/:id/legal-hold", requireAnyRole("ADMIN"), (req, res, next) => warehouseController.legalHold(req, res).catch(next));
+  staffRoutes.get("/warehouse-items/:id/disposition", (req, res, next) => warehouseController.dispositionContext(req, res).catch(next));
+  staffRoutes.post("/warehouse-items/:id/disposition", requireAnyRole("ADMIN"), (req, res, next) => warehouseController.requestDisposition(req, res).catch(next));
+  staffRoutes.post("/warehouse-approvals/:id/approve", requireAnyRole("ADMIN"), (req, res, next) => warehouseController.approveDisposition(req, res).catch(next));
   staffRoutes.post("/warehouse-approvals/:id/execute", (req, res, next) => warehouseController.executeDisposition(req, res).catch(next));
   staffRoutes.patch("/warehouse-items/:id", (req, res, next) => warehouseController.updateItem(req, res).catch(next));
   staffRoutes.post("/warehouse-items/:id/return", (req, res, next) => warehouseController.returnItem(req, res).catch(next));

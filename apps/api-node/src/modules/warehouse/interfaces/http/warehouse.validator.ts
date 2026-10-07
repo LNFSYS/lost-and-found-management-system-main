@@ -23,6 +23,7 @@ function atLeastOne(value: Record<string, unknown>) {
 export const warehouseItemIdParamSchema = z.object({ id: uuid });
 
 export const listWarehouseItemsQuerySchema = z.object({
+  overdue: z.enum(["true", "false"]).transform(value => value === "true").optional(),
   q: z.string().trim().max(120).optional(),
   status: warehouseStatusSchema.optional(),
   handoverPointId: uuid.optional(),

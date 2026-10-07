@@ -547,10 +547,15 @@ test("profile activity and avatar routes are authenticated and owner scoped", as
 test("return feedback routes require auth and keep participant contract", async () => {
   const originalValidateAccessSession = authService.validateAccessSession;
   const originalEligibility = returnFeedbackService.getEligibility;
+  const originalList = returnFeedbackService.listCompleted;
   const originalSubmit = returnFeedbackService.submitFeedback;
   let submitInput: unknown;
 
   authService.validateAccessSession = async () => true;
+  returnFeedbackService.listCompleted = async (viewer, page) => {
+    assert.equal(viewer.sub, "admin-id");
+    return { items: [], page, hasMore: false };
+  };
   returnFeedbackService.getEligibility = async (currentAppointmentId, viewer) => ({
     appointmentId: currentAppointmentId,
     eligible: true,
@@ -590,6 +595,12 @@ test("return feedback routes require auth and keep participant contract", async 
       const unauthenticated = await fetch(`${baseUrl}/api/returns/${appointmentId}/feedback/eligibility`);
       assert.equal(unauthenticated.status, 401);
 
+      assert.equal((await fetch(`${baseUrl}/api/returns/completed`)).status, 401);
+      const completed = await fetch(`${baseUrl}/api/returns/completed?userId=someone-else`, { headers: jsonHeaders(["USER"]) });
+      assert.equal(completed.status, 200);
+      assert.match(completed.headers.get("cache-control") ?? "", /no-store/);
+      assert.deepEqual(await completed.json(), { items: [], page: 1, hasMore: false });
+      assert.equal((await fetch(`${baseUrl}/api/returns/completed?page=-1`, { headers: jsonHeaders(["USER"]) })).status, 422);
       const eligibility = await fetch(`${baseUrl}/api/returns/${appointmentId}/feedback/eligibility`, { headers: jsonHeaders(["USER"]) });
       assert.equal(eligibility.status, 200);
       assert.equal((await eligibility.json()).eligible, true);
@@ -613,8 +624,26 @@ test("return feedback routes require auth and keep participant contract", async 
   } finally {
     authService.validateAccessSession = originalValidateAccessSession;
     returnFeedbackService.getEligibility = originalEligibility;
+    returnFeedbackService.listCompleted = originalList;
     returnFeedbackService.submitFeedback = originalSubmit;
   }
+});
+
+test("warehouse context and disposition routes deny unauthenticated/user access and Staff approval", async () => {
+  const originalValidate = authService.validateAccessSession;
+  authService.validateAccessSession = async () => true;
+  try {
+    await withServer(async () => undefined, async baseUrl => {
+      for (const path of [`warehouse-items/${userId}/disposition`, `warehouse-items/${userId}/legal-hold`, `warehouse-approvals/${userId}/approve`]) {
+        const url = `${baseUrl}/api/staff/${path}`;
+        assert.equal((await fetch(url, { method: "POST" })).status, 401);
+        assert.equal((await fetch(url, { method: "POST", headers: jsonHeaders(["USER"]) })).status, 403);
+        assert.equal((await fetch(url, { method: "POST", headers: jsonHeaders(["STAFF"]) })).status, 403);
+      }
+      assert.equal((await fetch(`${baseUrl}/api/staff/warehouse-items/${userId}/disposition`, { headers: jsonHeaders(["USER"]) })).status, 403);
+      assert.equal((await fetch(`${baseUrl}/api/staff/warehouse-proofs/${userId}`, { headers: jsonHeaders(["USER"]) })).status, 403);
+    });
+  } finally { authService.validateAccessSession = originalValidate; }
 });
 
 test("liveness stays independent while readiness reflects database availability", async () => {

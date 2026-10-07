@@ -212,9 +212,8 @@ test("isolated MySQL custody: authorization, concurrency, lifecycle, proof and n
       await warehouse.executeDisposition(approval.approvalId,ids.staff);
       assert.equal((await p.warehouseRepository.findItemById(record.id))?.status,"DONATED");
       const fresh = await warehouse.createItem({ ...await evidence(), itemName: "Fresh", handoverPointId: point, conditionNotes: "Good" },ids.staff);
-      const freshApproval = await warehouse.requestDisposition(fresh.id,"DISPOSED","Fresh fixture",ids.approver);
-      await warehouse.approveDisposition(freshApproval.approvalId,ids.finder);
-      await assert.rejects(warehouse.executeDisposition(freshApproval.approvalId,ids.staff));
+      await assert.rejects(warehouse.requestDisposition(fresh.id,"DISPOSED","Fresh fixture",ids.approver));
+      assert.equal((await p.warehouseRepository.listApprovals(fresh.id)).length, 0);
     });
     await t.test("real HTTP matching keeps inactive history, hides own LOST and preserves history on refresh", async httpTest => {
       const source = randomUUID(), ownLost = randomUUID(), inactive = randomUUID(), deleted = randomUUID(), hidden = randomUUID();
@@ -400,6 +399,9 @@ test("isolated MySQL custody: authorization, concurrency, lifecycle, proof and n
       const [notifications] = await pool.query<RowDataPacket[]>("SELECT user_id,COUNT(*) AS total FROM notifications WHERE type = 'CUSTODY_OVERDUE' AND entity_id = ? GROUP BY user_id", [request.request.id]);
       assert.ok(notifications.length > 0);
       assert.ok(notifications.every(row => Number(row.total) === 1));
+      const [retentionAlerts] = await pool.query<RowDataPacket[]>("SELECT user_id, COUNT(*) AS total FROM notifications WHERE type='WAREHOUSE_OVERDUE' AND entity_id=? GROUP BY user_id", [intake!.warehouseItemId!]);
+      assert.ok(retentionAlerts.length > 0);
+      assert.ok(retentionAlerts.every(row => Number(row.total) === 1 && [ids.staff, ids.approver, ids.finder].includes(row.user_id)));
     });
     await t.test("two email workers cannot reclaim a slow or expired SMTP attempt", async () => {
       await pool.execute("UPDATE notification_email_outbox SET status = 'CANCELLED'");

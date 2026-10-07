@@ -99,6 +99,10 @@ export function createWarehouseController({ warehouseService }: {
       await warehouseService.legalHold(routeId(request), input.held, input.reason, actorId(request));
       response.sendStatus(204);
     },
+    async dispositionContext(request: Request, response: Response) {
+      response.set("Cache-Control", "private, no-store");
+      response.json(await warehouseService.dispositionContext(routeId(request), actorId(request)));
+    },
     async requestDisposition(request: Request, response: Response) {
       const input = z.object({ target: z.enum(["DISPOSED","DONATED","TRANSFERRED"]), reason: z.string().trim().min(3).max(1000) }).parse(request.body);
       response.status(201).json(await warehouseService.requestDisposition(routeId(request), input.target, input.reason, actorId(request)));
