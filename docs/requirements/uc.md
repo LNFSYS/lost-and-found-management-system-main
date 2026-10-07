@@ -319,23 +319,23 @@ Completed UC work above is not reassigned. The 39 currently Partial/Planned UCs 
 
 ### 3.16 Warehouse Retention & Disposition
 
-**Runtime evidence:** retention-deadline visibility and custody overdue reminders exist. Canonical Staff/Admin APIs implement legal hold, per-item disposition request, independent approval and proof-gated execution with deadline/case/hold checks. They are meaningful Partial implementations, not absent code. Dedicated overdue/eligibility views, Admin order/hold screens, rejection/cancellation and donation-campaign lifecycle remain incomplete. See [the status review](../audits/uc-status-review-2026-10-06.md).
+**Runtime evidence (2026-10-07):** the warehouse screen now includes the deadline/hold overdue filter, eligibility context, legal-hold controls, per-item orders, independent approval and private evidence completion. Retention reminders cover upcoming and overdue walk-in/custody items. Unit/HTTP tests and mocked browser workflows are verified; isolated MySQL and real multi-account QA still need execution, so the affected UCs remain Partial rather than prematurely Implemented. See [workflow and verification](../workflows/warehouse-disposition-and-return-feedback.md). Rejection/cancellation and donation campaigns remain outside this change.
 
 **Remaining work:** UC-148 to UC-162 are assigned to Dat.
 
 | ID | Use Case | Actors | Use Case Description | Status |
 | --- | --- | --- | --- | --- |
-| UC-148 | List overdue warehouse items | Staff, Admin | View custody records whose retention deadline has passed and that are not legally blocked. Dashboard overdue totals, deadline indicators and EXPIRED status filtering exist; no authoritative deadline-and-hold overdue list filter exists. EXPIRED status alone is not that filter. | Partial |
-| UC-149 | View overdue item detail | Staff, Admin | View deadline, storage history, claim conflicts, appointments, holds, and disposition eligibility. Item detail/photos/logs exist; the complete conflict/hold/eligibility context does not. | Partial |
-| UC-150 | Send retention deadline alerts | Scheduler | Notify staff before and after a custody record reaches its retention deadline. Deduplicated post-deadline custody-item reminders exist; pre-deadline and general walk-in coverage are missing. | Partial |
-| UC-151 | Check disposition eligibility | Staff, Admin | Verify retention, claim, appointment, dispute, and legal-hold rules before disposition starts. Execution rechecks these gates atomically; a dedicated eligibility preview/actor screen is missing. | Partial |
-| UC-152 | Apply or remove a legal hold | Admin | Block or unblock disposition with a documented reason, authorization, and storage-log entry through the canonical Admin-only API. The Admin hold-control screen is missing. | Partial |
-| UC-153 | Create a disposition order | Admin | Create a donation, disposal, or transfer order for eligible warehouse items. Per-item approval requests exist; a complete eligible-item order workflow and Admin screen are missing. | Partial |
+| UC-148 | List overdue warehouse items | Staff, Admin | Deadline-based paginated filter excludes held, deleted and terminal records; it does not rely on EXPIRED alone. SQL runtime QA pending. | Partial |
+| UC-149 | View overdue item detail | Staff, Admin | Detail shows deadline, hold, conflict categories, eligibility, orders, protected proof and storage history without disclosing private case contents. SQL runtime QA pending. | Partial |
+| UC-150 | Send retention deadline alerts | Scheduler | Deduplicated upcoming/overdue notifications cover active custody and walk-in items, scoped to active Staff/Admin. Scheduler and notification SQL QA pending. | Partial |
+| UC-151 | Check disposition eligibility | Staff, Admin | Dedicated eligibility preview; request, approval and execution recheck deadline, status, reservation, claim, appointment, dispute and hold gates. SQL concurrency QA pending. | Partial |
+| UC-152 | Apply or remove a legal hold | Admin | Reason-required hold UI and Admin API with storage audit; replay of unchanged hold creates no extra log. Real role QA pending. | Partial |
+| UC-153 | Create a disposition order | Admin | Eligible-item donation/disposal/transfer order UI and API; identical active requests reuse the order, conflicting requests are rejected. SQL concurrency QA pending. | Partial |
 | UC-154 | View disposition order detail | Staff, Admin | View included items, reason, approval state, evidence, and processing history. | Planned |
-| UC-155 | Approve a disposition order | Admin | A different Admin approves a pending per-item request through the canonical API; execution rechecks eligibility. The order review/approval screen is missing. | Partial |
+| UC-155 | Approve a disposition order | Admin | Item-detail review UI requires a different Admin, rechecks eligibility and audits approval once. Real multi-Admin QA pending. | Partial |
 | UC-156 | Reject a disposition order | Admin | Reject an order with a recorded reason while leaving item custody records unchanged. | Planned |
 | UC-157 | Cancel a disposition order | Admin | Cancel an approved but unprocessed order with a reason and audit entry. | Planned |
-| UC-158 | Record disposition evidence | Staff, Admin | Canonical execution validates and attaches private proof to the approved item, records its terminal outcome and logs history. A dedicated disposition evidence/completion screen is missing. | Partial |
+| UC-158 | Record disposition evidence | Staff, Admin | Approved-order UI uploads private proof and explicitly confirms execution. Canonical API validates actor/item evidence scope, records terminal outcome and audits execution once. Real storage/SQL QA pending. | Partial |
 | UC-159 | Create a donation campaign | Admin | Create a donation campaign with a name, receiving organization, schedule, and eligibility rules. | Planned |
 | UC-160 | Update a donation campaign | Admin | Update the campaign information while preserving its change history. | Planned |
 | UC-161 | Assign or remove campaign items | Staff, Admin | Add eligible custody items to or remove unprocessed items from a donation campaign. | Planned |

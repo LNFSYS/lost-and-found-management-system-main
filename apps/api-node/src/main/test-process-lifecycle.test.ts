@@ -9,7 +9,7 @@ test("app tests and skipped integration suites exit without forcing process shut
   // A nested runner must not inherit the parent's internal reporting context.
   delete childEnvironment.NODE_TEST_CONTEXT;
   const { stdout } = await promisify(execFile)(process.execPath, [
-    "--import", "tsx", "--import", "./src/test/setup-env.ts", "--test",
+    "--import", "tsx", "--import", "./src/test/setup-env.ts", "--test", "--test-reporter=tap",
     "src/main/app.test.ts",
     "src/integration/custody-safety.integration.test.ts",
     "src/integration/database.integration.test.ts",
