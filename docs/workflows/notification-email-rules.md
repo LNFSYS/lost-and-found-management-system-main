@@ -1,6 +1,6 @@
 # Quy tắc gửi thông báo email LNFS
 
-Cập nhật: **06/10/2026**
+Cập nhật: **07/10/2026**
 
 ## 1. Phạm vi và trạng thái
 
@@ -21,7 +21,7 @@ Node.js là owner duy nhất của notification event, preference, outbox và de
 | Nhóm | Sự kiện | Người nhận | Mặc định | UC nguồn |
 | --- | --- | --- | --- | --- |
 | Security | OTP đăng ký, reset password, cảnh báo thay đổi bảo mật | Chủ tài khoản | Email ngay, bắt buộc khi cần hoàn tất thao tác | UC-001, UC-006 |
-| Matching | Có match mới đạt ngưỡng | Chủ bài liên quan | In-app ngay; email delayed-unread hoặc digest | UC-097 |
+| Matching | Cặp mới đạt từ 60%, hai bài còn mở và khác chủ | Cả chủ LOST và chủ FOUND | In-app; email theo nhóm preference nghiệp vụ hiện có, mặc định immediate; disabled/delayed-unread/digest/quiet hours được tôn trọng | UC-097 |
 | Claim | Claim mới hoặc trạng thái claim thay đổi | Claimant, Finder | In-app/PWA ngay; email theo preference | UC-123 |
 | Chat | Có tin nhắn mới từ participant còn lại | Participant còn lại | In-app/realtime ngay; một email sau 5–10 phút nếu vẫn unread, có coalescing | UC-124 |
 | Verification | Có câu hỏi, yêu cầu thêm thông tin hoặc quyết định cần xử lý | Participant cần hành động | In-app/PWA ngay; email action-required | UC-107, UC-108, UC-123 |
@@ -88,6 +88,8 @@ Node.js là owner duy nhất của notification event, preference, outbox và de
 | --- | --- | --- |
 | BR-47–BR-52, BR-67 | FR-NOTIFY-01–FR-NOTIFY-06, NFR-MAIL-01–NFR-MAIL-02 | UC-097, UC-123–UC-125, UC-147, UC-150, UC-168 và các UC nguồn trong ma trận sự kiện |
 ## Runtime implementation (Story notification email)
+
+Local follow-up ngày 7 October bổ sung producer matching riêng; xem [matching notification rules](matching-notification-rules.md) cho chống lặp, kiểm tra bài đóng trước SMTP và giới hạn inbox/CI/deployment. UC-097 hiện Partial; các snapshot và bằng chứng provider cũ không chứng nhận template/producer mới.
 
 The Node.js notification module now owns optional email preferences and a MySQL-backed transactional outbox (`052_notification_email_delivery.sql`). Chat and claim transactions enqueue only a notification identifier and recipient/entity metadata; private message and evidence content is never stored in the outbox. `GET/PUT /api/notifications/preferences` are authenticated and scoped to the token subject.
 

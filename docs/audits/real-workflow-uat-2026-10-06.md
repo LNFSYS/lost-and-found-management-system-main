@@ -49,7 +49,7 @@ Lịch hẹn cần migration 063_appointment_workflow.sql. Vui lòng liên hệ 
 
 **Hướng xử lý:** backup, rehearsal trên DB cô lập, preflight và xin phê duyệt áp dụng migration mới; sau đó test lại toàn bộ nhánh lịch hẹn/trả trực tiếp. Không replay migration đã áp dụng, sửa checksum hoặc xóa ledger.
 
-**Vị trí:** [schema gate](../../apps/api-node/src/modules/appointments/application/appointment.use-cases.ts:15), [migration 063](../../apps/api-node/src/migrations/063_appointment_workflow.sql), [runbook rollout](../runbooks/appointment-journey-rollout.md).
+**Vị trí:** [schema gate](../../apps/api-node/src/modules/appointments/application/appointment.use-cases.ts#L15), [migration 063](../../apps/api-node/src/migrations/063_appointment_workflow.sql), [runbook rollout](../runbooks/appointment-journey-rollout.md).
 
 **Hồ sơ:** LOST `UAT_RECORD_01`; FOUND `UAT_RECORD_02`; claim `UAT_RECORD_03`. Claim đang `ACCEPTED`, hai bài chưa được đánh dấu đã trả.
 
@@ -72,7 +72,7 @@ Lịch hẹn cần migration 063_appointment_workflow.sql. Vui lòng liên hệ 
 
 **Hướng xử lý:** tách ngân sách refresh khỏi password/reset/register, xem xét khóa theo phiên an toàn cộng giới hạn chống lạm dụng theo IP; hỗ trợ Retry-After/backoff và thông báo thử lại cho lỗi tạm thời. Không bỏ auth, không dùng access token hết hạn để vượt quyền.
 
-**Vị trí:** [limiter](../../apps/api-node/src/modules/auth/interfaces/http/auth.routes.ts:21), [refresh route](../../apps/api-node/src/modules/auth/interfaces/http/auth.routes.ts:34), [refreshSession](../../apps/web/src/services/api.ts:783), [AuthProvider](../../apps/web/src/context/auth-context.tsx:19).
+**Vị trí:** [limiter](../../apps/api-node/src/modules/auth/interfaces/http/auth.routes.ts#L21), [refresh route](../../apps/api-node/src/modules/auth/interfaces/http/auth.routes.ts#L34), [refreshSession](../../apps/web/src/services/api.ts#L783), [AuthProvider](../../apps/web/src/context/auth-context.tsx#L19).
 
 **Ảnh chụp:** `test-results/real-uat/20261006060605-refresh-login-redirect.png`.
 
@@ -92,7 +92,7 @@ Lịch hẹn cần migration 063_appointment_workflow.sql. Vui lòng liên hệ 
 
 **Hướng xử lý:** disable submit khi đang tải review hoặc quản lý lại riêng lỗi loading; cập nhật lỗi claim khi load/chọn/xác minh thành công, không xóa toàn bộ lỗi nghiệp vụ một cách mù quáng.
 
-**Vị trí:** [load claim reviews](../../apps/web/src/pages/staff-page.tsx:523), [ghi lỗi loading khi submit](../../apps/web/src/pages/staff-page.tsx:721), [select claim](../../apps/web/src/pages/staff-page.tsx:1077).
+**Vị trí:** [load claim reviews](../../apps/web/src/pages/staff-page.tsx#L523), [ghi lỗi loading khi submit](../../apps/web/src/pages/staff-page.tsx#L721), [select claim](../../apps/web/src/pages/staff-page.tsx#L1077).
 
 **Ảnh chụp:** `test-results/real-uat/20261006061051-return-ready.png`. Screenshot được chụp ngay sau upload proof; không dùng trạng thái thumbnail đang tải trong ảnh này để kết luận provider lỗi.
 
@@ -128,7 +128,7 @@ Lịch hẹn cần migration 063_appointment_workflow.sql. Vui lòng liên hệ 
 
 ## Hồ sơ UAT đã tạo và giữ lại
 
-Có **9 bài đăng, 6 claim, 4 yêu cầu custody và 5 vật phẩm kho** mới. Không tự xóa để giữ lịch sử/bằng chứng. Hai tiền tố bài đăng: `[UAT-20261006055914]`, `[UAT-20261006060605]`; ghi chú trả ở lần tiếp tục còn dùng `[UAT-20261006061051]`.
+Có **9 bài đăng, 6 claim, 4 yêu cầu custody và 5 vật phẩm kho** mới. Không tự xóa dữ liệu để giữ lịch sử/bằng chứng. Tiền tố bài đăng và ghi chú trả được ẩn trong tài liệu công khai; đối chiếu hồ sơ cụ thể qua receipt được bảo vệ ngoài Git.
 
 | Hồ sơ | Định danh chính | Trạng thái cuối kiểm tra |
 | --- | --- | --- |

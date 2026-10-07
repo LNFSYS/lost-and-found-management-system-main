@@ -75,3 +75,24 @@ Implementation: UC-126/127/128/130/131/133, UC-134-140, UC-163/166/167. UC-125 c
 Manual UAT cần hai tài khoản thật cho FOUND thông thường và photo-backed LOST không FOUND: eligibility, accept/reject/cancel, hai xác nhận, mismatch/correction, no-show, pending report, chuyển custody, private journey và lịch legacy. Staff intake/verification/return tiếp tục là nhánh riêng với proof/identity/hold gates. Dùng provider-controlled recipients để kiểm tra nhắc email, preference/quiet hours, link auth, cancellation và shutdown, không gửi tới người dùng thật ngoài phạm vi chấp thuận.
 
 Cần nghiệm thu thêm authorization/privacy/security sâu, keyboard/screen-reader/device accessibility, load/failover nhiều instance và vận hành reminder khi downtime. Không tuyên bố production/main sẵn sàng từ local mocks/tests. CI và shared smoke hiện tại nằm trong release receipt; inbox/physical acceptance và production deployment chưa được chứng nhận. Không tự merge `main`.
+
+## Giao diện lịch hẹn - 07/10/2026
+
+Phần dưới là snapshot kiểm chứng local trên `dev-clean` trước publish. Receipt publish và lượt kiểm tra rộng hơn xem [publish review 07/10](../audits/publish-review-2026-10-07.md). Giữ nguyên receipt và snapshot 06/10 ở trên; CI cũ không chứng nhận candidate mới.
+
+- `/appointments` hiển thị thẻ có ảnh vật phẩm, tiêu đề, trạng thái, ngày giờ, điểm hẹn, vai trò của người xem và liên kết chi tiết. Bố cục 3 cột desktop, 2 cột tablet, 1 cột mobile.
+- `/appointments/:id` hiển thị ảnh lớn, lịch hẹn và phản hồi hai bên; ảnh có thể phóng to bằng dialog có Escape/focus restoration. Không thay đổi kiểm tra vật lý, dual confirmation, dispute/custody/legacy gates, version hay idempotency.
+- API chỉ chiếu ID của ảnh `ITEM` đầu tiên thuộc bài identity của claim, visibility `PUBLIC`, không hidden/deleted. Không lấy ảnh `EVIDENCE`, ảnh liên hệ LOST riêng tư hoặc raw provider/storage references. Danh sách vẫn dùng count và một truy vấn projection; không đọc từng bài đăng riêng để lấy ảnh.
+- Client tải qua endpoint media hiện có, kèm authentication; ảnh thiếu/private dùng placeholder rõ ràng, lỗi tải có nút thử lại. Không dùng ảnh mẫu làm fallback production. Ảnh synthetic trong screenshots chỉ là browser fixture, không phải bằng chứng provider/UAT thật.
+- Không thêm migration, không ghi Aiven và không chạy lại 063. Chỉ cập nhật mô tả UC-126/127 và mapping hiện có; không thêm ID hoặc nâng trạng thái UC.
+
+| Kiểm tra local của đợt giao diện | Kết quả / giới hạn |
+| --- | --- |
+| `npm test` bình thường | 413 pass, 0 fail, 32 opt-in SQL skips; architecture và Web typecheck pass, process tự kết thúc |
+| `npm run build` sau sửa CSS cuối | API/Web pass |
+| Playwright focused | 33/33 pass: toàn bộ `appointment-journey.spec.ts` (15) và `notification-navigation.spec.ts` (18); không gọi đây là full browser suite |
+| Native SQL focused | 11/11 pass, 0 skip: `appointment.integration.test.ts` trên MySQL 9.3 loopback UTC; gồm ITEM/private/hidden/deleted media, participant ACL, dual handover, reminder, mismatch, no-show, custody gates, journey và lost COMMIT acknowledgement |
+| UC catalogue | 168 IDs: 129 Implemented, 21 Partial, 18 Planned; đợt UI không thay đổi số lượng/trạng thái |
+| Visual QA | Screenshots và ảnh decode thực tế tại 1440/768/390/320px; không tràn ngang. Retry/zoom/Escape/focus restoration được kiểm thử |
+
+Lượt native SQL đầu phát hiện helper cô lập dùng timezone hệ điều hành trong khi fixture/client đọc UTC, khiến timeline snapshot không thấy các event DB có giờ lệch. Lượt cuối khởi động server với timezone `+00:00`, kiểm tra UTC offset bằng 0 và chạy lại đủ 11 ca, không sửa hoặc bỏ assertions. Helper/server cô lập đã dừng; API/Vite của người dùng giữ nguyên. Đây không phải kiểm tra CI MySQL 8.0/8.4, SMTP inbox, production deployment hay nghiệm thu bàn giao vật lý mới. Chưa chạy lại full browser suite trong đợt giao diện này.

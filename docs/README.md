@@ -1,9 +1,10 @@
 # Tài liệu FPTU Lost & Found System
 
-Cập nhật: **06/10/2026**. Code, tests, cấu hình và receipt đúng candidate là nguồn sự thật; implementation không tự đồng nghĩa với deployment hay nghiệm thu thực tế.
+Cập nhật: **07/10/2026**. Code, tests, cấu hình và receipt đúng candidate là nguồn sự thật; implementation không tự đồng nghĩa với deployment hay nghiệm thu thực tế.
 
 ## Bắt đầu từ đây
 
+- [Rà soát trước publish 07/10](audits/publish-review-2026-10-07.md): privacy scan, matching email, điều hướng thông báo và giao diện lịch hẹn; trạng thái CI candidate theo PR `dev-clean`.
 - [Chuẩn bị PR dev vào main](audits/dev-main-release-2026-10-06.md): phạm vi lọc tài liệu, candidate/CI, rollout 063 và các giới hạn nghiệm thu.
 - [Kết quả sửa UAT](audits/uat-repair-verification-2026-10-06.md): refresh, popup trả đồ, backup/restore và regression.
 - [Kế hoạch UAT](plans/uat-repair-plan-2026-10-06.md) và [UAT thực tế](audits/real-workflow-uat-2026-10-06.md): finding gốc, checklist và evidence.
@@ -35,7 +36,7 @@ Root `docs/` chỉ giữ mục lục. Sáu báo cáo cũ dư thừa đã đượ
 | [Use cases](requirements/uc.md) | Catalogue 168 UC và ownership |
 | [Traceability](requirements/traceability-matrix.md) | BR → FR/NFR → UC → evidence |
 
-Catalogue hiện tại: **168 UC = 129 Implemented + 20 Partial + 19 Planned**. [Đối chiếu UC 06/10](audits/uc-status-review-2026-10-06.md) là snapshot trước đợt xây lịch hẹn/hành trình, không ghi đè catalogue mới.
+Catalogue hiện tại: **168 UC = 129 Implemented + 21 Partial + 18 Planned**. UC-097 có producer/email/popup; CI candidate, deployment và inbox acceptance được theo dõi riêng trong [publish review](audits/publish-review-2026-10-07.md) và [quy tắc matching notification](workflows/matching-notification-rules.md). [Đối chiếu UC 06/10](audits/uc-status-review-2026-10-06.md) là snapshot trước đợt xây lịch hẹn/hành trình, không ghi đè catalogue mới.
 
 Web là channel hiện có; PWA có manifest/service worker/offline shell nhưng còn cần device/installability acceptance. Native Mobile thuộc scope mục tiêu, trạng thái `Planned - project not created yet`. Node.js/TypeScript là backend và business/migration write owner duy nhất; Java đã ngừng sử dụng. Không tự bịa trạng thái Jira hoặc các report bên ngoài chưa được cung cấp.
 

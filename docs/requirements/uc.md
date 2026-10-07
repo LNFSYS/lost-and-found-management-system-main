@@ -1,10 +1,10 @@
 # 3. Business Use Case Catalogue - FPTU Lost & Found System (LNFS)
 
-Current statuses include the local appointment, peer handover, audit and item-journey follow-up on 6 October 2026, based on `dev@195b134`. See [the implementation and rollout record](../runbooks/appointment-journey-rollout.md). The preceding [71-row status review](../audits/uc-status-review-2026-10-06.md) remains a historical snapshot; its earlier 97 Implemented goals were retained, not newly re-certified. General Staff escalation, counter-proposal/rescheduling, full disposition screens and delivery-channel coverage remain separate gaps. Migrations 061/062 and the 16 warehouse-media transfers retain their dated rollout evidence. New additive migration 063 is tested on an isolated database but NOT applied to Aiven. Production/application deployment, non-warehouse legacy media and manual acceptance remain separate. See [the database rollout record](../runbooks/database-warehouse-recovery.md).
+Current statuses retain the appointment, peer handover, audit and item-journey follow-up on 6 October 2026, originally based on `dev@195b134`, plus the local 7 October matching notification follow-up. See [the implementation and rollout record](../runbooks/appointment-journey-rollout.md). The preceding [71-row status review](../audits/uc-status-review-2026-10-06.md) remains a historical snapshot; its earlier 97 Implemented goals were retained, not newly re-certified. General Staff escalation, counter-proposal/rescheduling, full disposition screens and delivery-channel coverage remain separate gaps. Migrations 061/062/063 and the 16 warehouse-media transfers retain their dated rollout evidence; this matching follow-up introduces no migration. Candidate CI/deployment, non-warehouse legacy media and manual acceptance remain separate. See [the database rollout record](../runbooks/database-warehouse-recovery.md).
 
 - **Implemented:** 129 use cases
-- **Partial:** 20 use cases
-- **Planned:** 19 use cases
+- **Partial:** 21 use cases
+- **Planned:** 18 use cases
 - **Total:** 168 business use cases
 
 Statuses describe implementation, not release acceptance: **Implemented** means an active authorized workflow covers the stated actor goal (API and Web for user-facing goals, worker for scheduler goals) with relevant regression evidence. **Partial** means a meaningful runtime slice exists but some stated actor/behavior/UI scope is missing. **Planned** means no active workflow for the goal; schema, event writers or a differently authorized workflow alone do not complete it. Provider/manual UAT, policy approval, CI and deployment are recorded separately even for Implemented goals. No new UC ID or product goal is introduced by this status correction.
@@ -80,7 +80,7 @@ Completed UC work above is not reassigned. The 39 currently Partial/Planned UCs 
 
 **Commit evidence:** Quan implemented and hardened persisted matching, scoring, access control, and explanations in `4d6841b` and `489cdc9`.
 
-**Runtime evidence:** UC-098 to UC-100 are Implemented: actor-scoped feedback/dismissal, Web controls, paginated HTTP results and a fenced, bounded refresh worker are active on `dev`. Migration 060 is applied on Aiven; historical receipts are in [matching review](../audits/matching-feedback-review.md). Source-owner filtering before pagination has owner/Staff/Admin regressions. Exact baseline CI and remaining manual/operational acceptance are separated in [the status review](../audits/uc-status-review-2026-10-06.md). UC-097 notifications remain Planned; no new UC ID is introduced.
+**Runtime evidence:** UC-098 to UC-100 are Implemented: actor-scoped feedback/dismissal, Web controls, paginated HTTP results and a fenced, bounded refresh worker are active on `dev`. Migration 060 is applied on Aiven; historical receipts are in [matching review](../audits/matching-feedback-review.md). Source-owner filtering before pagination has owner/Staff/Admin regressions. Exact baseline CI and remaining manual/operational acceptance are separated in [the status review](../audits/uc-status-review-2026-10-06.md). On 7 October, UC-097 moves to Partial: local new-match producer, transactional email and Web popup exist, but candidate CI, deployment and matching inbox acceptance remain unverified. See [matching notification rules](../workflows/matching-notification-rules.md). No new UC ID is introduced.
 
 | ID | Use Case | Actors | Use Case Description | Status |
 | --- | --- | --- | --- | --- |
@@ -90,7 +90,7 @@ Completed UC work above is not reassigned. The 39 currently Partial/Planned UCs 
 | UC-029 | Generate matches after post changes | System | Run matching on a best-effort basis after a post is created or updated without rolling back the valid post. | Implemented |
 | UC-030 | Calculate matching score | System | Compare LOST and FOUND posts using normalized text, category, location, time, image tags, and safe OCR signals. | Implemented |
 | UC-031 | Store active match results | System | Persist calculated active LOST-FOUND results while retaining permitted inactive saved history; deleted/hidden/private candidates remain guarded. | Implemented |
-| UC-097 | Notify owner about a new match | System, Post Owner | Notify the owner when a newly calculated candidate reaches the configured matching threshold. | Planned |
+| UC-097 | Notify owner about a new match | System, Post Owner | Notify both active post owners once when a calculated pair reaches 60%; honor preferences and recheck open posts before email. | Partial |
 | UC-098 | Dismiss a match suggestion | Post Owner | Hide a suggestion that the owner has reviewed and determined is not relevant. Dismissal is scoped to the actor and source post and does not resurface during later refreshes. | Implemented |
 | UC-099 | Submit match feedback | Post Owner | Mark a suggestion once as useful, irrelevant, or incorrect using an idempotent correlation key; feedback remains separate from ownership and workflow state. | Implemented |
 | UC-100 | Refresh matches periodically | Scheduler | Recalculate eligible active LOST and FOUND candidates with just-in-time fenced leases, heartbeat, bounded retries and graceful shutdown, without deciding ownership. | Implemented |
@@ -177,8 +177,8 @@ Completed UC work above is not reassigned. The 39 currently Partial/Planned UCs 
 
 | ID | Use Case | Actors | Use Case Description | Status |
 | --- | --- | --- | --- | --- |
-| UC-126 | List my appointments | Claimant, Finder | View participant-scoped paginated appointments through the calendar navigation or conversation link. | Implemented |
-| UC-127 | View appointment detail | Claimant, Finder | View place, time, participant responses, state and immutable attempt history. Legacy appointments without workflow metadata are explicitly read-only. | Implemented |
+| UC-126 | List my appointments | Claimant, Finder | View participant-scoped paginated appointment cards with public item photo (when available), title, schedule, place and status through the calendar navigation or conversation link. Private evidence is not used as a thumbnail. | Implemented |
+| UC-127 | View appointment detail | Claimant, Finder | View and enlarge the public item photo when available, alongside place, time, participant responses, state and immutable attempt history. Missing/private images use an explicit placeholder. Legacy appointments without workflow metadata are explicitly read-only. | Implemented |
 | UC-128 | Propose a meetup appointment | Claimant, Finder | Propose a future time and active handover point for an eligible accepted conversation, without treating a communication-only photo proposal as ownership proof. | Implemented |
 | UC-129 | Counter-propose an appointment | Claimant, Finder | Suggest a different place or time instead of accepting the current proposal. | Planned |
 | UC-130 | Accept an appointment proposal | Claimant, Finder | The counterpart accepts an eligible pending future proposal; the proposer cannot accept their own proposal. | Implemented |
