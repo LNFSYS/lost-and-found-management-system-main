@@ -117,6 +117,38 @@ async function fillCommonForm(page: Page) {
 
 for (const type of ["LOST", "FOUND"] as const) {
   for (const width of [1440, 390]) {
+    for (const reducedMotion of ["reduce", "no-preference"] as const) {
+      test(`keeps the ${type} form below navigation after ${reducedMotion} motion selection at ${width}px`, async ({ page }, testInfo) => {
+        await page.setViewportSize({ width, height: 900 });
+        await page.emulateMedia({ reducedMotion });
+        await prepare(page, () => undefined);
+        await page.locator("#two-sides").getByRole("button", {
+          name: type === "LOST" ? /Tôi làm mất đồ/i : /Tôi nhặt được đồ/i
+        }).click();
+        const form = page.locator(".story-post-form");
+        await expect(form.getByText(type === "LOST" ? "Báo mất vật phẩm" : "Báo nhặt được vật phẩm")).toBeVisible();
+        // Observe consecutive frames without overriding the application's scroll position.
+        await expect.poll(() => form.locator(".story-post-form__head").evaluate(async (element) => {
+          const offsets: number[] = [];
+          for (let frame = 0; frame < 6; frame += 1) {
+            await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+            offsets.push(element.getBoundingClientRect().top - document.querySelector(".topbar")!.getBoundingClientRect().bottom);
+          }
+          return {
+            clear: offsets.every((offset) => offset >= 15),
+            stable: Math.max(...offsets) - Math.min(...offsets) <= 1
+          };
+        })).toEqual({ clear: true, stable: true });
+        await expect(form.locator(".story-image-drop")).toBeInViewport({ ratio: 1 });
+        await expect(form.getByRole("button", { name: "Phân tích các ảnh" })).toBeInViewport({ ratio: 1 });
+        await page.screenshot({ path: testInfo.outputPath("selected-form.png") });
+      });
+    }
+  }
+}
+
+for (const type of ["LOST", "FOUND"] as const) {
+  for (const width of [1440, 390]) {
     test(`shows image upload and analysis before manual ${type} fields at ${width}px`, async ({ page }, testInfo) => {
       await page.setViewportSize({ width, height: 900 });
       await page.emulateMedia({ reducedMotion: "reduce" });

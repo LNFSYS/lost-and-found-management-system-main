@@ -1,5 +1,5 @@
 import { ArrowDown, ArrowRight, CalendarCheck, Check, Clock3, Image, LoaderCircle, MapPin, MessageCircle, RotateCcw, ScanSearch, ShieldCheck, Sparkles } from "lucide-react";
-import { motion } from "motion/react";
+import { MotionConfig, motion, useReducedMotion } from "motion/react";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { StoryPostForm, type StoryPostCreatedEvent } from "../components/story-post-form";
@@ -57,7 +57,8 @@ function StoryConnector({ direction, dark = false }: { direction: ConnectorDirec
 }
 
 function StoryStage({ children, className, id }: { children: ReactNode; className: string; id?: string }) {
-  return <motion.section id={id} className={`story-stage ${className}`} {...stageMotion}>{children}</motion.section>;
+  const reducedMotion = useReducedMotion();
+  return <motion.section id={id} className={`story-stage ${className}`} {...stageMotion} initial={reducedMotion ? false : stageMotion.initial}>{children}</motion.section>;
 }
 
 function wait(milliseconds: number) {
@@ -254,6 +255,7 @@ export function HomePage() {
   const [suggestions, setSuggestions] = useState<PostMatchResult[]>([]);
   const [workflowError, setWorkflowError] = useState("");
   const workflowRequest = useRef(0);
+  const scrollTimer = useRef<number | null>(null);
   const selected = storyCopy[storySide];
   const analysisPreviewUrls = useMemo(
     () => analysisFiles.map((file) => URL.createObjectURL(file)),
@@ -264,13 +266,38 @@ export function HomePage() {
     analysisPreviewUrls.forEach((url) => URL.revokeObjectURL(url));
   }, [analysisPreviewUrls]);
 
+  useEffect(() => () => {
+    if (scrollTimer.current !== null) window.clearTimeout(scrollTimer.current);
+  }, []);
+
+  function cancelStageScroll() {
+    if (scrollTimer.current !== null) window.clearTimeout(scrollTimer.current);
+    scrollTimer.current = null;
+  }
+
   function scrollToStage(selector: string, delay = 0) {
-    window.setTimeout(() => {
-      document.querySelector(selector)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    cancelStageScroll();
+    const requestId = workflowRequest.current;
+    scrollTimer.current = window.setTimeout(() => {
+      scrollTimer.current = null;
+      if (requestId !== workflowRequest.current) return;
+      const target = document.querySelector<HTMLElement>(selector === "#quick-story" ? "#quick-story .story-post-form__head" : selector);
+      if (!target) return;
+      // Layout offsets stay stable while a story stage animates its transform.
+      let top = 0;
+      for (let element: HTMLElement | null = target; element; element = element.offsetParent as HTMLElement | null) {
+        top += element.offsetTop + ((element.offsetParent as HTMLElement | null)?.clientTop ?? 0);
+      }
+      const navigationBottom = document.querySelector(".topbar")?.getBoundingClientRect().bottom ?? 0;
+      window.scrollTo({
+        top: Math.max(0, top - navigationBottom - 16),
+        behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth"
+      });
     }, delay);
   }
 
   function resetWorkflow() {
+    cancelStageScroll();
     workflowRequest.current += 1;
     setWorkflowPhase("idle");
     setAnalysisFiles([]);
@@ -305,12 +332,14 @@ export function HomePage() {
   }
 
   function failImageAnalysis(message: string) {
+    cancelStageScroll();
     setWorkflowError(message);
     setWorkflowPhase("idle");
     setAnalysisFiles([]);
   }
 
   function resetImageAnalysis() {
+    cancelStageScroll();
     workflowRequest.current += 1;
     setWorkflowPhase("idle");
     setAnalysisFiles([]);
@@ -347,7 +376,7 @@ export function HomePage() {
     }
   }
 
-  return <div className="home-page">
+  return <MotionConfig reducedMotion="user"><div className="home-page">
     <section className="home-hero" aria-labelledby="home-title">
       <div className="hero-grid" id="journey-start">
         <div className="hero-copy">
@@ -532,5 +561,5 @@ export function HomePage() {
     </div>
 
     <section className="closing-story"><p className="story-index">Hành trình khép lại</p><h2>Một món đồ thất lạc.<br />Hai người xa lạ.<br /><em>Một cái kết đúng chủ.</em></h2><p>Hồ sơ của bạn đã sẵn sàng cho những luồng Lost &amp; Found tiếp theo.</p><div className="hero-actions"><button className="journey-button journey-button--orange" onClick={() => chooseStory("LOST")}>Xem luồng báo mất</button><button className="journey-button journey-button--ghost-light" onClick={() => chooseStory("FOUND")}>Xem luồng báo nhặt</button><Link className="profile-link" to="/profile">Quản lý hồ sơ <ArrowRight size={17} /></Link></div></section>
-  </div>;
+  </div></MotionConfig>;
 }

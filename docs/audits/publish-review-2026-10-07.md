@@ -32,6 +32,16 @@ Receipt kiểm tra local trước đợt commit/push ngày 07/10. Trạng thái 
 
 SQL focused không thay thế toàn bộ SQL suite hoặc CI MySQL 8.0/8.4. Transport matching trong integration là bộ ghi nhận kiểm thử, không phải chứng nhận Gmail nhận thư. Browser sử dụng route fixtures và ảnh synthetic, không phải UAT provider thật. Giữ nguyên API/Vite đang phục vụ người dùng.
 
+## Follow-up lỗi browser CI
+
+- [Run thất bại](https://github.com/LNFSYS/lost-and-found-management-system-main/actions/runs/37572759747) kiểm tra head `6a87f51`, PR merge candidate `0d66f86`. MySQL 8.0/8.4 pass; browser 136 pass và 1 fail: vị trí upload FOUND ở 1440px bị topbar che. Đây là bằng chứng CI cũ, không được đánh dấu toàn bộ CI xanh.
+- Code cuộn ép `smooth` dù người dùng bật giảm chuyển động, nhắm đầu section mà không trừ topbar; timer cuộn cũ không bị hủy. Test còn chỉnh vị trí cuộn trực tiếp trong lúc hiệu ứng/timer ứng dụng có thể đang chạy. Test cũ vẫn pass 12/12 lượt local Chromium trước sửa, nên một lần pass local không đủ loại trừ race trên CI.
+- Sửa cuộn về đầu form thực tế, chừa khoảng với topbar theo chiều cao hiện tại, dùng layout offset không phụ thuộc transform đang animate. Tôn trọng reduced motion cho cuộn và Motion; hủy timer khi đổi/reset workflow hoặc unmount, kiểm tra generation trước khi cuộn.
+- Giữ nguyên các assertion hình ảnh của test cũ. Thêm 8 ca LOST/FOUND, desktop/mobile, chuyển động thường/giảm chuyển động: quan sát nhiều frame sau thao tác chọn thật, không tự chỉnh scroll; form phải ổn định, không bị topbar che và hai thao tác ảnh nằm trong viewport. Không buộc khoảng cách đúng một số pixel khi font/layout đổi nhưng nội dung vẫn không bị che.
+- Không thay đổi workflow CI, thêm retry, tăng timeout, skip hoặc force-exit để xử lý lỗi này. Không thêm migration, UC hoặc nâng trạng thái nghiệm thu. Kết quả CI mới và exact candidate tiếp tục được cập nhật trong PR; các gate inbox/bàn giao thật bên dưới vẫn còn nguyên.
+
+Verification local sau sửa: `npm test` 413 pass / 0 fail / 32 opt-in SQL skips (445 tests), architecture 204 files / 0 violations và Web typecheck pass; API/Web build pass; full Playwright **145/145 pass** bằng bundled Chromium với `CI=true`, 2 workers / 0 skip; production audit 0 vulnerabilities; UC và 37 tài liệu / 372 local links không thay đổi hoặc lỗi liên kết. Các giới hạn test fixture, SQL local trước đó và nghiệm thu deployment vẫn áp dụng.
+
 ## Gate trước merge/deploy
 
 - CI phải chạy trên head/PR merge candidate mới, gồm MySQL 8.0/8.4 và browser; link/status trong PR, không tái dùng receipt của candidate cũ. Không tự merge.
