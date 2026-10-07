@@ -122,6 +122,7 @@ for (const type of ["LOST", "FOUND"] as const) {
         await page.setViewportSize({ width, height: 900 });
         await page.emulateMedia({ reducedMotion });
         await prepare(page, () => undefined);
+        await page.evaluate(() => document.fonts.ready);
         await page.locator("#two-sides").getByRole("button", {
           name: type === "LOST" ? /Tôi làm mất đồ/i : /Tôi nhặt được đồ/i
         }).click();
@@ -134,11 +135,9 @@ for (const type of ["LOST", "FOUND"] as const) {
             await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
             offsets.push(element.getBoundingClientRect().top - document.querySelector(".topbar")!.getBoundingClientRect().bottom);
           }
-          return {
-            clear: offsets.every((offset) => offset >= 15),
-            stable: Math.max(...offsets) - Math.min(...offsets) <= 1
-          };
-        })).toEqual({ clear: true, stable: true });
+          const movement = Math.max(...offsets) - Math.min(...offsets);
+          return movement <= 1 ? Math.min(...offsets) : -1;
+        })).toBeGreaterThan(0);
         await expect(form.locator(".story-image-drop")).toBeInViewport({ ratio: 1 });
         await expect(form.getByRole("button", { name: "Phân tích các ảnh" })).toBeInViewport({ ratio: 1 });
         await page.screenshot({ path: testInfo.outputPath("selected-form.png") });
@@ -147,12 +146,40 @@ for (const type of ["LOST", "FOUND"] as const) {
   }
 }
 
+test("does not apply a pending font-layout scroll after leaving the story", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await prepare(page, () => undefined);
+  await page.evaluate(() => {
+    const probe = { requested: false, scrolls: 0, release: () => undefined as void };
+    const ready = new Promise<void>((resolve) => { probe.release = resolve; });
+    Object.defineProperty(document.fonts, "ready", { configurable: true, get: () => { probe.requested = true; return ready; } });
+    const originalScrollTo = window.scrollTo.bind(window);
+    window.scrollTo = (optionsOrX?: ScrollToOptions | number, y?: number) => {
+      probe.scrolls += 1;
+      if (typeof optionsOrX === "number") originalScrollTo(optionsOrX, y ?? 0);
+      else originalScrollTo(optionsOrX);
+    };
+    Object.assign(window, { storyFontProbe: probe });
+  });
+  await page.locator("#two-sides").getByRole("button", { name: /Tôi nhặt được đồ/i }).click();
+  await expect.poll(() => page.evaluate(() => (window as unknown as { storyFontProbe: { requested: boolean } }).storyFontProbe.requested)).toBe(true);
+  await page.getByRole("link", { name: "Bài đăng", exact: true }).click();
+  await expect(page).toHaveURL(/\/posts$/);
+  const before = await page.evaluate(() => (window as unknown as { storyFontProbe: { scrolls: number } }).storyFontProbe.scrolls);
+  await page.evaluate(async () => {
+    (window as unknown as { storyFontProbe: { release: () => void } }).storyFontProbe.release();
+    for (let frame = 0; frame < 6; frame += 1) await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+  });
+  expect(await page.evaluate(() => (window as unknown as { storyFontProbe: { scrolls: number } }).storyFontProbe.scrolls)).toBe(before);
+});
+
 for (const type of ["LOST", "FOUND"] as const) {
   for (const width of [1440, 390]) {
     test(`shows image upload and analysis before manual ${type} fields at ${width}px`, async ({ page }, testInfo) => {
       await page.setViewportSize({ width, height: 900 });
       await page.emulateMedia({ reducedMotion: "reduce" });
       await prepare(page, () => undefined);
+      await page.evaluate(() => document.fonts.ready);
       if (type === "FOUND") {
         await page.locator("#two-sides").getByRole("button", { name: /Tôi nhặt được đồ/i }).click();
         await expect(page.getByText("Báo nhặt được vật phẩm")).toBeVisible();

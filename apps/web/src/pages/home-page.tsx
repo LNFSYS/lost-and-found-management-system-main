@@ -256,6 +256,7 @@ export function HomePage() {
   const [workflowError, setWorkflowError] = useState("");
   const workflowRequest = useRef(0);
   const scrollTimer = useRef<number | null>(null);
+  const scrollRequest = useRef(0);
   const selected = storyCopy[storySide];
   const analysisPreviewUrls = useMemo(
     () => analysisFiles.map((file) => URL.createObjectURL(file)),
@@ -267,10 +268,11 @@ export function HomePage() {
   }, [analysisPreviewUrls]);
 
   useEffect(() => () => {
-    if (scrollTimer.current !== null) window.clearTimeout(scrollTimer.current);
+    cancelStageScroll();
   }, []);
 
   function cancelStageScroll() {
+    scrollRequest.current += 1;
     if (scrollTimer.current !== null) window.clearTimeout(scrollTimer.current);
     scrollTimer.current = null;
   }
@@ -278,9 +280,11 @@ export function HomePage() {
   function scrollToStage(selector: string, delay = 0) {
     cancelStageScroll();
     const requestId = workflowRequest.current;
-    scrollTimer.current = window.setTimeout(() => {
+    const scrollId = scrollRequest.current;
+    scrollTimer.current = window.setTimeout(async () => {
       scrollTimer.current = null;
-      if (requestId !== workflowRequest.current) return;
+      await document.fonts.ready;
+      if (requestId !== workflowRequest.current || scrollId !== scrollRequest.current) return;
       const target = document.querySelector<HTMLElement>(selector === "#quick-story" ? "#quick-story .story-post-form__head" : selector);
       if (!target) return;
       // Layout offsets stay stable while a story stage animates its transform.
