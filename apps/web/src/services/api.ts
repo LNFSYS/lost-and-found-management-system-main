@@ -313,6 +313,7 @@ export interface WarehouseDashboard {
   items: WarehouseItem[];
 }
 export interface WarehouseFilters {
+  overdue?: boolean;
   q?: string;
   status?: WarehouseStatus | "";
   handoverPointId?: string;
@@ -1067,6 +1068,15 @@ export const api = {
   deleteSystemConfig: (id: string) => raw<void>(`/admin/configs/${id}`, { method: "DELETE" }),
   getPublicConfig: () => raw<PublicConfigResponse>("/config/public"),
   getWarehouseCatalog: () => raw<WarehouseCatalog>("/staff/warehouse-items/catalog"),
+  getDispositionContext: (id: string) => raw<{
+    status: WarehouseStatus; eligible: boolean; reasons: string[]; legalHold: boolean; retentionDeadline: string | null;
+    orders: Array<{ id: string; requesterId: string; requesterName: string; approverName: string | null; target: "DISPOSED" | "DONATED" | "TRANSFERRED"; reason: string; status: string; createdAt: string; approvedAt: string | null; executedAt: string | null }>;
+    proofs: Array<{ id: string }>; logs: WarehouseStorageLog[];
+  }>(`/staff/warehouse-items/${id}/disposition`),
+  setWarehouseLegalHold: (id: string, held: boolean, reason: string) => raw<void>(`/staff/warehouse-items/${id}/legal-hold`, { method: "POST", body: JSON.stringify({ held, reason }) }),
+  requestDisposition: (id: string, target: string, reason: string) => raw<{ approvalId: string }>(`/staff/warehouse-items/${id}/disposition`, { method: "POST", body: JSON.stringify({ target, reason }) }),
+  approveDisposition: (id: string) => raw<void>(`/staff/warehouse-approvals/${id}/approve`, { method: "POST" }),
+  executeDisposition: (id: string, proofIds: string[]) => raw<void>(`/staff/warehouse-approvals/${id}/execute`, { method: "POST", body: JSON.stringify({ proofIds }) }),
   listWarehouseItems: (filters: WarehouseFilters = {}) => raw<WarehouseDashboard>(`/staff/warehouse-items${queryString(filters)}`),
   createWarehouseItem: (payload: CreateWarehouseItemPayload) => raw<WarehouseItem>("/staff/warehouse-items", { method: "POST", body: JSON.stringify(payload) }),
   updateWarehouseItem: (id: string, payload: UpdateWarehouseItemPayload) => raw<WarehouseItem>(`/staff/warehouse-items/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),

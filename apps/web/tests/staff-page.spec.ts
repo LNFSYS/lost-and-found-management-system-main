@@ -61,6 +61,7 @@ function dashboard() {
 }
 
 async function prepare(page: Page, calls: { created?: unknown; patched?: unknown }) {
+  await page.route("**/api/staff/warehouse-items/*/disposition", route => route.fulfill({ json: { eligible: false, reasons: ["Chưa hết thời hạn lưu giữ"], legalHold: false, retentionDeadline: item.retentionDeadline, orders: [], proofs: [], logs: [] } }));
   await page.route("**/api/staff/warehouse-intake-images", route => route.fulfill({ json: { id: "intake-photo", url: "/staff/warehouse-images/intake-photo?provenance=INTAKE" } }));
   await page.route("**/api/staff/warehouse-images/**", route => route.fulfill({ contentType: "image/png", body: photoBuffer }));
   await page.route("**/api/staff/warehouse-items/*/images", route => route.fulfill({ json: { images: [] } }));
@@ -108,6 +109,67 @@ async function prepare(page: Page, calls: { created?: unknown; patched?: unknown
     })
   }));
 }
+
+for (const width of [1440, 390]) {
+  test(`disposition hold, review and protected evidence workflow at ${width}px`, async ({ page }, testInfo) => {
+    await page.setViewportSize({ width, height: 900 });
+    await prepare(page, {});
+    await page.route("**/api/auth/refresh", route => route.fulfill({ json: { ...staffSession, user: { ...staffSession.user, roles: ["ADMIN"] } } }));
+    let held = false;
+    let status = "";
+    const actions: string[] = [];
+    await page.route("**/api/staff/warehouse-items/*/disposition", route => {
+      if (route.request().method() === "POST") {
+        expect(route.request().postDataJSON()).toEqual({ target: "DISPOSED", reason: "Đã hết thời hạn theo quy định" });
+        actions.push("request"); status = "PENDING";
+        return route.fulfill({ json: { approvalId: "order" } });
+      }
+      return route.fulfill({ json: { status: status === "EXECUTED" ? "DISPOSED" : "STORED", eligible: !held && status !== "EXECUTED", reasons: held ? ["Đang tạm giữ pháp lý"] : [], legalHold: held, retentionDeadline: "2026-01-01T00:00:00Z",
+        orders: status ? [{ id: "order", itemId: item.id, requesterId: "another-admin", requesterName: "Admin lập lệnh", approverName: status === "PENDING" ? null : "Admin duyệt", target: "DISPOSED", reason: "Đã hết thời hạn theo quy định", status, createdAt: "2026-01-02T00:00:00Z" }] : [], proofs: status === "EXECUTED" ? [{ id: "proof" }] : [], logs: [] } });
+    });
+    await page.route("**/api/staff/warehouse-items/*/legal-hold", route => { held = route.request().postDataJSON().held; actions.push(`hold:${held}`); return route.fulfill({ json: { ok: true } }); });
+    await page.route("**/api/staff/warehouse-approvals/order/approve", route => { actions.push("approve"); status = "APPROVED"; return route.fulfill({ json: { ok: true } }); });
+    await page.route("**/api/staff/warehouse-items/upload-proof", route => route.fulfill({ json: { id: "proof" } }));
+    await page.route("**/api/staff/warehouse-proofs/proof", route => route.fulfill({ contentType: "image/png", body: photoBuffer }));
+    await page.route("**/api/staff/warehouse-approvals/order/execute", route => {
+      expect(route.request().postDataJSON()).toEqual({ proofIds: ["proof"] });
+      actions.push("execute"); status = "EXECUTED"; return route.fulfill({ json: { ok: true } });
+    });
+    await page.goto("/admin/staff");
+    await page.getByRole("button", { name: "Kho tài sản", exact: true }).click();
+    await page.getByRole("button", { name: "Xem chi tiết", exact: true }).click();
+    const panel = page.getByRole("region", { name: "Điều kiện và lệnh xử lý" });
+    await panel.getByLabel("Lý do thao tác").fill("Tạm giữ để giải quyết tranh chấp");
+    await panel.getByRole("button", { name: "Áp dụng tạm giữ pháp lý", exact: true }).click();
+    await expect(panel.getByRole("button", { name: "Lập lệnh xử lý" })).toBeDisabled();
+    await panel.getByLabel("Lý do thao tác").fill("Tranh chấp đã giải quyết");
+    await panel.getByRole("button", { name: "Gỡ tạm giữ pháp lý", exact: true }).click();
+    await panel.getByLabel("Lý do thao tác").fill("Đã hết thời hạn theo quy định");
+    await panel.getByRole("button", { name: "Lập lệnh xử lý" }).click();
+    await panel.getByRole("button", { name: "Phê duyệt", exact: true }).click();
+    await panel.getByLabel("Chứng từ xử lý", { exact: true }).setInputFiles(intakePhoto);
+    await expect(panel.getByRole("img", { name: "Chứng từ xử lý vật phẩm", exact: true })).toBeVisible();
+    await panel.getByRole("checkbox").check();
+    await panel.getByRole("button", { name: "Ghi nhận hoàn tất" }).click();
+    await expect(panel.getByText("Tiêu hủy · Đã thực hiện", { exact: true })).toBeVisible();
+    await expect(panel.getByRole("img", { name: "Chứng từ xử lý vật phẩm", exact: true })).toHaveAttribute("src", /^blob:/);
+    expect(actions).toEqual(["hold:true", "hold:false", "request", "approve", "execute"]);
+    await panel.getByRole("heading", { name: "Điều kiện xử lý vật phẩm" }).scrollIntoViewIfNeeded();
+    await page.screenshot({ path: testInfo.outputPath(`disposition-${width}.png`) });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
+  });
+}
+
+test("Staff sees disposition conditions but no Admin hold or order controls", async ({ page }) => {
+  await prepare(page, {});
+  await page.goto("/staff");
+  await page.getByRole("button", { name: "Kho tài sản", exact: true }).click();
+  await page.getByRole("button", { name: "Xem chi tiết", exact: true }).click();
+  const panel = page.getByRole("region", { name: "Điều kiện và lệnh xử lý" });
+  await expect(panel.getByText("Chưa hết thời hạn lưu giữ", { exact: true })).toBeVisible();
+  await expect(panel.getByLabel("Lý do thao tác")).toHaveCount(0);
+  await expect(panel.getByRole("button", { name: "Lập lệnh xử lý" })).toHaveCount(0);
+});
 
 for (const width of [1440, 390]) {
   test(`intake keyboard isolation, nested preview and draft restoration at ${width}px`, async ({ page }, testInfo) => {

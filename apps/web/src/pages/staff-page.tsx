@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode, type ImgHTMLAttributes } from "react";
+import { useSearchParams } from "react-router-dom";
 import {
   AlertTriangle,
   Archive,
@@ -47,6 +48,8 @@ import { AccessibleDialog } from "../components/accessible-dialog";
 import { useModalFocus } from "../hooks/use-modal-focus";
 import { WarehouseImageGallery, WarehouseImageView } from "../components/warehouse-images";
 
+import { WarehouseDisposition } from "../components/warehouse-disposition";
+
 type StaffTab = "custody" | "warehouse" | "dashboard" | "logs";
 type PendingAction = "" | "load" | "create" | "update" | "logs" | "custody" | "custody-action";
 
@@ -83,7 +86,7 @@ const custodyStatusLabels: Record<CustodyRequestStatus, { label: string; icon: R
   INTAKED: { label: "Đã tiếp nhận", icon: <CheckCircle2 size={14} /> }
 };
 
-const emptyFilters = { q: "", status: "", handoverPointId: "" };
+const emptyFilters = { q: "", status: "", handoverPointId: "", overdue: false };
 const emptyRejectForm = { reason: "" };
 
 function messageOf(reason: unknown, fallback: string) {
@@ -806,6 +809,7 @@ function WarehouseInventoryTab({
         <section className="warehouse-main">
           {/* Search and Filter bar */}
           <form className="warehouse-filter-bar" onSubmit={submitFilters}>
+            <label className="warehouse-check warehouse-overdue-filter"><input type="checkbox" checked={filters.overdue} onChange={event => setFilters({ ...filters, overdue: event.target.checked })} /> Quá hạn, không tạm giữ pháp lý</label>
             <label className="input-field search-field">
               <span>Tìm kiếm vật phẩm</span>
               <div className="input-with-icon">
@@ -905,6 +909,7 @@ function WarehouseInventoryTab({
                 </div>
 
                 <h3>{selectedItem.itemName}</h3>
+                <WarehouseDisposition key={selectedItem.id} itemId={selectedItem.id} onChanged={() => onRefresh()} />
                 {itemImages.length ? <WarehouseImageGallery images={itemImages} /> : <WarehouseImageView image={selectedItem.thumbnail} />}
                 {imagesError && <p className="field-error" role="alert">{imagesError}</p>}
                 <h4>Mô tả vật phẩm</h4>
@@ -1324,11 +1329,12 @@ function WarehouseInventoryTab({
 /* ─────────────── Main Staff Page ─────────────── */
 
 export function StaffPage() {
+  const [searchParams] = useSearchParams();
   const warehouseQuery = useRef({ ...emptyFilters, page: 1 });
   const custodyQuery = useRef({ status: "ALL", page: 1 });
   const custodyLoadSequence = useRef(0);
   const warehouseLoadSequence = useRef(0);
-  const [activeTab, setActiveTab] = useState<StaffTab>("custody");
+  const [activeTab, setActiveTab] = useState<StaffTab>(searchParams.get("tab") === "warehouse" ? "warehouse" : "custody");
   const [catalog, setCatalog] = useState<WarehouseCatalog | null>(null);
   const [dashboard, setDashboard] = useState<WarehouseDashboard | null>(null);
   const [custodyData, setCustodyData] = useState<CustodyRequestListResponse | null>(null);
@@ -1344,7 +1350,7 @@ export function StaffPage() {
   async function loadDashboard() {
     const sequence = ++warehouseLoadSequence.current;
     const q = { ...warehouseQuery.current };
-    const result = await api.listWarehouseItems({ q: q.q || undefined, status: q.status ? q.status as WarehouseStatus : undefined, handoverPointId: q.handoverPointId || undefined, page: q.page, pageSize: 12 });
+    const result = await api.listWarehouseItems({ overdue: q.overdue || undefined, q: q.q || undefined, status: q.status ? q.status as WarehouseStatus : undefined, handoverPointId: q.handoverPointId || undefined, page: q.page, pageSize: 12 });
     if (sequence === warehouseLoadSequence.current) setDashboard(result);
   }
 
