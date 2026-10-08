@@ -1,0 +1,86 @@
+@startuml
+title 3.14.1 View administration dashboard
+caption UC-084 | Implemented
+skinparam monochrome true
+skinparam shadowing false
+skinparam roundcorner 0
+skinparam defaultFontName Arial
+skinparam LegendBackgroundColor white
+skinparam style strictuml
+skinparam sequenceMessageAlign center
+show footbox
+<style>
+lifeLine {
+    LineStyle 0
+}
+</style>
+skinparam sequence {
+    ParticipantBackgroundColor white
+    ActorBackgroundColor white
+    LifeLineBackgroundColor white
+    LifeLineBorderColor black
+    GroupBackgroundColor white
+    GroupHeaderBackgroundColor white
+}
+
+' Source: apps/api-node/src/modules/admin/application/admin-reporting.use-cases.ts
+' Main entity migration: apps/api-node/src/migrations/002_lost_found_schema.sql
+' One-table abstraction: related repository reads/writes stay inside the service.
+actor "Admin" as Actor
+participant "Administration Dashboard" as Page
+participant "Admin API" as API
+participant "Reporting Service" as Service
+participant "posts" as Table <<entity>>
+
+Actor -> Page: 1: View administration dashboard
+activate Page
+Page -> Page: 2: Read from/to date filters
+Page -> API: 3: GET /api/admin/dashboard/kpis
+activate API
+API -> API: 4: Authenticate active session and require ADMIN role
+alt Session and required permission are valid
+    API -> API: 5: Validate optional YYYY-MM-DD date format
+    alt Request input is valid
+        API -> Service: 6: View administration dashboard for the current actor
+        activate Service
+        Service -> Service: 7: Normalize UTC window; default 30 days, maximum 366
+        alt Actual dates and date range are valid
+            Service -> Table: 8: Read undeleted post counts, status totals and daily buckets
+            activate Table
+            Table --> Service: 9: Post aggregates or query error
+            deactivate Table
+            Service -> Service: 10: Read remaining KPI groups via reporting repository
+            alt Operation succeeds
+                Service -> Service: 11: Fill missing trend days with zero; build totals and snapshot
+                Service --> API: 12: Dashboard KPIs, trends and status breakdown
+                API --> Page: 13: HTTP 200: Dashboard KPIs, trends and status breakdown
+                Page --> Actor: 14: Render KPIs and latest 14 nonzero trend days
+            else Query or response mapping failure
+                Service -> Service: 11.1: Do not fabricate data; propagate the query or mapping failure
+                Service --> API: 11.2: Propagate read failure
+                API --> Page: 11.3: HTTP 503 or 500
+                Page --> Actor: 11.4: Display error; do not report success
+            end
+        else Invalid dates or range exceeds 366 days
+            Service --> API: 8.1: Reject reporting date window
+            API --> Page: 8.2: HTTP 422
+            Page --> Actor: 8.3: Display error; do not report success
+        end
+        deactivate Service
+    else Invalid request input
+        API --> Page: 6.1: HTTP 422: input validation errors
+        Page --> Actor: 6.2: Display validation errors; do not execute the operation
+    end
+else Missing/invalid session or required permission
+    API --> Page: 5.1: HTTP 401 or 403
+    Page --> Actor: 5.2: Show session or access error; no protected result
+end
+deactivate API
+deactivate Page
+
+legend bottom left
+posts is the representative KPI entity; other aggregate groups are internal repository reads, not
+separate lifelines.
+endlegend
+
+@enduml

@@ -1,0 +1,68 @@
+@startuml
+title 3.8.4 Counter-propose an appointment
+caption UC-129 | Planned | Proposed design
+skinparam monochrome true
+skinparam shadowing false
+skinparam roundcorner 0
+skinparam defaultFontName Arial
+skinparam LegendBackgroundColor white
+skinparam style strictuml
+skinparam sequenceMessageAlign center
+show footbox
+<style>
+lifeLine {
+    LineStyle 0
+}
+</style>
+skinparam sequence {
+    ParticipantBackgroundColor white
+    ActorBackgroundColor white
+    LifeLineBackgroundColor white
+    LifeLineBorderColor black
+    GroupBackgroundColor white
+    GroupHeaderBackgroundColor white
+}
+
+' Source: docs/requirements/uc.md
+' Main entity migration: apps/api-node/src/migrations/002_lost_found_schema.sql
+' One-table abstraction: related repository reads/writes stay inside the service.
+actor "Claimant / Finder" as Actor
+participant "Proposed Appointment Negotiation" as Page
+participant "Proposed Appointments API" as API
+participant "Appointment Service" as Service
+participant "return_appointments" as Table <<entity>>
+
+Actor -> Page: 1: Open Counter-propose an appointment
+activate Page
+Page -> API: 2: Submit counter-proposal (proposed interface)
+activate API
+API -> API: 3: Validate access session, role and input
+alt Valid request
+API -> Service: 4: Counter-propose an appointment
+activate Service
+Service -> Table: 5: Proposed: lock current pending proposal and version
+activate Table
+Table --> Service: 6: Current participant proposal
+deactivate Table
+Service -> Service: 7: Require counterpart; validate replacement point/time
+Service -> Table: 8: Proposed: preserve old attempt; record counter-proposal
+activate Table
+Table --> Service: 9: New pending negotiation version
+deactivate Table
+Service -> Service: 10: Notify counterpart; require mutual acceptance
+Service --> API: 11: Counter-proposal awaiting consent
+API --> Page: 12: HTTP 200: Counter-proposal awaiting consent
+Page --> Actor: 13: Show authorized result
+deactivate Service
+else Invalid input, missing session or insufficient role
+API --> Page: 4.1: Proposed rejection: invalid input / authorization
+Page --> Actor: 4.2: Show appropriate error; retain form/draft
+end
+deactivate API
+deactivate Page
+
+legend left
+Scope: Planned: no counter-proposal endpoint/workflow. Reject-and-create is not negotiated
+rescheduling; new schema/contract may be required.
+endlegend
+@enduml

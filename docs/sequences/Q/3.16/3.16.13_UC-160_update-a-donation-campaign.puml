@@ -1,0 +1,83 @@
+@startuml
+title 3.16.13 Update a donation campaign
+caption UC-160 | Planned | Proposed design
+skinparam monochrome true
+skinparam shadowing false
+skinparam roundcorner 0
+skinparam defaultFontName Arial
+skinparam LegendBackgroundColor white
+skinparam style strictuml
+skinparam sequenceMessageAlign center
+show footbox
+<style>
+lifeLine {
+    LineStyle 0
+}
+</style>
+skinparam sequence {
+    ParticipantBackgroundColor white
+    ActorBackgroundColor white
+    LifeLineBackgroundColor white
+    LifeLineBorderColor black
+    GroupBackgroundColor white
+    GroupHeaderBackgroundColor white
+}
+
+' Source: docs/requirements/uc.md
+' Main entity migration: No migration: proposed entity only
+' One-table abstraction: related repository reads/writes stay inside the service.
+actor "Admin" as Actor
+participant "Donation Campaign UI (proposed)" as Page
+participant "Campaign API (proposed)" as API
+participant "Campaign Service (proposed)" as Service
+participant "donation_campaigns" as Table <<proposed entity>>
+
+Actor -> Page: 1: Update a donation campaign
+activate Page
+Page -> Page: 2: Edit campaign details and supply a change reason
+Page -> API: 3: Update donation campaign (proposed interface)
+activate API
+API -> API: 4: Authenticate active session and require ADMIN role
+alt Session and required permission are valid
+    API -> API: 5: Proposed: validate id, mutable fields and schedule
+    alt Request input is valid
+        API -> Service: 6: Update a donation campaign for the current actor
+        activate Service
+        Service -> Service: 7: Begin proposed transaction
+        Service -> Table: 8: Lock campaign and read current state (proposed)
+        activate Table
+        Table --> Service: 9: Campaign or no record
+        deactivate Table
+        alt Campaign exists and may be updated
+            Service -> Service: 10: Validate new schedule and rules; preserve past item outcomes
+            Service -> Table: 11: Update allowed campaign fields (proposed)
+            activate Table
+            Table --> Service: 12: Proposed updated campaign
+            deactivate Table
+            Service -> Service: 13: Record before/after history and actor/reason; commit
+            Service --> API: 14: Updated campaign (proposed)
+            API --> Page: 15: HTTP 200 (proposed): Updated campaign (proposed)
+            Page --> Actor: 16: Display saved campaign and retained history
+        else Campaign missing, closed or update invalid
+            Service --> API: 10.1: Campaign update is not allowed
+            API --> Page: 10.2: HTTP 404, 409 or 422 (proposed)
+            Page --> Actor: 10.3: Display error; do not report success
+        end
+        deactivate Service
+    else Invalid request input
+        API --> Page: 6.1: Proposed validation error response
+        Page --> Actor: 6.2: Display validation errors; do not execute the operation
+    end
+else Missing/invalid session or required permission
+    API --> Page: 5.1: Proposed authentication/access error response
+    Page --> Actor: 5.2: Show session or access error; no protected result
+end
+deactivate API
+deactivate Page
+
+legend bottom left
+PLANNED: API/UI and donation_campaigns table are proposed, not present in the runtime or migrations.
+Required schema and policy design remain open.
+endlegend
+
+@enduml

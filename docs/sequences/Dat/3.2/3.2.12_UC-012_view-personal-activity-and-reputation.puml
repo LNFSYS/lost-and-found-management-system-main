@@ -1,0 +1,64 @@
+@startuml
+title 3.2.12 View personal activity and reputation
+caption UC-012 | Implemented
+skinparam monochrome true
+skinparam shadowing false
+skinparam roundcorner 0
+skinparam defaultFontName Arial
+skinparam LegendBackgroundColor white
+skinparam style strictuml
+skinparam sequenceMessageAlign center
+show footbox
+<style>
+lifeLine {
+    LineStyle 0
+}
+</style>
+skinparam sequence {
+    ParticipantBackgroundColor white
+    ActorBackgroundColor white
+    LifeLineBackgroundColor white
+    LifeLineBorderColor black
+    GroupBackgroundColor white
+    GroupHeaderBackgroundColor white
+}
+
+' Source: apps/api-node/src/modules/auth/application/auth.use-cases.ts
+' Main entity migration: apps/api-node/src/migrations/001_auth.sql
+' One-table abstraction: related repository reads/writes stay inside the service.
+actor "User" as Actor
+participant "Profile Page" as Page
+participant "Auth API" as API
+participant "Auth Service" as Service
+participant "users" as Table <<entity>>
+
+Actor -> Page: 1: Open View personal activity and reputation
+activate Page
+Page -> API: 2: GET /api/auth/activity
+activate API
+API -> API: 3: Validate access session, role and input
+alt Valid request
+API -> Service: 4: View personal activity and reputation
+activate Service
+Service -> Table: 5: SELECT signed-in user's activity summary anchor
+activate Table
+Table --> Service: 6: User activity context
+deactivate Table
+Service -> Service: 7: Aggregate own posts, completed-return feedback and reputation
+Service -> Service: 8: Return viewer-scoped summary
+Service --> API: 9: Activity and reputation
+API --> Page: 10: HTTP 200: Activity and reputation
+Page --> Actor: 11: Show authorized result
+deactivate Service
+else Invalid input, missing session or insufficient role
+API --> Page: 4.1: HTTP 422 / 401 / 403 (429 only if rate-limited)
+Page --> Actor: 4.2: Show appropriate error; retain form/draft
+end
+deactivate API
+deactivate Page
+
+legend left
+Scope: Related post, feedback and reputation reads are internal. Do not expose another user's
+private activity.
+endlegend
+@enduml

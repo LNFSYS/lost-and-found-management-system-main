@@ -1,0 +1,62 @@
+@startuml
+title 3.12.2 Create item category
+caption UC-069 | Implemented
+skinparam monochrome true
+skinparam shadowing false
+skinparam roundcorner 0
+skinparam defaultFontName Arial
+skinparam LegendBackgroundColor white
+skinparam style strictuml
+skinparam sequenceMessageAlign center
+show footbox
+<style>
+lifeLine {
+    LineStyle 0
+}
+</style>
+skinparam sequence {
+    ParticipantBackgroundColor white
+    ActorBackgroundColor white
+    LifeLineBackgroundColor white
+    LifeLineBorderColor black
+    GroupBackgroundColor white
+    GroupHeaderBackgroundColor white
+}
+
+' Source: apps/api-node/src/modules/admin/application/admin-catalog.use-cases.ts
+' Main entity migration: apps/api-node/src/migrations/002_lost_found_schema.sql
+' One-table abstraction: related repository reads/writes stay inside the service.
+actor "Admin" as Actor
+participant "Master Data Administration" as Page
+participant "Admin API" as API
+participant "Admin Catalog Service" as Service
+participant "item_categories" as Table <<entity>>
+
+Actor -> Page: 1: Open Create item category
+activate Page
+Page -> API: 2: POST /api/admin/categories
+activate API
+API -> API: 3: Validate access session, role and input
+alt Valid request
+API -> Service: 4: Create item category
+activate Service
+Service -> Service: 5: Normalize name; require unique name and top-level parent if\nsupplied
+Service -> Table: 6: INSERT top-level category or valid child
+activate Table
+Table --> Service: 7: Created category
+deactivate Table
+Service --> API: 8: New category
+API --> Page: 9: HTTP 201: New category
+Page --> Actor: 10: Show authorized result
+deactivate Service
+else Invalid input, missing session or insufficient role
+API --> Page: 4.1: HTTP 422 / 401 / 403 (429 only if rate-limited)
+Page --> Actor: 4.2: Show appropriate error; retain form/draft
+end
+deactivate API
+deactivate Page
+
+legend left
+Scope: Exactly two hierarchy levels; invalid/missing parent returns 400/404, duplicate name 409.
+endlegend
+@enduml

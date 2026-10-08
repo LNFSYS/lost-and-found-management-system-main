@@ -1,0 +1,65 @@
+@startuml
+title 3.8.2 View appointment detail
+caption UC-127 | Implemented
+skinparam monochrome true
+skinparam shadowing false
+skinparam roundcorner 0
+skinparam defaultFontName Arial
+skinparam LegendBackgroundColor white
+skinparam style strictuml
+skinparam sequenceMessageAlign center
+show footbox
+<style>
+lifeLine {
+    LineStyle 0
+}
+</style>
+skinparam sequence {
+    ParticipantBackgroundColor white
+    ActorBackgroundColor white
+    LifeLineBackgroundColor white
+    LifeLineBorderColor black
+    GroupBackgroundColor white
+    GroupHeaderBackgroundColor white
+}
+
+' Source: apps/api-node/src/modules/appointments/application/appointment.use-cases.ts
+' Main entity migration: apps/api-node/src/migrations/002_lost_found_schema.sql
+' One-table abstraction: related repository reads/writes stay inside the service.
+actor "Claimant / Finder" as Actor
+participant "Appointments Page" as Page
+participant "Appointments API" as API
+participant "Appointment Service" as Service
+participant "return_appointments" as Table <<entity>>
+
+Actor -> Page: 1: Open View appointment detail
+activate Page
+Page -> API: 2: GET /api/appointments/:id
+activate API
+API -> API: 3: Validate access session, role and input
+alt Valid request
+API -> Service: 4: View appointment detail
+activate Service
+Service -> Table: 5: SELECT appointment with participant and workflow context
+activate Table
+Table --> Service: 6: Appointment and immutable attempt history
+deactivate Table
+Service -> Service: 7: Require actual Finder/Claimant, not role-only access
+Service -> Service: 8: Return public item photo or explicit placeholder
+Service -> Service: 9: Mark legacy version=0 appointments read-only
+Service --> API: 10: Appointment detail and action eligibility
+API --> Page: 11: HTTP 200: Appointment detail and action eligibility
+Page --> Actor: 12: Show authorized result
+deactivate Service
+else Invalid input, missing session or insufficient role
+API --> Page: 4.1: HTTP 422 / 401 / 403 (429 only if rate-limited)
+Page --> Actor: 4.2: Show appropriate error; retain form/draft
+end
+deactivate API
+deactivate Page
+
+legend left
+Scope: Migration 063 supplies workflow/version/events. The entity is return_appointments from 002;
+joins remain within Service.
+endlegend
+@enduml

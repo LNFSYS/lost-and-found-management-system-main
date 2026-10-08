@@ -1,0 +1,54 @@
+@startuml
+title 3.9.9 Calculate item retention deadline
+caption UC-057 | Implemented
+skinparam monochrome true
+skinparam shadowing false
+skinparam roundcorner 0
+skinparam defaultFontName Arial
+skinparam LegendBackgroundColor white
+skinparam style strictuml
+skinparam sequenceMessageAlign center
+show footbox
+<style>
+lifeLine {
+    LineStyle 0
+}
+</style>
+skinparam sequence {
+    ParticipantBackgroundColor white
+    ActorBackgroundColor white
+    LifeLineBackgroundColor white
+    LifeLineBorderColor black
+    GroupBackgroundColor white
+    GroupHeaderBackgroundColor white
+}
+
+' Source: apps/api-node/src/modules/warehouse/application/warehouse.use-cases.ts
+' Main entity migration: apps/api-node/src/migrations/010_notifications_and_warehouse.sql
+' One-table abstraction: related repository reads/writes stay inside the service.
+actor "System" as Actor
+participant "Intake Retention Calculation" as Page
+participant "Warehouse Service" as Service
+participant "warehouse_items" as Table <<entity>>
+
+Actor -> Page: 1: Calculate retention during physical intake
+activate Page
+Page -> Service: 2: Run task with current eligible context
+activate Service
+Service -> Service: 3: Validate non-future physical receivedAt and category
+Service -> Service: 4: Resolve configured retention days for category with bounded\nfallback
+Service -> Service: 5: Calculate UTC receivedAt + retentionDays
+Service -> Table: 6: Persist retention_deadline with received warehouse item
+activate Table
+Table --> Service: 7: Stored retention deadline
+deactivate Table
+Service --> Page: 8: Category retention deadline
+Page --> Actor: 9: Record task outcome
+deactivate Service
+deactivate Page
+
+legend left
+Scope: Policy defaults: general 60, documents 120, electronics 90, perishables 3 days. Migration 014
+adds deadline; only validated configured policy is applied.
+endlegend
+@enduml

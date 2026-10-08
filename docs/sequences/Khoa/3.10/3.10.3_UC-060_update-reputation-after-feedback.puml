@@ -1,0 +1,58 @@
+@startuml
+title 3.10.3 Update reputation after feedback
+caption UC-060 | Implemented
+skinparam monochrome true
+skinparam shadowing false
+skinparam roundcorner 0
+skinparam defaultFontName Arial
+skinparam LegendBackgroundColor white
+skinparam style strictuml
+skinparam sequenceMessageAlign center
+show footbox
+<style>
+lifeLine {
+    LineStyle 0
+}
+</style>
+skinparam sequence {
+    ParticipantBackgroundColor white
+    ActorBackgroundColor white
+    LifeLineBackgroundColor white
+    LifeLineBorderColor black
+    GroupBackgroundColor white
+    GroupHeaderBackgroundColor white
+}
+
+' Source: apps/api-node/src/modules/returns/application/return-feedback.use-cases.ts
+' Main entity migration: apps/api-node/src/migrations/002_lost_found_schema.sql
+' One-table abstraction: related repository reads/writes stay inside the service.
+actor "System" as Actor
+participant "Feedback Reputation Task" as Page
+participant "Return Feedback Service" as Service
+participant "reputation_scores" as Table <<entity>>
+
+Actor -> Page: 1: Update reputation inside eligible feedback transaction
+activate Page
+Page -> Service: 2: Run task with current eligible context
+activate Service
+Service -> Service: 3: Resolve actual counterpart; reuse feedback-scoped idempotency
+Service -> Table: 4: SELECT counterpart reputation FOR UPDATE
+activate Table
+Table --> Service: 5: Current total points
+deactivate Table
+Service -> Service: 6: Apply configured rating mapping and calculate level
+Service -> Table: 7: Upsert score and append unique feedback reputation event
+activate Table
+Table --> Service: 8: Updated score
+deactivate Table
+Service -> Service: 9: Commit atomically with feedback; replay creates no new points
+Service --> Page: 10: Reputation updated once
+Page --> Actor: 11: Record task outcome
+deactivate Service
+deactivate Page
+
+legend left
+Scope: Current rating deltas: 5=>+6, 4=>+4, 3=>+1, 2=>-1, 1=>-3. No penalty is automatically created
+for unreviewed no-show.
+endlegend
+@enduml

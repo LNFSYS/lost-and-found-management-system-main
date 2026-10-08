@@ -1,0 +1,92 @@
+@startuml
+title 3.14.5 Export audit and moderation data
+caption UC-166 | Implemented
+skinparam monochrome true
+skinparam shadowing false
+skinparam roundcorner 0
+skinparam defaultFontName Arial
+skinparam LegendBackgroundColor white
+skinparam style strictuml
+skinparam sequenceMessageAlign center
+show footbox
+<style>
+lifeLine {
+    LineStyle 0
+}
+</style>
+skinparam sequence {
+    ParticipantBackgroundColor white
+    ActorBackgroundColor white
+    LifeLineBackgroundColor white
+    LifeLineBorderColor black
+    GroupBackgroundColor white
+    GroupHeaderBackgroundColor white
+}
+
+' Source: apps/api-node/src/modules/activity/application/activity.use-cases.ts
+' Main entity migration: apps/api-node/src/migrations/039_admin_user_and_config_audit.sql
+' One-table abstraction: related repository reads/writes stay inside the service.
+actor "Admin" as Actor
+participant "Administrative Audit Page" as Page
+participant "Activity API" as API
+participant "Activity Service" as Service
+participant "admin_audit_logs" as Table <<entity>>
+
+Actor -> Page: 1: Export audit and moderation data
+activate Page
+Page -> Page: 2: Choose filters and CSV/JSON export format
+Page -> API: 3: GET /api/admin/audit/export?source=ADMIN&format=csv
+activate API
+API -> API: 4: Authenticate active session and require ADMIN role
+alt Session and required permission are valid
+    API -> API: 5: Set private/no-store; validate filters and format
+    alt Request input is valid
+        API -> Service: 6: Export audit and moderation data for the current actor
+        activate Service
+        Service -> Service: 7: Recheck ADMIN permission and begin transaction
+        Service -> Table: 8: Read filtered count and up to 5001 safe metadata rows
+        activate Table
+        Table --> Service: 9: Matching total and metadata
+        deactivate Table
+        alt Total and returned rows do not exceed 5000
+            Service -> Service: 10: Render allowlisted CSV/JSON; neutralize CSV formulas
+            Service -> Table: 11: Insert EXPORT_ACTIVITY audit with count and format
+            activate Table
+            Table --> Service: 12: Export audit acknowledgement
+            deactivate Table
+            Service -> Service: 13: Commit read/export audit transaction
+            alt Operation succeeds
+                Service --> API: 14: Safe export content
+                API --> Page: 15: HTTP 200: attachment with CSV/JSON MIME type
+                Page -> Page: 16: Download protected Blob and revoke object URL
+                Page --> Actor: 17: Show export complete
+            else Query, write or commit failure
+                Service -> Service: 14.1: Propagate failure; rollback only when transaction failure is\nconfirmed
+                Service --> API: 14.2: Propagate storage or transaction failure
+                API --> Page: 14.3: HTTP 503 or 500
+                Page --> Actor: 14.4: Display error; do not report success
+            end
+        else More than 5000 events
+            Service -> Service: 10.1: Abort transaction; do not silently truncate
+            Service --> API: 10.2: Narrow the export filters
+            API --> Page: 10.3: HTTP 422
+            Page --> Actor: 10.4: Display error; do not report success
+        end
+        deactivate Service
+    else Invalid request input
+        API --> Page: 6.1: HTTP 422: input validation errors
+        Page --> Actor: 6.2: Display validation errors; do not execute the operation
+    end
+else Missing/invalid session or required permission
+    API --> Page: 5.1: HTTP 401 or 403
+    Page --> Actor: 5.2: Show session or access error; no protected result
+end
+deactivate API
+deactivate Page
+
+legend bottom left
+ADMIN-source example. Export is a protected attachment; cross-source reads are internal projection
+work.
+endlegend
+
+@enduml

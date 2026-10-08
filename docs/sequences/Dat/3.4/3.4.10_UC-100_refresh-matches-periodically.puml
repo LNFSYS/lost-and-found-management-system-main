@@ -1,0 +1,67 @@
+@startuml
+title 3.4.10 Refresh matches periodically
+caption UC-100 | Implemented
+skinparam monochrome true
+skinparam shadowing false
+skinparam roundcorner 0
+skinparam defaultFontName Arial
+skinparam LegendBackgroundColor white
+skinparam style strictuml
+skinparam sequenceMessageAlign center
+show footbox
+<style>
+lifeLine {
+    LineStyle 0
+}
+</style>
+skinparam sequence {
+    ParticipantBackgroundColor white
+    ActorBackgroundColor white
+    LifeLineBackgroundColor white
+    LifeLineBorderColor black
+    GroupBackgroundColor white
+    GroupHeaderBackgroundColor white
+}
+
+' Source: apps/api-node/src/modules/matching/application/matching.use-cases.ts
+' Main entity migration: apps/api-node/src/migrations/020_matching_jobs.sql
+' One-table abstraction: related repository reads/writes stay inside the service.
+actor "Scheduler" as Actor
+participant "Matching Refresh Worker" as Page
+participant "Matching Service" as Service
+participant "matching_jobs" as Table <<entity>>
+
+Actor -> Page: 1: runPeriodicRefresh(interval, batch, lease)
+activate Page
+Page -> Service: 2: Run task with current eligible context
+activate Service
+Service -> Table: 3: Enqueue eligible active posts; claim one fenced job just-in-time
+activate Table
+Table --> Service: 4: Job with lease token and expiry
+deactivate Table
+Service -> Service: 5: Start bounded heartbeat; renew lease while calculating
+Service -> Service: 6: Load current source; score and persist under the same fence
+alt Calculation and lease completion succeed
+Service -> Table: 7: Complete owned job; clear timer and await renewal
+activate Table
+Table --> Service: 8: Completed job counters
+deactivate Table
+Service --> Page: 9: Refresh counters
+Page --> Actor: 10: Record task outcome
+else Lease lost or calculation fails
+Service -> Table: 7.1: Fail only owned lease; bounded retry/backoff
+activate Table
+Table --> Service: 7.2: Failed job counters
+deactivate Table
+Service -> Service: 7.3: Never persist as an unfenced owner
+Service --> Page: 7.4: Task not completed; bounded retry / report failure
+Page --> Actor: 7.5: Record failure without reporting success
+end
+deactivate Service
+deactivate Page
+
+legend left
+Scope: Migration 060 adds lease fencing. Graceful stop waits for in-flight refresh and renewal; no
+blanket force-exit.
+endlegend
+@enduml

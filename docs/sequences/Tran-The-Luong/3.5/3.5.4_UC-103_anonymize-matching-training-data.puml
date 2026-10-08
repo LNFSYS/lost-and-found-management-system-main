@@ -1,0 +1,57 @@
+@startuml
+title 3.5.4 Anonymize matching training data
+caption UC-103 | Planned | Proposed design
+skinparam monochrome true
+skinparam shadowing false
+skinparam roundcorner 0
+skinparam defaultFontName Arial
+skinparam LegendBackgroundColor white
+skinparam style strictuml
+skinparam sequenceMessageAlign center
+show footbox
+<style>
+lifeLine {
+    LineStyle 0
+}
+</style>
+skinparam sequence {
+    ParticipantBackgroundColor white
+    ActorBackgroundColor white
+    LifeLineBackgroundColor white
+    LifeLineBorderColor black
+    GroupBackgroundColor white
+    GroupHeaderBackgroundColor white
+}
+
+' Source: docs/requirements/uc.md
+' Main entity migration: Proposed entity; no migration
+' One-table abstraction: related repository reads/writes stay inside the service.
+actor "System" as Actor
+participant "Proposed Anonymization Task" as Page
+participant "Proposed Training Service" as Service
+participant "matching_training_examples" as Table <<proposed entity>>
+
+Actor -> Page: 1: Anonymize approved training candidates
+activate Page
+Page -> Service: 2: Run task with current eligible context
+activate Service
+Service -> Table: 3: Proposed: read approved candidate dataset
+activate Table
+Table --> Service: 4: Raw reviewed candidates
+deactivate Table
+Service -> Service: 5: Remove contact, identities, private serials and sensitive OCR
+Service -> Service: 6: Run privacy checks; retain non-identifying provenance
+Service -> Table: 7: Proposed: save sanitized version and validation receipt
+activate Table
+Table --> Service: 8: Sanitized training version
+deactivate Table
+Service --> Page: 9: Sanitized dataset for approval
+Page --> Actor: 10: Record task outcome
+deactivate Service
+deactivate Page
+
+legend left
+Scope: No active anonymization pipeline or entity migration. Raw images/private claim evidence
+require separately approved policy.
+endlegend
+@enduml

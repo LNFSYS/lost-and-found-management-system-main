@@ -1,0 +1,85 @@
+@startuml
+title 3.16.6 Create a disposition order
+caption UC-153 | Partial
+skinparam monochrome true
+skinparam shadowing false
+skinparam roundcorner 0
+skinparam defaultFontName Arial
+skinparam LegendBackgroundColor white
+skinparam style strictuml
+skinparam sequenceMessageAlign center
+show footbox
+<style>
+lifeLine {
+    LineStyle 0
+}
+</style>
+skinparam sequence {
+    ParticipantBackgroundColor white
+    ActorBackgroundColor white
+    LifeLineBackgroundColor white
+    LifeLineBorderColor black
+    GroupBackgroundColor white
+    GroupHeaderBackgroundColor white
+}
+
+' Source: apps/api-node/src/modules/warehouse/application/warehouse.use-cases.ts
+' Main entity migration: apps/api-node/src/migrations/054_custody_safety_contract.sql
+' One-table abstraction: related repository reads/writes stay inside the service.
+actor "Admin" as Actor
+participant "Administrative API Client" as Page
+participant "Staff API" as API
+participant "Warehouse Service" as Service
+participant "warehouse_action_approvals" as Table <<entity>>
+
+Actor -> Page: 1: Create a disposition order
+activate Page
+Page -> Page: 2: Choose terminal target and enter reason for one item
+Page -> API: 3: POST /api/staff/warehouse-items/:id/disposition
+activate API
+API -> API: 4: Authenticate active session and require STAFF or ADMIN
+alt Session and required permission are valid
+    API -> API: 5: Validate item UUID, DISPOSED/DONATED/TRANSFERRED and reason
+    alt Request input is valid
+        API -> Service: 6: Create a disposition order for the current actor
+        activate Service
+        Service -> Service: 7: Recheck active ADMIN permission; begin transaction; lock referenced\nitem
+        alt Warehouse item exists
+            Service -> Table: 8: Insert PENDING approval with item, target, requester and reason
+            activate Table
+            Table --> Service: 9: New approval id
+            deactivate Table
+            Service -> Service: 10: Commit request; leave item state and physical custody unchanged
+            alt Operation succeeds
+                Service --> API: 11: approvalId
+                API --> Page: 12: HTTP 201: approvalId
+                Page --> Actor: 13: Display created per-item request
+            else Query, write or commit failure
+                Service -> Service: 11.1: Propagate failure; rollback only when transaction failure is\nconfirmed
+                Service --> API: 11.2: Propagate storage or transaction failure
+                API --> Page: 11.3: HTTP 503 or 500
+                Page --> Actor: 11.4: Display error; do not report success
+            end
+        else Warehouse item missing
+            Service --> API: 8.1: Warehouse item not found
+            API --> Page: 8.2: HTTP 404
+            Page --> Actor: 8.3: Display error; do not report success
+        end
+        deactivate Service
+    else Invalid request input
+        API --> Page: 6.1: HTTP 422: input validation errors
+        Page --> Actor: 6.2: Display validation errors; do not execute the operation
+    end
+else Missing/invalid session or required permission
+    API --> Page: 5.1: HTTP 401 or 403
+    Page --> Actor: 5.2: Show session or access error; no protected result
+end
+deactivate API
+deactivate Page
+
+legend bottom left
+PARTIAL: per-item request API exists, not a complete order screen. Request creation does not check
+eligibility; execution rechecks every safety gate.
+endlegend
+
+@enduml

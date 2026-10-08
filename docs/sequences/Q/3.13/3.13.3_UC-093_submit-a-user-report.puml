@@ -1,0 +1,97 @@
+@startuml
+title 3.13.3 Submit a user report
+caption UC-093 | Implemented
+skinparam monochrome true
+skinparam shadowing false
+skinparam roundcorner 0
+skinparam defaultFontName Arial
+skinparam LegendBackgroundColor white
+skinparam style strictuml
+skinparam sequenceMessageAlign center
+show footbox
+<style>
+lifeLine {
+    LineStyle 0
+}
+</style>
+skinparam sequence {
+    ParticipantBackgroundColor white
+    ActorBackgroundColor white
+    LifeLineBackgroundColor white
+    LifeLineBorderColor black
+    GroupBackgroundColor white
+    GroupHeaderBackgroundColor white
+}
+
+' Source: apps/api-node/src/modules/reports/application/report.use-cases.ts
+' Main entity migration: apps/api-node/src/migrations/002_lost_found_schema.sql
+' One-table abstraction: related repository reads/writes stay inside the service.
+actor "Authenticated User" as Actor
+participant "Report Dialog" as Page
+participant "Report API" as API
+participant "Report Service" as Service
+participant "reports" as Table <<entity>>
+
+Actor -> Page: 1: Submit a user report
+activate Page
+Page -> Page: 2: Enter target, reason, description and idempotency key
+Page -> API: 3: POST /api/reports
+activate API
+API -> API: 4: Authenticate active session
+alt Session and required permission are valid
+    API -> API: 5: Validate target UUID/type, safe text and idempotency key
+    alt Request input is valid
+        API -> Service: 6: Submit a user report for the current actor
+        activate Service
+        Service -> Service: 7: Find accessible target; derive authoritative entity/source
+        alt Target is accessible
+            Service -> Service: 8: Hash payload and begin transaction
+            Service -> Table: 9: Find reporter's existing idempotency key
+            activate Table
+            Table --> Service: 10: Existing report/hash, or no record
+            deactivate Table
+            alt No previous request
+                Service -> Table: 11: Insert PENDING report with derived target and request hash
+                activate Table
+                Table --> Service: 12: Inserted report, or duplicate-key result
+                deactivate Table
+                Service -> Service: 13: Handle matching duplicate replay; record SUBMITTED audit for new\nreport; read own detail and commit
+                alt Operation succeeds
+                    Service --> API: 14: Created or replayed report
+                    API --> Page: 15: HTTP 201: Created or replayed report
+                    Page --> Actor: 16: Display submission result
+                else Query, write or commit failure
+                    Service -> Service: 14.1: Propagate failure; rollback only when transaction failure is\nconfirmed
+                    Service --> API: 14.2: Propagate storage or transaction failure
+                    API --> Page: 14.3: HTTP 503 or 500
+                    Page --> Actor: 14.4: Display error; do not report success
+                end
+            else Existing request has identical payload
+                Service -> Service: 11.1: Return existing report without creating another
+                Service --> API: 11.2: Existing report
+                API --> Page: 11.3: HTTP 201: Existing report
+                Page --> Actor: 11.4: Display previous submission
+            else Idempotency key belongs to different payload
+                Service -> Service: 11.5: Abort transaction
+                Service --> API: 11.6: Idempotency conflict
+                API --> Page: 11.7: HTTP 409
+                Page --> Actor: 11.8: Display error; do not report success
+            end
+        else Target unavailable or inaccessible
+            Service --> API: 8.1: Reportable target not found
+            API --> Page: 8.2: HTTP 404
+            Page --> Actor: 8.3: Display error; do not report success
+        end
+        deactivate Service
+    else Invalid request input
+        API --> Page: 6.1: HTTP 422: input validation errors
+        Page --> Actor: 6.2: Display validation errors; do not execute the operation
+    end
+else Missing/invalid session or required permission
+    API --> Page: 5.1: HTTP 401 or 403
+    Page --> Actor: 5.2: Show session or access error; no protected result
+end
+deactivate API
+deactivate Page
+
+@enduml

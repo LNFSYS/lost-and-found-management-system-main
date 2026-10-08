@@ -1,0 +1,79 @@
+@startuml
+title 3.16.12 Create a donation campaign
+caption UC-159 | Planned | Proposed design
+skinparam monochrome true
+skinparam shadowing false
+skinparam roundcorner 0
+skinparam defaultFontName Arial
+skinparam LegendBackgroundColor white
+skinparam style strictuml
+skinparam sequenceMessageAlign center
+show footbox
+<style>
+lifeLine {
+    LineStyle 0
+}
+</style>
+skinparam sequence {
+    ParticipantBackgroundColor white
+    ActorBackgroundColor white
+    LifeLineBackgroundColor white
+    LifeLineBorderColor black
+    GroupBackgroundColor white
+    GroupHeaderBackgroundColor white
+}
+
+' Source: docs/requirements/uc.md
+' Main entity migration: No migration: proposed entity only
+' One-table abstraction: related repository reads/writes stay inside the service.
+actor "Admin" as Actor
+participant "Donation Campaign UI (proposed)" as Page
+participant "Campaign API (proposed)" as API
+participant "Campaign Service (proposed)" as Service
+participant "donation_campaigns" as Table <<proposed entity>>
+
+Actor -> Page: 1: Create a donation campaign
+activate Page
+Page -> Page: 2: Enter name, receiving organization, schedule and eligibility rules
+Page -> API: 3: Create donation campaign (proposed interface)
+activate API
+API -> API: 4: Authenticate active session and require ADMIN role
+alt Session and required permission are valid
+    API -> API: 5: Proposed: validate required fields, time window and eligibility\nrules
+    alt Request input is valid
+        API -> Service: 6: Create a donation campaign for the current actor
+        activate Service
+        Service -> Service: 7: Check campaign policy and receiving organization (proposed)
+        alt Campaign information is valid
+            Service -> Service: 8: Begin proposed transaction
+            Service -> Table: 9: Insert proposed campaign with creation metadata
+            activate Table
+            Table --> Service: 10: Proposed campaign id
+            deactivate Table
+            Service -> Service: 11: Record initial change history and audit; commit
+            Service --> API: 12: Created campaign (proposed)
+            API --> Page: 13: HTTP 201 (proposed): Created campaign (proposed)
+            Page --> Actor: 14: Display campaign without assigning or disposing items
+        else Missing fields, invalid schedule or incompatible rules
+            Service --> API: 8.1: Invalid campaign information
+            API --> Page: 8.2: HTTP 422 (proposed)
+            Page --> Actor: 8.3: Display error; do not report success
+        end
+        deactivate Service
+    else Invalid request input
+        API --> Page: 6.1: Proposed validation error response
+        Page --> Actor: 6.2: Display validation errors; do not execute the operation
+    end
+else Missing/invalid session or required permission
+    API --> Page: 5.1: Proposed authentication/access error response
+    Page --> Actor: 5.2: Show session or access error; no protected result
+end
+deactivate API
+deactivate Page
+
+legend bottom left
+PLANNED: API/UI and donation_campaigns table are proposed, not present in the runtime or migrations.
+Required schema and policy design remain open.
+endlegend
+
+@enduml

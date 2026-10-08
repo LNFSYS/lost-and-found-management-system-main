@@ -1,0 +1,54 @@
+@startuml
+title 3.7.15 Receive appointment and handover notifications
+caption UC-125 | Partial | Implemented slice
+skinparam monochrome true
+skinparam shadowing false
+skinparam roundcorner 0
+skinparam defaultFontName Arial
+skinparam LegendBackgroundColor white
+skinparam style strictuml
+skinparam sequenceMessageAlign center
+show footbox
+<style>
+lifeLine {
+    LineStyle 0
+}
+</style>
+skinparam sequence {
+    ParticipantBackgroundColor white
+    ActorBackgroundColor white
+    LifeLineBackgroundColor white
+    LifeLineBorderColor black
+    GroupBackgroundColor white
+    GroupHeaderBackgroundColor white
+}
+
+' Source: apps/api-node/src/modules/appointments/application/appointment.use-cases.ts
+' Main entity migration: apps/api-node/src/migrations/002_lost_found_schema.sql
+' One-table abstraction: related repository reads/writes stay inside the service.
+actor "System" as Actor
+participant "Appointment Event Producer" as Page
+participant "Appointment Notification Service" as Service
+participant "notifications" as Table <<entity>>
+
+Actor -> Page: 1: Persist appointment/handover event notifications
+activate Page
+Page -> Service: 2: Run task with current eligible context
+activate Service
+Service -> Service: 3: Resolve both actual participants of authorized appointment
+Service -> Table: 4: INSERT per-user/version/action deduplicated notification
+activate Table
+Table --> Service: 5: Participant notifications
+deactivate Table
+Service -> Service: 6: Enqueue optional APPOINTMENT email in same transaction
+Service -> Service: 7: Commit action and immutable events before delivery
+Service --> Page: 8: Event notification/outbox
+Page --> Actor: 9: Record task outcome
+deactivate Service
+deactivate Page
+
+legend left
+Scope: Partial: proposals, decisions, cancellation, reminders, no-show and peer outcomes exist.
+Counter-proposal/rescheduling producers and full channel coverage remain missing.
+endlegend
+@enduml

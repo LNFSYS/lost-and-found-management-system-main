@@ -1,0 +1,56 @@
+@startuml
+title 3.4.7 Notify owner about a new match
+caption UC-097 | Partial | Implemented slice
+skinparam monochrome true
+skinparam shadowing false
+skinparam roundcorner 0
+skinparam defaultFontName Arial
+skinparam LegendBackgroundColor white
+skinparam style strictuml
+skinparam sequenceMessageAlign center
+show footbox
+<style>
+lifeLine {
+    LineStyle 0
+}
+</style>
+skinparam sequence {
+    ParticipantBackgroundColor white
+    ActorBackgroundColor white
+    LifeLineBackgroundColor white
+    LifeLineBorderColor black
+    GroupBackgroundColor white
+    GroupHeaderBackgroundColor white
+}
+
+' Source: apps/api-node/src/modules/matching/application/matching.use-cases.ts
+' Main entity migration: apps/api-node/src/migrations/002_lost_found_schema.sql
+' One-table abstraction: related repository reads/writes stay inside the service.
+actor "System" as Actor
+participant "New Match Notification Task" as Page
+participant "Matching Service" as Service
+participant "notifications" as Table <<entity>>
+
+Actor -> Page: 1: notifyNewMatches(postId)
+activate Page
+Page -> Service: 2: Run task with current eligible context
+activate Service
+Service -> Service: 3: Begin transaction; lock unnotified active pairs with score >= 60%
+Service -> Service: 4: Process both owners; skip owner/source dismissals
+Service -> Table: 5: INSERT privacy-safe MATCH_FOUND with recipient dedupe key
+activate Table
+Table --> Service: 6: Notification or replay
+deactivate Table
+Service -> Service: 7: Enqueue optional MATCH outbox according to preferences
+Service -> Service: 8: Mark pair notified in same transaction; commit
+Service -> Service: 9: Email worker rechecks open posts and preferences before sending
+Service --> Page: 10: Notifications/outbox committed
+Page --> Actor: 11: Record task outcome
+deactivate Service
+deactivate Page
+
+legend left
+Scope: Partial: producer and popup exist; deployment, matching inbox acceptance and candidate CI
+remain separate. Closed posts must not receive a new matching email.
+endlegend
+@enduml

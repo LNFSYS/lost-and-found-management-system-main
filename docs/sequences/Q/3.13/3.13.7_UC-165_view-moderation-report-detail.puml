@@ -1,0 +1,77 @@
+@startuml
+title 3.13.7 View moderation report detail
+caption UC-165 | Implemented
+skinparam monochrome true
+skinparam shadowing false
+skinparam roundcorner 0
+skinparam defaultFontName Arial
+skinparam LegendBackgroundColor white
+skinparam style strictuml
+skinparam sequenceMessageAlign center
+show footbox
+<style>
+lifeLine {
+    LineStyle 0
+}
+</style>
+skinparam sequence {
+    ParticipantBackgroundColor white
+    ActorBackgroundColor white
+    LifeLineBackgroundColor white
+    LifeLineBorderColor black
+    GroupBackgroundColor white
+    GroupHeaderBackgroundColor white
+}
+
+' Source: apps/api-node/src/modules/admin/application/admin-reporting.use-cases.ts
+' Main entity migration: apps/api-node/src/migrations/002_lost_found_schema.sql
+' One-table abstraction: related repository reads/writes stay inside the service.
+actor "Admin" as Actor
+participant "Moderation Report Detail" as Page
+participant "Admin API" as API
+participant "Reporting Service" as Service
+participant "reports" as Table <<entity>>
+
+Actor -> Page: 1: View moderation report detail
+activate Page
+Page -> Page: 2: Select report from moderation list
+Page -> API: 3: GET /api/admin/reports/:id
+activate API
+API -> API: 4: Authenticate active session and require ADMIN role
+alt Session and required permission are valid
+    API -> API: 5: Validate report UUID
+    alt Request input is valid
+        API -> Service: 6: View moderation report detail for the current actor
+        activate Service
+        Service -> Table: 7: Read report and authorized related context
+        activate Table
+        Table --> Service: 8: Report detail or no record
+        deactivate Table
+        alt Report exists
+            Service -> Service: 9: Load report audit history through repository; keep unrelated private\ndata excluded
+            Service --> API: 10: Report detail and audit history
+            API --> Page: 11: HTTP 200: Report detail and audit history
+            Page --> Actor: 12: Display report, evidence context, resolution and history
+        else Report does not exist
+            Service --> API: 9.1: Report not found
+            API --> Page: 9.2: HTTP 404
+            Page --> Actor: 9.3: Display error; do not report success
+        end
+        deactivate Service
+    else Invalid request input
+        API --> Page: 6.1: HTTP 422: input validation errors
+        Page --> Actor: 6.2: Display validation errors; do not execute the operation
+    end
+else Missing/invalid session or required permission
+    API --> Page: 5.1: HTTP 401 or 403
+    Page --> Actor: 5.2: Show session or access error; no protected result
+end
+deactivate API
+deactivate Page
+
+legend bottom left
+Related entity, reporter context and audit history are loaded through repository joins/internal
+reads.
+endlegend
+
+@enduml

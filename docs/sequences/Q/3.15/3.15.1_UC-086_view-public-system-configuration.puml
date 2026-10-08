@@ -1,0 +1,62 @@
+@startuml
+title 3.15.1 View public system configuration
+caption UC-086 | Implemented
+skinparam monochrome true
+skinparam shadowing false
+skinparam roundcorner 0
+skinparam defaultFontName Arial
+skinparam LegendBackgroundColor white
+skinparam style strictuml
+skinparam sequenceMessageAlign center
+show footbox
+<style>
+lifeLine {
+    LineStyle 0
+}
+</style>
+skinparam sequence {
+    ParticipantBackgroundColor white
+    ActorBackgroundColor white
+    LifeLineBackgroundColor white
+    LifeLineBorderColor black
+    GroupBackgroundColor white
+    GroupHeaderBackgroundColor white
+}
+
+' Source: apps/api-node/src/modules/system-config/application/system-config.use-cases.ts
+' Main entity migration: apps/api-node/src/migrations/002_lost_found_schema.sql
+' One-table abstraction: related repository reads/writes stay inside the service.
+actor "Web Client" as Actor
+participant "Web Application" as Page
+participant "Public Config API" as API
+participant "Config Service" as Service
+participant "config_entries" as Table <<entity>>
+
+Actor -> Page: 1: View public system configuration
+activate Page
+Page -> Page: 2: Initialize public validation/display configuration
+Page -> API: 3: GET /api/config/public
+activate API
+API -> API: 4: Public endpoint; no login required
+API -> Service: 5: View public system configuration for the current actor
+activate Service
+Service -> Table: 6: Read is_public = TRUE entries
+activate Table
+Table --> Service: 7: Candidate public configuration rows, or query error
+deactivate Table
+alt Operation succeeds
+    Service -> Service: 8: Keep only allowlisted keys or client.*; parse typed values
+    Service --> API: 9: Public items and values
+    API --> Page: 10: HTTP 200: Public items and values
+    Page --> Actor: 11: Apply public validation and display settings
+else Query or response mapping failure
+    Service -> Service: 8.1: Do not fabricate data; propagate the query or mapping failure
+    Service --> API: 8.2: Propagate read failure
+    API --> Page: 8.3: HTTP 422, 503 or 500
+    Page --> Actor: 8.4: Display error; do not report success
+end
+deactivate Service
+deactivate API
+deactivate Page
+
+@enduml

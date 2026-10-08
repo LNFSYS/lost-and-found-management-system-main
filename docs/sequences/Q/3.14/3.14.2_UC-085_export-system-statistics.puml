@@ -1,0 +1,100 @@
+@startuml
+title 3.14.2 Export system statistics
+caption UC-085 | Implemented
+skinparam monochrome true
+skinparam shadowing false
+skinparam roundcorner 0
+skinparam defaultFontName Arial
+skinparam LegendBackgroundColor white
+skinparam style strictuml
+skinparam sequenceMessageAlign center
+show footbox
+<style>
+lifeLine {
+    LineStyle 0
+}
+</style>
+skinparam sequence {
+    ParticipantBackgroundColor white
+    ActorBackgroundColor white
+    LifeLineBackgroundColor white
+    LifeLineBorderColor black
+    GroupBackgroundColor white
+    GroupHeaderBackgroundColor white
+}
+
+' Source: apps/api-node/src/modules/admin/application/admin-reporting.use-cases.ts
+' Main entity migration: apps/api-node/src/migrations/039_admin_user_and_config_audit.sql
+' One-table abstraction: related repository reads/writes stay inside the service.
+actor "Admin" as Actor
+participant "Statistics Export Panel" as Page
+participant "Admin API" as API
+participant "Reporting Service" as Service
+participant "admin_audit_logs" as Table <<entity>>
+
+Actor -> Page: 1: Export system statistics
+activate Page
+Page -> Page: 2: Choose dates, CSV/JSON and at least one section
+Page -> API: 3: POST /api/admin/statistics/export
+activate API
+API -> API: 4: Authenticate active session and require ADMIN role
+alt Session and required permission are valid
+    API -> API: 5: Validate date format, export format and allowed sections
+    alt Request input is valid
+        API -> Service: 6: Export system statistics for the current actor
+        activate Service
+        Service -> Service: 7: Validate UTC date window; load aggregate KPIs; build selected\nCSV/JSON rows
+        alt Aggregate export generation succeeds
+            Service -> Table: 8: Insert ADMIN_STATISTICS_EXPORT_COMPLETED with safe counts/filters
+            activate Table
+            Table --> Service: 9: Audit write acknowledgement or error
+            deactivate Table
+            alt Success audit is persisted
+                Service --> API: 10: File envelope: name, MIME type, row count and content
+                API --> Page: 11: HTTP 200: JSON export envelope
+                Page -> Page: 12: Create Blob; trigger download; revoke object URL
+                Page --> Actor: 13: Show successful export and row count
+            else Audit write fails
+                Service -> Table: 10.1: Best-effort record ADMIN_STATISTICS_EXPORT_FAILED
+                activate Table
+                Table --> Service: 10.2: Acknowledgement or ignored failure-log error
+                deactivate Table
+                Service --> API: 10.3: Propagate original export error
+                API --> Page: 10.4: HTTP 503 or 500
+                Page --> Actor: 10.5: Display error; do not report success
+            end
+        else Invalid range, aggregate query or rendering failure
+            Service -> Table: 8.1: Best-effort record ADMIN_STATISTICS_EXPORT_FAILED
+            activate Table
+            Table --> Service: 8.2: Acknowledgement or ignored failure-log error
+            deactivate Table
+            Service --> API: 8.3: Propagate original generation error
+            API --> Page: 8.4: HTTP 422, 503 or 500
+            Page --> Actor: 8.5: Display error; do not report success
+        end
+        deactivate Service
+    else Invalid request input
+        API -> Service: 6.1: Record export validation failure without parsed input
+        activate Service
+        Service -> Table: 6.2: Best-effort record ADMIN_STATISTICS_EXPORT_FAILED
+        activate Table
+        Table --> Service: 6.3: Acknowledgement or ignored failure-log error
+        deactivate Table
+        Service --> API: 6.4: Failure logging finished; preserve validation error
+        deactivate Service
+        API --> Page: 6.5: HTTP 422: input validation errors
+        Page --> Actor: 6.6: Display validation errors; do not execute the operation
+    end
+else Missing/invalid session or required permission
+    API --> Page: 5.1: HTTP 401 or 403
+    Page --> Actor: 5.2: Show session or access error; no protected result
+end
+deactivate API
+deactivate Page
+
+legend bottom left
+Aggregate reads are internal repository work. HTTP 200 returns a JSON file envelope, not an
+attachment stream.
+endlegend
+
+@enduml

@@ -1,0 +1,53 @@
+@startuml
+title 3.6.14 Calculate verification confidence
+caption UC-110 | Planned | Proposed design
+skinparam monochrome true
+skinparam shadowing false
+skinparam roundcorner 0
+skinparam defaultFontName Arial
+skinparam LegendBackgroundColor white
+skinparam style strictuml
+skinparam sequenceMessageAlign center
+show footbox
+<style>
+lifeLine {
+    LineStyle 0
+}
+</style>
+skinparam sequence {
+    ParticipantBackgroundColor white
+    ActorBackgroundColor white
+    LifeLineBackgroundColor white
+    LifeLineBorderColor black
+    GroupBackgroundColor white
+    GroupHeaderBackgroundColor white
+}
+
+' Source: docs/requirements/uc.md
+' Main entity migration: apps/api-node/src/migrations/002_lost_found_schema.sql
+' One-table abstraction: related repository reads/writes stay inside the service.
+actor "System" as Actor
+participant "Proposed Verification Task" as Page
+participant "Claim Service" as Service
+participant "claims" as Table <<entity>>
+
+Actor -> Page: 1: Calculate support confidence (proposed task)
+activate Page
+Page -> Service: 2: Run task with current eligible context
+activate Service
+Service -> Table: 3: Proposed: read authorized answer/evidence support signals
+activate Table
+Table --> Service: 4: Verification input snapshot
+deactivate Table
+Service -> Service: 5: Calculate explainable support score with versioned policy
+Service -> Service: 6: Return confidence and uncertainty; require human decision
+Service --> Page: 7: Support confidence only
+Page --> Actor: 8: Record task outcome
+deactivate Service
+deactivate Page
+
+legend left
+Scope: Planned: current answered-count progress is not this confidence algorithm. No active scoring
+workflow or automatic ownership decision exists.
+endlegend
+@enduml

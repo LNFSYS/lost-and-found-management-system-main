@@ -1,0 +1,63 @@
+@startuml
+title 3.11.1 List and search user accounts
+caption UC-062 | Implemented
+skinparam monochrome true
+skinparam shadowing false
+skinparam roundcorner 0
+skinparam defaultFontName Arial
+skinparam LegendBackgroundColor white
+skinparam style strictuml
+skinparam sequenceMessageAlign center
+show footbox
+<style>
+lifeLine {
+    LineStyle 0
+}
+</style>
+skinparam sequence {
+    ParticipantBackgroundColor white
+    ActorBackgroundColor white
+    LifeLineBackgroundColor white
+    LifeLineBorderColor black
+    GroupBackgroundColor white
+    GroupHeaderBackgroundColor white
+}
+
+' Source: apps/api-node/src/modules/admin/application/admin-user.use-cases.ts
+' Main entity migration: apps/api-node/src/migrations/001_auth.sql
+' One-table abstraction: related repository reads/writes stay inside the service.
+actor "Admin" as Actor
+participant "User Administration" as Page
+participant "Admin API" as API
+participant "Admin User Service" as Service
+participant "users" as Table <<entity>>
+
+Actor -> Page: 1: Open List and search user accounts
+activate Page
+Page -> API: 2: GET /api/admin/users
+activate API
+API -> API: 3: Validate access session, role and input
+alt Valid request
+API -> Service: 4: List and search user accounts
+activate Service
+Service -> Table: 5: SELECT filtered user accounts with pagination
+activate Table
+Table --> Service: 6: Accounts and total
+deactivate Table
+Service -> Service: 7: Serialize supported profile/roles/status; exclude password hashes
+Service --> API: 8: Searchable account list
+API --> Page: 9: HTTP 200: Searchable account list
+Page --> Actor: 10: Show authorized result
+deactivate Service
+else Invalid input, missing session or insufficient role
+API --> Page: 4.1: HTTP 422 / 401 / 403 (429 only if rate-limited)
+Page --> Actor: 4.2: Show appropriate error; retain form/draft
+end
+deactivate API
+deactivate Page
+
+legend left
+Related tables, authorization, transactions and audit remain inside the service. Catalogue status is
+not deployment or manual acceptance.
+endlegend
+@enduml

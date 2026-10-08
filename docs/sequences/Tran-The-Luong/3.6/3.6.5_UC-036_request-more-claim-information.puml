@@ -1,0 +1,77 @@
+@startuml
+title 3.6.5 Request more claim information
+caption UC-036 | Implemented
+skinparam monochrome true
+skinparam shadowing false
+skinparam roundcorner 0
+skinparam defaultFontName Arial
+skinparam LegendBackgroundColor white
+skinparam style strictuml
+skinparam sequenceMessageAlign center
+show footbox
+<style>
+lifeLine {
+    LineStyle 0
+}
+</style>
+skinparam sequence {
+    ParticipantBackgroundColor white
+    ActorBackgroundColor white
+    LifeLineBackgroundColor white
+    LifeLineBorderColor black
+    GroupBackgroundColor white
+    GroupHeaderBackgroundColor white
+}
+
+' Source: apps/api-node/src/modules/claims/application/claim.use-cases.ts
+' Main entity migration: apps/api-node/src/migrations/002_lost_found_schema.sql
+' One-table abstraction: related repository reads/writes stay inside the service.
+actor "Finder" as Actor
+participant "Private Claims Page" as Page
+participant "Claims API" as API
+participant "Claim Service" as Service
+participant "claims" as Table <<entity>>
+
+Actor -> Page: 1: Open Request more claim information
+activate Page
+Page -> API: 2: POST /api/claims/:claimId/decision (REQUEST_MORE_INFO)
+activate API
+API -> API: 3: Validate access session, role and input
+alt Valid request
+API -> Service: 4: Request more claim information
+activate Service
+Service -> Table: 5: SELECT claim FOR UPDATE and Finder participant
+activate Table
+Table --> Service: 6: Claim, role and consent
+deactivate Table
+Service -> Service: 7: Require actual Finder; match request fingerprint; require PENDING\nrequest
+alt Business rules satisfied
+Service -> Service: 8: Accept exact idempotent replay without repeating writes
+Service -> Table: 9: UPDATE claim to NEED_MORE_INFO; Finder decision ACCEPTED
+activate Table
+Table --> Service: 10: Updated claim
+deactivate Table
+Service -> Service: 11: Update participant consent; open private room
+Service -> Service: 12: Append immutable audit; persist notification and optional outbox
+Service -> Service: 13: Commit; publish privacy-safe event after commit
+Service --> API: 14: Request for clarification
+API --> Page: 15: HTTP 200: Request for clarification
+Page --> Actor: 16: Show authorized result
+else Missing or ineligible context
+Service --> API: 8.1: Wrong Finder, ended request or conflicting retry
+API --> Page: 8.2: HTTP 404 or 409
+Page --> Actor: 8.3: Display error; do not report success
+end
+deactivate Service
+else Invalid input, missing session or insufficient role
+API --> Page: 4.1: HTTP 422 / 401 / 403 (429 only if rate-limited)
+Page --> Actor: 4.2: Show appropriate error; retain form/draft
+end
+deactivate API
+deactivate Page
+
+legend left
+Scope: This diagram covers the initial PENDING-request decision; later verification more-info uses
+the verification decision route.
+endlegend
+@enduml

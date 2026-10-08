@@ -1,0 +1,54 @@
+@startuml
+title 3.9.16 Receive custody status notifications
+caption UC-147 | Partial | Implemented slice
+skinparam monochrome true
+skinparam shadowing false
+skinparam roundcorner 0
+skinparam defaultFontName Arial
+skinparam LegendBackgroundColor white
+skinparam style strictuml
+skinparam sequenceMessageAlign center
+show footbox
+<style>
+lifeLine {
+    LineStyle 0
+}
+</style>
+skinparam sequence {
+    ParticipantBackgroundColor white
+    ActorBackgroundColor white
+    LifeLineBackgroundColor white
+    LifeLineBorderColor black
+    GroupBackgroundColor white
+    GroupHeaderBackgroundColor white
+}
+
+' Source: apps/api-node/src/modules/warehouse/application/custody-notifications.ts
+' Main entity migration: apps/api-node/src/migrations/002_lost_found_schema.sql
+' One-table abstraction: related repository reads/writes stay inside the service.
+actor "System" as Actor
+participant "Custody Event Producer" as Page
+participant "Custody Notification Service" as Service
+participant "notifications" as Table <<entity>>
+
+Actor -> Page: 1: Record custody event notifications
+activate Page
+Page -> Service: 2: Run task with current eligible context
+activate Service
+Service -> Service: 3: Resolve actual request, Finder and allowed event recipients
+Service -> Table: 4: INSERT event/recipient-deduplicated custody notifications
+activate Table
+Table --> Service: 5: Recipient notifications
+deactivate Table
+Service -> Service: 6: Queue optional CUSTODY outboxes in business transaction
+Service -> Service: 7: Publish safe recipient-scoped event only after commit
+Service --> Page: 8: Custody notification/outbox
+Page --> Actor: 9: Record task outcome
+deactivate Service
+deactivate Page
+
+legend left
+Scope: Partial: request/intake/return producers exist. Complete movement/release coverage and
+provider acceptance are separate gaps.
+endlegend
+@enduml

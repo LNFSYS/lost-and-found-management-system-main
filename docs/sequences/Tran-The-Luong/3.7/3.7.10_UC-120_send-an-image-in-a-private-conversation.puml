@@ -1,0 +1,87 @@
+@startuml
+title 3.7.10 Send an image in a private conversation
+caption UC-120 | Implemented
+skinparam monochrome true
+skinparam shadowing false
+skinparam roundcorner 0
+skinparam defaultFontName Arial
+skinparam LegendBackgroundColor white
+skinparam style strictuml
+skinparam sequenceMessageAlign center
+show footbox
+<style>
+lifeLine {
+    LineStyle 0
+}
+</style>
+skinparam sequence {
+    ParticipantBackgroundColor white
+    ActorBackgroundColor white
+    LifeLineBackgroundColor white
+    LifeLineBorderColor black
+    GroupBackgroundColor white
+    GroupHeaderBackgroundColor white
+}
+
+' Source: apps/api-node/src/modules/claims/application/claim.use-cases.ts
+' Main entity migration: apps/api-node/src/migrations/002_lost_found_schema.sql
+' One-table abstraction: related repository reads/writes stay inside the service.
+actor "Claimant / Finder" as Actor
+participant "Private Conversation" as Page
+participant "Claims API" as API
+participant "Claim Chat Service" as Service
+participant "chat_messages" as Table <<entity>>
+
+Actor -> Page: 1: Open Send an image in a private conversation
+activate Page
+Page -> API: 2: POST /api/claims/:id/messages/images (multipart)
+activate API
+API -> API: 3: Validate access session, role and input
+alt Valid request
+API -> Service: 4: Send an image in a private conversation
+activate Service
+Service -> Service: 5: Require active consented room; enforce sender contact-photo gate
+Service -> Service: 6: Coordinate PHOTO and IMAGE using stable clientMessageId
+Service -> Service: 7: Coordinate stable upload operation; check replay and authorization
+Service -> Table: 8: Find authorized room and IMAGE client-key replay
+activate Table
+Table --> Service: 9: Existing reference or upload context
+deactivate Table
+Service -> Service: 10: Validate image bytes; save private asset through storage adapter
+alt Asset storage succeeds
+Service -> Service: 11: Persist reference with business recheck in coordinated transaction
+Service -> Table: 12: Atomically INSERT protected evidence and IMAGE message
+activate Table
+Table --> Service: 13: Persistence acknowledgement / reference
+deactivate Table
+Service -> Service: 14: Commit and reconcile operation on authoritative primary
+alt Persistence confirmed
+Service -> Service: 15: Publish counterpart notification only after confirmed persistence
+Service -> Service: 16: Return protected API URL, never raw storage reference
+Service --> API: 17: Private IMAGE chat message
+API --> Page: 18: HTTP 201: Private IMAGE chat message
+Page --> Actor: 19: Show authorized result
+else Outcome unresolved or acknowledgement lost
+Service -> Service: 15.1: Keep asset and operation; reconcile later / stable retry
+Service --> API: 15.2: Do not claim success or delete possibly referenced asset
+API --> Page: 15.3: HTTP 503
+Page --> Actor: 15.4: Display error; do not report success
+end
+else Storage unavailable
+Service --> API: 11.1: No confirmed persisted upload
+API --> Page: 11.2: HTTP 503
+Page --> Actor: 11.3: Display error; do not report success
+end
+deactivate Service
+else Invalid input, missing session or insufficient role
+API --> Page: 4.1: HTTP 422 / 401 / 403 (429 only if rate-limited)
+Page --> Actor: 4.2: Show appropriate error; retain form/draft
+end
+deactivate API
+deactivate Page
+
+legend left
+Scope: IMAGE and protected PHOTO evidence persist atomically. Stable replay avoids duplicates;
+storage/unknown DB outcomes are not fake success. Late client callbacks must match room/generation.
+endlegend
+@enduml

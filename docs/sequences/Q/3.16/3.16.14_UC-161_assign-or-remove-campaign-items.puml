@@ -1,0 +1,84 @@
+@startuml
+title 3.16.14 Assign or remove campaign items
+caption UC-161 | Planned | Proposed design
+skinparam monochrome true
+skinparam shadowing false
+skinparam roundcorner 0
+skinparam defaultFontName Arial
+skinparam LegendBackgroundColor white
+skinparam style strictuml
+skinparam sequenceMessageAlign center
+show footbox
+<style>
+lifeLine {
+    LineStyle 0
+}
+</style>
+skinparam sequence {
+    ParticipantBackgroundColor white
+    ActorBackgroundColor white
+    LifeLineBackgroundColor white
+    LifeLineBorderColor black
+    GroupBackgroundColor white
+    GroupHeaderBackgroundColor white
+}
+
+' Source: docs/requirements/uc.md
+' Main entity migration: No migration: proposed entity only
+' One-table abstraction: related repository reads/writes stay inside the service.
+actor "Staff / Admin" as Actor
+participant "Donation Campaign UI (proposed)" as Page
+participant "Campaign API (proposed)" as API
+participant "Campaign Service (proposed)" as Service
+participant "donation_campaigns" as Table <<proposed entity>>
+
+Actor -> Page: 1: Assign or remove campaign items
+activate Page
+Page -> Page: 2: Select campaign, items and add/remove action
+Page -> API: 3: Assign or remove campaign items (proposed interface)
+activate API
+API -> API: 4: Proposed: authenticate active session and authorize STAFF or ADMIN
+alt Session and required permission are valid
+    API -> API: 5: Proposed: validate ids and item-management permission
+    alt Request input is valid
+        API -> Service: 6: Assign or remove campaign items for the current actor
+        activate Service
+        Service -> Service: 7: Begin proposed transaction
+        Service -> Table: 8: Lock campaign and verify editable processing state (proposed)
+        activate Table
+        Table --> Service: 9: Campaign state
+        deactivate Table
+        Service -> Service: 10: Lock selected custody items; inspect retention, claims,\nappointments, disputes, holds and processing state
+        alt Campaign is editable and selected items are eligible/unprocessed
+            Service -> Service: 11: Add eligible membership or remove unprocessed membership; keep prior\nitem outcomes
+            Service -> Table: 12: Record campaign membership revision (proposed)
+            activate Table
+            Table --> Service: 13: Proposed updated campaign revision
+            deactivate Table
+            Service -> Service: 14: Record membership history and actor; commit
+            Service --> API: 15: Updated campaign membership (proposed)
+            API --> Page: 16: HTTP 200 (proposed): Updated campaign membership (proposed)
+            Page --> Actor: 17: Display assigned items; do not execute disposition
+        else Campaign closed, item blocked or already processed
+            Service --> API: 11.1: Membership change is not allowed
+            API --> Page: 11.2: HTTP 409 (proposed)
+            Page --> Actor: 11.3: Display error; do not report success
+        end
+        deactivate Service
+    else Invalid request input
+        API --> Page: 6.1: Proposed validation error response
+        Page --> Actor: 6.2: Display validation errors; do not execute the operation
+    end
+else Missing/invalid session or required permission
+    API --> Page: 5.1: Proposed authentication/access error response
+    Page --> Actor: 5.2: Show session or access error; no protected result
+end
+deactivate API
+deactivate Page
+
+legend bottom left
+PLANNED: campaign and membership schema/API/UI are absent. donation_campaigns is the proposed main
+entity; membership is abstracted inside the service.
+endlegend
+
+@enduml

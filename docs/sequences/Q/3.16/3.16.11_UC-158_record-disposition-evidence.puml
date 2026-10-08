@@ -1,0 +1,109 @@
+@startuml
+title 3.16.11 Record disposition evidence
+caption UC-158 | Partial
+skinparam monochrome true
+skinparam shadowing false
+skinparam roundcorner 0
+skinparam defaultFontName Arial
+skinparam LegendBackgroundColor white
+skinparam style strictuml
+skinparam sequenceMessageAlign center
+show footbox
+<style>
+lifeLine {
+    LineStyle 0
+}
+</style>
+skinparam sequence {
+    ParticipantBackgroundColor white
+    ActorBackgroundColor white
+    LifeLineBackgroundColor white
+    LifeLineBorderColor black
+    GroupBackgroundColor white
+    GroupHeaderBackgroundColor white
+}
+
+' Source: apps/api-node/src/modules/warehouse/application/warehouse.use-cases.ts
+' Main entity migration: apps/api-node/src/migrations/054_custody_safety_contract.sql
+' One-table abstraction: related repository reads/writes stay inside the service.
+actor "Staff / Admin" as Actor
+participant "Disposition API Client" as Page
+participant "Staff API" as API
+participant "Warehouse Service" as Service
+participant "warehouse_private_proofs" as Table <<entity>>
+
+Actor -> Page: 1: Record disposition evidence
+activate Page
+Page -> Page: 2: Upload protected proofs first; select 1..5 unique proof ids
+Page -> API: 3: POST /api/staff/warehouse-approvals/:id/execute
+activate API
+API -> API: 4: Authenticate active session and require STAFF or ADMIN
+alt Session and required permission are valid
+    API -> API: 5: Validate approval UUID and proof-id array
+    alt Request input is valid
+        API -> Service: 6: Record disposition evidence for the current actor
+        activate Service
+        Service -> Service: 7: Recheck STAFF/ADMIN; begin transaction; lock approval
+        alt Approval is APPROVED
+            Service -> Service: 8: Lock item and physical source; recheck status, retention, claims,\nappointments, disputes and legal hold
+            alt All disposition safety gates pass
+                Service -> Table: 9: Lock proof records; check item, uploader and unused attachment
+                activate Table
+                Table --> Service: 10: Private proof ownership and attachment state
+                deactivate Table
+                alt All 1..5 proofs are valid, unique and unused
+                    Service -> Table: 11: Attach proofs atomically
+                    activate Table
+                    Table --> Service: 12: Attachment update results
+                    deactivate Table
+                    Service -> Service: 13: Set item's terminal target, mark approval EXECUTED and record\nstorage log; commit
+                    alt Operation succeeds
+                        Service --> API: 14: Disposition completed
+                        API --> Page: 15: HTTP 204: Disposition completed
+                        Page --> Actor: 16: Confirm evidence and terminal item outcome
+                    else Query, write or commit failure
+                        Service -> Service: 14.1: Propagate failure; rollback only when transaction failure is\nconfirmed
+                        Service --> API: 14.2: Propagate storage or transaction failure
+                        API --> Page: 14.3: HTTP 503 or 500
+                        Page --> Actor: 14.4: Display error; do not report success
+                    end
+                else Proof belongs to another item/user or is already attached
+                    Service -> Service: 11.1: Abort execution; record denied attempt without changing custody
+                    Service --> API: 11.2: Invalid disposition proof
+                    API --> Page: 11.3: HTTP 400 or 403
+                    Page --> Actor: 11.4: Display error; do not report success
+                end
+            else Retention, case, status or hold gate fails
+                Service -> Service: 9.1: Abort execution; record denied attempt
+                Service --> API: 9.2: Item is not eligible for disposition
+                API --> Page: 9.3: HTTP 409
+                Page --> Actor: 9.4: Display error; do not report success
+            end
+        else Approval is already EXECUTED
+            Service -> Service: 8.1: Return idempotent success without attaching proofs again
+            Service --> API: 8.2: Existing execution
+            API --> Page: 8.3: HTTP 204: Existing execution
+            Page --> Actor: 8.4: Keep terminal outcome unchanged
+        else Approval missing or not approved
+            Service --> API: 8.5: Disposition has not been approved
+            API --> Page: 8.6: HTTP 409
+            Page --> Actor: 8.7: Display error; do not report success
+        end
+        deactivate Service
+    else Invalid request input
+        API --> Page: 6.1: HTTP 422: input validation errors
+        Page --> Actor: 6.2: Display validation errors; do not execute the operation
+    end
+else Missing/invalid session or required permission
+    API --> Page: 5.1: HTTP 401 or 403
+    Page --> Actor: 5.2: Show session or access error; no protected result
+end
+deactivate API
+deactivate Page
+
+legend bottom left
+PARTIAL: canonical proof-gated execution exists; dedicated disposition evidence/completion screen is
+missing. Upload precedes execution via the existing proof endpoint.
+endlegend
+
+@enduml

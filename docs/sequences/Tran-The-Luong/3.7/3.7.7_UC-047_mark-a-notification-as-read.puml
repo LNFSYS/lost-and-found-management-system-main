@@ -1,0 +1,74 @@
+@startuml
+title 3.7.7 Mark a notification as read
+caption UC-047 | Implemented
+skinparam monochrome true
+skinparam shadowing false
+skinparam roundcorner 0
+skinparam defaultFontName Arial
+skinparam LegendBackgroundColor white
+skinparam style strictuml
+skinparam sequenceMessageAlign center
+show footbox
+<style>
+lifeLine {
+    LineStyle 0
+}
+</style>
+skinparam sequence {
+    ParticipantBackgroundColor white
+    ActorBackgroundColor white
+    LifeLineBackgroundColor white
+    LifeLineBorderColor black
+    GroupBackgroundColor white
+    GroupHeaderBackgroundColor white
+}
+
+' Source: apps/api-node/src/modules/notifications/application/notification.use-cases.ts
+' Main entity migration: apps/api-node/src/migrations/002_lost_found_schema.sql
+' One-table abstraction: related repository reads/writes stay inside the service.
+actor "User" as Actor
+participant "Notification Feed" as Page
+participant "Notifications API" as API
+participant "Notification Service" as Service
+participant "notifications" as Table <<entity>>
+
+Actor -> Page: 1: Open Mark a notification as read
+activate Page
+Page -> API: 2: POST /api/notifications/:notificationId/read
+activate API
+API -> API: 3: Validate access session, role and input
+alt Valid request
+API -> Service: 4: Mark a notification as read
+activate Service
+Service -> Table: 5: Find notification owned by signed-in user
+activate Table
+Table --> Service: 6: Notification context
+deactivate Table
+Service -> Service: 7: Require recipient ownership
+alt Business rules satisfied
+Service -> Table: 8: UPDATE owned notification to READ
+activate Table
+Table --> Service: 9: Read acknowledged
+deactivate Table
+Service -> Service: 10: Cancel pending optional email for this notification
+Service --> API: 11: Read acknowledgement
+API --> Page: 12: HTTP 200: Read acknowledgement
+Page --> Actor: 13: Show authorized result
+else Missing or ineligible context
+Service --> API: 8.1: Notification not owned or absent
+API --> Page: 8.2: HTTP 404
+Page --> Actor: 8.3: Display error; do not report success
+end
+deactivate Service
+else Invalid input, missing session or insufficient role
+API --> Page: 4.1: HTTP 422 / 401 / 403 (429 only if rate-limited)
+Page --> Actor: 4.2: Show appropriate error; retain form/draft
+end
+deactivate API
+deactivate Page
+
+legend left
+Related tables, authorization, transactions and audit remain inside the service. Catalogue status is
+not deployment or manual acceptance.
+endlegend
+@enduml

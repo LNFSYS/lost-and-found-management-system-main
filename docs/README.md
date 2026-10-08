@@ -18,6 +18,7 @@ Cập nhật: **07/10/2026**. Code, tests, cấu hình và receipt đúng candid
 | [overview/](overview/) | Tổng quan và quy trình A-Z |
 | [requirements/](requirements/) | BR, FR/NFR, UC và traceability |
 | [architecture/](architecture/) | Kiến trúc Node.js, mapping source và sơ đồ |
+| [sequences/](sequences/README.md) | Sequence từng UC trong 3.1–3.17, chia thư mục Đạt / Trần Thế Lượng / Khoa / Q; nguồn PlantUML và PNG |
 | [workflows/](workflows/) | Quy tắc chat, ảnh, kho và email |
 | [audits/](audits/) | Bằng chứng audit/UAT theo từng candidate |
 | [runbooks/](runbooks/) | Rollout, recovery, backup và đối soát media |

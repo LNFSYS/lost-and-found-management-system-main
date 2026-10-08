@@ -1,0 +1,77 @@
+@startuml
+title 3.16.7 View disposition order detail
+caption UC-154 | Planned | Proposed design
+skinparam monochrome true
+skinparam shadowing false
+skinparam roundcorner 0
+skinparam defaultFontName Arial
+skinparam LegendBackgroundColor white
+skinparam style strictuml
+skinparam sequenceMessageAlign center
+show footbox
+<style>
+lifeLine {
+    LineStyle 0
+}
+</style>
+skinparam sequence {
+    ParticipantBackgroundColor white
+    ActorBackgroundColor white
+    LifeLineBackgroundColor white
+    LifeLineBorderColor black
+    GroupBackgroundColor white
+    GroupHeaderBackgroundColor white
+}
+
+' Source: apps/api-node/src/modules/warehouse/application/warehouse.use-cases.ts
+' Main entity migration: apps/api-node/src/migrations/054_custody_safety_contract.sql
+' One-table abstraction: related repository reads/writes stay inside the service.
+actor "Staff / Admin" as Actor
+participant "Disposition Detail (proposed)" as Page
+participant "Staff API" as API
+participant "Warehouse Service" as Service
+participant "warehouse_action_approvals" as Table <<entity>>
+
+Actor -> Page: 1: View disposition order detail
+activate Page
+Page -> Page: 2: Select a disposition request/order
+Page -> API: 3: Read disposition detail (proposed interface)
+activate API
+API -> API: 4: Authenticate active session and require STAFF or ADMIN
+alt Session and required permission are valid
+    API -> API: 5: Proposed: validate id and Staff/Admin detail access
+    alt Request input is valid
+        API -> Service: 6: View disposition order detail for the current actor
+        activate Service
+        Service -> Table: 7: Read selected approval and processing state (proposed)
+        activate Table
+        Table --> Service: 8: Approval or no record
+        deactivate Table
+        alt Requested disposition exists
+            Service -> Service: 9: Project permitted item, reason, approvals, evidence and processing\nhistory
+            Service --> API: 10: Disposition detail (proposed)
+            API --> Page: 11: HTTP 200 (proposed): Disposition detail (proposed)
+            Page --> Actor: 12: Display protected request and history
+        else Disposition missing
+            Service --> API: 9.1: Disposition not found
+            API --> Page: 9.2: HTTP 404 (proposed)
+            Page --> Actor: 9.3: Display error; do not report success
+        end
+        deactivate Service
+    else Invalid request input
+        API --> Page: 6.1: Proposed validation error response
+        Page --> Actor: 6.2: Display validation errors; do not execute the operation
+    end
+else Missing/invalid session or required permission
+    API --> Page: 5.1: Proposed authentication/access error response
+    Page --> Actor: 5.2: Show session or access error; no protected result
+end
+deactivate API
+deactivate Page
+
+legend bottom left
+PLANNED: no detail endpoint/screen exists. This proposal uses the current per-item approval;
+multi-item order schema needs a separate design.
+endlegend
+
+@enduml

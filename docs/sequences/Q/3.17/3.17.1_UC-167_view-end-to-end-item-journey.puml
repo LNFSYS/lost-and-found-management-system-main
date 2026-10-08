@@ -1,0 +1,93 @@
+@startuml
+title 3.17.1 View end-to-end item journey
+caption UC-167 | Implemented
+skinparam monochrome true
+skinparam shadowing false
+skinparam roundcorner 0
+skinparam defaultFontName Arial
+skinparam LegendBackgroundColor white
+skinparam style strictuml
+skinparam sequenceMessageAlign center
+show footbox
+<style>
+lifeLine {
+    LineStyle 0
+}
+</style>
+skinparam sequence {
+    ParticipantBackgroundColor white
+    ActorBackgroundColor white
+    LifeLineBackgroundColor white
+    LifeLineBorderColor black
+    GroupBackgroundColor white
+    GroupHeaderBackgroundColor white
+}
+
+' Source: apps/api-node/src/modules/activity/application/activity.use-cases.ts
+' Main entity migration: apps/api-node/src/migrations/002_lost_found_schema.sql
+' One-table abstraction: related repository reads/writes stay inside the service.
+actor "LOST Owner / Finder" as Actor
+participant "Item Journey Page" as Page
+participant "Activity API" as API
+participant "Activity Service" as Service
+participant "posts" as Table <<entity>>
+
+Actor -> Page: 1: View end-to-end item journey
+activate Page
+Page -> Page: 2: Open item journey from My Posts; read page and asOf
+Page -> API: 3: GET /api/posts/:id/journey
+activate API
+API -> API: 4: Authenticate active session
+alt Session and required permission are valid
+    API -> API: 5: Set private/no-store; validate post UUID, page and asOf
+    alt Request input is valid
+        API -> Service: 6: View end-to-end item journey for the current actor
+        activate Service
+        Service -> Service: 7: Use a nonfuture asOf checkpoint; default to current time
+        alt asOf is not in the future
+            Service -> Table: 8: Read post only if actor owns it or is an actual related claim\nparticipant
+            activate Table
+            Table --> Service: 9: Accessible post or no record
+            deactivate Table
+            alt Post is accessible
+                Service -> Service: 10: Read only allowed chronological events and custody/return\nprojections; page size 50
+                Service -> Service: 11: Derive custodian, location class and duration; keep ambiguous\nphysical candidates UNKNOWN
+                Service -> Service: 12: Redact private messages, answers, contact details, proof/media and\nunrelated cases
+                alt Operation succeeds
+                    Service --> API: 13: Journey, summary, asOf, page and hasMore
+                    API --> Page: 14: HTTP 200: Journey, summary, asOf, page and hasMore
+                    Page --> Actor: 15: Display timeline and current custody; preserve explicit historical\ngaps
+                else Query or response mapping failure
+                    Service -> Service: 13.1: Do not fabricate data; propagate the query or mapping failure
+                    Service --> API: 13.2: Propagate read failure
+                    API --> Page: 13.3: HTTP 503 or 500
+                    Page --> Actor: 13.4: Display error; do not report success
+                end
+            else Missing post or unrelated actor
+                Service --> API: 10.1: Authorized item journey not found
+                API --> Page: 10.2: HTTP 404
+                Page --> Actor: 10.3: Display error; do not report success
+            end
+        else asOf is in the future
+            Service --> API: 8.1: Invalid journey checkpoint
+            API --> Page: 8.2: HTTP 422
+            Page --> Actor: 8.3: Display error; do not report success
+        end
+        deactivate Service
+    else Invalid request input
+        API --> Page: 6.1: HTTP 422: input validation errors
+        Page --> Actor: 6.2: Display validation errors; do not execute the operation
+    end
+else Missing/invalid session or required permission
+    API --> Page: 5.1: HTTP 401 or 403
+    Page --> Actor: 5.2: Show session or access error; no protected result
+end
+deactivate API
+deactivate Page
+
+legend bottom left
+posts is the journey anchor. Linked event projections are internal repository work; private content
+is redacted and missing history is never invented.
+endlegend
+
+@enduml

@@ -1,0 +1,73 @@
+@startuml
+title 3.3.9 Close or remove my post
+caption UC-022 | Implemented
+skinparam monochrome true
+skinparam shadowing false
+skinparam roundcorner 0
+skinparam defaultFontName Arial
+skinparam LegendBackgroundColor white
+skinparam style strictuml
+skinparam sequenceMessageAlign center
+show footbox
+<style>
+lifeLine {
+    LineStyle 0
+}
+</style>
+skinparam sequence {
+    ParticipantBackgroundColor white
+    ActorBackgroundColor white
+    LifeLineBackgroundColor white
+    LifeLineBorderColor black
+    GroupBackgroundColor white
+    GroupHeaderBackgroundColor white
+}
+
+' Source: apps/api-node/src/modules/posts/application/post.use-cases.ts
+' Main entity migration: apps/api-node/src/migrations/002_lost_found_schema.sql
+' One-table abstraction: related repository reads/writes stay inside the service.
+actor "Post Owner" as Actor
+participant "My Posts Page" as Page
+participant "Posts API" as API
+participant "Post Service" as Service
+participant "posts" as Table <<entity>>
+
+Actor -> Page: 1: Open Close or remove my post
+activate Page
+Page -> API: 2: DELETE /api/posts/:id
+activate API
+API -> API: 3: Validate access session, role and input
+alt Valid request
+API -> Service: 4: Close or remove my post
+activate Service
+Service -> Table: 5: Lock owned post and inspect deletion context
+activate Table
+Table --> Service: 6: Owned post
+deactivate Table
+Service -> Service: 7: Check custody, warehouse, active claims, appointments, disputes and\nhold
+alt Business rules satisfied
+Service -> Table: 8: Soft-delete eligible owned post
+activate Table
+Table --> Service: 9: Deletion acknowledged
+deactivate Table
+Service -> Service: 10: Commit atomically; retain completed operational history
+Service --> API: 11: Post removed from active board
+API --> Page: 12: HTTP 204 (no response body)
+Page --> Actor: 13: Show authorized result
+else Missing or ineligible context
+Service --> API: 8.1: Unresolved operational relationship blocks deletion
+API --> Page: 8.2: HTTP 409
+Page --> Actor: 8.3: Display error; do not report success
+end
+deactivate Service
+else Invalid input, missing session or insufficient role
+API --> Page: 4.1: HTTP 422 / 401 / 403 (429 only if rate-limited)
+Page --> Actor: 4.2: Show appropriate error; retain form/draft
+end
+deactivate API
+deactivate Page
+
+legend left
+Scope: No physical deletion of retained operational history. Missing/other-owned post returns 404.
+endlegend
+@enduml

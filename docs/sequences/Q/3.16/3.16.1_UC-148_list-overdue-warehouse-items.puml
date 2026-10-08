@@ -1,0 +1,70 @@
+@startuml
+title 3.16.1 List overdue warehouse items
+caption UC-148 | Partial
+skinparam monochrome true
+skinparam shadowing false
+skinparam roundcorner 0
+skinparam defaultFontName Arial
+skinparam LegendBackgroundColor white
+skinparam style strictuml
+skinparam sequenceMessageAlign center
+show footbox
+<style>
+lifeLine {
+    LineStyle 0
+}
+</style>
+skinparam sequence {
+    ParticipantBackgroundColor white
+    ActorBackgroundColor white
+    LifeLineBackgroundColor white
+    LifeLineBorderColor black
+    GroupBackgroundColor white
+    GroupHeaderBackgroundColor white
+}
+
+' Source: apps/api-node/src/modules/warehouse/application/warehouse.use-cases.ts
+' Main entity migration: apps/api-node/src/migrations/010_notifications_and_warehouse.sql
+' One-table abstraction: related repository reads/writes stay inside the service.
+actor "Staff / Admin" as Actor
+participant "Warehouse Inventory" as Page
+participant "Staff API" as API
+participant "Warehouse Service" as Service
+participant "warehouse_items" as Table <<entity>>
+
+Actor -> Page: 1: List overdue warehouse items
+activate Page
+Page -> Page: 2: Select EXPIRED status and page; read overdue indicator
+Page -> API: 3: GET /api/staff/warehouse-items?status=EXPIRED
+activate API
+API -> API: 4: Authenticate active session and require STAFF or ADMIN
+alt Session and required permission are valid
+    API -> API: 5: Validate status, handover point and pagination
+    alt Request input is valid
+        API -> Service: 6: List overdue warehouse items for the current actor
+        activate Service
+        Service -> Table: 7: Read EXPIRED inventory page and current deadline statistics
+        activate Table
+        Table --> Service: 8: Items, counts and retention deadlines
+        deactivate Table
+        Service -> Service: 9: Build inventory response; do not infer that every EXPIRED item is\ndisposition-eligible
+        Service --> API: 10: Inventory page with statistics
+        API --> Page: 11: HTTP 200: Inventory page with statistics
+        Page --> Actor: 12: Display EXPIRED items and deadline indicators
+        deactivate Service
+    else Invalid request input
+        API --> Page: 6.1: HTTP 422: input validation errors
+        Page --> Actor: 6.2: Display validation errors; do not execute the operation
+    end
+else Missing/invalid session or required permission
+    API --> Page: 5.1: HTTP 401 or 403
+    Page --> Actor: 5.2: Show session or access error; no protected result
+end
+deactivate API
+deactivate Page
+
+legend bottom left
+PARTIAL: EXPIRED is a status proxy, not an authoritative deadline-and-legal-hold overdue filter.
+endlegend
+
+@enduml

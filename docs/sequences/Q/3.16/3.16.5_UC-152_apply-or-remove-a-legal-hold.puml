@@ -1,0 +1,88 @@
+@startuml
+title 3.16.5 Apply or remove a legal hold
+caption UC-152 | Partial
+skinparam monochrome true
+skinparam shadowing false
+skinparam roundcorner 0
+skinparam defaultFontName Arial
+skinparam LegendBackgroundColor white
+skinparam style strictuml
+skinparam sequenceMessageAlign center
+show footbox
+<style>
+lifeLine {
+    LineStyle 0
+}
+</style>
+skinparam sequence {
+    ParticipantBackgroundColor white
+    ActorBackgroundColor white
+    LifeLineBackgroundColor white
+    LifeLineBorderColor black
+    GroupBackgroundColor white
+    GroupHeaderBackgroundColor white
+}
+
+' Source: apps/api-node/src/modules/warehouse/application/warehouse.use-cases.ts
+' Main entity migration: apps/api-node/src/migrations/010_notifications_and_warehouse.sql
+' One-table abstraction: related repository reads/writes stay inside the service.
+actor "Admin" as Actor
+participant "Administrative API Client" as Page
+participant "Staff API" as API
+participant "Warehouse Service" as Service
+participant "warehouse_items" as Table <<entity>>
+
+Actor -> Page: 1: Apply or remove a legal hold
+activate Page
+Page -> Page: 2: Choose held=true/false and enter reason
+Page -> API: 3: POST /api/staff/warehouse-items/:id/legal-hold
+activate API
+API -> API: 4: Authenticate active session and require STAFF or ADMIN
+alt Session and required permission are valid
+    API -> API: 5: Validate item UUID, boolean hold and reason (3..1000)
+    alt Request input is valid
+        API -> Service: 6: Apply or remove a legal hold for the current actor
+        activate Service
+        Service -> Service: 7: Recheck active ADMIN permission and nonblank reason; begin\ntransaction
+        Service -> Table: 8: Lock warehouse item FOR UPDATE
+        activate Table
+        Table --> Service: 9: Current item or no record
+        deactivate Table
+        alt Item exists
+            Service -> Table: 10: Set legal_hold to requested value; preserve item status
+            activate Table
+            Table --> Service: 11: Hold update result
+            deactivate Table
+            Service -> Service: 12: Record storage-log reason with unchanged from/to status; commit
+            alt Operation succeeds
+                Service --> API: 13: Legal hold updated
+                API --> Page: 14: HTTP 204: Legal hold updated
+                Page --> Actor: 15: Confirm hold change
+            else Query, write or commit failure
+                Service -> Service: 13.1: Propagate failure; rollback only when transaction failure is\nconfirmed
+                Service --> API: 13.2: Propagate storage or transaction failure
+                API --> Page: 13.3: HTTP 503 or 500
+                Page --> Actor: 13.4: Display error; do not report success
+            end
+        else Item missing
+            Service --> API: 10.1: Warehouse item not found
+            API --> Page: 10.2: HTTP 404
+            Page --> Actor: 10.3: Display error; do not report success
+        end
+        deactivate Service
+    else Invalid request input
+        API --> Page: 6.1: HTTP 422: input validation errors
+        Page --> Actor: 6.2: Display validation errors; do not execute the operation
+    end
+else Missing/invalid session or required permission
+    API --> Page: 5.1: HTTP 401 or 403
+    Page --> Actor: 5.2: Show session or access error; no protected result
+end
+deactivate API
+deactivate Page
+
+legend bottom left
+PARTIAL: canonical Admin-only API exists; the dedicated Admin hold screen is missing.
+endlegend
+
+@enduml

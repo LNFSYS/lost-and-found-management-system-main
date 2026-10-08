@@ -1,0 +1,85 @@
+@startuml
+title 3.14.4 View claim and verification history
+caption UC-164 | Partial
+skinparam monochrome true
+skinparam shadowing false
+skinparam roundcorner 0
+skinparam defaultFontName Arial
+skinparam LegendBackgroundColor white
+skinparam style strictuml
+skinparam sequenceMessageAlign center
+show footbox
+<style>
+lifeLine {
+    LineStyle 0
+}
+</style>
+skinparam sequence {
+    ParticipantBackgroundColor white
+    ActorBackgroundColor white
+    LifeLineBackgroundColor white
+    LifeLineBorderColor black
+    GroupBackgroundColor white
+    GroupHeaderBackgroundColor white
+}
+
+' Source: apps/api-node/src/modules/claims/application/claim.use-cases.ts
+' Main entity migration: apps/api-node/src/migrations/045_peer_claim_conversations.sql
+' One-table abstraction: related repository reads/writes stay inside the service.
+actor "Authorized Participant" as Actor
+participant "Claim Conversation" as Page
+participant "Claim API" as API
+participant "Claim Service" as Service
+participant "claim_audit_events" as Table <<entity>>
+
+Actor -> Page: 1: View claim and verification history
+activate Page
+Page -> Page: 2: Open verification state in own claim conversation
+Page -> API: 3: GET /api/claims/:claimId/verification
+activate API
+API -> API: 4: Authenticate active session
+alt Session and required permission are valid
+    API -> API: 5: Validate claim UUID
+    alt Request input is valid
+        API -> Service: 6: View claim and verification history for the current actor
+        activate Service
+        Service -> Service: 7: Read claim and participant; do not grant access by Staff/Admin role\nalone
+        alt Actor is an actual claim participant
+            Service -> Table: 8: Read verification audit events for the authorized claim
+            activate Table
+            Table --> Service: 9: Ordered decision/history events, or query error
+            deactivate Table
+            alt Operation succeeds
+                Service -> Service: 10: Load permitted question/context data; allowlist audit metadata
+                Service --> API: 11: Verification state and safe history
+                API --> Page: 12: HTTP 200: Verification state and safe history
+                Page --> Actor: 13: Display latest decision and available verification history
+            else Query or response mapping failure
+                Service -> Service: 10.1: Do not fabricate data; propagate the query or mapping failure
+                Service --> API: 10.2: Propagate read failure
+                API --> Page: 10.3: HTTP 503 or 500
+                Page --> Actor: 10.4: Display error; do not report success
+            end
+        else Missing claim or no participant access
+            Service --> API: 8.1: Authorized claim not found
+            API --> Page: 8.2: HTTP 404
+            Page --> Actor: 8.3: Display error; do not report success
+        end
+        deactivate Service
+    else Invalid request input
+        API --> Page: 6.1: HTTP 422: input validation errors
+        Page --> Actor: 6.2: Display validation errors; do not execute the operation
+    end
+else Missing/invalid session or required permission
+    API --> Page: 5.1: HTTP 401 or 403
+    Page --> Actor: 5.2: Show session or access error; no protected result
+end
+deactivate API
+deactivate Page
+
+legend bottom left
+PARTIAL: participant verification history exists; general Staff/Admin case-history access and a full
+history UI are missing.
+endlegend
+
+@enduml

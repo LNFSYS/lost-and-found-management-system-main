@@ -1,0 +1,68 @@
+@startuml
+title 3.9.4 Receive a warehouse item
+caption UC-052 | Implemented
+skinparam monochrome true
+skinparam shadowing false
+skinparam roundcorner 0
+skinparam defaultFontName Arial
+skinparam LegendBackgroundColor white
+skinparam style strictuml
+skinparam sequenceMessageAlign center
+show footbox
+<style>
+lifeLine {
+    LineStyle 0
+}
+</style>
+skinparam sequence {
+    ParticipantBackgroundColor white
+    ActorBackgroundColor white
+    LifeLineBackgroundColor white
+    LifeLineBorderColor black
+    GroupBackgroundColor white
+    GroupHeaderBackgroundColor white
+}
+
+' Source: apps/api-node/src/modules/warehouse/application/warehouse.use-cases.ts
+' Main entity migration: apps/api-node/src/migrations/010_notifications_and_warehouse.sql
+' One-table abstraction: related repository reads/writes stay inside the service.
+actor "Staff / Admin" as Actor
+participant "Warehouse Operations" as Page
+participant "Warehouse API" as API
+participant "Warehouse Service" as Service
+participant "warehouse_items" as Table <<entity>>
+
+Actor -> Page: 1: Open Receive a warehouse item
+activate Page
+Page -> API: 2: POST /api/staff/warehouse-items
+activate API
+API -> API: 3: Validate access session, role and input
+alt Valid request
+API -> Service: 4: Receive a warehouse item
+activate Service
+Service -> Service: 5: Validate physical receipt, condition, quantity/accessories and\nreferences
+Service -> Service: 6: Begin transaction; lock intake session and compare stable\nfingerprint
+Service -> Service: 7: Require 1-5 new private Staff images owned by this intake session
+Service -> Table: 8: INSERT one RECEIVED item or return exact intake replay
+activate Table
+Table --> Service: 9: Warehouse item
+deactivate Table
+Service -> Service: 10: Attach intake photos; store category retention deadline
+Service -> Service: 11: Write RECEIVED log; finalize session and commit
+Service --> API: 12: Physically received walk-in item
+API --> Page: 13: HTTP 201: Physically received walk-in item
+Page --> Actor: 14: Show authorized result
+deactivate Service
+else Invalid input, missing session or insufficient role
+API --> Page: 4.1: HTTP 422 / 401 / 403 (429 only if rate-limited)
+Page --> Actor: 4.2: Show appropriate error; retain form/draft
+end
+deactivate API
+deactivate Page
+
+legend left
+Scope: Staff first uploads new photos through warehouse-intake-images. Optional Gemini draft must be
+reviewed. Account-free walk-in needs no post or synthetic claim; photo source cannot substitute for
+Staff condition evidence.
+endlegend
+@enduml

@@ -1,0 +1,82 @@
+@startuml
+title 3.16.9 Reject a disposition order
+caption UC-156 | Planned | Proposed design
+skinparam monochrome true
+skinparam shadowing false
+skinparam roundcorner 0
+skinparam defaultFontName Arial
+skinparam LegendBackgroundColor white
+skinparam style strictuml
+skinparam sequenceMessageAlign center
+show footbox
+<style>
+lifeLine {
+    LineStyle 0
+}
+</style>
+skinparam sequence {
+    ParticipantBackgroundColor white
+    ActorBackgroundColor white
+    LifeLineBackgroundColor white
+    LifeLineBorderColor black
+    GroupBackgroundColor white
+    GroupHeaderBackgroundColor white
+}
+
+' Source: apps/api-node/src/modules/warehouse/application/warehouse.use-cases.ts
+' Main entity migration: apps/api-node/src/migrations/054_custody_safety_contract.sql
+' One-table abstraction: related repository reads/writes stay inside the service.
+actor "Admin" as Actor
+participant "Disposition Review (proposed)" as Page
+participant "Staff API" as API
+participant "Warehouse Service" as Service
+participant "warehouse_action_approvals" as Table <<entity>>
+
+Actor -> Page: 1: Reject a disposition order
+activate Page
+Page -> Page: 2: Choose rejection and enter reason
+Page -> API: 3: Reject disposition request (proposed interface)
+activate API
+API -> API: 4: Authenticate active session and require STAFF or ADMIN
+alt Session and required permission are valid
+    API -> API: 5: Proposed: validate id, reason and ADMIN permission
+    alt Request input is valid
+        API -> Service: 6: Reject a disposition order for the current actor
+        activate Service
+        Service -> Service: 7: Begin proposed transaction
+        Service -> Table: 8: Lock requested disposition (proposed)
+        activate Table
+        Table --> Service: 9: Current approval state
+        deactivate Table
+        alt Request is pending and actor may reject
+            Service -> Table: 10: Store proposed REJECTED state, actor, reason and time
+            activate Table
+            Table --> Service: 11: Proposed rejection result
+            deactivate Table
+            Service -> Service: 12: Record rejection audit; commit; do not mutate warehouse item
+            Service --> API: 13: Rejected disposition (proposed)
+            API --> Page: 14: HTTP 200 (proposed): Rejected disposition (proposed)
+            Page --> Actor: 15: Display rejection while custody remains unchanged
+        else Missing request, unauthorized actor or invalid state
+            Service --> API: 10.1: Rejection is not allowed
+            API --> Page: 10.2: HTTP 403, 404 or 409 (proposed)
+            Page --> Actor: 10.3: Display error; do not report success
+        end
+        deactivate Service
+    else Invalid request input
+        API --> Page: 6.1: Proposed validation error response
+        Page --> Actor: 6.2: Display validation errors; do not execute the operation
+    end
+else Missing/invalid session or required permission
+    API --> Page: 5.1: Proposed authentication/access error response
+    Page --> Actor: 5.2: Show session or access error; no protected result
+end
+deactivate API
+deactivate Page
+
+legend bottom left
+PLANNED: rejection API/UI is absent; warehouse_action_approvals does not yet support a REJECTED
+state. Schema extension is proposed only.
+endlegend
+
+@enduml

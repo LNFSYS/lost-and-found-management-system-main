@@ -1,0 +1,78 @@
+@startuml
+title 3.16.2 View overdue item detail
+caption UC-149 | Partial
+skinparam monochrome true
+skinparam shadowing false
+skinparam roundcorner 0
+skinparam defaultFontName Arial
+skinparam LegendBackgroundColor white
+skinparam style strictuml
+skinparam sequenceMessageAlign center
+show footbox
+<style>
+lifeLine {
+    LineStyle 0
+}
+</style>
+skinparam sequence {
+    ParticipantBackgroundColor white
+    ActorBackgroundColor white
+    LifeLineBackgroundColor white
+    LifeLineBorderColor black
+    GroupBackgroundColor white
+    GroupHeaderBackgroundColor white
+}
+
+' Source: apps/api-node/src/modules/warehouse/application/warehouse.use-cases.ts
+' Main entity migration: apps/api-node/src/migrations/010_notifications_and_warehouse.sql
+' One-table abstraction: related repository reads/writes stay inside the service.
+actor "Staff / Admin" as Actor
+participant "Warehouse Item Detail" as Page
+participant "Staff API" as API
+participant "Warehouse Service" as Service
+participant "warehouse_items" as Table <<entity>>
+
+Actor -> Page: 1: View overdue item detail
+activate Page
+Page -> Page: 2: Select item; use existing inventory metadata
+Page -> API: 3: GET /api/staff/warehouse-items/:id/logs
+activate API
+API -> API: 4: Authenticate active session and require STAFF or ADMIN
+alt Session and required permission are valid
+    API -> API: 5: Validate warehouse item UUID
+    alt Request input is valid
+        API -> Service: 6: View overdue item detail for the current actor
+        activate Service
+        Service -> Table: 7: Find warehouse item by id
+        activate Table
+        Table --> Service: 8: Existing item or no record
+        deactivate Table
+        alt Item exists
+            Service -> Service: 9: Read storage logs through repository
+            Service --> API: 10: Storage logs
+            API --> Page: 11: HTTP 200: logs
+            Page -> Page: 12: Load images through the separate protected images endpoint
+            Page --> Actor: 13: Display selected metadata, condition photos and storage history
+        else Item missing
+            Service --> API: 9.1: Warehouse item not found
+            API --> Page: 9.2: HTTP 404
+            Page --> Actor: 9.3: Display error; do not report success
+        end
+        deactivate Service
+    else Invalid request input
+        API --> Page: 6.1: HTTP 422: input validation errors
+        Page --> Actor: 6.2: Display validation errors; do not execute the operation
+    end
+else Missing/invalid session or required permission
+    API --> Page: 5.1: HTTP 401 or 403
+    Page --> Actor: 5.2: Show session or access error; no protected result
+end
+deactivate API
+deactivate Page
+
+legend bottom left
+PARTIAL: detail/photos/logs exist; complete conflicts, holds and disposition eligibility context is
+missing. Images use a separate protected request.
+endlegend
+
+@enduml

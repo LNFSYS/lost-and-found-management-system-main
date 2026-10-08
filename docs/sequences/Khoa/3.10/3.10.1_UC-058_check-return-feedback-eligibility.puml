@@ -1,0 +1,65 @@
+@startuml
+title 3.10.1 Check return-feedback eligibility
+caption UC-058 | Implemented
+skinparam monochrome true
+skinparam shadowing false
+skinparam roundcorner 0
+skinparam defaultFontName Arial
+skinparam LegendBackgroundColor white
+skinparam style strictuml
+skinparam sequenceMessageAlign center
+show footbox
+<style>
+lifeLine {
+    LineStyle 0
+}
+</style>
+skinparam sequence {
+    ParticipantBackgroundColor white
+    ActorBackgroundColor white
+    LifeLineBackgroundColor white
+    LifeLineBorderColor black
+    GroupBackgroundColor white
+    GroupHeaderBackgroundColor white
+}
+
+' Source: apps/api-node/src/modules/returns/application/return-feedback.use-cases.ts
+' Main entity migration: apps/api-node/src/migrations/002_lost_found_schema.sql
+' One-table abstraction: related repository reads/writes stay inside the service.
+actor "Claimant / Finder" as Actor
+participant "Return Feedback" as Page
+participant "Returns API" as API
+participant "Return Feedback Service" as Service
+participant "return_appointments" as Table <<entity>>
+
+Actor -> Page: 1: Open Check return-feedback eligibility
+activate Page
+Page -> API: 2: GET /api/returns/:id/feedback/eligibility
+activate API
+API -> API: 3: Validate access session, role and input
+alt Valid request
+API -> Service: 4: Check return-feedback eligibility
+activate Service
+Service -> Table: 5: Read canonical return and actual participants
+activate Table
+Table --> Service: 6: Return completion/confirmation context
+deactivate Table
+Service -> Service: 7: Require participant; Admin read-only access is audited
+Service -> Service: 8: Require COMPLETED time and dual confirmation OR authorized custody
+Service -> Service: 9: Read existing reviewer feedback; return eligibility and reason
+Service --> API: 10: Feedback eligibility
+API --> Page: 11: HTTP 200: Feedback eligibility
+Page --> Actor: 12: Show authorized result
+deactivate Service
+else Invalid input, missing session or insufficient role
+API --> Page: 4.1: HTTP 422 / 401 / 403 (429 only if rate-limited)
+Page --> Actor: 4.2: Show appropriate error; retain form/draft
+end
+deactivate API
+deactivate Page
+
+legend left
+Scope: A third-party Admin may inspect with audit but cannot submit as a participant. Offline
+walk-in does not synthesize feedback participants.
+endlegend
+@enduml

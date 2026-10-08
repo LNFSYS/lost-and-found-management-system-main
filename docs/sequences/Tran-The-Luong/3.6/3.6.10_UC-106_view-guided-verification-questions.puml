@@ -1,0 +1,71 @@
+@startuml
+title 3.6.10 View guided verification questions
+caption UC-106 | Implemented
+skinparam monochrome true
+skinparam shadowing false
+skinparam roundcorner 0
+skinparam defaultFontName Arial
+skinparam LegendBackgroundColor white
+skinparam style strictuml
+skinparam sequenceMessageAlign center
+show footbox
+<style>
+lifeLine {
+    LineStyle 0
+}
+</style>
+skinparam sequence {
+    ParticipantBackgroundColor white
+    ActorBackgroundColor white
+    LifeLineBackgroundColor white
+    LifeLineBorderColor black
+    GroupBackgroundColor white
+    GroupHeaderBackgroundColor white
+}
+
+' Source: apps/api-node/src/modules/claims/application/claim.use-cases.ts
+' Main entity migration: apps/api-node/src/migrations/002_lost_found_schema.sql
+' One-table abstraction: related repository reads/writes stay inside the service.
+actor "Finder" as Actor
+participant "Private Claims Page" as Page
+participant "Claims API" as API
+participant "Claim Service" as Service
+participant "claims" as Table <<entity>>
+
+Actor -> Page: 1: Open View guided verification questions
+activate Page
+Page -> API: 2: GET /api/claims/:claimId/verification/templates
+activate API
+API -> API: 3: Validate access session, role and input
+alt Valid request
+API -> Service: 4: View guided verification questions
+activate Service
+Service -> Table: 5: Read claim, Finder participant and category context
+activate Table
+Table --> Service: 6: Verification context
+deactivate Table
+Service -> Service: 7: Require actual Finder and consented active room
+alt Business rules satisfied
+Service -> Service: 8: Resolve safe category templates; omit expected answers
+Service -> Service: 9: Display fresh image-response suggestions only on Finder client
+Service --> API: 10: Safe verification prompts
+API --> Page: 11: HTTP 200: Safe verification prompts
+Page --> Actor: 12: Show authorized result
+else Missing or ineligible context
+Service --> API: 8.1: Verification templates unavailable to this viewer
+API --> Page: 8.2: HTTP 404
+Page --> Actor: 8.3: Display error; do not report success
+end
+deactivate Service
+else Invalid input, missing session or insufficient role
+API --> Page: 4.1: HTTP 422 / 401 / 403 (429 only if rate-limited)
+Page --> Actor: 4.2: Show appropriate error; retain form/draft
+end
+deactivate API
+deactivate Page
+
+legend left
+Scope: The GET route returns safe templates. Three AI-derived suggestions come only from fresh photo
+analysis; they are not saved/recreated on ordinary reads. Panel collapses after a click.
+endlegend
+@enduml

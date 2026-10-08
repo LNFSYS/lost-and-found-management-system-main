@@ -1,0 +1,75 @@
+@startuml
+title 3.6.12 Answer a guided verification question
+caption UC-108 | Implemented
+skinparam monochrome true
+skinparam shadowing false
+skinparam roundcorner 0
+skinparam defaultFontName Arial
+skinparam LegendBackgroundColor white
+skinparam style strictuml
+skinparam sequenceMessageAlign center
+show footbox
+<style>
+lifeLine {
+    LineStyle 0
+}
+</style>
+skinparam sequence {
+    ParticipantBackgroundColor white
+    ActorBackgroundColor white
+    LifeLineBackgroundColor white
+    LifeLineBorderColor black
+    GroupBackgroundColor white
+    GroupHeaderBackgroundColor white
+}
+
+' Source: apps/api-node/src/modules/claims/application/claim.use-cases.ts
+' Main entity migration: apps/api-node/src/migrations/029_ai_verification_questions.sql
+' One-table abstraction: related repository reads/writes stay inside the service.
+actor "Claimant" as Actor
+participant "Private Claims Page" as Page
+participant "Claims API" as API
+participant "Claim Service" as Service
+participant "claim_verification_answers" as Table <<entity>>
+
+Actor -> Page: 1: Open Answer a guided verification question
+activate Page
+Page -> API: 2: POST /api/claims/:id/verification/questions/:questionId/answer
+activate API
+API -> API: 3: Validate access session, role and input
+alt Valid request
+API -> Service: 4: Answer a guided verification question
+activate Service
+Service -> Table: 5: Read assigned question and previous answer progress
+activate Table
+Table --> Service: 6: Question and attempts
+deactivate Table
+Service -> Service: 7: Lock claim; actual Claimant, active question/room and <=3 attempts
+alt Business rules satisfied
+Service -> Table: 8: Upsert answer progress with is_match=NULL
+activate Table
+Table --> Service: 9: Updated attempt count
+deactivate Table
+Service -> Service: 10: Store raw answer only in protected chat; append idempotent audit
+Service -> Service: 11: Commit; return progress without expected-answer hashes
+Service --> API: 12: Private answer progress
+API --> Page: 13: HTTP 200: Private answer progress
+Page --> Actor: 14: Show authorized result
+else Missing or ineligible context
+Service --> API: 8.1: Wrong participant or disabled/exhausted question
+API --> Page: 8.2: HTTP 404 or 409
+Page --> Actor: 8.3: Display error; do not report success
+end
+deactivate Service
+else Invalid input, missing session or insufficient role
+API --> Page: 4.1: HTTP 422 / 401 / 403 (429 only if rate-limited)
+Page --> Actor: 4.2: Show appropriate error; retain form/draft
+end
+deactivate API
+deactivate Page
+
+legend left
+Scope: Answer length is 1-500 characters. Human review decides ownership; answered count is not
+automated confidence.
+endlegend
+@enduml

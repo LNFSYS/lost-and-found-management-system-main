@@ -1,0 +1,54 @@
+@startuml
+title 3.4.6 Store active match results
+caption UC-031 | Implemented
+skinparam monochrome true
+skinparam shadowing false
+skinparam roundcorner 0
+skinparam defaultFontName Arial
+skinparam LegendBackgroundColor white
+skinparam style strictuml
+skinparam sequenceMessageAlign center
+show footbox
+<style>
+lifeLine {
+    LineStyle 0
+}
+</style>
+skinparam sequence {
+    ParticipantBackgroundColor white
+    ActorBackgroundColor white
+    LifeLineBackgroundColor white
+    LifeLineBorderColor black
+    GroupBackgroundColor white
+    GroupHeaderBackgroundColor white
+}
+
+' Source: apps/api-node/src/modules/matching/infrastructure/matching.repository.ts
+' Main entity migration: apps/api-node/src/migrations/002_lost_found_schema.sql
+' One-table abstraction: related repository reads/writes stay inside the service.
+actor "System" as Actor
+participant "Matching Persistence Task" as Page
+participant "Matching Service" as Service
+participant "match_results" as Table <<entity>>
+
+Actor -> Page: 1: persistForSource(source, scores, lease?)
+activate Page
+Page -> Service: 2: Run task with current eligible context
+activate Service
+Service -> Service: 3: Begin transaction; lock eligible source and validate optional lease
+Service -> Table: 4: Upsert active pairs; deactivate stale source results
+activate Table
+Table --> Service: 5: Committed matching projection
+deactivate Table
+Service -> Service: 6: Retain permitted inactive history; guard hidden/private/deleted\nposts
+Service -> Service: 7: Reject changed source/lease; retry only confirmed deadlocks
+Service --> Page: 8: Persisted results or fenced conflict
+Page --> Actor: 9: Record task outcome
+deactivate Service
+deactivate Page
+
+legend left
+Related tables, authorization, transactions and audit remain inside the service. Catalogue status is
+not deployment or manual acceptance.
+endlegend
+@enduml

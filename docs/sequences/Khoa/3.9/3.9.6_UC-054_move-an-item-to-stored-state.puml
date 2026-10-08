@@ -1,0 +1,74 @@
+@startuml
+title 3.9.6 Move an item to stored state
+caption UC-054 | Implemented
+skinparam monochrome true
+skinparam shadowing false
+skinparam roundcorner 0
+skinparam defaultFontName Arial
+skinparam LegendBackgroundColor white
+skinparam style strictuml
+skinparam sequenceMessageAlign center
+show footbox
+<style>
+lifeLine {
+    LineStyle 0
+}
+</style>
+skinparam sequence {
+    ParticipantBackgroundColor white
+    ActorBackgroundColor white
+    LifeLineBackgroundColor white
+    LifeLineBorderColor black
+    GroupBackgroundColor white
+    GroupHeaderBackgroundColor white
+}
+
+' Source: apps/api-node/src/modules/warehouse/application/warehouse.use-cases.ts
+' Main entity migration: apps/api-node/src/migrations/010_notifications_and_warehouse.sql
+' One-table abstraction: related repository reads/writes stay inside the service.
+actor "Staff / Admin" as Actor
+participant "Warehouse Operations" as Page
+participant "Warehouse API" as API
+participant "Warehouse Service" as Service
+participant "warehouse_items" as Table <<entity>>
+
+Actor -> Page: 1: Open Move an item to stored state
+activate Page
+Page -> API: 2: PATCH /api/staff/warehouse-items/:id (status=STORED)
+activate API
+API -> API: 3: Validate access session, role and input
+alt Valid request
+API -> Service: 4: Move an item to stored state
+activate Service
+Service -> Table: 5: SELECT warehouse item FOR UPDATE
+activate Table
+Table --> Service: 6: Current RECEIVED item
+deactivate Table
+Service -> Service: 7: Validate RECEIVED to STORED and storage location/code
+alt Business rules satisfied
+Service -> Table: 8: UPDATE item status to STORED
+activate Table
+Table --> Service: 9: Stored item
+deactivate Table
+Service -> Service: 10: Append immutable storage transition log; commit
+Service --> API: 11: Stored item and log
+API --> Page: 12: HTTP 200: Stored item and log
+Page --> Actor: 13: Show authorized result
+else Missing or ineligible context
+Service --> API: 8.1: Transition not permitted
+API --> Page: 8.2: HTTP 409
+Page --> Actor: 8.3: Display error; do not report success
+end
+deactivate Service
+else Invalid input, missing session or insufficient role
+API --> Page: 4.1: HTTP 422 / 401 / 403 (429 only if rate-limited)
+Page --> Actor: 4.2: Show appropriate error; retain form/draft
+end
+deactivate API
+deactivate Page
+
+legend left
+Related tables, authorization, transactions and audit remain inside the service. Catalogue status is
+not deployment or manual acceptance.
+endlegend
+@enduml

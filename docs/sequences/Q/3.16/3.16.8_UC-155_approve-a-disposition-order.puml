@@ -1,0 +1,101 @@
+@startuml
+title 3.16.8 Approve a disposition order
+caption UC-155 | Partial
+skinparam monochrome true
+skinparam shadowing false
+skinparam roundcorner 0
+skinparam defaultFontName Arial
+skinparam LegendBackgroundColor white
+skinparam style strictuml
+skinparam sequenceMessageAlign center
+show footbox
+<style>
+lifeLine {
+    LineStyle 0
+}
+</style>
+skinparam sequence {
+    ParticipantBackgroundColor white
+    ActorBackgroundColor white
+    LifeLineBackgroundColor white
+    LifeLineBorderColor black
+    GroupBackgroundColor white
+    GroupHeaderBackgroundColor white
+}
+
+' Source: apps/api-node/src/modules/warehouse/application/warehouse.use-cases.ts
+' Main entity migration: apps/api-node/src/migrations/054_custody_safety_contract.sql
+' One-table abstraction: related repository reads/writes stay inside the service.
+actor "Admin" as Actor
+participant "Administrative API Client" as Page
+participant "Staff API" as API
+participant "Warehouse Service" as Service
+participant "warehouse_action_approvals" as Table <<entity>>
+
+Actor -> Page: 1: Approve a disposition order
+activate Page
+Page -> Page: 2: Select pending request to approve as a different Admin
+Page -> API: 3: POST /api/staff/warehouse-approvals/:id/approve
+activate API
+API -> API: 4: Authenticate active session and require STAFF or ADMIN
+alt Session and required permission are valid
+    API -> API: 5: Validate approval UUID
+    alt Request input is valid
+        API -> Service: 6: Approve a disposition order for the current actor
+        activate Service
+        Service -> Service: 7: Recheck active ADMIN permission; begin transaction
+        Service -> Table: 8: Lock approval FOR UPDATE
+        activate Table
+        Table --> Service: 9: Approval, requester and current status
+        deactivate Table
+        alt Approval exists and approver differs from requester
+            Service -> Service: 10: Inspect whether the independent approval is pending, approved or\nexecuted
+            alt Status is PENDING
+                Service -> Table: 11: Set APPROVED, approved_by and approved_at
+                activate Table
+                Table --> Service: 12: Approval write result
+                deactivate Table
+                Service -> Service: 13: Commit approval without changing item custody
+                alt Operation succeeds
+                    Service --> API: 14: Approval completed
+                    API --> Page: 15: HTTP 204: Approval completed
+                    Page --> Actor: 16: Confirm independent approval
+                else Query, write or commit failure
+                    Service -> Service: 14.1: Propagate failure; rollback only when transaction failure is\nconfirmed
+                    Service --> API: 14.2: Propagate storage or transaction failure
+                    API --> Page: 14.3: HTTP 503 or 500
+                    Page --> Actor: 14.4: Display error; do not report success
+                end
+            else Already APPROVED
+                Service -> Service: 11.1: Finish idempotent replay without another transition
+                Service --> API: 11.2: Existing approval
+                API --> Page: 11.3: HTTP 204: Existing approval
+                Page --> Actor: 11.4: Keep approved state
+            else Request is no longer pending
+                Service --> API: 11.5: Request cannot be approved
+                API --> Page: 11.6: HTTP 409
+                Page --> Actor: 11.7: Display error; do not report success
+            end
+        else Approval missing or actor is requester
+            Service --> API: 10.1: Independent approver is required
+            API --> Page: 10.2: HTTP 403
+            Page --> Actor: 10.3: Display error; do not report success
+        end
+        deactivate Service
+    else Invalid request input
+        API --> Page: 6.1: HTTP 422: input validation errors
+        Page --> Actor: 6.2: Display validation errors; do not execute the operation
+    end
+else Missing/invalid session or required permission
+    API --> Page: 5.1: HTTP 401 or 403
+    Page --> Actor: 5.2: Show session or access error; no protected result
+end
+deactivate API
+deactivate Page
+
+legend bottom left
+PARTIAL: independent approval API exists; order review/approval screen is missing. Eligibility is
+rechecked at execution, not certified by approval.
+endlegend
+
+@enduml

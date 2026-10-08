@@ -1,0 +1,66 @@
+@startuml
+title 3.8.3 Propose a meetup appointment
+caption UC-128 | Implemented
+skinparam monochrome true
+skinparam shadowing false
+skinparam roundcorner 0
+skinparam defaultFontName Arial
+skinparam LegendBackgroundColor white
+skinparam style strictuml
+skinparam sequenceMessageAlign center
+show footbox
+<style>
+lifeLine {
+    LineStyle 0
+}
+</style>
+skinparam sequence {
+    ParticipantBackgroundColor white
+    ActorBackgroundColor white
+    LifeLineBackgroundColor white
+    LifeLineBorderColor black
+    GroupBackgroundColor white
+    GroupHeaderBackgroundColor white
+}
+
+' Source: apps/api-node/src/modules/appointments/application/appointment.use-cases.ts
+' Main entity migration: apps/api-node/src/migrations/002_lost_found_schema.sql
+' One-table abstraction: related repository reads/writes stay inside the service.
+actor "Claimant / Finder" as Actor
+participant "Appointments Page" as Page
+participant "Appointments API" as API
+participant "Appointment Service" as Service
+participant "return_appointments" as Table <<entity>>
+
+Actor -> Page: 1: Open Propose a meetup appointment
+activate Page
+Page -> API: 2: POST /api/appointments
+activate API
+API -> API: 3: Validate access session, role and input
+alt Valid request
+API -> Service: 4: Propose a meetup appointment
+activate Service
+Service -> Service: 5: Begin transaction; authorize actual claim participant; replay key
+Service -> Service: 6: Check accepted conversation, active users, no custody/dispute/case
+Service -> Service: 7: Require active handover point; time 1 minute to 90 days ahead
+Service -> Table: 8: Check no active attempt; INSERT PENDING appointment
+activate Table
+Table --> Service: 9: Appointment
+deactivate Table
+Service -> Service: 10: Write workflow and PROPOSED event; optional notifications/outbox
+Service -> Service: 11: Commit; require counterpart acceptance
+Service --> API: 12: Pending appointment proposal
+API --> Page: 13: HTTP 201: Pending appointment proposal
+Page --> Actor: 14: Show authorized result
+deactivate Service
+else Invalid input, missing session or insufficient role
+API --> Page: 4.1: HTTP 422 / 401 / 403 (429 only if rate-limited)
+Page --> Actor: 4.2: Show appropriate error; retain form/draft
+end
+deactivate API
+deactivate Page
+
+legend left
+Scope: A chat photo-based meetup decision does not itself book an appointment or prove ownership.
+endlegend
+@enduml

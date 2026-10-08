@@ -1,0 +1,74 @@
+@startuml
+title 3.3.8 Update my post
+caption UC-021 | Implemented
+skinparam monochrome true
+skinparam shadowing false
+skinparam roundcorner 0
+skinparam defaultFontName Arial
+skinparam LegendBackgroundColor white
+skinparam style strictuml
+skinparam sequenceMessageAlign center
+show footbox
+<style>
+lifeLine {
+    LineStyle 0
+}
+</style>
+skinparam sequence {
+    ParticipantBackgroundColor white
+    ActorBackgroundColor white
+    LifeLineBackgroundColor white
+    LifeLineBorderColor black
+    GroupBackgroundColor white
+    GroupHeaderBackgroundColor white
+}
+
+' Source: apps/api-node/src/modules/posts/application/post.use-cases.ts
+' Main entity migration: apps/api-node/src/migrations/002_lost_found_schema.sql
+' One-table abstraction: related repository reads/writes stay inside the service.
+actor "Post Owner" as Actor
+participant "Edit Post Form" as Page
+participant "Posts API" as API
+participant "Post Service" as Service
+participant "posts" as Table <<entity>>
+
+Actor -> Page: 1: Open Update my post
+activate Page
+Page -> API: 2: PATCH /api/posts/:id
+activate API
+API -> API: 3: Validate access session, role and input
+alt Valid request
+API -> Service: 4: Update my post
+activate Service
+Service -> Table: 5: SELECT owned post FOR UPDATE
+activate Table
+Table --> Service: 6: Current post
+deactivate Table
+Service -> Service: 7: Check ownership, writable status and merged business references
+alt Business rules satisfied
+Service -> Table: 8: UPDATE allowed fields and normalized search text
+activate Table
+Table --> Service: 9: Updated owned post
+deactivate Table
+Service -> Service: 10: Commit; refresh matching best effort only for OPEN/MATCHED
+Service --> API: 11: Updated post
+API --> Page: 12: HTTP 200: Updated post
+Page --> Actor: 13: Show authorized result
+else Missing or ineligible context
+Service --> API: 8.1: Not owned or invalid transition
+API --> Page: 8.2: HTTP 404 or 409
+Page --> Actor: 8.3: Display error; do not report success
+end
+deactivate Service
+else Invalid input, missing session or insufficient role
+API --> Page: 4.1: HTTP 422 / 401 / 403 (429 only if rate-limited)
+Page --> Actor: 4.2: Show appropriate error; retain form/draft
+end
+deactivate API
+deactivate Page
+
+legend left
+Scope: Use authenticated owner; preserve operational history. Matching failure cannot roll back the
+committed edit.
+endlegend
+@enduml

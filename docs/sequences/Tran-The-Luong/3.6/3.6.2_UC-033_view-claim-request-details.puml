@@ -1,0 +1,70 @@
+@startuml
+title 3.6.2 View claim request details
+caption UC-033 | Implemented
+skinparam monochrome true
+skinparam shadowing false
+skinparam roundcorner 0
+skinparam defaultFontName Arial
+skinparam LegendBackgroundColor white
+skinparam style strictuml
+skinparam sequenceMessageAlign center
+show footbox
+<style>
+lifeLine {
+    LineStyle 0
+}
+</style>
+skinparam sequence {
+    ParticipantBackgroundColor white
+    ActorBackgroundColor white
+    LifeLineBackgroundColor white
+    LifeLineBorderColor black
+    GroupBackgroundColor white
+    GroupHeaderBackgroundColor white
+}
+
+' Source: apps/api-node/src/modules/claims/application/claim.use-cases.ts
+' Main entity migration: apps/api-node/src/migrations/002_lost_found_schema.sql
+' One-table abstraction: related repository reads/writes stay inside the service.
+actor "Claimant / Finder" as Actor
+participant "Private Claims Page" as Page
+participant "Claims API" as API
+participant "Claim Service" as Service
+participant "claims" as Table <<entity>>
+
+Actor -> Page: 1: Open View claim request details
+activate Page
+Page -> API: 2: GET /api/claims/:claimId
+activate API
+API -> API: 3: Validate access session, role and input
+alt Valid request
+API -> Service: 4: View claim request details
+activate Service
+Service -> Table: 5: SELECT claim and current participant
+activate Table
+Table --> Service: 6: Claim context
+deactivate Table
+Service -> Service: 7: Require participant; resolve actual roles and protected context
+alt Business rules satisfied
+Service -> Service: 8: Serialize claim, room state and allowed actions
+Service --> API: 9: Authorized claim detail
+API --> Page: 10: HTTP 200: Authorized claim detail
+Page --> Actor: 11: Show authorized result
+else Missing or ineligible context
+Service --> API: 8.1: No authorized claim context
+API --> Page: 8.2: HTTP 404
+Page --> Actor: 8.3: Display error; do not report success
+end
+deactivate Service
+else Invalid input, missing session or insufficient role
+API --> Page: 4.1: HTTP 422 / 401 / 403 (429 only if rate-limited)
+Page --> Actor: 4.2: Show appropriate error; retain form/draft
+end
+deactivate API
+deactivate Page
+
+legend left
+Related tables, authorization, transactions and audit remain inside the service. Catalogue status is
+not deployment or manual acceptance.
+endlegend
+@enduml

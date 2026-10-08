@@ -1,0 +1,64 @@
+@startuml
+title 3.9.13 Review a custody transfer request
+caption UC-144 | Implemented
+skinparam monochrome true
+skinparam shadowing false
+skinparam roundcorner 0
+skinparam defaultFontName Arial
+skinparam LegendBackgroundColor white
+skinparam style strictuml
+skinparam sequenceMessageAlign center
+show footbox
+<style>
+lifeLine {
+    LineStyle 0
+}
+</style>
+skinparam sequence {
+    ParticipantBackgroundColor white
+    ActorBackgroundColor white
+    LifeLineBackgroundColor white
+    LifeLineBorderColor black
+    GroupBackgroundColor white
+    GroupHeaderBackgroundColor white
+}
+
+' Source: apps/api-node/src/modules/warehouse/application/custody-request.use-cases.ts
+' Main entity migration: apps/api-node/src/migrations/053_custody_requests.sql
+' One-table abstraction: related repository reads/writes stay inside the service.
+actor "Staff / Admin" as Actor
+participant "Warehouse Operations" as Page
+participant "Warehouse API" as API
+participant "Warehouse Service" as Service
+participant "custody_requests" as Table <<entity>>
+
+Actor -> Page: 1: Open Review a custody transfer request
+activate Page
+Page -> API: 2: GET /api/staff/custody-requests/:id/intake-context
+activate API
+API -> API: 3: Validate access session, role and input
+alt Valid request
+API -> Service: 4: Review a custody transfer request
+activate Service
+Service -> Table: 5: Read authorized request and exact source binding
+activate Table
+Table --> Service: 6: Custody context
+deactivate Table
+Service -> Service: 7: Resolve original post/photos OR protected CONTACT_PHOTO context
+Service -> Service: 8: Keep source comparison separate from Staff receipt observations
+Service --> API: 9: Permitted comparison context
+API --> Page: 10: HTTP 200: Permitted comparison context
+Page --> Actor: 11: Show authorized result
+deactivate Service
+else Invalid input, missing session or insufficient role
+API --> Page: 4.1: HTTP 422 / 401 / 403 (429 only if rate-limited)
+Page --> Actor: 4.2: Show appropriate error; retain form/draft
+end
+deactivate API
+deactivate Page
+
+legend left
+Scope: Review does not create physical custody or verify ownership. Historical accept API remains
+compatibility-only.
+endlegend
+@enduml

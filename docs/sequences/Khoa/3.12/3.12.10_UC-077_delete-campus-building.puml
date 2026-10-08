@@ -1,0 +1,73 @@
+@startuml
+title 3.12.10 Delete campus building
+caption UC-077 | Implemented
+skinparam monochrome true
+skinparam shadowing false
+skinparam roundcorner 0
+skinparam defaultFontName Arial
+skinparam LegendBackgroundColor white
+skinparam style strictuml
+skinparam sequenceMessageAlign center
+show footbox
+<style>
+lifeLine {
+    LineStyle 0
+}
+</style>
+skinparam sequence {
+    ParticipantBackgroundColor white
+    ActorBackgroundColor white
+    LifeLineBackgroundColor white
+    LifeLineBorderColor black
+    GroupBackgroundColor white
+    GroupHeaderBackgroundColor white
+}
+
+' Source: apps/api-node/src/modules/admin/application/admin-catalog.use-cases.ts
+' Main entity migration: apps/api-node/src/migrations/002_lost_found_schema.sql
+' One-table abstraction: related repository reads/writes stay inside the service.
+actor "Admin" as Actor
+participant "Master Data Administration" as Page
+participant "Admin API" as API
+participant "Admin Catalog Service" as Service
+participant "campus_buildings" as Table <<entity>>
+
+Actor -> Page: 1: Open Delete campus building
+activate Page
+Page -> API: 2: DELETE /api/admin/buildings/:id
+activate API
+API -> API: 3: Validate access session, role and input
+alt Valid request
+API -> Service: 4: Delete campus building
+activate Service
+Service -> Table: 5: Read building and protected usage references
+activate Table
+Table --> Service: 6: Building deletion context
+deactivate Table
+Service -> Service: 7: Require no protected post/location/warehouse references
+alt Business rules satisfied
+Service -> Table: 8: DELETE unreferenced building
+activate Table
+Table --> Service: 9: Deletion acknowledged
+deactivate Table
+Service --> API: 10: Campus building deleted
+API --> Page: 11: HTTP 204 (no response body)
+Page --> Actor: 12: Show authorized result
+else Missing or ineligible context
+Service --> API: 8.1: Referenced building must be disabled instead
+API --> Page: 8.2: HTTP 409
+Page --> Actor: 8.3: Display error; do not report success
+end
+deactivate Service
+else Invalid input, missing session or insufficient role
+API --> Page: 4.1: HTTP 422 / 401 / 403 (429 only if rate-limited)
+Page --> Actor: 4.2: Show appropriate error; retain form/draft
+end
+deactivate API
+deactivate Page
+
+legend left
+Related tables, authorization, transactions and audit remain inside the service. Catalogue status is
+not deployment or manual acceptance.
+endlegend
+@enduml

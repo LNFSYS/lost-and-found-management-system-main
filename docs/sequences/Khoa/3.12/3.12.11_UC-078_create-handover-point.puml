@@ -1,0 +1,63 @@
+@startuml
+title 3.12.11 Create handover point
+caption UC-078 | Implemented
+skinparam monochrome true
+skinparam shadowing false
+skinparam roundcorner 0
+skinparam defaultFontName Arial
+skinparam LegendBackgroundColor white
+skinparam style strictuml
+skinparam sequenceMessageAlign center
+show footbox
+<style>
+lifeLine {
+    LineStyle 0
+}
+</style>
+skinparam sequence {
+    ParticipantBackgroundColor white
+    ActorBackgroundColor white
+    LifeLineBackgroundColor white
+    LifeLineBorderColor black
+    GroupBackgroundColor white
+    GroupHeaderBackgroundColor white
+}
+
+' Source: apps/api-node/src/modules/admin/application/admin-catalog.use-cases.ts
+' Main entity migration: apps/api-node/src/migrations/002_lost_found_schema.sql
+' One-table abstraction: related repository reads/writes stay inside the service.
+actor "Admin" as Actor
+participant "Master Data Administration" as Page
+participant "Admin API" as API
+participant "Admin Catalog Service" as Service
+participant "handover_points" as Table <<entity>>
+
+Actor -> Page: 1: Open Create handover point
+activate Page
+Page -> API: 2: POST /api/admin/handover-points
+activate API
+API -> API: 3: Validate access session, role and input
+alt Valid request
+API -> Service: 4: Create handover point
+activate Service
+Service -> Service: 5: Validate area/building relationship and operating information
+Service -> Table: 6: INSERT point with validated location and creator
+activate Table
+Table --> Service: 7: Created handover point
+deactivate Table
+Service --> API: 8: New handover point
+API --> Page: 9: HTTP 201: New handover point
+Page --> Actor: 10: Show authorized result
+deactivate Service
+else Invalid input, missing session or insufficient role
+API --> Page: 4.1: HTTP 422 / 401 / 403 (429 only if rate-limited)
+Page --> Actor: 4.2: Show appropriate error; retain form/draft
+end
+deactivate API
+deactivate Page
+
+legend left
+Related tables, authorization, transactions and audit remain inside the service. Catalogue status is
+not deployment or manual acceptance.
+endlegend
+@enduml

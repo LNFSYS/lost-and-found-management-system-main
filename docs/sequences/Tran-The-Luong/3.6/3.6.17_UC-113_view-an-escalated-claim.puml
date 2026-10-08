@@ -1,0 +1,64 @@
+@startuml
+title 3.6.17 View an escalated claim
+caption UC-113 | Partial | Implemented slice
+skinparam monochrome true
+skinparam shadowing false
+skinparam roundcorner 0
+skinparam defaultFontName Arial
+skinparam LegendBackgroundColor white
+skinparam style strictuml
+skinparam sequenceMessageAlign center
+show footbox
+<style>
+lifeLine {
+    LineStyle 0
+}
+</style>
+skinparam sequence {
+    ParticipantBackgroundColor white
+    ActorBackgroundColor white
+    LifeLineBackgroundColor white
+    LifeLineBorderColor black
+    GroupBackgroundColor white
+    GroupHeaderBackgroundColor white
+}
+
+' Source: apps/api-node/src/modules/warehouse/application/warehouse.use-cases.ts
+' Main entity migration: apps/api-node/src/migrations/002_lost_found_schema.sql
+' One-table abstraction: related repository reads/writes stay inside the service.
+actor "Staff / Admin" as Actor
+participant "Custody Claim Review" as Page
+participant "Warehouse API" as API
+participant "Warehouse Claim Review Service" as Service
+participant "claims" as Table <<entity>>
+
+Actor -> Page: 1: Open View an escalated claim
+activate Page
+Page -> API: 2: GET /api/staff/warehouse-items/:id/return-claim-reviews
+activate API
+API -> API: 3: Validate access session, role and input
+alt Valid request
+API -> Service: 4: View an escalated claim
+activate Service
+Service -> Service: 5: Require Staff/Admin; load physically received item
+Service -> Table: 6: Read exact item-bound eligible return-claim summaries
+activate Table
+Table --> Service: 7: Recipient and verification summaries
+deactivate Table
+Service -> Service: 8: Return only permitted custody context; no unrestricted chat access
+Service --> API: 9: Item-bound claim summaries
+API --> Page: 10: HTTP 200: Item-bound claim summaries
+Page --> Actor: 11: Show authorized result
+deactivate Service
+else Invalid input, missing session or insufficient role
+API --> Page: 4.1: HTTP 422 / 401 / 403 (429 only if rate-limited)
+Page --> Actor: 4.2: Show appropriate error; retain form/draft
+end
+deactivate API
+deactivate Page
+
+legend left
+Scope: Partial: this is existing custody review, not a general escalation-case detail page.
+Conversation/evidence/audit access beyond this scope is missing.
+endlegend
+@enduml

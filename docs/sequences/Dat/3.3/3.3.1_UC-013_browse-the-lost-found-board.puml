@@ -1,0 +1,63 @@
+@startuml
+title 3.3.1 Browse the LOST/FOUND board
+caption UC-013 | Implemented
+skinparam monochrome true
+skinparam shadowing false
+skinparam roundcorner 0
+skinparam defaultFontName Arial
+skinparam LegendBackgroundColor white
+skinparam style strictuml
+skinparam sequenceMessageAlign center
+show footbox
+<style>
+lifeLine {
+    LineStyle 0
+}
+</style>
+skinparam sequence {
+    ParticipantBackgroundColor white
+    ActorBackgroundColor white
+    LifeLineBackgroundColor white
+    LifeLineBorderColor black
+    GroupBackgroundColor white
+    GroupHeaderBackgroundColor white
+}
+
+' Source: apps/api-node/src/modules/posts/application/post.use-cases.ts
+' Main entity migration: apps/api-node/src/migrations/002_lost_found_schema.sql
+' One-table abstraction: related repository reads/writes stay inside the service.
+actor "Guest / User" as Actor
+participant "Posts Page" as Page
+participant "Posts API" as API
+participant "Post Service" as Service
+participant "posts" as Table <<entity>>
+
+Actor -> Page: 1: Open Browse the LOST/FOUND board
+activate Page
+Page -> API: 2: GET /api/posts
+activate API
+API -> API: 3: Validate optional session and pagination
+alt Valid request
+API -> Service: 4: Browse the LOST/FOUND board
+activate Service
+Service -> Table: 5: SELECT visible active board posts with pagination
+activate Table
+Table --> Service: 6: Permitted posts and total
+deactivate Table
+Service -> Service: 7: Redact private details and contact data for current viewer
+Service --> API: 8: Board cards and pagination
+API --> Page: 9: HTTP 200: Board cards and pagination
+Page --> Actor: 10: Show authorized result
+deactivate Service
+else Invalid input or request unavailable
+API --> Page: 4.1: HTTP 422 (429 only if rate-limited)
+Page --> Actor: 4.2: Show appropriate error; retain form/draft
+end
+deactivate API
+deactivate Page
+
+legend left
+Related tables, authorization, transactions and audit remain inside the service. Catalogue status is
+not deployment or manual acceptance.
+endlegend
+@enduml

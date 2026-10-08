@@ -1,0 +1,98 @@
+@startuml
+title 3.13.2 Review report and apply moderation
+caption UC-083 | Implemented
+skinparam monochrome true
+skinparam shadowing false
+skinparam roundcorner 0
+skinparam defaultFontName Arial
+skinparam LegendBackgroundColor white
+skinparam style strictuml
+skinparam sequenceMessageAlign center
+show footbox
+<style>
+lifeLine {
+    LineStyle 0
+}
+</style>
+skinparam sequence {
+    ParticipantBackgroundColor white
+    ActorBackgroundColor white
+    LifeLineBackgroundColor white
+    LifeLineBorderColor black
+    GroupBackgroundColor white
+    GroupHeaderBackgroundColor white
+}
+
+' Source: apps/api-node/src/modules/admin/application/admin-reporting.use-cases.ts
+' Main entity migration: apps/api-node/src/migrations/002_lost_found_schema.sql
+' One-table abstraction: related repository reads/writes stay inside the service.
+actor "Admin" as Actor
+participant "Moderation Review Page" as Page
+participant "Admin API" as API
+participant "Reporting Service" as Service
+participant "reports" as Table <<entity>>
+
+Actor -> Page: 1: Review report and apply moderation
+activate Page
+Page -> Page: 2: Choose action and enter reason
+Page -> API: 3: PATCH /api/admin/reports/:id/review
+activate API
+API -> API: 4: Authenticate active session and require ADMIN role
+alt Session and required permission are valid
+    API -> API: 5: Validate report UUID, action and reason (3..255 characters)
+    alt Request input is valid
+        API -> Service: 6: Review report and apply moderation for the current actor
+        activate Service
+        Service -> Service: 7: Begin transaction
+        Service -> Table: 8: Lock report FOR UPDATE
+        activate Table
+        Table --> Service: 9: Report and current review state
+        deactivate Table
+        alt Report exists and is PENDING
+            Service -> Service: 10: Derive target from report; validate supported action
+            alt Target and safeguards allow action
+                Service -> Service: 11: Apply target action; reject self-ban or last-active-Admin ban;\nrevoke sessions for ban
+                Service -> Table: 12: Set report to REVIEWED, or DISMISSED for dismissal
+                activate Table
+                Table --> Service: 13: Updated review state
+                deactivate Table
+                Service -> Service: 14: Record moderation action and administrative audit; commit\ntransaction
+                alt Operation succeeds
+                    Service --> API: 15: Updated report
+                    API --> Page: 16: HTTP 200: Updated report
+                    Page --> Actor: 17: Display moderation result and refreshed report
+                else Query, write or commit failure
+                    Service -> Service: 15.1: Propagate failure; rollback only when transaction failure is\nconfirmed
+                    Service --> API: 15.2: Propagate storage or transaction failure
+                    API --> Page: 15.3: HTTP 503 or 500
+                    Page --> Actor: 15.4: Display error; do not report success
+                end
+            else Invalid action, missing target or protected Admin
+                Service -> Service: 11.1: Abort transaction without applying moderation
+                Service --> API: 11.2: Reject unsafe or incompatible action
+                API --> Page: 11.3: HTTP 422, 404 or 409
+                Page --> Actor: 11.4: Display error; do not report success
+            end
+        else Missing or already reviewed report
+            Service -> Service: 10.1: Abort transaction
+            Service --> API: 10.2: Report unavailable or no longer pending
+            API --> Page: 10.3: HTTP 404 or 409
+            Page --> Actor: 10.4: Display error; do not report success
+        end
+        deactivate Service
+    else Invalid request input
+        API --> Page: 6.1: HTTP 422: input validation errors
+        Page --> Actor: 6.2: Display validation errors; do not execute the operation
+    end
+else Missing/invalid session or required permission
+    API --> Page: 5.1: HTTP 401 or 403
+    Page --> Actor: 5.2: Show session or access error; no protected result
+end
+deactivate API
+deactivate Page
+
+legend bottom left
+Related target updates and moderation/admin audit writes are internal service operations.
+endlegend
+
+@enduml

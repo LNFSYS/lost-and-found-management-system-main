@@ -1,0 +1,70 @@
+@startuml
+title 3.7.5 View protected claim evidence
+caption UC-045 | Implemented
+skinparam monochrome true
+skinparam shadowing false
+skinparam roundcorner 0
+skinparam defaultFontName Arial
+skinparam LegendBackgroundColor white
+skinparam style strictuml
+skinparam sequenceMessageAlign center
+show footbox
+<style>
+lifeLine {
+    LineStyle 0
+}
+</style>
+skinparam sequence {
+    ParticipantBackgroundColor white
+    ActorBackgroundColor white
+    LifeLineBackgroundColor white
+    LifeLineBorderColor black
+    GroupBackgroundColor white
+    GroupHeaderBackgroundColor white
+}
+
+' Source: apps/api-node/src/modules/claims/application/claim.use-cases.ts
+' Main entity migration: apps/api-node/src/migrations/002_lost_found_schema.sql
+' One-table abstraction: related repository reads/writes stay inside the service.
+actor "Claimant / Finder" as Actor
+participant "Private Conversation" as Page
+participant "Claims API" as API
+participant "Claim Chat Service" as Service
+participant "claim_evidence" as Table <<entity>>
+
+Actor -> Page: 1: Open View protected claim evidence
+activate Page
+Page -> API: 2: GET /api/claims/:id/evidence/:evidenceId
+activate API
+API -> API: 3: Validate access session, role and input
+alt Valid request
+API -> Service: 4: View protected claim evidence
+activate Service
+Service -> Table: 5: SELECT claim-scoped private evidence
+activate Table
+Table --> Service: 6: Evidence storage metadata
+deactivate Table
+Service -> Service: 7: Require actual room participant; never role-only Staff access
+alt Business rules satisfied
+Service -> Service: 8: Resolve private asset through storage adapter; stream bytes
+Service --> API: 9: Protected image bytes
+API --> Page: 10: HTTP 200: Protected image bytes
+Page --> Actor: 11: Render evidence preview without exposing raw storage reference
+else Missing or ineligible context
+Service --> API: 8.1: No authorized evidence for this room
+API --> Page: 8.2: HTTP 404
+Page --> Actor: 8.3: Display error; do not report success
+end
+deactivate Service
+else Invalid input, missing session or insufficient role
+API --> Page: 4.1: HTTP 422 / 401 / 403 (429 only if rate-limited)
+Page --> Actor: 4.2: Show appropriate error; retain form/draft
+end
+deactivate API
+deactivate Page
+
+legend left
+Related tables, authorization, transactions and audit remain inside the service. Catalogue status is
+not deployment or manual acceptance.
+endlegend
+@enduml

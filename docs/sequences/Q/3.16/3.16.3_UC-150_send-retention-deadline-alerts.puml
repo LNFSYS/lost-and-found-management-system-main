@@ -1,0 +1,73 @@
+@startuml
+title 3.16.3 Send retention deadline alerts
+caption UC-150 | Partial
+skinparam monochrome true
+skinparam shadowing false
+skinparam roundcorner 0
+skinparam defaultFontName Arial
+skinparam LegendBackgroundColor white
+skinparam style strictuml
+skinparam sequenceMessageAlign center
+show footbox
+<style>
+lifeLine {
+    LineStyle 0
+}
+</style>
+skinparam sequence {
+    ParticipantBackgroundColor white
+    ActorBackgroundColor white
+    LifeLineBackgroundColor white
+    LifeLineBorderColor black
+    GroupBackgroundColor white
+    GroupHeaderBackgroundColor white
+}
+
+' Source: apps/api-node/src/modules/warehouse/application/warehouse.use-cases.ts
+' Main entity migration: apps/api-node/src/migrations/002_lost_found_schema.sql
+' One-table abstraction: related repository reads/writes stay inside the service.
+actor "Scheduler" as Actor
+participant "Warehouse Maintenance Task" as Page
+participant "Warehouse Service" as Service
+participant "notifications" as Table <<entity>>
+
+Actor -> Page: 1: Run maintenance tick
+activate Page
+Page -> Page: 2: Check schema readiness; avoid overlapping or stopped ticks
+alt Schema ready and task is running
+    Page -> Service: 3: runMaintenance()
+    activate Service
+    Service -> Service: 4: Begin transaction; find up to 100 overdue INTAKED custody requests
+    loop Each eligible request and authorized recipient
+        Service -> Table: 5: Create CUSTODY_OVERDUE notification using per-request/recipient\ndedupe key
+        activate Table
+        Table --> Service: 6: Inserted notification, or no new record
+        deactivate Table
+        alt New notification created
+            Service -> Service: 7: Queue permitted email in the same transaction
+        else Already notified
+            Service -> Service: 7.1: Skip duplicate delivery
+        end
+    end
+    Service -> Service: 8: Finish remaining maintenance work; commit transaction before\npublication
+    alt Maintenance transaction succeeds
+        Service -> Service: 9: Publish committed in-app notifications; email worker sends\nseparately
+        Service --> Page: 10: Maintenance finished
+        Page --> Actor: 11: Complete tick without claiming email delivery
+    else Maintenance query, transaction or provider failure
+        Service -> Service: 9.1: Do not publish an uncommitted batch; retain safe failure diagnostics
+        Service --> Page: 9.2: Propagate maintenance failure
+        Page --> Actor: 9.3: Log sanitized WAREHOUSE_MAINTENANCE_FAILED and finish tick
+    end
+    deactivate Service
+else Schema missing or maintenance stopped
+    Page --> Actor: 3.1: Pause tick and report missing-schema readiness; no new alerts
+end
+deactivate Page
+
+legend bottom left
+PARTIAL: deduplicated post-deadline custody alerts exist. Pre-deadline alerts and general walk-in
+coverage are missing. Queued email is not confirmed SMTP delivery.
+endlegend
+
+@enduml

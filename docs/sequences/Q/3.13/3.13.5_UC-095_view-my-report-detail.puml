@@ -1,0 +1,71 @@
+@startuml
+title 3.13.5 View my report detail
+caption UC-095 | Implemented
+skinparam monochrome true
+skinparam shadowing false
+skinparam roundcorner 0
+skinparam defaultFontName Arial
+skinparam LegendBackgroundColor white
+skinparam style strictuml
+skinparam sequenceMessageAlign center
+show footbox
+<style>
+lifeLine {
+    LineStyle 0
+}
+</style>
+skinparam sequence {
+    ParticipantBackgroundColor white
+    ActorBackgroundColor white
+    LifeLineBackgroundColor white
+    LifeLineBorderColor black
+    GroupBackgroundColor white
+    GroupHeaderBackgroundColor white
+}
+
+' Source: apps/api-node/src/modules/reports/application/report.use-cases.ts
+' Main entity migration: apps/api-node/src/migrations/002_lost_found_schema.sql
+' One-table abstraction: related repository reads/writes stay inside the service.
+actor "Authenticated User" as Actor
+participant "My Report Detail Page" as Page
+participant "Report API" as API
+participant "Report Service" as Service
+participant "reports" as Table <<entity>>
+
+Actor -> Page: 1: View my report detail
+activate Page
+Page -> Page: 2: Select a submitted report
+Page -> API: 3: GET /api/reports/mine/:id
+activate API
+API -> API: 4: Authenticate active session
+alt Session and required permission are valid
+    API -> API: 5: Validate report UUID
+    alt Request input is valid
+        API -> Service: 6: View my report detail for the current actor
+        activate Service
+        Service -> Table: 7: Read report WHERE id and reporter_id match
+        activate Table
+        Table --> Service: 8: Own report with safe target context and resolution, or no record
+        deactivate Table
+        alt Own report exists
+            Service --> API: 9: Own report detail
+            API --> Page: 10: HTTP 200: Own report detail
+            Page --> Actor: 11: Display reason, description, status and resolution
+        else Missing report or different reporter
+            Service --> API: 9.1: Own report not found
+            API --> Page: 9.2: HTTP 404
+            Page --> Actor: 9.3: Display error; do not report success
+        end
+        deactivate Service
+    else Invalid request input
+        API --> Page: 6.1: HTTP 422: input validation errors
+        Page --> Actor: 6.2: Display validation errors; do not execute the operation
+    end
+else Missing/invalid session or required permission
+    API --> Page: 5.1: HTTP 401 or 403
+    Page --> Actor: 5.2: Show session or access error; no protected result
+end
+deactivate API
+deactivate Page
+
+@enduml

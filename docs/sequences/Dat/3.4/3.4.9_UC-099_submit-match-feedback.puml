@@ -1,0 +1,74 @@
+@startuml
+title 3.4.9 Submit match feedback
+caption UC-099 | Implemented
+skinparam monochrome true
+skinparam shadowing false
+skinparam roundcorner 0
+skinparam defaultFontName Arial
+skinparam LegendBackgroundColor white
+skinparam style strictuml
+skinparam sequenceMessageAlign center
+show footbox
+<style>
+lifeLine {
+    LineStyle 0
+}
+</style>
+skinparam sequence {
+    ParticipantBackgroundColor white
+    ActorBackgroundColor white
+    LifeLineBackgroundColor white
+    LifeLineBorderColor black
+    GroupBackgroundColor white
+    GroupHeaderBackgroundColor white
+}
+
+' Source: apps/api-node/src/modules/matching/application/matching.use-cases.ts
+' Main entity migration: apps/api-node/src/migrations/016_ai_training_feedback.sql
+' One-table abstraction: related repository reads/writes stay inside the service.
+actor "Post Owner" as Actor
+participant "Matching Results Page" as Page
+participant "Posts API" as API
+participant "Matching Service" as Service
+participant "match_feedback" as Table <<entity>>
+
+Actor -> Page: 1: Open Submit match feedback
+activate Page
+Page -> API: 2: POST /api/posts/:id/matches/:matchId/feedback
+activate API
+API -> API: 3: Validate access session, role and input
+alt Valid request
+API -> Service: 4: Submit match feedback
+activate Service
+Service -> Table: 5: Find linked match and actor feedback
+activate Table
+Table --> Service: 6: Match and feedback context
+deactivate Table
+Service -> Service: 7: Require source owner; validate value and stable correlation key
+alt Business rules satisfied
+Service -> Table: 8: INSERT actor feedback or exact replay
+activate Table
+Table --> Service: 9: Saved feedback
+deactivate Table
+Service -> Service: 10: Leave claim, ownership and workflow state unchanged
+Service --> API: 11: Saved feedback
+API --> Page: 12: HTTP 201: Saved feedback
+Page --> Actor: 13: Show authorized result
+else Missing or ineligible context
+Service --> API: 8.1: Different feedback already submitted
+API --> Page: 8.2: HTTP 409
+Page --> Actor: 8.3: Display error; do not report success
+end
+deactivate Service
+else Invalid input, missing session or insufficient role
+API --> Page: 4.1: HTTP 422 / 401 / 403 (429 only if rate-limited)
+Page --> Actor: 4.2: Show appropriate error; retain form/draft
+end
+deactivate API
+deactivate Page
+
+legend left
+Related tables, authorization, transactions and audit remain inside the service. Catalogue status is
+not deployment or manual acceptance.
+endlegend
+@enduml

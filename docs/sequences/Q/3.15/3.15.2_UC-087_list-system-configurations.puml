@@ -1,0 +1,73 @@
+@startuml
+title 3.15.2 List system configurations
+caption UC-087 | Implemented
+skinparam monochrome true
+skinparam shadowing false
+skinparam roundcorner 0
+skinparam defaultFontName Arial
+skinparam LegendBackgroundColor white
+skinparam style strictuml
+skinparam sequenceMessageAlign center
+show footbox
+<style>
+lifeLine {
+    LineStyle 0
+}
+</style>
+skinparam sequence {
+    ParticipantBackgroundColor white
+    ActorBackgroundColor white
+    LifeLineBackgroundColor white
+    LifeLineBorderColor black
+    GroupBackgroundColor white
+    GroupHeaderBackgroundColor white
+}
+
+' Source: apps/api-node/src/modules/system-config/application/system-config.use-cases.ts
+' Main entity migration: apps/api-node/src/migrations/002_lost_found_schema.sql
+' One-table abstraction: related repository reads/writes stay inside the service.
+actor "Admin" as Actor
+participant "Configuration Page" as Page
+participant "Admin Config API" as API
+participant "Config Service" as Service
+participant "config_entries" as Table <<entity>>
+
+Actor -> Page: 1: List system configurations
+activate Page
+Page -> Page: 2: Read keyword, value type, visibility and page filters
+Page -> API: 3: GET /api/admin/configs
+activate API
+API -> API: 4: Authenticate active session and require ADMIN role
+alt Session and required permission are valid
+    API -> API: 5: Validate filter types and pagination
+    alt Request input is valid
+        API -> Service: 6: List system configurations for the current actor
+        activate Service
+        Service -> Table: 7: Count and read configurations matching filters
+        activate Table
+        Table --> Service: 8: Config rows and total, or error
+        deactivate Table
+        alt Operation succeeds
+            Service -> Service: 9: Redact values whose keys are sensitive
+            Service --> API: 10: Paginated safe configurations
+            API --> Page: 11: HTTP 200: Paginated safe configurations
+            Page --> Actor: 12: Display entries and pagination
+        else Query or response mapping failure
+            Service -> Service: 9.1: Do not fabricate data; propagate the query or mapping failure
+            Service --> API: 9.2: Propagate read failure
+            API --> Page: 9.3: HTTP 503 or 500
+            Page --> Actor: 9.4: Display error; do not report success
+        end
+        deactivate Service
+    else Invalid request input
+        API --> Page: 6.1: HTTP 422: input validation errors
+        Page --> Actor: 6.2: Display validation errors; do not execute the operation
+    end
+else Missing/invalid session or required permission
+    API --> Page: 5.1: HTTP 401 or 403
+    Page --> Actor: 5.2: Show session or access error; no protected result
+end
+deactivate API
+deactivate Page
+
+@enduml

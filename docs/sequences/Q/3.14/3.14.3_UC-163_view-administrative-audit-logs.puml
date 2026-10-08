@@ -1,0 +1,78 @@
+@startuml
+title 3.14.3 View administrative audit logs
+caption UC-163 | Implemented
+skinparam monochrome true
+skinparam shadowing false
+skinparam roundcorner 0
+skinparam defaultFontName Arial
+skinparam LegendBackgroundColor white
+skinparam style strictuml
+skinparam sequenceMessageAlign center
+show footbox
+<style>
+lifeLine {
+    LineStyle 0
+}
+</style>
+skinparam sequence {
+    ParticipantBackgroundColor white
+    ActorBackgroundColor white
+    LifeLineBackgroundColor white
+    LifeLineBorderColor black
+    GroupBackgroundColor white
+    GroupHeaderBackgroundColor white
+}
+
+' Source: apps/api-node/src/modules/activity/application/activity.use-cases.ts
+' Main entity migration: apps/api-node/src/migrations/039_admin_user_and_config_audit.sql
+' One-table abstraction: related repository reads/writes stay inside the service.
+actor "Admin" as Actor
+participant "Administrative Audit Page" as Page
+participant "Activity API" as API
+participant "Activity Service" as Service
+participant "admin_audit_logs" as Table <<entity>>
+
+Actor -> Page: 1: View administrative audit logs
+activate Page
+Page -> Page: 2: Select ADMIN source, keyword, actor/target, dates and page
+Page -> API: 3: GET /api/admin/audit?source=ADMIN
+activate API
+API -> API: 4: Authenticate active session and require ADMIN role
+alt Session and required permission are valid
+    API -> API: 5: Set private/no-store; validate UUIDs, dates and page (1..10000)
+    alt Request input is valid
+        API -> Service: 6: View administrative audit logs for the current actor
+        activate Service
+        Service -> Service: 7: Recheck ADMIN permission; use page size 30
+        Service -> Table: 8: Read total and filtered administrative event metadata; newest first
+        activate Table
+        Table --> Service: 9: Total and safe rows, or query error
+        deactivate Table
+        alt Operation succeeds
+            Service -> Service: 10: Exclude private notes, snapshots and media from response
+            Service --> API: 11: Paginated audit results and actual total
+            API --> Page: 12: HTTP 200: Paginated audit results and actual total
+            Page --> Actor: 13: Display audit table, or empty page with actual total
+        else Query or response mapping failure
+            Service -> Service: 10.1: Do not fabricate data; propagate the query or mapping failure
+            Service --> API: 10.2: Propagate read failure
+            API --> Page: 10.3: HTTP 503 or 500
+            Page --> Actor: 10.4: Display error; do not report success
+        end
+        deactivate Service
+    else Invalid request input
+        API --> Page: 6.1: HTTP 422: input validation errors
+        Page --> Actor: 6.2: Display validation errors; do not execute the operation
+    end
+else Missing/invalid session or required permission
+    API --> Page: 5.1: HTTP 401 or 403
+    Page --> Actor: 5.2: Show session or access error; no protected result
+end
+deactivate API
+deactivate Page
+
+legend bottom left
+ADMIN-source example. Cross-source aggregation is abstracted to preserve one table lifeline.
+endlegend
+
+@enduml

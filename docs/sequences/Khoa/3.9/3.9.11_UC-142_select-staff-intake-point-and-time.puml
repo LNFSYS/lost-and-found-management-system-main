@@ -1,0 +1,63 @@
+@startuml
+title 3.9.11 Select staff intake point and time
+caption UC-142 | Partial | Implemented slice
+skinparam monochrome true
+skinparam shadowing false
+skinparam roundcorner 0
+skinparam defaultFontName Arial
+skinparam LegendBackgroundColor white
+skinparam style strictuml
+skinparam sequenceMessageAlign center
+show footbox
+<style>
+lifeLine {
+    LineStyle 0
+}
+</style>
+skinparam sequence {
+    ParticipantBackgroundColor white
+    ActorBackgroundColor white
+    LifeLineBackgroundColor white
+    LifeLineBorderColor black
+    GroupBackgroundColor white
+    GroupHeaderBackgroundColor white
+}
+
+' Source: apps/api-node/src/modules/admin/application/admin-catalog.use-cases.ts
+' Main entity migration: apps/api-node/src/migrations/002_lost_found_schema.sql
+' One-table abstraction: related repository reads/writes stay inside the service.
+actor "Finder / Staff" as Actor
+participant "Custody Point Selection" as Page
+participant "Handover Point API" as API
+participant "Handover Point Service" as Service
+participant "handover_points" as Table <<entity>>
+
+Actor -> Page: 1: Open Select staff intake point and time
+activate Page
+Page -> API: 2: GET /api/handover-points
+activate API
+API -> API: 3: Validate public handover-point request
+alt Valid request
+API -> Service: 4: Select staff intake point and time
+activate Service
+Service -> Table: 5: SELECT active point and office-hour information
+activate Table
+Table --> Service: 6: Available intake points
+deactivate Table
+Service -> Service: 7: Choose active point in Finder custody request
+Service --> API: 8: Active point and office hours
+API --> Page: 9: HTTP 200: Active point and office hours
+Page --> Actor: 10: Show authorized result
+deactivate Service
+else Invalid input, missing session or insufficient role
+API --> Page: 4.1: HTTP 422 / 401 / 403 (429 only if rate-limited)
+Page --> Actor: 4.2: Show appropriate error; retain form/draft
+end
+deactivate API
+deactivate Page
+
+legend left
+Scope: Partial: point selection and office hours exist; proposed-time/holiday-aware scheduling is
+missing.
+endlegend
+@enduml

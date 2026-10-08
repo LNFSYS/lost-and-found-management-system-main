@@ -1,0 +1,63 @@
+@startuml
+title 3.8.13 Hold conflicting handover confirmations
+caption UC-138 | Implemented
+skinparam monochrome true
+skinparam shadowing false
+skinparam roundcorner 0
+skinparam defaultFontName Arial
+skinparam LegendBackgroundColor white
+skinparam style strictuml
+skinparam sequenceMessageAlign center
+show footbox
+<style>
+lifeLine {
+    LineStyle 0
+}
+</style>
+skinparam sequence {
+    ParticipantBackgroundColor white
+    ActorBackgroundColor white
+    LifeLineBackgroundColor white
+    LifeLineBorderColor black
+    GroupBackgroundColor white
+    GroupHeaderBackgroundColor white
+}
+
+' Source: apps/api-node/src/modules/appointments/application/appointment.use-cases.ts
+' Main entity migration: apps/api-node/src/migrations/002_lost_found_schema.sql
+' One-table abstraction: related repository reads/writes stay inside the service.
+actor "System" as Actor
+participant "Handover Response Evaluation" as Page
+participant "Appointment Service" as Service
+participant "return_appointments" as Table <<entity>>
+
+Actor -> Page: 1: Evaluate responses inside authorized appointment action
+activate Page
+Page -> Service: 2: Run task with current eligible context
+activate Service
+Service -> Table: 3: Lock appointment and participant response snapshot
+activate Table
+Table --> Service: 4: Finder/owner responses
+deactivate Table
+Service -> Service: 5: Record explicit CONFIRMED or DISPUTED response
+alt Not both valid positive responses
+Service -> Table: 6: Keep ACCEPTED attempt; persist pending/mismatched responses
+activate Table
+Table --> Service: 7: Uncompleted appointment
+deactivate Table
+Service -> Service: 8: Write immutable action event; require explicit correction/review
+Service --> Page: 9: Pending/mismatched handover retained
+Page --> Actor: 10: Record task outcome
+else Both positive but safety recheck fails
+Service -> Service: 6.1: Do not complete; retain reviewable history
+Service --> Page: 6.2: Task not completed; bounded retry / report failure
+Page --> Actor: 6.3: Record failure without reporting success
+end
+deactivate Service
+deactivate Page
+
+legend left
+Scope: This diagram covers the non-completion branch; both safe positive responses use UC-139. No
+automatic return or silent cancellation.
+endlegend
+@enduml

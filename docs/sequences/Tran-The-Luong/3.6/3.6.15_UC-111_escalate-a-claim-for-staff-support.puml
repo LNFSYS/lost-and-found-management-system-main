@@ -1,0 +1,75 @@
+@startuml
+title 3.6.15 Escalate a claim for staff support
+caption UC-111 | Partial | Implemented slice
+skinparam monochrome true
+skinparam shadowing false
+skinparam roundcorner 0
+skinparam defaultFontName Arial
+skinparam LegendBackgroundColor white
+skinparam style strictuml
+skinparam sequenceMessageAlign center
+show footbox
+<style>
+lifeLine {
+    LineStyle 0
+}
+</style>
+skinparam sequence {
+    ParticipantBackgroundColor white
+    ActorBackgroundColor white
+    LifeLineBackgroundColor white
+    LifeLineBorderColor black
+    GroupBackgroundColor white
+    GroupHeaderBackgroundColor white
+}
+
+' Source: apps/api-node/src/modules/claims/application/claim.use-cases.ts
+' Main entity migration: apps/api-node/src/migrations/053_custody_requests.sql
+' One-table abstraction: related repository reads/writes stay inside the service.
+actor "Finder" as Actor
+participant "Private Claims Page" as Page
+participant "Claims API" as API
+participant "Claim Service" as Service
+participant "custody_requests" as Table <<entity>>
+
+Actor -> Page: 1: Open Escalate a claim for staff support
+activate Page
+Page -> API: 2: POST /api/claims/:id/verification/decision (ESCALATE_TO_CUSTODY)
+activate API
+API -> API: 3: Validate access session, role and input
+alt Valid request
+API -> Service: 4: Escalate a claim for staff support
+activate Service
+Service -> Table: 5: Find custody request for exact physical source or photo-backed room
+activate Table
+Table --> Service: 6: Request context
+deactivate Table
+Service -> Service: 7: Actual Finder; reason, active point, eligible FOUND or consumed\nLOST photo
+alt Business rules satisfied
+Service -> Table: 8: INSERT PENDING custody request with idempotency identity
+activate Table
+Table --> Service: 9: Custody request
+deactivate Table
+Service -> Service: 10: Mark room escalated; preserve claim status and Finder identity
+Service -> Service: 11: Append custody/claim audit and notifications; commit
+Service --> API: 12: Custody request queued
+API --> Page: 13: HTTP 200: Custody request queued
+Page --> Actor: 14: Show authorized result
+else Missing or ineligible context
+Service --> API: 8.1: Existing custody, inactive source or invalid contact photo
+API --> Page: 8.2: HTTP 409
+Page --> Actor: 8.3: Display error; do not report success
+end
+deactivate Service
+else Invalid input, missing session or insufficient role
+API --> Page: 4.1: HTTP 422 / 401 / 403 (429 only if rate-limited)
+Page --> Actor: 4.2: Show appropriate error; retain form/draft
+end
+deactivate API
+deactivate Page
+
+legend left
+Scope: Partial: Finder custody escalation is implemented. General escalation by both participants
+with assigned Staff support cases remains missing; this is not automatic ownership acceptance.
+endlegend
+@enduml

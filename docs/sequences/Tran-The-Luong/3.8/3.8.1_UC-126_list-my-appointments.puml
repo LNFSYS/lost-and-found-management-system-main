@@ -1,0 +1,65 @@
+@startuml
+title 3.8.1 List my appointments
+caption UC-126 | Implemented
+skinparam monochrome true
+skinparam shadowing false
+skinparam roundcorner 0
+skinparam defaultFontName Arial
+skinparam LegendBackgroundColor white
+skinparam style strictuml
+skinparam sequenceMessageAlign center
+show footbox
+<style>
+lifeLine {
+    LineStyle 0
+}
+</style>
+skinparam sequence {
+    ParticipantBackgroundColor white
+    ActorBackgroundColor white
+    LifeLineBackgroundColor white
+    LifeLineBorderColor black
+    GroupBackgroundColor white
+    GroupHeaderBackgroundColor white
+}
+
+' Source: apps/api-node/src/modules/appointments/application/appointment.use-cases.ts
+' Main entity migration: apps/api-node/src/migrations/002_lost_found_schema.sql
+' One-table abstraction: related repository reads/writes stay inside the service.
+actor "Claimant / Finder" as Actor
+participant "Appointments Page" as Page
+participant "Appointments API" as API
+participant "Appointment Service" as Service
+participant "return_appointments" as Table <<entity>>
+
+Actor -> Page: 1: Open List my appointments
+activate Page
+Page -> API: 2: GET /api/appointments?page=...
+activate API
+API -> API: 3: Validate access session, role and input
+alt Valid request
+API -> Service: 4: List my appointments
+activate Service
+Service -> Service: 5: Verify workflow schema available
+Service -> Table: 6: SELECT participant appointments with pagination
+activate Table
+Table --> Service: 7: Authorized appointment page
+deactivate Table
+Service -> Service: 8: Join workflow state/place/public item thumbnail internally
+Service -> Service: 9: Never use private evidence as card thumbnail
+Service --> API: 10: Appointment cards with photo, time, place and status
+API --> Page: 11: HTTP 200: Appointment cards with photo, time, place and status
+Page --> Actor: 12: Show authorized result
+deactivate Service
+else Invalid input, missing session or insufficient role
+API --> Page: 4.1: HTTP 422 / 401 / 403 (429 only if rate-limited)
+Page --> Actor: 4.2: Show appropriate error; retain form/draft
+end
+deactivate API
+deactivate Page
+
+legend left
+Related tables, authorization, transactions and audit remain inside the service. Catalogue status is
+not deployment or manual acceptance.
+endlegend
+@enduml

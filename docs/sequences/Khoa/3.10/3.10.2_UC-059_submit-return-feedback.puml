@@ -1,0 +1,75 @@
+@startuml
+title 3.10.2 Submit return feedback
+caption UC-059 | Implemented
+skinparam monochrome true
+skinparam shadowing false
+skinparam roundcorner 0
+skinparam defaultFontName Arial
+skinparam LegendBackgroundColor white
+skinparam style strictuml
+skinparam sequenceMessageAlign center
+show footbox
+<style>
+lifeLine {
+    LineStyle 0
+}
+</style>
+skinparam sequence {
+    ParticipantBackgroundColor white
+    ActorBackgroundColor white
+    LifeLineBackgroundColor white
+    LifeLineBorderColor black
+    GroupBackgroundColor white
+    GroupHeaderBackgroundColor white
+}
+
+' Source: apps/api-node/src/modules/returns/application/return-feedback.use-cases.ts
+' Main entity migration: apps/api-node/src/migrations/018_return_feedback.sql
+' One-table abstraction: related repository reads/writes stay inside the service.
+actor "Claimant / Finder" as Actor
+participant "Return Feedback" as Page
+participant "Returns API" as API
+participant "Return Feedback Service" as Service
+participant "return_feedback" as Table <<entity>>
+
+Actor -> Page: 1: Open Submit return feedback
+activate Page
+Page -> API: 2: POST /api/returns/:id/feedback
+activate API
+API -> API: 3: Validate access session, role and input
+alt Valid request
+API -> Service: 4: Submit return feedback
+activate Service
+Service -> Service: 5: Begin transaction; lock canonical completed appointment
+Service -> Service: 6: Require actual participant; check exact scoped idempotency replay
+Service -> Table: 7: Find reviewer feedback; enforce one review per completed return
+activate Table
+Table --> Service: 8: Existing feedback or eligibility
+deactivate Table
+alt No conflicting review and valid canonical completion
+Service -> Table: 9: INSERT one rating/comment for actual counterpart
+activate Table
+Table --> Service: 10: Persisted feedback
+deactivate Table
+Service -> Service: 11: Lock counterpart reputation; update score and immutable event
+Service -> Service: 12: Commit feedback and reputation atomically
+Service --> API: 13: Saved feedback and reputation result
+API --> Page: 14: HTTP 201: Saved feedback and reputation result
+Page --> Actor: 15: Show authorized result
+else Already reviewed or return not eligible
+Service --> API: 9.1: Feedback cannot be submitted
+API --> Page: 9.2: HTTP 409
+Page --> Actor: 9.3: Display error; do not report success
+end
+deactivate Service
+else Invalid input, missing session or insufficient role
+API --> Page: 4.1: HTTP 422 / 401 / 403 (429 only if rate-limited)
+Page --> Actor: 4.2: Show appropriate error; retain form/draft
+end
+deactivate API
+deactivate Page
+
+legend left
+Scope: No self-rating. Exact idempotent replay does not create another reputation event.
+endlegend
+@enduml

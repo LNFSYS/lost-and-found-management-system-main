@@ -1,0 +1,58 @@
+@startuml
+title 3.8.9 Send appointment reminders
+caption UC-134 | Implemented
+skinparam monochrome true
+skinparam shadowing false
+skinparam roundcorner 0
+skinparam defaultFontName Arial
+skinparam LegendBackgroundColor white
+skinparam style strictuml
+skinparam sequenceMessageAlign center
+show footbox
+<style>
+lifeLine {
+    LineStyle 0
+}
+</style>
+skinparam sequence {
+    ParticipantBackgroundColor white
+    ActorBackgroundColor white
+    LifeLineBackgroundColor white
+    LifeLineBorderColor black
+    GroupBackgroundColor white
+    GroupHeaderBackgroundColor white
+}
+
+' Source: apps/api-node/src/modules/appointments/application/appointment.use-cases.ts
+' Main entity migration: apps/api-node/src/migrations/002_lost_found_schema.sql
+' One-table abstraction: related repository reads/writes stay inside the service.
+actor "Scheduler" as Actor
+participant "Appointment Reminder Task" as Page
+participant "Appointment Service" as Service
+participant "return_appointments" as Table <<entity>>
+
+Actor -> Page: 1: queueReminders() at configured lead time
+activate Page
+Page -> Service: 2: Run task with current eligible context
+activate Service
+Service -> Table: 3: SELECT due ACCEPTED future appointments not reminded
+activate Table
+Table --> Service: 4: Due appointment IDs
+deactivate Table
+Service -> Service: 5: Lock and recheck eligible claim, safety and future time
+Service -> Table: 6: Mark reminder once under transaction lock
+activate Table
+Table --> Service: 7: Reminder marker
+deactivate Table
+Service -> Service: 8: Persist one notification and optional outbox per participant
+Service -> Service: 9: Write REMINDER_QUEUED event; commit before delivery
+Service --> Page: 10: Queued reminder count
+Page --> Actor: 11: Record task outcome
+deactivate Service
+deactivate Page
+
+legend left
+Scope: Default lead is 30 minutes. Existing email worker honors preferences; queuing does not
+guarantee delivery before meeting time.
+endlegend
+@enduml

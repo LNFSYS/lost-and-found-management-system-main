@@ -1,0 +1,85 @@
+@startuml
+title 3.2.10 Update profile avatar
+caption UC-010 | Implemented
+skinparam monochrome true
+skinparam shadowing false
+skinparam roundcorner 0
+skinparam defaultFontName Arial
+skinparam LegendBackgroundColor white
+skinparam style strictuml
+skinparam sequenceMessageAlign center
+show footbox
+<style>
+lifeLine {
+    LineStyle 0
+}
+</style>
+skinparam sequence {
+    ParticipantBackgroundColor white
+    ActorBackgroundColor white
+    LifeLineBackgroundColor white
+    LifeLineBorderColor black
+    GroupBackgroundColor white
+    GroupHeaderBackgroundColor white
+}
+
+' Source: apps/api-node/src/modules/auth/application/auth.use-cases.ts
+' Main entity migration: apps/api-node/src/migrations/001_auth.sql
+' One-table abstraction: related repository reads/writes stay inside the service.
+actor "User" as Actor
+participant "Profile Page" as Page
+participant "Auth API" as API
+participant "Auth Service" as Service
+participant "users" as Table <<entity>>
+
+Actor -> Page: 1: Open Update profile avatar
+activate Page
+Page -> API: 2: PATCH /api/auth/profile/avatar (multipart)
+activate API
+API -> API: 3: Validate access session, role and input
+alt Valid request
+API -> Service: 4: Update profile avatar
+activate Service
+Service -> Service: 5: Coordinate stable upload operation; check replay and authorization
+Service -> Table: 6: SELECT user's existing avatar metadata
+activate Table
+Table --> Service: 7: Existing reference or upload context
+deactivate Table
+Service -> Service: 8: Validate image bytes; save private asset through storage adapter
+alt Asset storage succeeds
+Service -> Service: 9: Persist reference with business recheck in coordinated transaction
+Service -> Table: 10: UPDATE user's avatar metadata
+activate Table
+Table --> Service: 11: Persistence acknowledgement / reference
+deactivate Table
+Service -> Service: 12: Commit and reconcile operation on authoritative primary
+alt Persistence confirmed
+Service -> Service: 13: Remove previous asset only with safe compensation permission
+Service -> Service: 14: Return protected API URL, never raw storage reference
+Service --> API: 15: Updated avatar metadata
+API --> Page: 16: HTTP 201: Updated avatar metadata
+Page --> Actor: 17: Show authorized result
+else Outcome unresolved or acknowledgement lost
+Service -> Service: 13.1: Keep asset and operation; reconcile later / stable retry
+Service --> API: 13.2: Do not claim success or delete possibly referenced asset
+API --> Page: 13.3: HTTP 503
+Page --> Actor: 13.4: Display error; do not report success
+end
+else Storage unavailable
+Service --> API: 9.1: No confirmed persisted upload
+API --> Page: 9.2: HTTP 503
+Page --> Actor: 9.3: Display error; do not report success
+end
+deactivate Service
+else Invalid input, missing session or insufficient role
+API --> Page: 4.1: HTTP 422 / 401 / 403 (429 only if rate-limited)
+Page --> Actor: 4.2: Show appropriate error; retain form/draft
+end
+deactivate API
+deactivate Page
+
+legend left
+Scope: Authenticated Cloudinary. Unknown DB outcome retains the new asset; prior-asset cleanup is
+best effort.
+endlegend
+@enduml

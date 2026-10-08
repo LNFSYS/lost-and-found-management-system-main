@@ -1,0 +1,63 @@
+@startuml
+title 3.9.12 List custody transfer requests
+caption UC-143 | Implemented
+skinparam monochrome true
+skinparam shadowing false
+skinparam roundcorner 0
+skinparam defaultFontName Arial
+skinparam LegendBackgroundColor white
+skinparam style strictuml
+skinparam sequenceMessageAlign center
+show footbox
+<style>
+lifeLine {
+    LineStyle 0
+}
+</style>
+skinparam sequence {
+    ParticipantBackgroundColor white
+    ActorBackgroundColor white
+    LifeLineBackgroundColor white
+    LifeLineBorderColor black
+    GroupBackgroundColor white
+    GroupHeaderBackgroundColor white
+}
+
+' Source: apps/api-node/src/modules/warehouse/application/custody-request.use-cases.ts
+' Main entity migration: apps/api-node/src/migrations/053_custody_requests.sql
+' One-table abstraction: related repository reads/writes stay inside the service.
+actor "Staff / Admin" as Actor
+participant "Warehouse Operations" as Page
+participant "Warehouse API" as API
+participant "Warehouse Service" as Service
+participant "custody_requests" as Table <<entity>>
+
+Actor -> Page: 1: Open List custody transfer requests
+activate Page
+Page -> API: 2: GET /api/staff/custody-requests
+activate API
+API -> API: 3: Validate access session, role and input
+alt Valid request
+API -> Service: 4: List custody transfer requests
+activate Service
+Service -> Table: 5: SELECT request queue by permitted status and pagination
+activate Table
+Table --> Service: 6: Requests and total
+deactivate Table
+Service -> Service: 7: Return source thumbnail/context summary with correct access
+Service --> API: 8: Paginated custody queue
+API --> Page: 9: HTTP 200: Paginated custody queue
+Page --> Actor: 10: Show authorized result
+deactivate Service
+else Invalid input, missing session or insufficient role
+API --> Page: 4.1: HTTP 422 / 401 / 403 (429 only if rate-limited)
+Page --> Actor: 4.2: Show appropriate error; retain form/draft
+end
+deactivate API
+deactivate Page
+
+legend left
+Scope: Physical intake is available from PENDING and legacy ACCEPTED. A new pre-acceptance step is
+not required.
+endlegend
+@enduml

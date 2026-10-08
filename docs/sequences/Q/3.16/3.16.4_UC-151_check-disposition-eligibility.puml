@@ -1,0 +1,77 @@
+@startuml
+title 3.16.4 Check disposition eligibility
+caption UC-151 | Partial | Proposed design
+skinparam monochrome true
+skinparam shadowing false
+skinparam roundcorner 0
+skinparam defaultFontName Arial
+skinparam LegendBackgroundColor white
+skinparam style strictuml
+skinparam sequenceMessageAlign center
+show footbox
+<style>
+lifeLine {
+    LineStyle 0
+}
+</style>
+skinparam sequence {
+    ParticipantBackgroundColor white
+    ActorBackgroundColor white
+    LifeLineBackgroundColor white
+    LifeLineBorderColor black
+    GroupBackgroundColor white
+    GroupHeaderBackgroundColor white
+}
+
+' Source: apps/api-node/src/modules/warehouse/application/warehouse.use-cases.ts
+' Main entity migration: apps/api-node/src/migrations/010_notifications_and_warehouse.sql
+' One-table abstraction: related repository reads/writes stay inside the service.
+actor "Staff / Admin" as Actor
+participant "Eligibility Preview (proposed)" as Page
+participant "Staff API" as API
+participant "Warehouse Service" as Service
+participant "warehouse_items" as Table <<entity>>
+
+Actor -> Page: 1: Check disposition eligibility
+activate Page
+Page -> Page: 2: Select warehouse item for disposition preview
+Page -> API: 3: Request read-only eligibility preview (proposed interface)
+activate API
+API -> API: 4: Authenticate active session and require STAFF or ADMIN
+alt Session and required permission are valid
+    API -> API: 5: Proposed: validate item id and preview permission
+    alt Request input is valid
+        API -> Service: 6: Check disposition eligibility for the current actor
+        activate Service
+        Service -> Table: 7: Read item status, retention deadline and legal_hold
+        activate Table
+        Table --> Service: 8: Current custody policy data
+        deactivate Table
+        Service -> Service: 9: Read related claim, appointment and dispute blockers through\nrepository
+        alt Deadline passed, allowed status, no hold and no blocking cases
+            Service --> API: 10: Eligible preview (proposed)
+            API --> Page: 11: HTTP 200 (proposed): Eligible preview (proposed)
+            Page --> Actor: 12: Display eligibility; do not execute disposition
+        else Any guard is not satisfied
+            Service --> API: 10.1: Ineligible preview with blockers (proposed)
+            API --> Page: 10.2: HTTP 200 (proposed): Ineligible preview with blockers (proposed)
+            Page --> Actor: 10.3: Display reasons; keep custody unchanged
+        end
+        deactivate Service
+    else Invalid request input
+        API --> Page: 6.1: Proposed validation error response
+        Page --> Actor: 6.2: Display validation errors; do not execute the operation
+    end
+else Missing/invalid session or required permission
+    API --> Page: 5.1: Proposed authentication/access error response
+    Page --> Actor: 5.2: Show session or access error; no protected result
+end
+deactivate API
+deactivate Page
+
+legend bottom left
+PARTIAL / PROPOSED PREVIEW: canonical executeDisposition has these guards, but no
+eligibility-preview endpoint or screen exists.
+endlegend
+
+@enduml

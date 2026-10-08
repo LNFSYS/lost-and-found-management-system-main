@@ -1,0 +1,78 @@
+@startuml
+title 3.8.10 Record an appointment no-show
+caption UC-135 | Implemented
+skinparam monochrome true
+skinparam shadowing false
+skinparam roundcorner 0
+skinparam defaultFontName Arial
+skinparam LegendBackgroundColor white
+skinparam style strictuml
+skinparam sequenceMessageAlign center
+show footbox
+<style>
+lifeLine {
+    LineStyle 0
+}
+</style>
+skinparam sequence {
+    ParticipantBackgroundColor white
+    ActorBackgroundColor white
+    LifeLineBackgroundColor white
+    LifeLineBorderColor black
+    GroupBackgroundColor white
+    GroupHeaderBackgroundColor white
+}
+
+' Source: apps/api-node/src/modules/appointments/application/appointment.use-cases.ts
+' Main entity migration: apps/api-node/src/migrations/002_lost_found_schema.sql
+' One-table abstraction: related repository reads/writes stay inside the service.
+actor "Claimant / Finder" as Actor
+participant "Appointments Page" as Page
+participant "Appointments API" as API
+participant "Appointment Service" as Service
+participant "return_appointments" as Table <<entity>>
+
+Actor -> Page: 1: Open Record an appointment no-show
+activate Page
+Page -> API: 2: POST /api/appointments/:id/actions (NO_SHOW)
+activate API
+API -> API: 3: Validate access session, role and input
+alt Valid request
+API -> Service: 4: Record an appointment no-show
+activate Service
+Service -> Service: 5: Check migration 063 schema; require actual participant
+Service -> Service: 6: Begin transaction; lock claim context; check request-key replay
+Service -> Table: 7: Read appointment and workflow version
+activate Table
+Table --> Service: 8: Current state, participants and responses
+deactivate Table
+Service -> Service: 9: Check version >0, exact version and non-terminal attempt
+alt Action NO_SHOW permitted
+Service -> Service: 10: Require ACCEPTED; >=15 minutes past time; both responses PENDING
+Service -> Table: 11: Set other participant as no-show; appointment CANCELLED
+activate Table
+Table --> Service: 12: Updated appointment
+deactivate Table
+Service -> Service: 13: Increase version; write immutable action event
+Service -> Service: 14: Persist participant notifications/outboxes; commit
+Service --> API: 15: Recorded no-show attempt
+API --> Page: 16: HTTP 200: Recorded no-show attempt
+Page --> Actor: 17: Show authorized result
+else Stale version, invalid actor/state or unsafe context
+Service --> API: 10.1: Do not overwrite current appointment
+API --> Page: 10.2: HTTP 409
+Page --> Actor: 10.3: Display error; do not report success
+end
+deactivate Service
+else Invalid input, missing session or insufficient role
+API --> Page: 4.1: HTTP 422 / 401 / 403 (429 only if rate-limited)
+Page --> Actor: 4.2: Show appropriate error; retain form/draft
+end
+deactivate API
+deactivate Page
+
+legend left
+Scope: No automatic reputation penalty or completed return. Positive/disputed handover must be
+reviewed instead.
+endlegend
+@enduml

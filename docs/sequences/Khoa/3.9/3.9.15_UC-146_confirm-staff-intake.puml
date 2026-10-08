@@ -1,0 +1,67 @@
+@startuml
+title 3.9.15 Confirm staff intake
+caption UC-146 | Implemented
+skinparam monochrome true
+skinparam shadowing false
+skinparam roundcorner 0
+skinparam defaultFontName Arial
+skinparam LegendBackgroundColor white
+skinparam style strictuml
+skinparam sequenceMessageAlign center
+show footbox
+<style>
+lifeLine {
+    LineStyle 0
+}
+</style>
+skinparam sequence {
+    ParticipantBackgroundColor white
+    ActorBackgroundColor white
+    LifeLineBackgroundColor white
+    LifeLineBorderColor black
+    GroupBackgroundColor white
+    GroupHeaderBackgroundColor white
+}
+
+' Source: apps/api-node/src/modules/warehouse/application/custody-request.use-cases.ts
+' Main entity migration: apps/api-node/src/migrations/053_custody_requests.sql
+' One-table abstraction: related repository reads/writes stay inside the service.
+actor "Staff / Admin" as Actor
+participant "Warehouse Operations" as Page
+participant "Warehouse API" as API
+participant "Warehouse Service" as Service
+participant "custody_requests" as Table <<entity>>
+
+Actor -> Page: 1: Open Confirm staff intake
+activate Page
+Page -> API: 2: POST /api/staff/custody-requests/:id/intake
+activate API
+API -> API: 3: Validate access session, role and input
+alt Valid request
+API -> Service: 4: Confirm staff intake
+activate Service
+Service -> Service: 5: Begin transaction; lock request and intake session/fingerprint
+Service -> Service: 6: Allow PENDING or legacy ACCEPTED; recheck exact eligible source
+Service -> Service: 7: Require physical condition, quantity/accessories and 1-5 new Staff\nphotos
+Service -> Table: 8: Set request INTAKED with one RECEIVED warehouse item
+activate Table
+Table --> Service: 9: Intaked request and item ID
+deactivate Table
+Service -> Service: 10: Preserve source/NULL binding and actual Finder; attach new Staff\nphotos
+Service -> Service: 11: Finalize intake session, history and optional notifications; commit
+Service --> API: 12: Physically received custody item
+API --> Page: 13: HTTP 200: Physically received custody item
+Page --> Actor: 14: Show authorized result
+deactivate Service
+else Invalid input, missing session or insufficient role
+API --> Page: 4.1: HTTP 422 / 401 / 403 (429 only if rate-limited)
+Page --> Actor: 4.2: Show appropriate error; retain form/draft
+end
+deactivate API
+deactivate Page
+
+legend left
+Scope: Stable intake replay returns the same item. Source/contact photos do not replace new Staff
+condition images. No automatic ownership acceptance.
+endlegend
+@enduml

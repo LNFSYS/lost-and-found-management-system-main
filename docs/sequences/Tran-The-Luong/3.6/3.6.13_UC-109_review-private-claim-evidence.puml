@@ -1,0 +1,65 @@
+@startuml
+title 3.6.13 Review private claim evidence
+caption UC-109 | Implemented
+skinparam monochrome true
+skinparam shadowing false
+skinparam roundcorner 0
+skinparam defaultFontName Arial
+skinparam LegendBackgroundColor white
+skinparam style strictuml
+skinparam sequenceMessageAlign center
+show footbox
+<style>
+lifeLine {
+    LineStyle 0
+}
+</style>
+skinparam sequence {
+    ParticipantBackgroundColor white
+    ActorBackgroundColor white
+    LifeLineBackgroundColor white
+    LifeLineBorderColor black
+    GroupBackgroundColor white
+    GroupHeaderBackgroundColor white
+}
+
+' Source: apps/api-node/src/modules/claims/application/claim.use-cases.ts
+' Main entity migration: apps/api-node/src/migrations/002_lost_found_schema.sql
+' One-table abstraction: related repository reads/writes stay inside the service.
+actor "Finder" as Actor
+participant "Private Claims Page" as Page
+participant "Claims API" as API
+participant "Claim Service" as Service
+participant "claim_evidence" as Table <<entity>>
+
+Actor -> Page: 1: Open Review private claim evidence
+activate Page
+Page -> API: 2: GET /api/claims/:claimId/evidence
+activate API
+API -> API: 3: Validate access session, role and input
+alt Valid request
+API -> Service: 4: Review private claim evidence
+activate Service
+Service -> Service: 5: Authorize Finder as actual participant of consented room
+Service -> Table: 6: SELECT claim-scoped private evidence metadata
+activate Table
+Table --> Service: 7: Protected evidence list
+deactivate Table
+Service -> Service: 8: Review protected previews and counterpart answers
+Service -> Service: 9: Require explicit separate verification decision
+Service --> API: 10: Evidence available for human review
+API --> Page: 11: HTTP 200: Evidence available for human review
+Page --> Actor: 12: Show authorized result
+deactivate Service
+else Invalid input, missing session or insufficient role
+API --> Page: 4.1: HTTP 422 / 401 / 403 (429 only if rate-limited)
+Page --> Actor: 4.2: Show appropriate error; retain form/draft
+end
+deactivate API
+deactivate Page
+
+legend left
+Scope: Image bytes require UC-045 separately. Previewing evidence does not change claim or return
+state.
+endlegend
+@enduml

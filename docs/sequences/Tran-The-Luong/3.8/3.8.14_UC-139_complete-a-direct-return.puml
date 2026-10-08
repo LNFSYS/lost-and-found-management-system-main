@@ -1,0 +1,63 @@
+@startuml
+title 3.8.14 Complete a direct return
+caption UC-139 | Implemented
+skinparam monochrome true
+skinparam shadowing false
+skinparam roundcorner 0
+skinparam defaultFontName Arial
+skinparam LegendBackgroundColor white
+skinparam style strictuml
+skinparam sequenceMessageAlign center
+show footbox
+<style>
+lifeLine {
+    LineStyle 0
+}
+</style>
+skinparam sequence {
+    ParticipantBackgroundColor white
+    ActorBackgroundColor white
+    LifeLineBackgroundColor white
+    LifeLineBorderColor black
+    GroupBackgroundColor white
+    GroupHeaderBackgroundColor white
+}
+
+' Source: apps/api-node/src/modules/appointments/application/appointment.use-cases.ts
+' Main entity migration: apps/api-node/src/migrations/002_lost_found_schema.sql
+' One-table abstraction: related repository reads/writes stay inside the service.
+actor "System" as Actor
+participant "Direct Return Completion" as Page
+participant "Appointment Service" as Service
+participant "return_appointments" as Table <<entity>>
+
+Actor -> Page: 1: Complete inside final positive participant confirmation
+activate Page
+Page -> Service: 2: Run task with current eligible context
+activate Service
+Service -> Table: 3: Lock appointment/current version and both responses
+activate Table
+Table --> Service: 4: Current confirmation state
+deactivate Table
+Service -> Service: 5: Recheck eligible claim, active users, competing cases and no\ncustody
+alt Both CONFIRMED with valid physical checks and safe context
+Service -> Table: 6: Set COMPLETED and completion timestamp
+activate Table
+Table --> Service: 7: Completed appointment
+deactivate Table
+Service -> Service: 8: Resolve linked posts atomically; write RETURN_COMPLETED event
+Service -> Service: 9: Queue participant notifications; enable existing feedback; commit
+Service --> Page: 10: Atomically completed direct return
+Page --> Actor: 11: Record task outcome
+else One response missing, disputed or unsafe context
+Service -> Service: 6.1: Do not resolve posts or complete return
+Service --> Page: 6.2: Task not completed; bounded retry / report failure
+Page --> Actor: 6.3: Record failure without reporting success
+end
+deactivate Service
+deactivate Page
+
+legend left
+Scope: An appointment is not completed by a single confirmation, photo approval or meetup proposal.
+endlegend
+@enduml

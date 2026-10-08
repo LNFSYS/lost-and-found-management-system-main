@@ -1,0 +1,78 @@
+@startuml
+title 3.15.5 View configuration history
+caption UC-090 | Implemented
+skinparam monochrome true
+skinparam shadowing false
+skinparam roundcorner 0
+skinparam defaultFontName Arial
+skinparam LegendBackgroundColor white
+skinparam style strictuml
+skinparam sequenceMessageAlign center
+show footbox
+<style>
+lifeLine {
+    LineStyle 0
+}
+</style>
+skinparam sequence {
+    ParticipantBackgroundColor white
+    ActorBackgroundColor white
+    LifeLineBackgroundColor white
+    LifeLineBorderColor black
+    GroupBackgroundColor white
+    GroupHeaderBackgroundColor white
+}
+
+' Source: apps/api-node/src/modules/system-config/application/system-config.use-cases.ts
+' Main entity migration: apps/api-node/src/migrations/002_lost_found_schema.sql
+' One-table abstraction: related repository reads/writes stay inside the service.
+actor "Admin" as Actor
+participant "Configuration History" as Page
+participant "Admin Config API" as API
+participant "Config Service" as Service
+participant "config_history" as Table <<entity>>
+
+Actor -> Page: 1: View configuration history
+activate Page
+Page -> Page: 2: Open configuration history and choose bounded limit
+Page -> API: 3: GET /api/admin/configs/:id/history?limit=20
+activate API
+API -> API: 4: Authenticate active session and require ADMIN role
+alt Session and required permission are valid
+    API -> API: 5: Validate configuration UUID and limit (1..100)
+    alt Request input is valid
+        API -> Service: 6: View configuration history for the current actor
+        activate Service
+        Service -> Service: 7: Find current configuration to resolve id and key
+        alt Configuration exists
+            Service -> Table: 8: Read latest history using config id or legacy key fallback
+            activate Table
+            Table --> Service: 9: History rows with actor/reason and before/after state
+            deactivate Table
+            Service -> Service: 10: Redact sensitive values and history states
+            Service --> API: 11: Safe bounded history list
+            API --> Page: 12: HTTP 200: Safe bounded history list
+            Page --> Actor: 13: Display creation, update and deletion history
+        else Configuration missing
+            Service --> API: 8.1: Configuration not found
+            API --> Page: 8.2: HTTP 404
+            Page --> Actor: 8.3: Display error; do not report success
+        end
+        deactivate Service
+    else Invalid request input
+        API --> Page: 6.1: HTTP 422: input validation errors
+        Page --> Actor: 6.2: Display validation errors; do not execute the operation
+    end
+else Missing/invalid session or required permission
+    API --> Page: 5.1: HTTP 401 or 403
+    Page --> Actor: 5.2: Show session or access error; no protected result
+end
+deactivate API
+deactivate Page
+
+legend bottom left
+Current API returns a bounded latest-history list, not page navigation. Migration 039 extends
+history fields.
+endlegend
+
+@enduml

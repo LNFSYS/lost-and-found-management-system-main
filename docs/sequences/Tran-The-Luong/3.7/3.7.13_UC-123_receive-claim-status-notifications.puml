@@ -1,0 +1,54 @@
+@startuml
+title 3.7.13 Receive claim status notifications
+caption UC-123 | Partial | Implemented slice
+skinparam monochrome true
+skinparam shadowing false
+skinparam roundcorner 0
+skinparam defaultFontName Arial
+skinparam LegendBackgroundColor white
+skinparam style strictuml
+skinparam sequenceMessageAlign center
+show footbox
+<style>
+lifeLine {
+    LineStyle 0
+}
+</style>
+skinparam sequence {
+    ParticipantBackgroundColor white
+    ActorBackgroundColor white
+    LifeLineBackgroundColor white
+    LifeLineBorderColor black
+    GroupBackgroundColor white
+    GroupHeaderBackgroundColor white
+}
+
+' Source: apps/api-node/src/modules/claims/application/claim.use-cases.ts
+' Main entity migration: apps/api-node/src/migrations/002_lost_found_schema.sql
+' One-table abstraction: related repository reads/writes stay inside the service.
+actor "System" as Actor
+participant "Claim Notification Producer" as Page
+participant "Claim Chat Service" as Service
+participant "notifications" as Table <<entity>>
+
+Actor -> Page: 1: Persist notification with claim decision
+activate Page
+Page -> Service: 2: Run task with current eligible context
+activate Service
+Service -> Service: 3: Resolve committed workflow actor, recipient and event identity
+Service -> Table: 4: INSERT deduplicated claim notification in mutation transaction
+activate Table
+Table --> Service: 5: Recipient notification
+deactivate Table
+Service -> Service: 6: Enqueue optional CLAIM email; commit with business decision
+Service -> Service: 7: Publish recipient-scoped safe event after commit
+Service --> Page: 8: Claim notification/outbox
+Page --> Actor: 9: Record task outcome
+deactivate Service
+deactivate Page
+
+legend left
+Scope: Partial: existing producers cover implemented claim paths. Full escalation/change/channel
+coverage is incomplete. Queuing is not proof of inbox delivery.
+endlegend
+@enduml

@@ -1,0 +1,76 @@
+@startuml
+title 3.11.5 Change user role
+caption UC-066 | Implemented
+skinparam monochrome true
+skinparam shadowing false
+skinparam roundcorner 0
+skinparam defaultFontName Arial
+skinparam LegendBackgroundColor white
+skinparam style strictuml
+skinparam sequenceMessageAlign center
+show footbox
+<style>
+lifeLine {
+    LineStyle 0
+}
+</style>
+skinparam sequence {
+    ParticipantBackgroundColor white
+    ActorBackgroundColor white
+    LifeLineBackgroundColor white
+    LifeLineBorderColor black
+    GroupBackgroundColor white
+    GroupHeaderBackgroundColor white
+}
+
+' Source: apps/api-node/src/modules/admin/application/admin-user.use-cases.ts
+' Main entity migration: apps/api-node/src/migrations/001_auth.sql
+' One-table abstraction: related repository reads/writes stay inside the service.
+actor "Admin" as Actor
+participant "User Administration" as Page
+participant "Admin API" as API
+participant "Admin User Service" as Service
+participant "users" as Table <<entity>>
+
+Actor -> Page: 1: Open Change user role
+activate Page
+Page -> API: 2: PATCH /api/admin/users/:id/role
+activate API
+API -> API: 3: Validate access session, role and input
+alt Valid request
+API -> Service: 4: Change user role
+activate Service
+Service -> Service: 5: Begin transaction; lock complete active Admin set in fixed order
+Service -> Table: 6: SELECT target account FOR UPDATE
+activate Table
+Table --> Service: 7: Target account and current roles/status
+deactivate Table
+Service -> Service: 8: Validate role vocabulary; forbid self-demotion and removing last\nactive Admin
+alt Account mutation satisfies safeguards
+Service -> Table: 9: UPDATE account access role via role repository
+activate Table
+Table --> Service: 10: Updated account
+deactivate Table
+Service -> Service: 11: Apply permitted roles/status internally; invalidate changed\nsessions
+Service -> Service: 12: Record ADMIN_USER_ROLE_CHANGED with before/after state; commit
+Service --> API: 13: Audited role change
+API --> Page: 14: HTTP 200: Audited role change
+Page --> Actor: 15: Show authorized result
+else Self-demotion/disable, last Admin or duplicate data
+Service --> API: 9.1: Do not change protected account
+API --> Page: 9.2: HTTP 409
+Page --> Actor: 9.3: Display error; do not report success
+end
+deactivate Service
+else Invalid input, missing session or insufficient role
+API --> Page: 4.1: HTTP 422 / 401 / 403 (429 only if rate-limited)
+Page --> Actor: 4.2: Show appropriate error; retain form/draft
+end
+deactivate API
+deactivate Page
+
+legend left
+Scope: Related user_roles mutation and session invalidation are internal; last-active-Admin locking
+prevents concurrent removal.
+endlegend
+@enduml

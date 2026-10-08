@@ -1,0 +1,53 @@
+@startuml
+title 3.4.5 Calculate matching score
+caption UC-030 | Implemented
+skinparam monochrome true
+skinparam shadowing false
+skinparam roundcorner 0
+skinparam defaultFontName Arial
+skinparam LegendBackgroundColor white
+skinparam style strictuml
+skinparam sequenceMessageAlign center
+show footbox
+<style>
+lifeLine {
+    LineStyle 0
+}
+</style>
+skinparam sequence {
+    ParticipantBackgroundColor white
+    ActorBackgroundColor white
+    LifeLineBackgroundColor white
+    LifeLineBorderColor black
+    GroupBackgroundColor white
+    GroupHeaderBackgroundColor white
+}
+
+' Source: apps/api-node/src/modules/matching/domain/matching.engine.ts
+' Main entity migration: apps/api-node/src/migrations/002_lost_found_schema.sql
+' One-table abstraction: related repository reads/writes stay inside the service.
+actor "System" as Actor
+participant "Matching Calculation" as Page
+participant "Matching Service" as Service
+participant "posts" as Table <<entity>>
+
+Actor -> Page: 1: scoreMatchCandidates(source, candidates, config)
+activate Page
+Page -> Service: 2: Run task with current eligible context
+activate Service
+Service -> Table: 3: Load active source and bounded opposite candidates
+activate Table
+Table --> Service: 4: Normalized post and safe image/OCR signals
+deactivate Table
+Service -> Service: 5: Sanitize configuration; exclude same-owner LOST pairs
+Service -> Service: 6: Calculate TF-IDF text, category, location, time, image/OCR\ncomponents
+Service -> Service: 7: Weight components; assign tier and safe explainable reasons
+Service --> Page: 8: Scored candidate list
+Page --> Actor: 9: Record task outcome
+deactivate Service
+deactivate Page
+
+legend left
+Scope: Rule-v2 hybrid scoring, not a trained custom model. Scores do not decide ownership.
+endlegend
+@enduml

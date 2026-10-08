@@ -1,0 +1,64 @@
+@startuml
+title 3.4.2 Recalculate matching suggestions
+caption UC-027 | Implemented
+skinparam monochrome true
+skinparam shadowing false
+skinparam roundcorner 0
+skinparam defaultFontName Arial
+skinparam LegendBackgroundColor white
+skinparam style strictuml
+skinparam sequenceMessageAlign center
+show footbox
+<style>
+lifeLine {
+    LineStyle 0
+}
+</style>
+skinparam sequence {
+    ParticipantBackgroundColor white
+    ActorBackgroundColor white
+    LifeLineBackgroundColor white
+    LifeLineBorderColor black
+    GroupBackgroundColor white
+    GroupHeaderBackgroundColor white
+}
+
+' Source: apps/api-node/src/modules/matching/application/matching.use-cases.ts
+' Main entity migration: apps/api-node/src/migrations/002_lost_found_schema.sql
+' One-table abstraction: related repository reads/writes stay inside the service.
+actor "Owner / Staff / Admin" as Actor
+participant "Matching Results Page" as Page
+participant "Posts API" as API
+participant "Matching Service" as Service
+participant "match_results" as Table <<entity>>
+
+Actor -> Page: 1: Open Recalculate matching suggestions
+activate Page
+Page -> API: 2: POST /api/posts/:id/matches/recalculate
+activate API
+API -> API: 3: Validate access session, role and input
+alt Valid request
+API -> Service: 4: Recalculate matching suggestions
+activate Service
+Service -> Service: 5: Authorize accessible active source; enforce rate limit
+Service -> Service: 6: Load bounded opposite candidates; calculate hybrid scores
+Service -> Table: 7: Persist source results with source eligibility recheck
+activate Table
+Table --> Service: 8: Stored match results
+deactivate Table
+Service -> Service: 9: Notify new qualifying pairs transactionally; read paginated results
+Service --> API: 10: Recalculated suggestions
+API --> Page: 11: HTTP 200: Recalculated suggestions
+Page --> Actor: 12: Show authorized result
+deactivate Service
+else Invalid input, missing session or insufficient role
+API --> Page: 4.1: HTTP 422 / 401 / 403 (429 only if rate-limited)
+Page --> Actor: 4.2: Show appropriate error; retain form/draft
+end
+deactivate API
+deactivate Page
+
+legend left
+Scope: Scoring and notification are support only; do not authorize ownership or warehouse release.
+endlegend
+@enduml

@@ -1,0 +1,72 @@
+@startuml
+title 3.13.1 View user reports
+caption UC-082 | Implemented
+skinparam monochrome true
+skinparam shadowing false
+skinparam roundcorner 0
+skinparam defaultFontName Arial
+skinparam LegendBackgroundColor white
+skinparam style strictuml
+skinparam sequenceMessageAlign center
+show footbox
+<style>
+lifeLine {
+    LineStyle 0
+}
+</style>
+skinparam sequence {
+    ParticipantBackgroundColor white
+    ActorBackgroundColor white
+    LifeLineBackgroundColor white
+    LifeLineBorderColor black
+    GroupBackgroundColor white
+    GroupHeaderBackgroundColor white
+}
+
+' Source: apps/api-node/src/modules/admin/application/admin-reporting.use-cases.ts
+' Main entity migration: apps/api-node/src/migrations/002_lost_found_schema.sql
+' One-table abstraction: related repository reads/writes stay inside the service.
+actor "Admin" as Actor
+participant "Moderation Reports Page" as Page
+participant "Admin API" as API
+participant "Reporting Service" as Service
+participant "reports" as Table <<entity>>
+
+Actor -> Page: 1: View user reports
+activate Page
+Page -> Page: 2: Read keyword, status, entity type and pagination
+Page -> API: 3: GET /api/admin/reports
+activate API
+API -> API: 4: Authenticate active session and require ADMIN role
+alt Session and required permission are valid
+    API -> API: 5: Validate filters; page size 1..50
+    alt Request input is valid
+        API -> Service: 6: View user reports for the current actor
+        activate Service
+        Service -> Table: 7: Count and read filtered reports; newest first
+        activate Table
+        Table --> Service: 8: Report rows and total, or query error
+        deactivate Table
+        alt Operation succeeds
+            Service --> API: 9: Paginated reports
+            API --> Page: 10: HTTP 200: Paginated reports
+            Page --> Actor: 11: Display reports, review states and page controls
+        else Query or response mapping failure
+            Service -> Service: 9.1: Do not fabricate data; propagate the query or mapping failure
+            Service --> API: 9.2: Propagate read failure
+            API --> Page: 9.3: HTTP 503 or 500
+            Page --> Actor: 9.4: Display error; do not report success
+        end
+        deactivate Service
+    else Invalid request input
+        API --> Page: 6.1: HTTP 422: input validation errors
+        Page --> Actor: 6.2: Display validation errors; do not execute the operation
+    end
+else Missing/invalid session or required permission
+    API --> Page: 5.1: HTTP 401 or 403
+    Page --> Actor: 5.2: Show session or access error; no protected result
+end
+deactivate API
+deactivate Page
+
+@enduml

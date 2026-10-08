@@ -1,0 +1,83 @@
+@startuml
+title 3.16.15 Complete a donation campaign
+caption UC-162 | Planned | Proposed design
+skinparam monochrome true
+skinparam shadowing false
+skinparam roundcorner 0
+skinparam defaultFontName Arial
+skinparam LegendBackgroundColor white
+skinparam style strictuml
+skinparam sequenceMessageAlign center
+show footbox
+<style>
+lifeLine {
+    LineStyle 0
+}
+</style>
+skinparam sequence {
+    ParticipantBackgroundColor white
+    ActorBackgroundColor white
+    LifeLineBackgroundColor white
+    LifeLineBorderColor black
+    GroupBackgroundColor white
+    GroupHeaderBackgroundColor white
+}
+
+' Source: docs/requirements/uc.md
+' Main entity migration: No migration: proposed entity only
+' One-table abstraction: related repository reads/writes stay inside the service.
+actor "Admin" as Actor
+participant "Donation Campaign UI (proposed)" as Page
+participant "Campaign API (proposed)" as API
+participant "Campaign Service (proposed)" as Service
+participant "donation_campaigns" as Table <<proposed entity>>
+
+Actor -> Page: 1: Complete a donation campaign
+activate Page
+Page -> Page: 2: Confirm campaign completion
+Page -> API: 3: Complete donation campaign (proposed interface)
+activate API
+API -> API: 4: Authenticate active session and require ADMIN role
+alt Session and required permission are valid
+    API -> API: 5: Proposed: validate campaign id and ADMIN completion permission
+    alt Request input is valid
+        API -> Service: 6: Complete a donation campaign for the current actor
+        activate Service
+        Service -> Service: 7: Begin proposed transaction
+        Service -> Table: 8: Lock campaign and current completion state (proposed)
+        activate Table
+        Table --> Service: 9: Campaign or no record
+        deactivate Table
+        Service -> Service: 10: Check required approvals and evidence for all processed items\nthrough protected projections
+        alt Campaign exists and completion requirements are satisfied
+            Service -> Table: 11: Mark campaign completed and retain prior item outcomes (proposed)
+            activate Table
+            Table --> Service: 12: Proposed completion result
+            deactivate Table
+            Service -> Service: 13: Record completion audit and time; commit; never fabricate return\noutcomes
+            Service --> API: 14: Completed campaign (proposed)
+            API --> Page: 15: HTTP 200 (proposed): Completed campaign (proposed)
+            Page --> Actor: 16: Display closed campaign and retained processing history
+        else Campaign missing or required approval/evidence incomplete
+            Service --> API: 11.1: Campaign cannot be completed
+            API --> Page: 11.2: HTTP 404 or 409 (proposed)
+            Page --> Actor: 11.3: Display error; do not report success
+        end
+        deactivate Service
+    else Invalid request input
+        API --> Page: 6.1: Proposed validation error response
+        Page --> Actor: 6.2: Display validation errors; do not execute the operation
+    end
+else Missing/invalid session or required permission
+    API --> Page: 5.1: Proposed authentication/access error response
+    Page --> Actor: 5.2: Show session or access error; no protected result
+end
+deactivate API
+deactivate Page
+
+legend bottom left
+PLANNED: API/UI and donation_campaigns table are proposed, not present in the runtime or migrations.
+Required schema and policy design remain open.
+endlegend
+
+@enduml

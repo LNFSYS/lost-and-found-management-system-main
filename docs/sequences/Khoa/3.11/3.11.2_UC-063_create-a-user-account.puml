@@ -1,0 +1,65 @@
+@startuml
+title 3.11.2 Create a user account
+caption UC-063 | Implemented
+skinparam monochrome true
+skinparam shadowing false
+skinparam roundcorner 0
+skinparam defaultFontName Arial
+skinparam LegendBackgroundColor white
+skinparam style strictuml
+skinparam sequenceMessageAlign center
+show footbox
+<style>
+lifeLine {
+    LineStyle 0
+}
+</style>
+skinparam sequence {
+    ParticipantBackgroundColor white
+    ActorBackgroundColor white
+    LifeLineBackgroundColor white
+    LifeLineBorderColor black
+    GroupBackgroundColor white
+    GroupHeaderBackgroundColor white
+}
+
+' Source: apps/api-node/src/modules/admin/application/admin-user.use-cases.ts
+' Main entity migration: apps/api-node/src/migrations/001_auth.sql
+' One-table abstraction: related repository reads/writes stay inside the service.
+actor "Admin" as Actor
+participant "User Administration" as Page
+participant "Admin API" as API
+participant "Admin User Service" as Service
+participant "users" as Table <<entity>>
+
+Actor -> Page: 1: Open Create a user account
+activate Page
+Page -> API: 2: POST /api/admin/users
+activate API
+API -> API: 3: Validate access session, role and input
+alt Valid request
+API -> Service: 4: Create a user account
+activate Service
+Service -> Service: 5: Begin transaction; normalize email and enforce uniqueness
+Service -> Service: 6: Hash password; validate allowed access/audience roles
+Service -> Table: 7: INSERT user account with validated initial status
+activate Table
+Table --> Service: 8: Created account
+deactivate Table
+Service -> Service: 9: Assign USER plus supported roles; audit ADMIN_USER_CREATED; commit
+Service --> API: 10: Created account
+API --> Page: 11: HTTP 201: Created account
+Page --> Actor: 12: Show authorized result
+deactivate Service
+else Invalid input, missing session or insufficient role
+API --> Page: 4.1: HTTP 422 / 401 / 403 (429 only if rate-limited)
+Page --> Actor: 4.2: Show appropriate error; retain form/draft
+end
+deactivate API
+deactivate Page
+
+legend left
+Related tables, authorization, transactions and audit remain inside the service. Catalogue status is
+not deployment or manual acceptance.
+endlegend
+@enduml

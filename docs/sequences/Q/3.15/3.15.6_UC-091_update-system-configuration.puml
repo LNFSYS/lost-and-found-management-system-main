@@ -1,0 +1,91 @@
+@startuml
+title 3.15.6 Update system configuration
+caption UC-091 | Implemented
+skinparam monochrome true
+skinparam shadowing false
+skinparam roundcorner 0
+skinparam defaultFontName Arial
+skinparam LegendBackgroundColor white
+skinparam style strictuml
+skinparam sequenceMessageAlign center
+show footbox
+<style>
+lifeLine {
+    LineStyle 0
+}
+</style>
+skinparam sequence {
+    ParticipantBackgroundColor white
+    ActorBackgroundColor white
+    LifeLineBackgroundColor white
+    LifeLineBorderColor black
+    GroupBackgroundColor white
+    GroupHeaderBackgroundColor white
+}
+
+' Source: apps/api-node/src/modules/system-config/application/system-config.use-cases.ts
+' Main entity migration: apps/api-node/src/migrations/002_lost_found_schema.sql
+' One-table abstraction: related repository reads/writes stay inside the service.
+actor "Admin" as Actor
+participant "Edit Configuration Dialog" as Page
+participant "Admin Config API" as API
+participant "Config Service" as Service
+participant "config_entries" as Table <<entity>>
+
+Actor -> Page: 1: Update system configuration
+activate Page
+Page -> Page: 2: Change typed value or metadata; enter reason
+Page -> API: 3: PATCH /api/admin/configs/:id
+activate API
+API -> API: 4: Authenticate active session and require ADMIN role
+alt Session and required permission are valid
+    API -> API: 5: Validate UUID and at least one mutable field
+    alt Request input is valid
+        API -> Service: 6: Update system configuration for the current actor
+        activate Service
+        Service -> Service: 7: Begin transaction
+        Service -> Table: 8: Lock configuration FOR UPDATE
+        activate Table
+        Table --> Service: 9: Current config or no record
+        deactivate Table
+        alt Configuration exists
+            Service -> Service: 10: Compute next state; enforce key/value/public rules and renamed-key\nuniqueness
+            alt New configuration state is valid
+                Service -> Table: 11: Update configuration and read new state
+                activate Table
+                Table --> Service: 12: Updated entry or write error
+                deactivate Table
+                Service -> Service: 13: Record UPDATE history and before/after audit; commit transaction
+                alt Operation succeeds
+                    Service --> API: 14: Updated configuration
+                    API --> Page: 15: HTTP 200: Updated configuration
+                    Page --> Actor: 16: Display saved values and history
+                else Query, write or commit failure
+                    Service -> Service: 14.1: Propagate failure; rollback only when transaction failure is\nconfirmed
+                    Service --> API: 14.2: Propagate storage or transaction failure
+                    API --> Page: 14.3: HTTP 503 or 500
+                    Page --> Actor: 14.4: Display error; do not report success
+                end
+            else Invalid value, protected key or duplicate renamed key
+                Service --> API: 11.1: Reject invalid or conflicting update
+                API --> Page: 11.2: HTTP 422 or 409
+                Page --> Actor: 11.3: Display error; do not report success
+            end
+        else Configuration missing
+            Service --> API: 10.1: Configuration not found
+            API --> Page: 10.2: HTTP 404
+            Page --> Actor: 10.3: Display error; do not report success
+        end
+        deactivate Service
+    else Invalid request input
+        API --> Page: 6.1: HTTP 422: input validation errors
+        Page --> Actor: 6.2: Display validation errors; do not execute the operation
+    end
+else Missing/invalid session or required permission
+    API --> Page: 5.1: HTTP 401 or 403
+    Page --> Actor: 5.2: Show session or access error; no protected result
+end
+deactivate API
+deactivate Page
+
+@enduml

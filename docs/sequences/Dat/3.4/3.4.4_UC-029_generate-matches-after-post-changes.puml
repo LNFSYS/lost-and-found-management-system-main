@@ -1,0 +1,60 @@
+@startuml
+title 3.4.4 Generate matches after post changes
+caption UC-029 | Implemented
+skinparam monochrome true
+skinparam shadowing false
+skinparam roundcorner 0
+skinparam defaultFontName Arial
+skinparam LegendBackgroundColor white
+skinparam style strictuml
+skinparam sequenceMessageAlign center
+show footbox
+<style>
+lifeLine {
+    LineStyle 0
+}
+</style>
+skinparam sequence {
+    ParticipantBackgroundColor white
+    ActorBackgroundColor white
+    LifeLineBackgroundColor white
+    LifeLineBorderColor black
+    GroupBackgroundColor white
+    GroupHeaderBackgroundColor white
+}
+
+' Source: apps/api-node/src/modules/matching/application/matching.use-cases.ts
+' Main entity migration: apps/api-node/src/migrations/002_lost_found_schema.sql
+' One-table abstraction: related repository reads/writes stay inside the service.
+actor "System" as Actor
+participant "Post Change Task" as Page
+participant "Matching Service" as Service
+participant "match_results" as Table <<entity>>
+
+Actor -> Page: 1: runForPost(postId) after committed post change
+activate Page
+Page -> Service: 2: Run task with current eligible context
+activate Service
+Service -> Service: 3: Receive committed create/update event; resolve active source
+Service -> Service: 4: Load candidates; score using configured hybrid engine
+Service -> Table: 5: Persist calculated matches for eligible source
+activate Table
+Table --> Service: 6: Updated source match projection
+deactivate Table
+alt Matching refresh succeeds
+Service -> Service: 7: Record best-effort refresh outcome
+Service --> Page: 8: Refresh completed
+Page --> Actor: 9: Record task outcome
+else Matching fails after post commit
+Service -> Service: 7.1: Log refresh failure; do not undo the valid post
+Service -> Service: 7.2: Keep committed post; report refresh failure
+Service --> Page: 7.3: Task not completed; bounded retry / report failure
+Page --> Actor: 7.4: Record failure without reporting success
+end
+deactivate Service
+deactivate Page
+
+legend left
+Scope: Best-effort post-change matching is not a transaction with the post write.
+endlegend
+@enduml

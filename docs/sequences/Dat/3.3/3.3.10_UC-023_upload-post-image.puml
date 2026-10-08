@@ -1,0 +1,85 @@
+@startuml
+title 3.3.10 Upload post image
+caption UC-023 | Implemented
+skinparam monochrome true
+skinparam shadowing false
+skinparam roundcorner 0
+skinparam defaultFontName Arial
+skinparam LegendBackgroundColor white
+skinparam style strictuml
+skinparam sequenceMessageAlign center
+show footbox
+<style>
+lifeLine {
+    LineStyle 0
+}
+</style>
+skinparam sequence {
+    ParticipantBackgroundColor white
+    ActorBackgroundColor white
+    LifeLineBackgroundColor white
+    LifeLineBorderColor black
+    GroupBackgroundColor white
+    GroupHeaderBackgroundColor white
+}
+
+' Source: apps/api-node/src/modules/posts/application/post.use-cases.ts
+' Main entity migration: apps/api-node/src/migrations/002_lost_found_schema.sql
+' One-table abstraction: related repository reads/writes stay inside the service.
+actor "Post Owner" as Actor
+participant "Posts Page" as Page
+participant "Posts API" as API
+participant "Post Service" as Service
+participant "post_media" as Table <<entity>>
+
+Actor -> Page: 1: Open Upload post image
+activate Page
+Page -> API: 2: POST /api/posts/:id/media (multipart)
+activate API
+API -> API: 3: Validate access session, role and input
+alt Valid request
+API -> Service: 4: Upload post image
+activate Service
+Service -> Service: 5: Require owned writable post and validated media kind
+Service -> Service: 6: Coordinate stable upload operation; check replay and authorization
+Service -> Table: 7: SELECT operation media reference
+activate Table
+Table --> Service: 8: Existing reference or upload context
+deactivate Table
+Service -> Service: 9: Validate image bytes; save private asset through storage adapter
+alt Asset storage succeeds
+Service -> Service: 10: Persist reference with business recheck in coordinated transaction
+Service -> Table: 11: Lock post; check image limit; INSERT media
+activate Table
+Table --> Service: 12: Persistence acknowledgement / reference
+deactivate Table
+Service -> Service: 13: Commit and reconcile operation on authoritative primary
+alt Persistence confirmed
+Service -> Service: 14: Return protected API URL, never raw storage reference
+Service --> API: 15: Protected media URL
+API --> Page: 16: HTTP 201: Protected media URL
+Page --> Actor: 17: Show authorized result
+else Outcome unresolved or acknowledgement lost
+Service -> Service: 14.1: Keep asset and operation; reconcile later / stable retry
+Service --> API: 14.2: Do not claim success or delete possibly referenced asset
+API --> Page: 14.3: HTTP 503
+Page --> Actor: 14.4: Display error; do not report success
+end
+else Storage unavailable
+Service --> API: 10.1: No confirmed persisted upload
+API --> Page: 10.2: HTTP 503
+Page --> Actor: 10.3: Display error; do not report success
+end
+deactivate Service
+else Invalid input, missing session or insufficient role
+API --> Page: 4.1: HTTP 422 / 401 / 403 (429 only if rate-limited)
+Page --> Actor: 4.2: Show appropriate error; retain form/draft
+end
+deactivate API
+deactivate Page
+
+legend left
+Scope: Upload coordination keeps assets on uncertain INSERT/COMMIT outcome. Storage errors never
+create false success.
+endlegend
+@enduml

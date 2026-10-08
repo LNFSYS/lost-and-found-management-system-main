@@ -1,0 +1,65 @@
+@startuml
+title 3.7.1 View direct messages
+caption UC-041 | Implemented
+skinparam monochrome true
+skinparam shadowing false
+skinparam roundcorner 0
+skinparam defaultFontName Arial
+skinparam LegendBackgroundColor white
+skinparam style strictuml
+skinparam sequenceMessageAlign center
+show footbox
+<style>
+lifeLine {
+    LineStyle 0
+}
+</style>
+skinparam sequence {
+    ParticipantBackgroundColor white
+    ActorBackgroundColor white
+    LifeLineBackgroundColor white
+    LifeLineBorderColor black
+    GroupBackgroundColor white
+    GroupHeaderBackgroundColor white
+}
+
+' Source: apps/api-node/src/modules/claims/application/claim.use-cases.ts
+' Main entity migration: apps/api-node/src/migrations/002_lost_found_schema.sql
+' One-table abstraction: related repository reads/writes stay inside the service.
+actor "Claimant / Finder" as Actor
+participant "Private Conversation" as Page
+participant "Claims API" as API
+participant "Claim Chat Service" as Service
+participant "chat_messages" as Table <<entity>>
+
+Actor -> Page: 1: Open View direct messages
+activate Page
+Page -> API: 2: GET /api/claims/:id/messages?cursor=...
+activate API
+API -> API: 3: Validate access session, role and input
+alt Valid request
+API -> Service: 4: View direct messages
+activate Service
+Service -> Service: 5: Require consented actual participant; resolve room
+Service -> Table: 6: SELECT cursor-paginated messages for authorized room
+activate Table
+Table --> Service: 7: Text/IMAGE messages and cursor
+deactivate Table
+Service -> Service: 8: Mark counterpart messages READ; cancel delayed unread email
+Service -> Service: 9: Return protected IMAGE URLs and stable cursor metadata
+Service --> API: 10: Private message page
+API --> Page: 11: HTTP 200: Private message page
+Page --> Actor: 12: Show authorized result
+deactivate Service
+else Invalid input, missing session or insufficient role
+API --> Page: 4.1: HTTP 422 / 401 / 403 (429 only if rate-limited)
+Page --> Actor: 4.2: Show appropriate error; retain form/draft
+end
+deactivate API
+deactivate Page
+
+legend left
+Scope: Web ignores late reads after room/generation changes. Image bytes remain behind participant
+authorization.
+endlegend
+@enduml

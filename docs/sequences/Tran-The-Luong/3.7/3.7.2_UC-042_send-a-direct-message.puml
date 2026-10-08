@@ -1,0 +1,75 @@
+@startuml
+title 3.7.2 Send a direct message
+caption UC-042 | Implemented
+skinparam monochrome true
+skinparam shadowing false
+skinparam roundcorner 0
+skinparam defaultFontName Arial
+skinparam LegendBackgroundColor white
+skinparam style strictuml
+skinparam sequenceMessageAlign center
+show footbox
+<style>
+lifeLine {
+    LineStyle 0
+}
+</style>
+skinparam sequence {
+    ParticipantBackgroundColor white
+    ActorBackgroundColor white
+    LifeLineBackgroundColor white
+    LifeLineBorderColor black
+    GroupBackgroundColor white
+    GroupHeaderBackgroundColor white
+}
+
+' Source: apps/api-node/src/modules/claims/application/claim.use-cases.ts
+' Main entity migration: apps/api-node/src/migrations/002_lost_found_schema.sql
+' One-table abstraction: related repository reads/writes stay inside the service.
+actor "Claimant / Finder" as Actor
+participant "Private Conversation" as Page
+participant "Claims API" as API
+participant "Claim Chat Service" as Service
+participant "chat_messages" as Table <<entity>>
+
+Actor -> Page: 1: Open Send a direct message
+activate Page
+Page -> API: 2: POST /api/claims/:id/messages
+activate API
+API -> API: 3: Validate access session, role and input
+alt Valid request
+API -> Service: 4: Send a direct message
+activate Service
+Service -> Table: 5: Lock claim/room; find stable clientMessageId
+activate Table
+Table --> Service: 6: Room context or prior message
+deactivate Table
+Service -> Service: 7: Require active consent and sender contact-photo approval when\nrequired
+alt Business rules satisfied
+Service -> Table: 8: INSERT private text or exact client-key replay
+activate Table
+Table --> Service: 9: Persisted message
+deactivate Table
+Service -> Service: 10: Persist privacy-safe counterpart notification and optional email
+Service -> Service: 11: Commit; publish after commit; never mix another room's draft
+Service --> API: 12: Sent text message
+API --> Page: 13: HTTP 201: Sent text message
+Page --> Actor: 14: Show authorized result
+else Missing or ineligible context
+Service --> API: 8.1: Room closed, approval missing or conflicting retry
+API --> Page: 8.2: HTTP 404 or 409
+Page --> Actor: 8.3: Display error; do not report success
+end
+deactivate Service
+else Invalid input, missing session or insufficient role
+API --> Page: 4.1: HTTP 422 / 401 / 403 (429 only if rate-limited)
+Page --> Actor: 4.2: Show appropriate error; retain form/draft
+end
+deactivate API
+deactivate Page
+
+legend left
+Scope: AI-suggested prompt buttons send ordinary text through this route; they do not count as
+structured answered questions.
+endlegend
+@enduml

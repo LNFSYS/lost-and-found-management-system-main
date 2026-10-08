@@ -1,0 +1,73 @@
+@startuml
+title 3.9.10 Request transfer to staff custody
+caption UC-141 | Implemented
+skinparam monochrome true
+skinparam shadowing false
+skinparam roundcorner 0
+skinparam defaultFontName Arial
+skinparam LegendBackgroundColor white
+skinparam style strictuml
+skinparam sequenceMessageAlign center
+show footbox
+<style>
+lifeLine {
+    LineStyle 0
+}
+</style>
+skinparam sequence {
+    ParticipantBackgroundColor white
+    ActorBackgroundColor white
+    LifeLineBackgroundColor white
+    LifeLineBorderColor black
+    GroupBackgroundColor white
+    GroupHeaderBackgroundColor white
+}
+
+' Source: apps/api-node/src/modules/claims/application/claim.use-cases.ts
+' Main entity migration: apps/api-node/src/migrations/053_custody_requests.sql
+' One-table abstraction: related repository reads/writes stay inside the service.
+actor "Finder" as Actor
+participant "Conversation Custody Transfer" as Page
+participant "Claims API" as API
+participant "Claim Custody Service" as Service
+participant "custody_requests" as Table <<entity>>
+
+Actor -> Page: 1: Open Request transfer to staff custody
+activate Page
+Page -> API: 2: POST /api/claims/:id/verification/decision (ESCALATE_TO_CUSTODY)
+activate API
+API -> API: 3: Validate access session, role and input
+alt Valid request
+API -> Service: 4: Request transfer to staff custody
+activate Service
+Service -> Service: 5: Require actual Finder, explicit reason and active intake point
+Service -> Service: 6: Lock eligible owned FOUND OR exact approved photo-backed LOST room
+alt Physical source or consumed contact photo eligible
+Service -> Table: 7: INSERT PENDING exact-source custody request or stable replay
+activate Table
+Table --> Service: 8: Custody request
+deactivate Table
+Service -> Service: 9: For no-FOUND: keep physical post_id NULL; bind claim/room/Finder
+Service -> Service: 10: Preserve claim verification; write audit/notifications and commit
+Service --> API: 11: Custody transfer request
+API --> Page: 12: HTTP 200: Custody transfer request
+Page --> Actor: 13: Show authorized result
+else Source/room/photo invalid or already in custody
+Service --> API: 7.1: Custody cannot be queued for this context
+API --> Page: 7.2: HTTP 409
+Page --> Actor: 7.3: Display error; do not report success
+end
+deactivate Service
+else Invalid input, missing session or insufficient role
+API --> Page: 4.1: HTTP 422 / 401 / 403 (429 only if rate-limited)
+Page --> Actor: 4.2: Show appropriate error; retain form/draft
+end
+deactivate API
+deactivate Page
+
+legend left
+Scope: This depicts the chat route; owned FOUND also has staff/custody-requests creation. No FOUND
+is required for approved direct LOST contact. Queueing does not physically receive property or
+verify ownership.
+endlegend
+@enduml

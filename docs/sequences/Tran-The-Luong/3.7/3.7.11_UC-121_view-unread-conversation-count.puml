@@ -1,0 +1,64 @@
+@startuml
+title 3.7.11 View unread conversation count
+caption UC-121 | Implemented
+skinparam monochrome true
+skinparam shadowing false
+skinparam roundcorner 0
+skinparam defaultFontName Arial
+skinparam LegendBackgroundColor white
+skinparam style strictuml
+skinparam sequenceMessageAlign center
+show footbox
+<style>
+lifeLine {
+    LineStyle 0
+}
+</style>
+skinparam sequence {
+    ParticipantBackgroundColor white
+    ActorBackgroundColor white
+    LifeLineBackgroundColor white
+    LifeLineBorderColor black
+    GroupBackgroundColor white
+    GroupHeaderBackgroundColor white
+}
+
+' Source: apps/api-node/src/modules/claims/application/claim.use-cases.ts
+' Main entity migration: apps/api-node/src/migrations/002_lost_found_schema.sql
+' One-table abstraction: related repository reads/writes stay inside the service.
+actor "Claimant / Finder" as Actor
+participant "Private Conversation" as Page
+participant "Claims API" as API
+participant "Claim Chat Service" as Service
+participant "chat_messages" as Table <<entity>>
+
+Actor -> Page: 1: Open View unread conversation count
+activate Page
+Page -> API: 2: GET /api/claims
+activate API
+API -> API: 3: Validate access session, role and input
+alt Valid request
+API -> Service: 4: View unread conversation count
+activate Service
+Service -> Service: 5: Resolve participant claim and room IDs
+Service -> Table: 6: Count unread counterpart messages per authorized room
+activate Table
+Table --> Service: 7: Persisted unread counts
+deactivate Table
+Service -> Service: 8: Combine private claim summaries; expose unread filter
+Service --> API: 9: Room summaries with unread counts
+API --> Page: 10: HTTP 200: Room summaries with unread counts
+Page --> Actor: 11: Show authorized result
+deactivate Service
+else Invalid input, missing session or insufficient role
+API --> Page: 4.1: HTTP 422 / 401 / 403 (429 only if rate-limited)
+Page --> Actor: 4.2: Show appropriate error; retain form/draft
+end
+deactivate API
+deactivate Page
+
+legend left
+Related tables, authorization, transactions and audit remain inside the service. Catalogue status is
+not deployment or manual acceptance.
+endlegend
+@enduml

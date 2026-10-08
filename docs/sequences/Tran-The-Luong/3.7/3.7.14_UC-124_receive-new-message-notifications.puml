@@ -1,0 +1,54 @@
+@startuml
+title 3.7.14 Receive new-message notifications
+caption UC-124 | Implemented
+skinparam monochrome true
+skinparam shadowing false
+skinparam roundcorner 0
+skinparam defaultFontName Arial
+skinparam LegendBackgroundColor white
+skinparam style strictuml
+skinparam sequenceMessageAlign center
+show footbox
+<style>
+lifeLine {
+    LineStyle 0
+}
+</style>
+skinparam sequence {
+    ParticipantBackgroundColor white
+    ActorBackgroundColor white
+    LifeLineBackgroundColor white
+    LifeLineBorderColor black
+    GroupBackgroundColor white
+    GroupHeaderBackgroundColor white
+}
+
+' Source: apps/api-node/src/modules/claims/application/claim.use-cases.ts
+' Main entity migration: apps/api-node/src/migrations/002_lost_found_schema.sql
+' One-table abstraction: related repository reads/writes stay inside the service.
+actor "System" as Actor
+participant "Chat Notification Producer" as Page
+participant "Claim Chat Service" as Service
+participant "notifications" as Table <<entity>>
+
+Actor -> Page: 1: Persist counterpart new-message notification
+activate Page
+Page -> Service: 2: Run task with current eligible context
+activate Service
+Service -> Service: 3: Resolve actual counterpart from authorized room write
+Service -> Table: 4: INSERT deduplicated privacy-safe new-message notification
+activate Table
+Table --> Service: 5: Notification ID
+deactivate Table
+Service -> Service: 6: Queue optional unread email without private message content
+Service -> Service: 7: Commit with message; publish safe event after commit
+Service --> Page: 8: New-message notification
+Page --> Actor: 9: Record task outcome
+deactivate Service
+deactivate Page
+
+legend left
+Scope: No private message text or image in notification/email. Recipient preferences, read state and
+delayed delivery eligibility are rechecked by email worker.
+endlegend
+@enduml
