@@ -890,7 +890,7 @@ async function mediaBlob(path: string, retry = true, errorMessage = "Khong the t
 export const api = {
   listAppointments: (filters:{claimId?:string;page?:number}={},signal?:AbortSignal) => raw<{results:import("./workflow-types").Appointment[];total:number}>(`/appointments${queryString(filters)}`,{signal}),
   getAppointment: (id:string,signal?:AbortSignal) => raw<import("./workflow-types").Appointment>(`/appointments/${id}`,{signal}),
-  createAppointment: (payload:{claimId:string;proposedAt:string;handoverPointId:string;requestKey:string}) => raw<import("./workflow-types").Appointment>("/appointments",{method:"POST",body:JSON.stringify(payload)}),
+  createAppointment: (payload:{claimId:string;proposedAt:string;handoverPointId?:string;customLocation?:string;requestKey:string}) => raw<import("./workflow-types").Appointment>("/appointments",{method:"POST",body:JSON.stringify(payload)}),
   actOnAppointment: (id:string,payload:{action:import("./workflow-types").AppointmentAction;version:number;requestKey:string;physicallyChecked?:boolean;reason?:string}) => raw<import("./workflow-types").Appointment>(`/appointments/${id}/actions`,{method:"POST",body:JSON.stringify(payload)}),
   getItemJourney: (id:string,filters:{page?:number;asOf?:string}={},signal?:AbortSignal) => raw<import("./workflow-types").Journey>(`/posts/${id}/journey${queryString(filters)}`,{signal}),
   listAudit: (filters:import("./workflow-types").AuditFilter={},signal?:AbortSignal) => raw<{results:import("./workflow-types").ActivityEvent[];total:number}>(`/admin/audit${queryString(filters)}`,{signal}),

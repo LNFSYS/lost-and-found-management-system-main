@@ -512,7 +512,8 @@ export function ClaimsPage() {
   }, [claimId, claim?.canSend, verificationError]);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    const messagePane = messagesEndRef.current?.closest(".claim-chat-scroll");
+    messagePane?.scrollTo({ top: messagePane.scrollHeight, behavior: "smooth" });
   }, [messages]);
 
   async function loadOlderMessages() {

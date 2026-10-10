@@ -41,3 +41,32 @@ test("Legacy appointments cannot be modified through a forged API action",async(
 test("Mutual negative review may cancel with reason without fabricating physical receipt",async()=>{const f=fixture();f.a.finderResponse="DISPUTED";f.a.ownerResponse="DISPUTED";
   await f.service.act("owner",f.a.id,{action:"CANCEL",version:1,requestKey:randomUUID(),reason:"Both reviewed: no valid handover"});assert.equal(f.a.status,"CANCELLED");assert.equal(f.a.completedAt,null);
 });
+
+test("Custom locations are normalized, stored without a desk and replayed once", async () => {
+  const f=fixture();let writes=0;
+  f.repo.pointExists=async()=>{throw new Error("Custom location must not require a desk");};
+  f.repo.create=async input=>{writes++;f.a.handoverPointId=input.handoverPointId;f.a.location=input.customLocation;};
+  const input={claimId:"claim",proposedAt:"2026-10-07T00:30:00Z",customLocation:"  Library entrance  ",requestKey:randomUUID()};
+  assert.equal((await f.service.create("finder",input)).location,"Library entrance");
+  await f.service.create("finder",{...input,customLocation:"Library entrance"});
+  assert.equal(writes,1);assert.equal(f.a.handoverPointId,null);assert.equal(f.emails.length,2);
+  await assert.rejects(f.service.create("finder",{...input,customLocation:"Main gate"}),{code:"conflict"});
+});
+
+test("Custom location cannot bypass eligibility, authorization or active appointment gates", async () => {
+  const input={claimId:"claim",proposedAt:"2026-10-07T00:30:00Z",customLocation:"Library entrance",requestKey:randomUUID()};
+  const f=fixture();await assert.rejects(f.service.create("staff",input),{code:"forbidden"});
+  f.setSafe(false);await assert.rejects(f.service.create("finder",input),{code:"conflict"});
+  f.setSafe(true);f.repo.active=async()=>true;await assert.rejects(f.service.create("finder",input),{code:"conflict"});
+});
+
+test("Proposal requires exactly one valid location and preserves existing point payloads", async () => {
+  const f=fixture();let writes=0;
+  f.repo.create=async input=>{writes++;assert.equal(input.customLocation,null);assert.equal(input.handoverPointId,"point");};
+  const base={claimId:"claim",proposedAt:"2026-10-07T00:30:00Z",requestKey:randomUUID()};
+  for(const location of [{},{customLocation:"  "},{customLocation:"ab"},{customLocation:"x".repeat(256)},
+    {customLocation:"Library\nentrance"},{handoverPointId:"point",customLocation:"Library entrance"}]){
+    await assert.rejects(f.service.create("finder",{...base,...location}),{code:"invalid_input"});
+  }
+  await f.service.create("finder",{...base,handoverPointId:"point"});assert.equal(writes,1);
+});

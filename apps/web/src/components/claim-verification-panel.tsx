@@ -1,6 +1,6 @@
-import { AlertTriangle, CalendarDays, CheckCircle2, Clock3, HelpCircle, LoaderCircle, LockKeyhole, PackageCheck, RotateCw, ShieldAlert, ShieldCheck, X, XCircle } from "lucide-react";
+import { AlertTriangle, CalendarDays, CheckCircle2, Clock3, FileText, HelpCircle, LoaderCircle, LockKeyhole, PackageCheck, RotateCw, ShieldAlert, ShieldCheck, X, XCircle } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { ClaimAppointmentDialog } from "./claim-appointment-dialog";
 import { useModalFocus } from "../hooks/use-modal-focus";
 import { api, type ClaimMessage, type ClaimRecord, type ClaimVerificationState } from "../services/api";
 
@@ -43,14 +43,18 @@ export function ClaimVerificationPanel({ claim, verification, loading, loadError
   const [handoverPointId, setHandoverPointId] = useState("");
   const [loadingHandoverPoints, setLoadingHandoverPoints] = useState(false);
   const [correctionMode, setCorrectionMode] = useState(false);
+  const [showDetails, setShowDetails] = useState(false);
+  const [showAppointments, setShowAppointments] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const retry = useRef<{ decision: Decision; key: string } | null>(null);
+  const retry = useRef<{ fingerprint: string; key: string } | null>(null);
   const actionsRef = useRef<HTMLDivElement>(null);
   const decisionRef = useRef<HTMLElement>(null);
   const custodyRef = useRef<HTMLElement>(null);
+  const detailsRef = useRef<HTMLElement>(null);
   useModalFocus(decisionRef, Boolean(decision && decision !== "ESCALATE_TO_CUSTODY"), () => setDecision(null), busy);
   useModalFocus(custodyRef, decision === "ESCALATE_TO_CUSTODY", () => setDecision(null), busy);
+  useModalFocus(detailsRef, showDetails && Boolean(verification) && !loadError, () => setShowDetails(false));
   const active = verification?.status === "CONVERSATION_OPEN" || verification?.status === "NEED_MORE_INFO";
   const finder = verification?.participantRole === "FINDER";
   const latestDecision = useMemo(
@@ -99,7 +103,8 @@ export function ClaimVerificationPanel({ claim, verification, loading, loadError
     if (decision === "ESCALATE_TO_CUSTODY" && !handoverPointId) return;
     setBusy(true);
     setError("");
-    if (retry.current?.decision !== decision) retry.current = { decision, key: crypto.randomUUID() };
+    const fingerprint = JSON.stringify([decision, reason.trim(), handoverPointId, active ? null : latestDecision?.id]);
+    if (retry.current?.fingerprint !== fingerprint) retry.current = { fingerprint, key: crypto.randomUUID() };
     try {
       const result = await api.decideClaimVerification(claim.id, {
         decision,
@@ -122,7 +127,7 @@ export function ClaimVerificationPanel({ claim, verification, loading, loadError
   }
 
   if (loadError) return <section className="review-panel review-panel--error">
-    <header><span>OWNERSHIP REVIEW</span><ShieldAlert /></header>
+    <header><span>Xác minh vật phẩm</span><ShieldAlert /></header>
     <p className="review-load-error" role="alert">Không tải được trạng thái xác minh. {loadError}</p>
     <button type="button" className="review-retry" onClick={onRetry} disabled={loading}><RotateCw />{loading ? "Đang thử lại..." : "Thử lại"}</button>
   </section>;
@@ -133,40 +138,62 @@ export function ClaimVerificationPanel({ claim, verification, loading, loadError
   const lastReason = metadataText(latestDecision?.metadata ?? null, "reason");
   const selectedDecision = decisionLabel(latestDecision?.metadata?.decision);
   const showActions = finder && (active || correctionMode) && !custody;
+  const canCorrect = finder && latestDecision && !custody && (accepted || !active);
+  const outcome = custody ? "Đã gửi yêu cầu chuyển sang custody"
+    : selectedDecision ? `Finder đã chọn: ${selectedDecision}`
+      : accepted ? "Finder đã đề xuất gặp mặt"
+        : verification.status === "PENDING" ? "Chờ Finder mở conversation"
+          : verification.status === "REJECTED" ? "Claim đã bị từ chối" : "Conversation đã đóng";
+  const detailsActor = custody ? verification.roomEscalation?.escalatedBy : latestDecision?.actorId;
+  const detailsTime = custody ? verification.roomEscalation?.escalatedAt : latestDecision?.createdAt;
+  const detailsReason = custody ? verification.roomEscalation?.reason : lastReason;
 
   return <>
-    <section className={`review-panel review-panel--${accepted ? "eligible" : custody ? "custody" : verification.status.toLowerCase()}`}>
-      <header><span>OWNERSHIP REVIEW</span>{accepted ? <CheckCircle2 /> : <ShieldCheck />}</header>
+    <section className={`review-panel review-panel--${custody ? "custody" : accepted ? "eligible" : verification.status.toLowerCase()}`} aria-label="Xác minh vật phẩm">
+      <header><span>Xác minh vật phẩm</span>{custody ? <PackageCheck /> : accepted ? <CheckCircle2 /> : <ShieldCheck />}</header>
       <div className="review-progress">
         <strong>{verification.policy.photoContactEligible ? "Ảnh đã đạt điều kiện trao đổi" : `${accepted ? "✓ " : ""}${verification.policy.answeredCount} / ${verification.policy.minimumAnswers} câu trả lời tối thiểu`}</strong>
-        <span className={accepted ? "success" : "pending"}>{accepted ? "Đủ điều kiện đặt lịch" : verification.policy.readyForDecision ? "Có thể đưa ra quyết định" : "Chưa đủ điều kiện đặt lịch"}</span>
+        <span className={accepted && !custody ? "success" : "pending"}>{custody ? "Đang chuyển sang kho" : accepted ? "Đủ điều kiện đặt lịch" : verification.policy.readyForDecision ? "Có thể đưa ra quyết định" : "Chưa đủ điều kiện đặt lịch"}</span>
       </div>
 
       {custody && <div className="review-outcome review-outcome--custody" role="status">
         <strong>Đã gửi yêu cầu chuyển sang custody</strong>
-        <p>Yêu cầu đang chờ Staff xử lý. Claim vẫn giữ nguyên trạng thái, chưa được chấp nhận hoặc từ chối; hai bên vẫn có thể tiếp tục trao đổi.</p>
-        {verification.roomEscalation?.reason && <p><strong>Lý do:</strong> {verification.roomEscalation.reason}</p>}
+        <p>Yêu cầu đang chờ Staff xử lý. Hai bên vẫn có thể tiếp tục trao đổi.</p>
       </div>}
 
-      {accepted && latestDecision && <div className="review-outcome">
-        <strong>Finder đã chọn: {selectedDecision ?? "Đề xuất gặp mặt"}</strong>
-        <dl><div><dt>Quyết định bởi</dt><dd>{actorName(latestDecision.actorId)}</dd></div><div><dt>Thời gian</dt><dd>{new Intl.DateTimeFormat("vi-VN", { dateStyle: "short", timeStyle: "short" }).format(new Date(latestDecision.createdAt))}</dd></div>{lastReason && <div><dt>Lý do</dt><dd>{lastReason}</dd></div>}</dl>
-        <div className="review-appointment"><span>LỊCH HẸN</span><Link className="secondary-button" to={`/appointments?claimId=${claim.id}`}><CalendarDays /> Tạo / xem lịch hẹn</Link></div>
-        {finder && <button type="button" className="review-correct" onClick={toggleCorrection}>{correctionMode ? "Ẩn lựa chọn quyết định" : "Điều chỉnh quyết định"}</button>}
+      {!custody && !active && (!accepted || latestDecision) && <div className="review-outcome"><strong>{outcome}</strong></div>}
+
+      {(custody || latestDecision) && <div className="review-tools">
+        <button type="button" className="review-details" onClick={() => setShowDetails(true)}><FileText /> Chi tiết xác minh</button>
+        {accepted && latestDecision && <button type="button" className="review-appointment-link" onClick={() => setShowAppointments(true)}><CalendarDays /> Lịch hẹn</button>}
+        {canCorrect && <button type="button" className="review-correct" onClick={toggleCorrection}><RotateCw />{correctionMode ? "Ẩn lựa chọn quyết định" : "Điều chỉnh quyết định"}</button>}
       </div>}
 
-      {!accepted && !active && <div className="review-outcome"><strong>{selectedDecision ? `Finder đã chọn: ${selectedDecision}` : verification.status === "PENDING" ? "Chờ Finder mở conversation" : custody ? "Đã chuyển sang custody" : verification.status === "REJECTED" ? "Claim đã bị từ chối" : "Conversation đã đóng"}</strong>{lastReason && <p>{lastReason}</p>}{finder && latestDecision && <button type="button" className="review-correct" onClick={toggleCorrection}>{correctionMode ? "Ẩn lựa chọn quyết định" : "Điều chỉnh quyết định"}</button>}</div>}
-
-      {showActions && <div ref={actionsRef} className="review-actions">
-        <span>Bạn muốn thực hiện quyết định nào?</span>
-        {(Object.keys(decisionContent) as Decision[]).filter((value) => !correctionMode || value !== "ESCALATE_TO_CUSTODY").map((value) => {
+      {showActions && <div ref={actionsRef} className="review-actions" role="group" aria-label="Quyết định xác minh">
+        {(Object.keys(decisionContent) as Decision[]).map((value) => {
           const item = decisionContent[value];
           const Icon = item.icon;
-          const disabled = value === "VERIFY_FOR_MEETUP" && !verification.policy.readyForDecision;
+          const disabled = (value === "VERIFY_FOR_MEETUP" && !verification.policy.readyForDecision) ||
+            (value === "ESCALATE_TO_CUSTODY" && correctionMode && verification.status !== "ACCEPTED");
           return <button type="button" key={value} className={`review-action review-action--${value.toLowerCase()}`} disabled={disabled} onClick={() => openDecision(value)} title={disabled ? "Cần trả lời câu hỏi xác minh trước khi đề xuất gặp mặt" : item.label}><Icon /><span>{item.label}</span>{disabled && <LockKeyhole />}</button>;
         })}
       </div>}
     </section>
+
+    {showAppointments && <ClaimAppointmentDialog key={claim.id} claimId={claim.id} canPropose={!custody} onDismiss={() => setShowAppointments(false)}/>}
+
+    {showDetails && <div className="decision-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowDetails(false); }}>
+      <section ref={detailsRef} tabIndex={-1} className="decision-modal review-details-modal" role="dialog" aria-modal="true" aria-labelledby="review-details-title">
+        <header><h3 id="review-details-title">Chi tiết xác minh</h3><button type="button" onClick={() => setShowDetails(false)} aria-label="Đóng chi tiết xác minh"><X /></button></header>
+        <p>{outcome}</p>
+        {custody && <p>Yêu cầu đang chờ Staff xử lý. Claim vẫn giữ nguyên trạng thái, chưa được chấp nhận hoặc từ chối; hai bên vẫn có thể tiếp tục trao đổi.</p>}
+        <dl>
+          {detailsActor && <div><dt>Quyết định bởi</dt><dd>{actorName(detailsActor)}</dd></div>}
+          {detailsTime && <div><dt>Thời gian</dt><dd>{new Intl.DateTimeFormat("vi-VN", { dateStyle: "short", timeStyle: "short" }).format(new Date(detailsTime))}</dd></div>}
+          {detailsReason && <div className="review-details-reason"><dt>Lý do</dt><dd>{detailsReason}</dd></div>}
+        </dl>
+      </section>
+    </div>}
 
     {decision && decision !== "ESCALATE_TO_CUSTODY" && <div className="decision-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) setDecision(null); }}>
       <section ref={decisionRef} tabIndex={-1} className="decision-modal" role="dialog" aria-modal="true" aria-labelledby="decision-modal-title">
@@ -194,16 +221,18 @@ export function ClaimVerificationPanel({ claim, verification, loading, loadError
 
         <div className="claim-custody-hours"><Clock3 /><p>Giờ làm việc Phòng DVSV: thứ Hai–thứ Sáu, buổi sáng 08:00/08:15–12:00 và buổi chiều 13:30–17:00, trừ ngày nghỉ lễ.</p></div>
 
+        {correctionMode && <p className="claim-custody-reminder">Nếu đã có lịch hẹn, hãy hủy lịch trước khi gửi custody. Xác nhận bàn giao hoặc tranh chấp cần hai bên đối soát trước.</p>}
+
         <form className="modal-form claim-custody-form" onSubmit={(event) => { event.preventDefault(); void confirmDecision(); }}>
           <label htmlFor="claim-custody-handover-point">Điểm quầy nhận bàn giao <span className="required-star">*</span>
-            <select id="claim-custody-handover-point" value={handoverPointId} onChange={(event) => setHandoverPointId(event.target.value)} required disabled={loadingHandoverPoints || handoverPoints.length === 0}>
+            <select id="claim-custody-handover-point" value={handoverPointId} onChange={(event) => setHandoverPointId(event.target.value)} required disabled={busy || loadingHandoverPoints || handoverPoints.length === 0}>
               <option value="">{loadingHandoverPoints ? "Đang tải danh sách quầy..." : "Chọn quầy bàn giao"}</option>
               {handoverPoints.map((point) => <option key={point.id} value={point.id}>{point.name} - {point.address}</option>)}
             </select>
           </label>
           {!loadingHandoverPoints && handoverPoints.length === 0 && <small className="field-hint">Hiện chưa có quầy bàn giao nào đang hoạt động.</small>}
           <label htmlFor="claim-custody-reason">Ghi chú / Lời nhắn cho Staff
-            <textarea id="claim-custody-reason" value={reason} onChange={(event) => setReason(event.target.value)} minLength={3} maxLength={1000} placeholder="Ví dụ: Tôi sẽ mang chìa khóa đến quầy vào giờ ra chơi 10h sáng..." required />
+            <textarea id="claim-custody-reason" value={reason} onChange={(event) => setReason(event.target.value)} minLength={3} maxLength={1000} disabled={busy} placeholder="Ví dụ: Tôi sẽ mang chìa khóa đến quầy vào giờ ra chơi 10h sáng..." required />
           </label>
           {loadingHandoverPoints && <small className="field-hint" role="status"><LoaderCircle className="spin-icon" /> Đang tải quầy bàn giao...</small>}
           {error && <div className="decision-modal-error"><AlertTriangle /> {error}</div>}

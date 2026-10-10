@@ -5796,23 +5796,16 @@ textarea {
 
 .posts-heading {
   display: flex;
-  align-items: end;
+  align-items: center;
   justify-content: space-between;
   gap: 32px;
-  margin-bottom: 32px;
+  margin-bottom: 24px;
 }
 
 .posts-heading h1 {
   margin: 0;
-  font-size: clamp(2.35rem, 4vw, 4.3rem);
-  line-height: 0.98;
-}
-
-.posts-heading > div > p:last-child {
-  max-width: 650px;
-  margin: 14px 0 0;
-  color: var(--muted);
-  line-height: 1.65;
+  font-size: 32px;
+  line-height: 1.25;
 }
 
 .posts-create {
@@ -5837,51 +5830,9 @@ textarea {
 }
 
 .posts-create svg,
-.posts-tabs svg,
 .posts-toolbar svg {
   width: 18px;
   height: 18px;
-}
-
-.posts-tabs {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  padding: 4px;
-  margin-bottom: 28px;
-  border: 1px solid var(--line);
-  border-radius: 7px;
-  background: #e9eef4;
-}
-
-.posts-tabs button {
-  position: relative;
-  min-height: 50px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 9px;
-  border: 0;
-  border-radius: 5px;
-  color: var(--muted);
-  background: transparent;
-  font-weight: 700;
-  transition: color 180ms ease, background-color 180ms ease, box-shadow 180ms ease;
-}
-
-.posts-tabs button.active {
-  color: var(--ink);
-  background: #fff;
-  box-shadow: 0 4px 14px rgba(25, 49, 75, 0.08);
-}
-
-.posts-tabs button.active::after {
-  content: "";
-  position: absolute;
-  left: 25%;
-  right: 25%;
-  bottom: 0;
-  height: 2px;
-  background: var(--fpt-blue);
 }
 
 .posts-toolbar {
@@ -6695,10 +6646,9 @@ textarea {
 @media (max-width: 680px) {
   .posts-page { width: min(100% - 28px, 1240px); padding: 34px 0 54px; }
   .posts-heading { align-items: start; flex-direction: column; gap: 20px; }
-  .posts-heading h1 { font-size: 2.7rem; }
+  .posts-heading h1 { font-size: 28px; }
   .offline-banner { top: 0; padding: 9px 14px; }
   .pwa-data-state { align-items: flex-start; flex-direction: column; gap: 4px; }
-  .posts-tabs button { min-height: 54px; padding: 6px 10px; font-size: 0.78rem; }
   .posts-toolbar { grid-template-columns: 1fr; }
   .posts-search { grid-column: auto; }
   .post-grid { grid-template-columns: 1fr; }
@@ -8458,15 +8408,28 @@ textarea {
 .claim-private-banner span { color: #758896; font-size: .64rem; }
 .claim-chat-scroll { min-height: 0; overflow-y: auto; display: flex; flex-direction: column; overflow-x: hidden; }
 .claim-chat-header > .claim-chat-review { grid-column: 1 / -1; }
-.claim-chat-review .review-panel { padding: 10px 0; border-top: 1px solid #dfe7ec; }
-.claim-chat-review .review-panel > header { margin-bottom: 6px; }
-.claim-chat-review .review-progress { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px; margin: 0 0 8px; padding: 8px 10px; }
-.claim-chat-review .review-progress strong, .claim-chat-review .review-progress span { font-size: .72rem; }
+.claim-chat-review .review-panel { padding: 10px 0 0 10px; border-top: 1px solid #dfe7ec; gap: 8px; }
+.claim-chat-review .review-panel > header { margin: 0; color: #405764; font-size: 13px; font-weight: 700; }
+.claim-chat-review .review-progress { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 12px; margin: 0; padding: 0; border: 0; background: transparent; }
+.claim-chat-review .review-progress strong, .claim-chat-review .review-progress span { font-size: 13px; line-height: 1.45; font-weight: 600; }
 .claim-chat-review .review-actions { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
-.claim-chat-review .review-actions > span { grid-column: 1 / -1; }
-.claim-chat-review .review-action { min-height: 42px; padding: 6px 8px; gap: 5px; font-size: .72rem; }
-.claim-chat-review .review-panel { gap: 7px; }
-.claim-chat-review .review-action span { min-width: 0; overflow-wrap: anywhere; }
+.claim-chat-review .review-action { min-height: 42px; padding: 6px 8px; display: flex; gap: 6px; font-size: 13px; line-height: 1.4; font-weight: 600; }
+.claim-chat-review .review-action svg { width: 16px; height: 16px; flex-shrink: 0; }
+.claim-chat-review .review-action span { min-width: 0; overflow-wrap: break-word; }
+.claim-chat-review .review-outcome { gap: 3px; }
+.claim-chat-review .review-outcome > strong { font-size: 13px; line-height: 1.45; font-weight: 600; }
+.claim-chat-review .review-outcome > p { font-size: 13px; line-height: 1.45; }
+.review-tools { display: flex; flex-wrap: wrap; gap: 6px; }
+.claim-chat-review .review-tools > button, .claim-chat-review .review-tools > a { min-height: 34px; padding: 6px 10px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; border: 1px solid #c7d5dc; border-radius: 5px; background: #fff; color: #405764; font-size: 13px; line-height: 1.4; font-weight: 600; }
+.review-tools svg { width: 16px; height: 16px; flex-shrink: 0; }
+.claim-chat-review .review-tools > .review-appointment-link { color: var(--fpt-blue); border-color: #bfd5e8; }
+.claim-chat-review .review-tools > button:hover, .claim-chat-review .review-tools > a:hover { background: #f2f7fb; border-color: #8aafc9; }
+.review-details-modal > header h3 { margin: 0; font-size: 18px; }
+.review-details-modal > p { font-size: 14px; line-height: 1.6; overflow-wrap: anywhere; }
+.review-details-modal dl { margin: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.review-details-modal dt { margin-bottom: 5px; color: #687a85; font-size: 13px; }
+.review-details-modal dd { margin: 0; color: #405764; font-size: 14px; line-height: 1.6; overflow-wrap: anywhere; white-space: pre-wrap; }
+.review-details-reason { grid-column: 1 / -1; }
 .claim-question-suggestions { grid-column: 1 / -1; display: grid; gap: 5px; }
 .claim-question-suggestions button { min-width: 0; min-height: 34px; padding: 6px 10px; display: grid; grid-template-columns: 16px minmax(0, 1fr) 16px; gap: 8px; align-items: center; border: 1px solid #cbdce8; border-radius: 5px; background: #f8fbfe; color: #344f62; text-align: left; cursor: pointer; }
 .claim-question-suggestions button:hover { background: #eaf4fc; border-color: #87b6d5; }

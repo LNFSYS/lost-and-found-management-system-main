@@ -87,8 +87,8 @@ export function createAppointmentRepository(pool: SqlExecutor): AppointmentRepos
     },
     async create(input, tx) {
       const db = sqlExecutor(tx);
-      await db.execute(`INSERT INTO return_appointments (id,claim_id,post_id,proposer_id,proposed_at,handover_point_id) VALUES (?,?,?,?,?,?)`,
-        [input.id,input.claimId,input.postId,input.proposerId,input.proposedAt,input.handoverPointId]);
+      await db.execute(`INSERT INTO return_appointments (id,claim_id,post_id,proposer_id,proposed_at,handover_point_id,custom_location) VALUES (?,?,?,?,?,?,?)`,
+        [input.id,input.claimId,input.postId,input.proposerId,input.proposedAt,input.handoverPointId,input.customLocation]);
       await db.execute("INSERT INTO return_appointment_workflows (appointment_id) VALUES (?)", [input.id]);
     },
     async active(claimId, tx) {

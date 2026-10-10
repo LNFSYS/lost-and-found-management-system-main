@@ -401,6 +401,40 @@ test("an authorized correction appends a correction event instead of replacing h
   assert.equal(harness.audits[1]?.metadata?.correctsEventId, originalDecision.id);
 });
 
+test("Finder may switch a meetup decision to custody after cancellation, retaining history and replay", async () => {
+  const harness=commonRepository({listVerificationQuestions:async()=>[answeredQuestion("case-accessory")]});
+  const requests:unknown[]=[];
+  const custody=unexpectedPort<CustodyRequestRepository>("custody");
+  custody.lockEligiblePost=async()=>true;custody.findActiveByPostId=async()=>null;
+  custody.hasWarehouseItem=async()=>false;custody.findPendingByClaimId=async()=>null;
+  custody.createRequest=async input=>{requests.push(input);};custody.writeAudit=async()=>{};
+  custody.notificationRecipients=async()=>[claimantId];custody.isStaff=async()=>false;
+  const warehouse=unexpectedPort<WarehouseRepository>("warehouse");
+  warehouse.findHandoverPointById=async id=>({id} as never);
+  const service=createTestClaimUseCases({claimRepository:harness.repository,custodyRequestRepository:custody,warehouseRepository:warehouse});
+  await service.decideVerification(claimId,finderId,{decision:"VERIFY_FOR_MEETUP",reason:"Compare the item in person",idempotencyKey:"first-meetup"});
+  const original=harness.audits[0]!;
+  const input={decision:"ESCALATE_TO_CUSTODY" as const,reason:"Our schedules no longer align",handoverPointId:"desk",correctsEventId:original.id,idempotencyKey:"switch-custody"};
+  harness.repository.hasActiveAppointment=async()=>true;
+  await assert.rejects(service.decideVerification(claimId,finderId,input),{code:"conflict"});assert.equal(requests.length,0);
+  harness.repository.hasActiveAppointment=async()=>false;
+  await assert.rejects(service.decideVerification(claimId,claimantId,input),{code:"not_found"});
+  await assert.rejects(service.decideVerification(claimId,finderId,{...input,correctsEventId:"stale"}),{code:"conflict"});
+  const result=await service.decideVerification(claimId,finderId,input);
+  await service.decideVerification(claimId,finderId,input);
+  assert.equal(result.claim.status,"ACCEPTED");assert.equal(requests.length,1);assert.equal(harness.audits.length,2);
+  assert.equal(harness.audits[0],original);assert.equal(harness.audits[1].action,"CUSTODY_ESCALATED");
+  assert.equal(harness.audits[1].metadata?.correctsEventId,original.id);
+});
+
+for(const action of ["DIRECT_RETURN_COMPLETED","STAFF_CUSTODY_VERIFIED"])test(`Custody correction cannot bypass ${action}`,async()=>{
+  const harness=commonRepository({findByIdForUpdate:async()=>claim("ACCEPTED")});
+  harness.audits.push({id:"completed",claimId,actorId:finderId,action,fromStatus:"ACCEPTED",toStatus:"ACCEPTED",metadata:null,createdAt:"2026-10-10T01:00:00Z"});
+  const service=createTestClaimUseCases({claimRepository:harness.repository});
+  await assert.rejects(service.decideVerification(claimId,finderId,{decision:"ESCALATE_TO_CUSTODY",reason:"Cannot overwrite completion",handoverPointId:"desk",correctsEventId:"completed",idempotencyKey:"blocked"}),{code:"conflict"});
+  assert.equal(harness.audits.length,1);
+});
+
 test("custody escalation creates one pending request without accepting or rejecting the claim", async () => {
   let currentStatus: ClaimStatus = "CONVERSATION_OPEN";
   let currentFinderDecision: FinderDecision = "ACCEPTED";

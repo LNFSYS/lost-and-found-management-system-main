@@ -713,15 +713,15 @@ export function createClaimUseCases(options: ClaimDependencies) {
         const finalActions = new Set(["VERIFICATION_ACCEPTED", "VERIFICATION_DECLINED", "CUSTODY_ESCALATED", "VERIFICATION_DECISION_CORRECTED"]);
         const latestDecision = [...history].reverse().find((event) => finalActions.has(event.action));
         const isCorrection = Boolean(input.correctsEventId);
-        if (isCorrection && input.decision === "ESCALATE_TO_CUSTODY") {
-          throw new AppError("conflict", "Không thể chuyển custody bằng cách sửa một quyết định đã kết thúc");
-        }
         if (isCorrection) {
           if (!latestDecision || latestDecision.id !== input.correctsEventId || !["ACCEPTED", "REJECTED"].includes(claim.status)) {
             throw new AppError("conflict", "Chỉ có thể sửa quyết định xác minh mới nhất");
           }
           if (await claimRepository.hasActiveAppointment(claimId, connection)) {
-            throw new AppError("conflict", "Không thể sửa quyết định khi claim đã có lịch hẹn đang hoạt động");
+            throw new AppError("conflict", "Hãy mở Lịch hẹn và hủy lịch đang hoạt động trước khi đổi quyết định hoặc chuyển custody. Nếu đã có xác nhận bàn giao, hai bên cần đối soát trước.");
+          }
+          if (input.decision === "ESCALATE_TO_CUSTODY" && claim.status !== "ACCEPTED") {
+            throw new AppError("conflict", "Chỉ chuyển custody từ quyết định gặp mặt còn hợp lệ; không thay thế quyết định từ chối");
           }
         } else if (!canSubmitVerificationDecision(claim.status)) {
           throw new AppError("conflict", "Claim không còn chờ quyết định xác minh");
@@ -835,12 +835,11 @@ export function createClaimUseCases(options: ClaimDependencies) {
           queryable: connection
         });
 
-        const action = isCorrection
+        const action = input.decision === "ESCALATE_TO_CUSTODY" ? "CUSTODY_ESCALATED" : isCorrection
           ? "VERIFICATION_DECISION_CORRECTED"
           : input.decision === "VERIFY_FOR_MEETUP" ? "VERIFICATION_ACCEPTED"
             : input.decision === "DECLINE" ? "VERIFICATION_DECLINED"
-              : input.decision === "ESCALATE_TO_CUSTODY" ? "CUSTODY_ESCALATED"
-                : "MORE_INFO_REQUESTED";
+              : "MORE_INFO_REQUESTED";
         await claimRepository.writeAudit({
           eventId: id(),
           claimId,

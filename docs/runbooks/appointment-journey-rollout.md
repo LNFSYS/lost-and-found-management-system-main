@@ -21,7 +21,7 @@ Finder/owner được suy ra từ post ownership và participant thật bằng i
 
 Mutation dùng claim/related-post/appointment locks, expected version, request UUID và payload hash. Lần đọc context ban đầu nằm trước transaction; sau khi giữ connection mọi đọc/ghi dùng transaction đó, không xin connection thứ hai và làm kẹt pool nhỏ. Retry cùng thao tác sau mất COMMIT acknowledgement đọc lại kết quả persisted, không tạo appointment/notification trùng; đổi payload cùng key là conflict. Không tự retry COMMIT mù hoặc trả thành công giả. Consent/account/current post, room blocks, competing cases, pending dispute/custody và retained warehouse source được kiểm tra lại trước accept/physical completion. Sau peer completion, Finder decision không được viết lại outcome.
 
-Journey chỉ cho post owner hoặc participant thật của related claim, không có generic Staff/Admin bypass. Warehouse source history cần accepted FOUND linkage hợp lệ hoặc exact custody chain; rejected candidate không mở quyền xem kho. Không chọn/trả raw chat, verification answers, recipient name/phone/identity, private audit JSON/notes, proof/media references hoặc signed URLs. Admin audit chỉ trả metadata allowlist; reason hiện có được tìm server-side nhưng không render/export. Không mở quyền vào hội thoại từ audit metadata.
+Journey chỉ cho post owner hoặc participant thật của related claim, không có generic Staff/Admin bypass. Warehouse source history cần accepted FOUND linkage hợp lệ hoặc exact custody chain; rejected candidate không mở quyền xem kho. Không chọn/trả raw chat text, verification answers, recipient name/phone/identity, private audit JSON/notes, storage/provider references hoặc signed URLs. Ảnh hợp lệ có thể hiển thị qua proxy journey riêng, theo phạm vi bổ sung bên dưới; gateway kho Staff/Admin giữ nguyên. Admin audit chỉ trả metadata allowlist; reason hiện có được tìm server-side nhưng không render/export. Không mở quyền vào hội thoại từ audit metadata.
 
 Journey là projection dữ liệu hiện có, không tạo event lịch sử giả. Matching availability là sự kiện thô từ current saved results, không chứng nhận immutable matching-job history. Summary độc lập với trang timeline; nguồn vật lý mơ hồ là UNKNOWN. Legacy return thiếu dual/custody evidence được ghi riêng, không mở feedback giả. Audit read/export không bổ sung các catalogue/domain writers còn thiếu của FR-AUDIT-01/UC-164.
 
@@ -96,3 +96,44 @@ Phần dưới là snapshot kiểm chứng local trên `dev-clean` trước publ
 | Visual QA | Screenshots và ảnh decode thực tế tại 1440/768/390/320px; không tràn ngang. Retry/zoom/Escape/focus restoration được kiểm thử |
 
 Lượt native SQL đầu phát hiện helper cô lập dùng timezone hệ điều hành trong khi fixture/client đọc UTC, khiến timeline snapshot không thấy các event DB có giờ lệch. Lượt cuối khởi động server với timezone `+00:00`, kiểm tra UTC offset bằng 0 và chạy lại đủ 11 ca, không sửa hoặc bỏ assertions. Helper/server cô lập đã dừng; API/Vite của người dùng giữ nguyên. Đây không phải kiểm tra CI MySQL 8.0/8.4, SMTP inbox, production deployment hay nghiệm thu bàn giao vật lý mới. Chưa chạy lại full browser suite trong đợt giao diện này.
+
+## Ảnh trong hành trình - 10/10/2026
+
+Phạm vi local chưa commit/push trên `main`; mở rộng UC-167, FR-JOURNEY-01 và BR-74, không thêm UC hoặc migration. Các receipt trước vẫn là snapshot lịch sử.
+
+- Mốc đăng bài có ảnh ITEM của bài đó; ảnh PHOTO đã chia sẻ trong cuộc trao đổi có mốc riêng theo thời gian lưu ảnh. Ảnh kiểm tra trước liên hệ LOST được lấy từ evidence đã gắn vào cuộc trao đổi, không từ bản nháp AI.
+- Mốc tiếp nhận có ảnh condition của phiên intake đã xác nhận, gắn đúng vật phẩm. Mốc hoàn tất trả từ kho có proof đã attach trong `warehouse_completed_returns.proof_ids`, không lấy từ note/log hoặc proof chưa sử dụng.
+- Proxy `/api/posts/:postId/journey/images/:kind/:imageId` kiểm tra lại current post/participant/consent, item chưa xóa và snapshot. Không có quyền xem thay nhờ role Staff/Admin. Ảnh trả đồ chỉ cho người nhận thực tế hoặc Finder của claim trong chính completed return đó; claimant khác không được xem receipt.
+- Không tự công khai giấy tờ, ảnh post EVIDENCE, chứng từ người nhận offline, private messages/answers/contact details, storage refs hoặc signed URLs. Gateway kho Staff/Admin giữ nguyên. Trả trực tiếp không có ảnh đã lưu thì không tạo ảnh giả; ảnh không chứng minh đang cầm đồ hay quyền sở hữu.
+- Thumbnail có nhãn và thời gian, mở dialog ảnh lớn bằng bàn phím, Tab/Shift+Tab, Escape và trả focus; lỗi ảnh có retry, không làm mất timeline. Gallery theo snapshot/paging và được tháo khi chuyển vật phẩm.
+
+| Kiểm tra local của đợt ảnh hành trình | Kết quả / giới hạn |
+| --- | --- |
+| `npm test` bình thường | 418 pass, 0 fail, 34 opt-in SQL skips; architecture 205 production files/0 violations, Web typecheck pass; process tự kết thúc |
+| `npm run build` | API/Web pass; API build chạy lại sau cập nhật test cuối cũng pass |
+| Playwright focused | 73/73 pass: item-journey-media, appointment-journey, claims-resilience, posts-page, story-post-form; không gọi đây là full browser suite |
+| Native SQL media | 2/2 pass, 0 skip: journey-media.integration.test.ts trên MySQL 9.3 loopback UTC cô lập; FOUND/LOST-photo-only, intake/verified return, byte delivery, consent/outsider/Admin/Staff/cross-post/type/snapshot/deleted-item gates, draft/document/unattached proof exclusions |
+| UC catalogue | 168 IDs: 129 Implemented, 21 Partial, 18 Planned; không nâng trạng thái hoặc thay số lượng UC |
+| Visual QA | Ảnh PNG fixture decode đủ 600px và screenshots ở 1440/768/390/320px; preview/focus và không tràn ngang đã kiểm tra |
+
+MySQL `DATETIME(0)` có thể làm tròn thời gian vừa ghi lên giây kế tiếp; fixture chờ đúng `completed_at` authoritative trước khi tạo snapshot, không sửa clock/assertion để giả outcome. Không sửa Aiven hay chạy lại rollout media/063. Ảnh synthetic chỉ dùng trong tests, không thay evidence production. Chưa có candidate CI MySQL 8.0/8.4, provider acceptance hoặc manual UAT cho scope ảnh mới; không dùng các kết quả local này để chứng nhận deployment/main release.
+
+## Popup Lịch Hẹn Và Chuyển Custody - 10/10/2026
+
+Phạm vi local chưa commit/push trên `main`. Mở rộng các UC/BR/FR hiện có, không thêm ID, đổi trạng thái UC hoặc tạo migration. Các receipt ở trên vẫn giữ nguyên snapshot lịch sử.
+
+- Nút Lịch hẹn trong chat mở popup danh sách, đề xuất và chi tiết ngay tại phòng hiện tại. Popup dùng chung xử lý với trang lịch hẹn: counterpart accept/reject, hủy có lý do, physical confirmation/dispute/no-show và lịch sử. Giữ nguyên draft chat, focus trap, Escape/focus restoration; không đóng khi mutation còn chạy. Preview ảnh lồng nhau chỉ đóng lớp trên cùng.
+- Chọn một điểm bàn giao đang hoạt động hoặc nhập địa điểm riêng (trim, 3-255 ký tự, không control characters). Dùng `return_appointments.custom_location` có từ schema cũ; `handover_point_id` NULL khi địa điểm riêng. Idempotency hash của đề xuất điểm cũ không thay đổi; địa điểm mới thuộc payload replay. Eligibility, consent, account, duplicate-active, dispute và custody gates giữ nguyên. Điểm riêng chỉ dùng hẹn trực tiếp, không thay quầy Staff.
+- Finder có Chuyển sang custody trong phần điều chỉnh quyết định gặp mặt. Nếu còn lịch hoạt động, phải mở popup và hủy lịch bằng quy tắc hiện có trước; không tự hủy hoặc ghi đè xác nhận bàn giao/mâu thuẫn. Chỉ sửa quyết định hợp lệ mới nhất của claim ACCEPTED, không thay quyết định từ chối/completed return/Staff verification. Audit thêm CUSTODY_ESCALATED với correctsEventId, giữ original Finder history và trạng thái claim; request không tự tiếp nhận hoặc cấp quyền trả đồ.
+- Cả linked FOUND và no-FOUND LOST có ảnh Finder đã đối chiếu tiếp tục đi qua physical intake, explicit Staff verification và private proof/recipient/hold checks. Sau chuyển custody, popup không cho tạo lịch trực tiếp mới. Client retry giữ key khi payload không đổi, cấp key khác nếu sửa lý do/điểm/decision.
+
+| Kiểm tra local của đợt popup/custody | Kết quả / giới hạn |
+| --- | --- |
+| `npm test` bình thường, lượt cuối | 424 pass, 0 fail, 37 opt-in SQL skips; architecture 205 files/0 violations và Web typecheck pass; process tự kết thúc |
+| `npm run build`, lượt cuối | API/Web pass; appointments tiếp tục lazy-load, không thêm dependency |
+| Full Playwright, sau build cuối | 163/163 pass, 0 fail/skip, hai workers. Bao gồm custom-location proposal/retry, mutation busy/Escape, owner accept, nested preview, draft/focus restoration, late read khi đóng/mở lại và hủy hẹn rồi chuyển custody |
+| Native SQL focused | 22/22 pass, 0 skip: appointment.integration.test.ts và lost-custody-return.integration.test.ts trên MySQL 9.3 loopback UTC cô lập. Bao gồm custom location persist/list/replay, linked/no-FOUND meetup cancellation -> pending custody -> Staff receipt/verification -> return, cùng consent/identity/proof/dispute/reminder/legacy/acknowledgement regressions |
+| UC catalogue / diff | 168 IDs: 129 Implemented, 21 Partial, 18 Planned; git diff --check pass |
+| Visual QA | Screenshots popup proposal/detail ở 1440/390px, ảnh decode thực tế, keyboard focus và overflow checks pass. Ảnh browser fixture không phải chứng cứ bàn giao thật |
+
+Helper MySQL đã dừng, fixture DB được drop; API/Vite của người dùng tại localhost giữ nguyên. Không đọc/ghi Aiven trong đợt này, không chạy lại 063 hay rollout media. Full browser dùng controlled API fixtures, SQL dùng provider analysis fixture và private local test media; chưa chứng nhận real SMTP, provider hoặc bàn giao vật lý. Manual UAT cần hai participant thật kiểm tra popup/custom location/notification và hủy hẹn trước custody; Staff thực hiện intake/verification/return thực tế. Exact candidate CI MySQL 8.0/8.4 và production acceptance vẫn là gates riêng sau khi commit/push được yêu cầu.

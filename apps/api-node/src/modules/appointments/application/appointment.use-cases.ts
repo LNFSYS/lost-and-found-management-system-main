@@ -42,10 +42,18 @@ export function createAppointmentUseCases(options: {
       if (!a) throw new AppError("not_found", "Không tìm thấy lịch hẹn");
       participant(a, userId); return a;
     },
-    async create(userId: string, input: { claimId: string; proposedAt: string; handoverPointId: string; requestKey: string }) {
+    async create(userId: string, input: { claimId: string; proposedAt: string; handoverPointId?: string; customLocation?: string; requestKey: string }) {
       await ready();
+      const location = input.customLocation?.trim();
+      if (Boolean(input.handoverPointId) === (input.customLocation !== undefined) ||
+        (input.customLocation !== undefined && (!location || location.length < 3 || location.length > 255 || /[\u0000-\u001f\u007f]/.test(location)))) {
+        throw new AppError("invalid_input", "Chọn một điểm bàn giao hoặc nhập địa điểm riêng từ 3 đến 255 ký tự");
+      }
       const date = new Date(input.proposedAt);
-      const hash = options.hash(JSON.stringify(["CREATE", input.claimId, input.proposedAt, input.handoverPointId]));
+      // Preserve replay hashes for existing handover-point proposals.
+      const hash = options.hash(JSON.stringify(location
+        ? ["CREATE", input.claimId, input.proposedAt, null, location]
+        : ["CREATE", input.claimId, input.proposedAt, input.handoverPointId]));
       return options.transaction(async tx => {
         const context = await repo.context(input.claimId, tx);
         if (!context) throw new AppError("not_found", "Không tìm thấy cuộc trao đổi");
@@ -54,10 +62,11 @@ export function createAppointmentUseCases(options: {
         if (!context.eligible || !await repo.assertSafe(context, tx)) throw new AppError("conflict", "Chưa đủ điều kiện đặt lịch hoặc vật phẩm đang do kho/tranh chấp xử lý");
         if (!Number.isFinite(date.getTime()) || date.getTime() < now().getTime() + 60_000 || date.getTime() > now().getTime() + 90 * 86_400_000)
           throw new AppError("invalid_input", "Lịch hẹn phải sau hiện tại ít nhất 1 phút và trong 90 ngày");
-        if (!await repo.pointExists(input.handoverPointId, tx)) throw new AppError("invalid_input", "Điểm hẹn không còn hoạt động");
+        if (input.handoverPointId && !await repo.pointExists(input.handoverPointId, tx)) throw new AppError("invalid_input", "Điểm hẹn không còn hoạt động");
         if (await repo.active(input.claimId, tx)) throw new AppError("conflict", "Cuộc trao đổi đã có lịch hẹn đang hoạt động");
         const id = options.id();
-        await repo.create({ id, ...input, postId: context.postId, proposerId: userId, proposedAt: date }, tx);
+        await repo.create({ id, claimId: input.claimId, handoverPointId: input.handoverPointId ?? null,
+          customLocation: location ?? null, postId: context.postId, proposerId: userId, proposedAt: date }, tx);
         await repo.event({ id: options.id(), appointmentId: id, actorId: userId, action: "PROPOSED", key: input.requestKey, hash }, tx);
         const a = (await repo.find(id, tx))!; await notify(a, "PROPOSED", tx); return a;
       });

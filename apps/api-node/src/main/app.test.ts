@@ -190,7 +190,7 @@ test("appointment, item journey and global audit routes enforce auth, roles and 
   const validate=authService.validateAccessSession;
   authService.validateAccessSession=async()=>true;
   const application=createApp({services:{...testServices,
-    appointmentService:{...testServices.appointmentService,list:async()=>({results:[],total:0})},
+    appointmentService:{...testServices.appointmentService,list:async()=>({results:[],total:0}),create:async(_user,input)=>({id:userId,...input} as never)},
     activityService:{...testServices.activityService,audit:async()=>({results:[],total:0})}}});
   const server=application.listen(0,"127.0.0.1");await once(server,"listening");const url=`http://127.0.0.1:${(server.address() as AddressInfo).port}`;
   try{
@@ -202,6 +202,33 @@ test("appointment, item journey and global audit routes enforce auth, roles and 
     const invalid=await fetch(`${url}/api/appointments`,{method:"POST",headers:jsonHeaders(["USER"]),body:JSON.stringify({claimId:"wrong",proposedAt:"not-a-date"})});
     assert.equal(invalid.status,422);assert.match(invalid.headers.get("content-type")??"",/json/);
     assert.equal((await fetch(`${url}/api/appointments?page=-1`,{headers:jsonHeaders(["USER"])})).status,422);
+    const proposal={claimId:userId,proposedAt:"2026-10-11T01:00:00Z",requestKey:userId};
+    const custom=await fetch(`${url}/api/appointments`,{method:"POST",headers:jsonHeaders(["USER"]),body:JSON.stringify({...proposal,customLocation:"  Library entrance  "})});
+    assert.equal(custom.status,201);assert.equal((await custom.json()).customLocation,"Library entrance");
+    for(const location of [{},{customLocation:"ab"},{customLocation:"x".repeat(256)},{customLocation:"Gate\nA"},{handoverPointId:userId,customLocation:"Gate A"}]){
+      assert.equal((await fetch(`${url}/api/appointments`,{method:"POST",headers:jsonHeaders(["USER"]),body:JSON.stringify({...proposal,...location})})).status,422);
+    }
+  }finally{authService.validateAccessSession=validate;server.close();await once(server,"close");}
+});
+
+test("journey photo route authenticates, validates and serves uncached binary without provider references",async()=>{
+  const validate=authService.validateAccessSession;authService.validateAccessSession=async()=>true;
+  const calls:unknown[][]=[];const body=Buffer.from([0xff,0xd8,0xff,0xe0]);
+  const application=createApp({services:{...testServices,activityService:{...testServices.activityService,
+    journeyImage:async(...args)=>{calls.push(args);return {body,contentType:"image/jpeg"};}}}});
+  const server=application.listen(0,"127.0.0.1");await once(server,"listening");
+  const url=`http://127.0.0.1:${(server.address() as AddressInfo).port}/api/posts/${userId}/journey/images/RETURN/${configId}`;
+  try{
+    assert.equal((await fetch(url)).status,401);assert.equal(calls.length,0);
+    for(const endpoint of [url.replace("RETURN","DOCUMENT"),url.replace(configId,"wrong"),`${url}?asOf=wrong`]){
+      const invalid=await fetch(endpoint,{headers:jsonHeaders(["USER"])});assert.equal(invalid.status,422);assert.match(invalid.headers.get("content-type")??"",/json/);
+    }
+    assert.equal(calls.length,0);
+    const asOf="2026-10-10T00:00:00Z";const response=await fetch(`${url}?asOf=${encodeURIComponent(asOf)}`,{headers:jsonHeaders(["USER"])});
+    assert.equal(response.status,200);assert.equal(response.headers.get("content-type"),"image/jpeg");
+    assert.match(response.headers.get("cache-control")??"",/private.*no-store/);assert.match(response.headers.get("vary")??"",/Authorization/);
+    assert.equal(response.headers.get("x-content-type-options"),"nosniff");assert.deepEqual(Buffer.from(await response.arrayBuffer()),body);
+    assert.deepEqual(calls[0]?.slice(1),[userId,"RETURN",configId,asOf]);
   }finally{authService.validateAccessSession=validate;server.close();await once(server,"close");}
 });
 

@@ -4,7 +4,10 @@ import type { AuthMiddleware } from "../../../../shared/interfaces/http/auth.mid
 import type { createAppointmentUseCases } from "../../application/appointment.use-cases.js";
 
 const uuid = z.string().uuid();
-const proposal = z.object({ claimId: uuid, proposedAt: z.string().datetime({ offset: true }), handoverPointId: uuid, requestKey: uuid }).strict();
+const proposal = z.object({ claimId: uuid, proposedAt: z.string().datetime({ offset: true }),
+  handoverPointId: uuid.optional(), customLocation: z.string().trim().min(3).max(255).regex(/^[^\u0000-\u001f\u007f]+$/).optional(),
+  requestKey: uuid }).strict().refine(input => Boolean(input.handoverPointId) !== (input.customLocation !== undefined),
+  { message: "Chọn một điểm bàn giao hoặc nhập địa điểm riêng", path: ["customLocation"] });
 const decision = z.object({ action: z.enum(["ACCEPT","REJECT","CANCEL","CONFIRM","DISPUTE","NO_SHOW"]), version: z.number().int().min(1), requestKey: uuid, physicallyChecked: z.boolean().optional(), reason:z.string().trim().max(500).optional() }).strict();
 export function createAppointmentRoutes(service: ReturnType<typeof createAppointmentUseCases>, auth: AuthMiddleware) {
   const routes = Router(); routes.use(auth.requireAuth);

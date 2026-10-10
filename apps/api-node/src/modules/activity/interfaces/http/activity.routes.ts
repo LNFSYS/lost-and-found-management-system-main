@@ -11,6 +11,12 @@ export function createActivityRoutes(service: ReturnType<typeof createActivityUs
   routes.get("/posts/:id/journey",auth.requireAuth,privateResponse,(req,res,next) => { const run=async() => {
     const q=z.object({page:z.coerce.number().int().min(1).max(10000).default(1),asOf:z.string().datetime({offset:true}).optional()}).parse(req.query);
     res.json(await service.journey(req.auth!,z.string().uuid().parse(req.params.id),q.page,q.asOf)); };void run().catch(next); });
+  routes.get("/posts/:id/journey/images/:kind/:imageId",auth.requireAuth,privateResponse,(req,res,next)=>{const run=async()=>{
+    const kind=z.enum(["POST","CLAIM","INTAKE","RETURN"]).parse(req.params.kind);
+    const asOf=z.string().datetime({offset:true}).optional().parse(req.query.asOf);
+    const image=await service.journeyImage(req.auth!,z.string().uuid().parse(req.params.id),kind,z.string().uuid().parse(req.params.imageId),asOf);
+    res.set("X-Content-Type-Options","nosniff").type(image.contentType).send(image.body);
+  };void run().catch(next);});
   routes.get("/admin/audit",auth.requireAuth,auth.requireAnyRole("ADMIN"),privateResponse,(req,res,next) => {const run=async()=>res.json(await service.audit(req.auth!,filters.parse(req.query)));void run().catch(next);});
   routes.get("/admin/audit/export",auth.requireAuth,auth.requireAnyRole("ADMIN"),privateResponse,(req,res,next)=>{const run=async()=>{
     const format=z.enum(["csv","json"]).default("csv").parse(req.query.format);
