@@ -15,6 +15,8 @@ export const registerSchema = z.object({
   phoneNumber: z.string().trim().max(30).optional()
 });
 export const loginSchema = z.object({ email, password: z.string().min(1).max(72) });
+export const mobileRefreshSchema = z.object({ refreshToken: z.string().trim().min(32).max(512) });
+export const mobileLogoutSchema = mobileRefreshSchema;
 export const forgotPasswordSchema = z.object({ email });
 export const resetPasswordSchema = z.object({ email, token: otp, newPassword: password });
 export const updateProfileSchema = z.object({

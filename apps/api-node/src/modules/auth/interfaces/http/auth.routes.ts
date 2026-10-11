@@ -33,6 +33,10 @@ export function createAuthRoutes({ authController, auth }: {
   authRoutes.post("/register/request-otp", otpLimit, (req, res, next) => authController.requestRegistrationOtp(req, res).catch(next));
   authRoutes.post("/register", sensitiveLimit, (req, res, next) => authController.register(req, res).catch(next));
   authRoutes.post("/login", loginLimit, (req, res, next) => authController.login(req, res).catch(next));
+  authRoutes.post("/mobile/register", sensitiveLimit, (req, res, next) => authController.mobileRegister(req, res).catch(next));
+  authRoutes.post("/mobile/login", loginLimit, (req, res, next) => authController.mobileLogin(req, res).catch(next));
+  authRoutes.post("/mobile/refresh", refreshLimit, (req, res, next) => authController.mobileRefresh(req, res).catch(next));
+  authRoutes.post("/mobile/logout", refreshLimit, (req, res, next) => authController.mobileLogout(req, res).catch(next));
   authRoutes.post("/refresh", refreshLimit, (req, res, next) => authController.refresh(req, res).catch(next));
   authRoutes.post("/logout", (req, res, next) => authController.logout(req, res).catch(next));
   authRoutes.post("/forgot-password", otpLimit, (req, res, next) => authController.forgotPassword(req, res).catch(next));

@@ -2,7 +2,7 @@ import type { CookieOptions, Request, Response } from "express";
 import { refreshCookieName } from "../../../../shared/interfaces/http/auth-cookie.js";
 import { HttpError } from "../../../../shared/interfaces/http/http-error.js";
 import type { AuthUseCases } from "../../application/auth.use-cases.js";
-import { forgotPasswordSchema, loginSchema, registerSchema, requestOtpSchema, resetPasswordSchema, updateProfileSchema } from "./auth.validator.js";
+import { forgotPasswordSchema, loginSchema, mobileLogoutSchema, mobileRefreshSchema, registerSchema, requestOtpSchema, resetPasswordSchema, updateProfileSchema } from "./auth.validator.js";
 
 export function createAuthController({ authService, refreshCookieOptions, accessTokenExpiresIn }: {
   authService: AuthUseCases;
@@ -15,6 +15,7 @@ export function createAuthController({ authService, refreshCookieOptions, access
   }
   function clearRefreshCookie(response: Response) { response.clearCookie(refreshCookieName, refreshCookieOptions()); }
   function toClientSession(result: Awaited<ReturnType<typeof authService.login>>) { return { user: result.user, accessToken: result.accessToken, accessTokenExpiresIn: accessTokenExpiresIn }; }
+  function toMobileSession(result: Awaited<ReturnType<typeof authService.login>>) { return { ...toClientSession(result), refreshToken: result.refreshToken }; }
   const authController = {
     async requestRegistrationOtp(request: Request, response: Response) {
       response.status(200).json(await authService.requestRegistrationOtp(requestOtpSchema.parse(request.body)));
@@ -28,6 +29,22 @@ export function createAuthController({ authService, refreshCookieOptions, access
       const result = await authService.login(loginSchema.parse(request.body), meta(request));
       setRefreshCookie(response, result.refreshToken, result.refreshExpiresAt);
       response.json(toClientSession(result));
+    },
+    async mobileRegister(request: Request, response: Response) {
+      const result = await authService.register(registerSchema.parse(request.body), meta(request));
+      response.status(201).json(toMobileSession(result));
+    },
+    async mobileLogin(request: Request, response: Response) {
+      response.json(toMobileSession(await authService.login(loginSchema.parse(request.body), meta(request))));
+    },
+    async mobileRefresh(request: Request, response: Response) {
+      const { refreshToken } = mobileRefreshSchema.parse(request.body);
+      response.json(toMobileSession(await authService.refresh(refreshToken, meta(request))));
+    },
+    async mobileLogout(request: Request, response: Response) {
+      const { refreshToken } = mobileLogoutSchema.parse(request.body);
+      await authService.logout(refreshToken);
+      response.status(204).send();
     },
     async refresh(request: Request, response: Response) {
       const result = await authService.refresh(request.cookies?.[refreshCookieName], meta(request));

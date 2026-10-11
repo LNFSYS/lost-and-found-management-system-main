@@ -1,0 +1,28 @@
+{
+  "expo": {
+    "name": "FPTU Lost & Found",
+    "slug": "fptu-lost-found-mobile",
+    "scheme": "lnfs",
+    "version": "0.1.0",
+    "platforms": ["android"],
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "android": {
+      "package": "vn.edu.fptu.lnfs",
+      "versionCode": 1,
+      "adaptiveIcon": {
+        "backgroundColor": "#F5F9FE"
+      }
+    },
+    "plugins": [
+      [
+        "expo-secure-store",
+        {
+          "configureAndroidBackup": true
+        }
+      ],
+      "expo-status-bar"
+    ]
+  }
+}

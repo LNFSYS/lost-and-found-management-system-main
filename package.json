@@ -2,13 +2,18 @@
   "name": "fptu-lost-found-system",
   "private": true,
   "version": "0.1.0",
-  "description": "FPTU Lost & Found web application with planned Progressive Web App support.",
-  "workspaces": ["apps/*"],
+  "description": "FPTU Lost & Found web, API, and Android mobile applications.",
+  "workspaces": [
+    "apps/api-node",
+    "apps/web"
+  ],
   "scripts": {
     "start": "npm run dev",
     "dev": "concurrently -n API,WEB -c blue,green \"npm run dev:api\" \"npm run dev:web\"",
     "dev:api": "npm --workspace @lnfs/api-node run dev",
     "dev:web": "npm --workspace @lnfs/web run dev",
+    "mobile:start": "npm --prefix apps/mobile run start",
+    "mobile:typecheck": "npm --prefix apps/mobile run typecheck",
     "migrate": "npm --workspace @lnfs/api-node run migrate",
     "migrate:preflight": "npm --workspace @lnfs/api-node run migrate:preflight",
     "migrate:reconcile-claim": "npm --workspace @lnfs/api-node run migrate:reconcile-claim --",
@@ -20,7 +25,9 @@
     "build": "npm --workspace @lnfs/api-node run build && npm --workspace @lnfs/web run build"
   },
   "devDependencies": {
-    "concurrently": "^9.1.2"
+    "@types/react": "^18.3.31",
+    "concurrently": "^9.1.2",
+    "react": "^18.3.1"
   },
   "engines": {
     "node": ">=20"
