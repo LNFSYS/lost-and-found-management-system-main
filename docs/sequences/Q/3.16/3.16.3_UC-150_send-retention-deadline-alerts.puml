@@ -1,6 +1,7 @@
 @startuml
 title 3.16.3 Send retention deadline alerts
-caption UC-150 | Partial
+caption UC-150
+' Catalogue: UC-150 | Partial
 skinparam monochrome true
 skinparam shadowing false
 skinparam roundcorner 0
@@ -24,13 +25,15 @@ skinparam sequence {
 }
 
 ' Source: apps/api-node/src/modules/warehouse/application/warehouse.use-cases.ts
+' Main entity: notifications
 ' Main entity migration: apps/api-node/src/migrations/002_lost_found_schema.sql
-' One-table abstraction: related repository reads/writes stay inside the service.
+' Single persistence lifeline: related reads/writes remain summarized in the service.
 actor "Scheduler" as Actor
 participant "Warehouse Maintenance Task" as Page
 participant "Warehouse Service" as Service
-participant "notifications" as Table <<entity>>
+participant "NotificationRepository" as Table
 
+activate Actor
 Actor -> Page: 1: Run maintenance tick
 activate Page
 Page -> Page: 2: Check schema readiness; avoid overlapping or stopped ticks
@@ -64,10 +67,10 @@ else Schema missing or maintenance stopped
     Page --> Actor: 3.1: Pause tick and report missing-schema readiness; no new alerts
 end
 deactivate Page
+deactivate Actor
 
-legend bottom left
-PARTIAL: deduplicated post-deadline custody alerts exist. Pre-deadline alerts and general walk-in
-coverage are missing. Queued email is not confirmed SMTP delivery.
-endlegend
+' Scope note (not rendered):
+' PARTIAL: deduplicated post-deadline custody alerts exist. Pre-deadline alerts and general walk-in
+' coverage are missing. Queued email is not confirmed SMTP delivery.
 
 @enduml

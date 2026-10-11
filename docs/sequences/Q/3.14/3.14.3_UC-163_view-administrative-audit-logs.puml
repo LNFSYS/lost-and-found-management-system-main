@@ -1,6 +1,7 @@
 @startuml
 title 3.14.3 View administrative audit logs
-caption UC-163 | Implemented
+caption UC-163
+' Catalogue: UC-163 | Implemented
 skinparam monochrome true
 skinparam shadowing false
 skinparam roundcorner 0
@@ -24,14 +25,16 @@ skinparam sequence {
 }
 
 ' Source: apps/api-node/src/modules/activity/application/activity.use-cases.ts
+' Main entity: admin_audit_logs
 ' Main entity migration: apps/api-node/src/migrations/039_admin_user_and_config_audit.sql
-' One-table abstraction: related repository reads/writes stay inside the service.
+' Single persistence lifeline: related reads/writes remain summarized in the service.
 actor "Admin" as Actor
 participant "Administrative Audit Page" as Page
 participant "Activity API" as API
 participant "Activity Service" as Service
-participant "admin_audit_logs" as Table <<entity>>
+participant "ActivityRepository" as Table
 
+activate Actor
 Actor -> Page: 1: View administrative audit logs
 activate Page
 Page -> Page: 2: Select ADMIN source, keyword, actor/target, dates and page
@@ -70,9 +73,9 @@ else Missing/invalid session or required permission
 end
 deactivate API
 deactivate Page
+deactivate Actor
 
-legend bottom left
-ADMIN-source example. Cross-source aggregation is abstracted to preserve one table lifeline.
-endlegend
+' Scope note (not rendered):
+' ADMIN-source example. Cross-source aggregation is abstracted to preserve one table lifeline.
 
 @enduml

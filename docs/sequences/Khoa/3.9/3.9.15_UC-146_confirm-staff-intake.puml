@@ -1,6 +1,7 @@
 @startuml
 title 3.9.15 Confirm staff intake
-caption UC-146 | Implemented
+caption UC-146
+' Catalogue: UC-146 | Implemented
 skinparam monochrome true
 skinparam shadowing false
 skinparam roundcorner 0
@@ -24,14 +25,16 @@ skinparam sequence {
 }
 
 ' Source: apps/api-node/src/modules/warehouse/application/custody-request.use-cases.ts
+' Main entity: custody_requests
 ' Main entity migration: apps/api-node/src/migrations/053_custody_requests.sql
-' One-table abstraction: related repository reads/writes stay inside the service.
+' Single persistence lifeline: related reads/writes remain summarized in the service.
 actor "Staff / Admin" as Actor
 participant "Warehouse Operations" as Page
 participant "Warehouse API" as API
 participant "Warehouse Service" as Service
-participant "custody_requests" as Table <<entity>>
+participant "CustodyRequestRepository\nWarehouseRepository" as Table
 
+activate Actor
 Actor -> Page: 1: Open Confirm staff intake
 activate Page
 Page -> API: 2: POST /api/staff/custody-requests/:id/intake
@@ -59,9 +62,9 @@ Page --> Actor: 4.2: Show appropriate error; retain form/draft
 end
 deactivate API
 deactivate Page
+deactivate Actor
 
-legend left
-Scope: Stable intake replay returns the same item. Source/contact photos do not replace new Staff
-condition images. No automatic ownership acceptance.
-endlegend
+' Scope note (not rendered):
+' Scope: Stable intake replay returns the same item. Source/contact photos do not replace new Staff
+' condition images. No automatic ownership acceptance.
 @enduml

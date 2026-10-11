@@ -1,6 +1,7 @@
 @startuml
 title 3.16.9 Reject a disposition order
-caption UC-156 | Planned | Proposed design
+caption UC-156
+' Catalogue: UC-156 | Planned | Proposed design
 skinparam monochrome true
 skinparam shadowing false
 skinparam roundcorner 0
@@ -24,14 +25,16 @@ skinparam sequence {
 }
 
 ' Source: apps/api-node/src/modules/warehouse/application/warehouse.use-cases.ts
+' Main entity: warehouse_action_approvals
 ' Main entity migration: apps/api-node/src/migrations/054_custody_safety_contract.sql
-' One-table abstraction: related repository reads/writes stay inside the service.
+' Single persistence lifeline: related reads/writes remain summarized in the service.
 actor "Admin" as Actor
 participant "Disposition Review (proposed)" as Page
 participant "Staff API" as API
 participant "Warehouse Service" as Service
-participant "warehouse_action_approvals" as Table <<entity>>
+participant "WarehouseRepository" as Table
 
+activate Actor
 Actor -> Page: 1: Reject a disposition order
 activate Page
 Page -> Page: 2: Choose rejection and enter reason
@@ -73,10 +76,10 @@ else Missing/invalid session or required permission
 end
 deactivate API
 deactivate Page
+deactivate Actor
 
-legend bottom left
-PLANNED: rejection API/UI is absent; warehouse_action_approvals does not yet support a REJECTED
-state. Schema extension is proposed only.
-endlegend
+' Scope note (not rendered):
+' PLANNED: rejection API/UI is absent; warehouse_action_approvals does not yet support a REJECTED
+' state. Schema extension is proposed only.
 
 @enduml

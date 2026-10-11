@@ -1,6 +1,7 @@
 @startuml
 title 3.7.10 Send an image in a private conversation
-caption UC-120 | Implemented
+caption UC-120
+' Catalogue: UC-120 | Implemented
 skinparam monochrome true
 skinparam shadowing false
 skinparam roundcorner 0
@@ -24,14 +25,16 @@ skinparam sequence {
 }
 
 ' Source: apps/api-node/src/modules/claims/application/claim.use-cases.ts
+' Main entity: chat_messages
 ' Main entity migration: apps/api-node/src/migrations/002_lost_found_schema.sql
-' One-table abstraction: related repository reads/writes stay inside the service.
+' Single persistence lifeline: related reads/writes remain summarized in the service.
 actor "Claimant / Finder" as Actor
 participant "Private Conversation" as Page
 participant "Claims API" as API
 participant "Claim Chat Service" as Service
-participant "chat_messages" as Table <<entity>>
+participant "ClaimRepository" as Table
 
+activate Actor
 Actor -> Page: 1: Open Send an image in a private conversation
 activate Page
 Page -> API: 2: POST /api/claims/:id/messages/images (multipart)
@@ -79,9 +82,9 @@ Page --> Actor: 4.2: Show appropriate error; retain form/draft
 end
 deactivate API
 deactivate Page
+deactivate Actor
 
-legend left
-Scope: IMAGE and protected PHOTO evidence persist atomically. Stable replay avoids duplicates;
-storage/unknown DB outcomes are not fake success. Late client callbacks must match room/generation.
-endlegend
+' Scope note (not rendered):
+' Scope: IMAGE and protected PHOTO evidence persist atomically. Stable replay avoids duplicates;
+' storage/unknown DB outcomes are not fake success. Late client callbacks must match room/generation.
 @enduml

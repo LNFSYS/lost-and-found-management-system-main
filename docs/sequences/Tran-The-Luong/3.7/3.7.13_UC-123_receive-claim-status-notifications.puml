@@ -1,6 +1,7 @@
 @startuml
 title 3.7.13 Receive claim status notifications
-caption UC-123 | Partial | Implemented slice
+caption UC-123
+' Catalogue: UC-123 | Partial | Implemented slice
 skinparam monochrome true
 skinparam shadowing false
 skinparam roundcorner 0
@@ -24,13 +25,15 @@ skinparam sequence {
 }
 
 ' Source: apps/api-node/src/modules/claims/application/claim.use-cases.ts
+' Main entity: notifications
 ' Main entity migration: apps/api-node/src/migrations/002_lost_found_schema.sql
-' One-table abstraction: related repository reads/writes stay inside the service.
+' Single persistence lifeline: related reads/writes remain summarized in the service.
 actor "System" as Actor
 participant "Claim Notification Producer" as Page
 participant "Claim Chat Service" as Service
-participant "notifications" as Table <<entity>>
+participant "NotificationRepository" as Table
 
+activate Actor
 Actor -> Page: 1: Persist notification with claim decision
 activate Page
 Page -> Service: 2: Run task with current eligible context
@@ -46,9 +49,9 @@ Service --> Page: 8: Claim notification/outbox
 Page --> Actor: 9: Record task outcome
 deactivate Service
 deactivate Page
+deactivate Actor
 
-legend left
-Scope: Partial: existing producers cover implemented claim paths. Full escalation/change/channel
-coverage is incomplete. Queuing is not proof of inbox delivery.
-endlegend
+' Scope note (not rendered):
+' Scope: Partial: existing producers cover implemented claim paths. Full escalation/change/channel
+' coverage is incomplete. Queuing is not proof of inbox delivery.
 @enduml

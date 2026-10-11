@@ -1,6 +1,7 @@
 @startuml
 title 3.16.6 Create a disposition order
-caption UC-153 | Partial
+caption UC-153
+' Catalogue: UC-153 | Partial
 skinparam monochrome true
 skinparam shadowing false
 skinparam roundcorner 0
@@ -24,14 +25,16 @@ skinparam sequence {
 }
 
 ' Source: apps/api-node/src/modules/warehouse/application/warehouse.use-cases.ts
+' Main entity: warehouse_action_approvals
 ' Main entity migration: apps/api-node/src/migrations/054_custody_safety_contract.sql
-' One-table abstraction: related repository reads/writes stay inside the service.
+' Single persistence lifeline: related reads/writes remain summarized in the service.
 actor "Admin" as Actor
 participant "Administrative API Client" as Page
 participant "Staff API" as API
 participant "Warehouse Service" as Service
-participant "warehouse_action_approvals" as Table <<entity>>
+participant "WarehouseRepository" as Table
 
+activate Actor
 Actor -> Page: 1: Create a disposition order
 activate Page
 Page -> Page: 2: Choose terminal target and enter reason for one item
@@ -76,10 +79,10 @@ else Missing/invalid session or required permission
 end
 deactivate API
 deactivate Page
+deactivate Actor
 
-legend bottom left
-PARTIAL: per-item request API exists, not a complete order screen. Request creation does not check
-eligibility; execution rechecks every safety gate.
-endlegend
+' Scope note (not rendered):
+' PARTIAL: per-item request API exists, not a complete order screen. Request creation does not check
+' eligibility; execution rechecks every safety gate.
 
 @enduml

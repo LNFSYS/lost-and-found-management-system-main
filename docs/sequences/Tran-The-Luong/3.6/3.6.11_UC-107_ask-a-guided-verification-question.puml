@@ -1,6 +1,7 @@
 @startuml
 title 3.6.11 Ask a guided verification question
-caption UC-107 | Implemented
+caption UC-107
+' Catalogue: UC-107 | Implemented
 skinparam monochrome true
 skinparam shadowing false
 skinparam roundcorner 0
@@ -24,14 +25,16 @@ skinparam sequence {
 }
 
 ' Source: apps/api-node/src/modules/claims/application/claim.use-cases.ts
+' Main entity: item_verification_questions
 ' Main entity migration: apps/api-node/src/migrations/029_ai_verification_questions.sql
-' One-table abstraction: related repository reads/writes stay inside the service.
+' Single persistence lifeline: related reads/writes remain summarized in the service.
 actor "Finder" as Actor
 participant "Private Claims Page" as Page
 participant "Claims API" as API
 participant "Claim Service" as Service
-participant "item_verification_questions" as Table <<entity>>
+participant "ClaimRepository" as Table
 
+activate Actor
 Actor -> Page: 1: Open Ask a guided verification question
 activate Page
 Page -> API: 2: POST /api/claims/:claimId/verification/questions
@@ -68,9 +71,9 @@ Page --> Actor: 4.2: Show appropriate error; retain form/draft
 end
 deactivate API
 deactivate Page
+deactivate Actor
 
-legend left
-Scope: This is the structured question path. Clicking an image suggestion instead uses UC-042
-ordinary text: it does not create an answered assignment or score.
-endlegend
+' Scope note (not rendered):
+' Scope: This is the structured question path. Clicking an image suggestion instead uses UC-042
+' ordinary text: it does not create an answered assignment or score.
 @enduml

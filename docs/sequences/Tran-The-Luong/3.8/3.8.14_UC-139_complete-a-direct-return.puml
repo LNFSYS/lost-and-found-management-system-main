@@ -1,6 +1,7 @@
 @startuml
 title 3.8.14 Complete a direct return
-caption UC-139 | Implemented
+caption UC-139
+' Catalogue: UC-139 | Implemented
 skinparam monochrome true
 skinparam shadowing false
 skinparam roundcorner 0
@@ -24,13 +25,15 @@ skinparam sequence {
 }
 
 ' Source: apps/api-node/src/modules/appointments/application/appointment.use-cases.ts
+' Main entity: return_appointments
 ' Main entity migration: apps/api-node/src/migrations/002_lost_found_schema.sql
-' One-table abstraction: related repository reads/writes stay inside the service.
+' Single persistence lifeline: related reads/writes remain summarized in the service.
 actor "System" as Actor
 participant "Direct Return Completion" as Page
 participant "Appointment Service" as Service
-participant "return_appointments" as Table <<entity>>
+participant "AppointmentRepository" as Table
 
+activate Actor
 Actor -> Page: 1: Complete inside final positive participant confirmation
 activate Page
 Page -> Service: 2: Run task with current eligible context
@@ -56,8 +59,8 @@ Page --> Actor: 6.3: Record failure without reporting success
 end
 deactivate Service
 deactivate Page
+deactivate Actor
 
-legend left
-Scope: An appointment is not completed by a single confirmation, photo approval or meetup proposal.
-endlegend
+' Scope note (not rendered):
+' Scope: An appointment is not completed by a single confirmation, photo approval or meetup proposal.
 @enduml

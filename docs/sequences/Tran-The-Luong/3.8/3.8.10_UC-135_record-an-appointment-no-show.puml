@@ -1,6 +1,7 @@
 @startuml
 title 3.8.10 Record an appointment no-show
-caption UC-135 | Implemented
+caption UC-135
+' Catalogue: UC-135 | Implemented
 skinparam monochrome true
 skinparam shadowing false
 skinparam roundcorner 0
@@ -24,14 +25,16 @@ skinparam sequence {
 }
 
 ' Source: apps/api-node/src/modules/appointments/application/appointment.use-cases.ts
+' Main entity: return_appointments
 ' Main entity migration: apps/api-node/src/migrations/002_lost_found_schema.sql
-' One-table abstraction: related repository reads/writes stay inside the service.
+' Single persistence lifeline: related reads/writes remain summarized in the service.
 actor "Claimant / Finder" as Actor
 participant "Appointments Page" as Page
 participant "Appointments API" as API
 participant "Appointment Service" as Service
-participant "return_appointments" as Table <<entity>>
+participant "AppointmentRepository" as Table
 
+activate Actor
 Actor -> Page: 1: Open Record an appointment no-show
 activate Page
 Page -> API: 2: POST /api/appointments/:id/actions (NO_SHOW)
@@ -70,9 +73,9 @@ Page --> Actor: 4.2: Show appropriate error; retain form/draft
 end
 deactivate API
 deactivate Page
+deactivate Actor
 
-legend left
-Scope: No automatic reputation penalty or completed return. Positive/disputed handover must be
-reviewed instead.
-endlegend
+' Scope note (not rendered):
+' Scope: No automatic reputation penalty or completed return. Positive/disputed handover must be
+' reviewed instead.
 @enduml

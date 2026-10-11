@@ -1,6 +1,7 @@
 @startuml
 title 3.5.4 Anonymize matching training data
-caption UC-103 | Planned | Proposed design
+caption UC-103
+' Catalogue: UC-103 | Planned | Proposed design
 skinparam monochrome true
 skinparam shadowing false
 skinparam roundcorner 0
@@ -24,13 +25,15 @@ skinparam sequence {
 }
 
 ' Source: docs/requirements/uc.md
+' Main entity: matching_training_examples (proposed)
 ' Main entity migration: Proposed entity; no migration
-' One-table abstraction: related repository reads/writes stay inside the service.
+' Single persistence lifeline: related reads/writes remain summarized in the service.
 actor "System" as Actor
 participant "Proposed Anonymization Task" as Page
 participant "Proposed Training Service" as Service
-participant "matching_training_examples" as Table <<proposed entity>>
+participant "MatchingTrainingRepository (proposed)" as Table
 
+activate Actor
 Actor -> Page: 1: Anonymize approved training candidates
 activate Page
 Page -> Service: 2: Run task with current eligible context
@@ -49,9 +52,9 @@ Service --> Page: 9: Sanitized dataset for approval
 Page --> Actor: 10: Record task outcome
 deactivate Service
 deactivate Page
+deactivate Actor
 
-legend left
-Scope: No active anonymization pipeline or entity migration. Raw images/private claim evidence
-require separately approved policy.
-endlegend
+' Scope note (not rendered):
+' Scope: No active anonymization pipeline or entity migration. Raw images/private claim evidence
+' require separately approved policy.
 @enduml

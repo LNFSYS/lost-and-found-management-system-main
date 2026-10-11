@@ -1,6 +1,7 @@
 @startuml
 title 3.4.4 Generate matches after post changes
-caption UC-029 | Implemented
+caption UC-029
+' Catalogue: UC-029 | Implemented
 skinparam monochrome true
 skinparam shadowing false
 skinparam roundcorner 0
@@ -24,13 +25,15 @@ skinparam sequence {
 }
 
 ' Source: apps/api-node/src/modules/matching/application/matching.use-cases.ts
+' Main entity: match_results
 ' Main entity migration: apps/api-node/src/migrations/002_lost_found_schema.sql
-' One-table abstraction: related repository reads/writes stay inside the service.
+' Single persistence lifeline: related reads/writes remain summarized in the service.
 actor "System" as Actor
 participant "Post Change Task" as Page
 participant "Matching Service" as Service
-participant "match_results" as Table <<entity>>
+participant "MatchingRepository" as Table
 
+activate Actor
 Actor -> Page: 1: runForPost(postId) after committed post change
 activate Page
 Page -> Service: 2: Run task with current eligible context
@@ -53,8 +56,8 @@ Page --> Actor: 7.4: Record failure without reporting success
 end
 deactivate Service
 deactivate Page
+deactivate Actor
 
-legend left
-Scope: Best-effort post-change matching is not a transaction with the post write.
-endlegend
+' Scope note (not rendered):
+' Scope: Best-effort post-change matching is not a transaction with the post write.
 @enduml

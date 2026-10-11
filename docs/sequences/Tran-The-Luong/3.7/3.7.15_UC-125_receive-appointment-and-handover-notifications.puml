@@ -1,6 +1,7 @@
 @startuml
 title 3.7.15 Receive appointment and handover notifications
-caption UC-125 | Partial | Implemented slice
+caption UC-125
+' Catalogue: UC-125 | Partial | Implemented slice
 skinparam monochrome true
 skinparam shadowing false
 skinparam roundcorner 0
@@ -24,13 +25,15 @@ skinparam sequence {
 }
 
 ' Source: apps/api-node/src/modules/appointments/application/appointment.use-cases.ts
+' Main entity: notifications
 ' Main entity migration: apps/api-node/src/migrations/002_lost_found_schema.sql
-' One-table abstraction: related repository reads/writes stay inside the service.
+' Single persistence lifeline: related reads/writes remain summarized in the service.
 actor "System" as Actor
 participant "Appointment Event Producer" as Page
 participant "Appointment Notification Service" as Service
-participant "notifications" as Table <<entity>>
+participant "NotificationRepository" as Table
 
+activate Actor
 Actor -> Page: 1: Persist appointment/handover event notifications
 activate Page
 Page -> Service: 2: Run task with current eligible context
@@ -46,9 +49,9 @@ Service --> Page: 8: Event notification/outbox
 Page --> Actor: 9: Record task outcome
 deactivate Service
 deactivate Page
+deactivate Actor
 
-legend left
-Scope: Partial: proposals, decisions, cancellation, reminders, no-show and peer outcomes exist.
-Counter-proposal/rescheduling producers and full channel coverage remain missing.
-endlegend
+' Scope note (not rendered):
+' Scope: Partial: proposals, decisions, cancellation, reminders, no-show and peer outcomes exist.
+' Counter-proposal/rescheduling producers and full channel coverage remain missing.
 @enduml

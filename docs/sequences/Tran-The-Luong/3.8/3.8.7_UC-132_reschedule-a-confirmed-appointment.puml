@@ -1,6 +1,7 @@
 @startuml
 title 3.8.7 Reschedule a confirmed appointment
-caption UC-132 | Planned | Proposed design
+caption UC-132
+' Catalogue: UC-132 | Planned | Proposed design
 skinparam monochrome true
 skinparam shadowing false
 skinparam roundcorner 0
@@ -24,14 +25,16 @@ skinparam sequence {
 }
 
 ' Source: docs/requirements/uc.md
+' Main entity: return_appointments
 ' Main entity migration: apps/api-node/src/migrations/002_lost_found_schema.sql
-' One-table abstraction: related repository reads/writes stay inside the service.
+' Single persistence lifeline: related reads/writes remain summarized in the service.
 actor "Claimant / Finder" as Actor
 participant "Proposed Appointment Reschedule" as Page
 participant "Proposed Appointments API" as API
 participant "Appointment Service" as Service
-participant "return_appointments" as Table <<entity>>
+participant "AppointmentRepository" as Table
 
+activate Actor
 Actor -> Page: 1: Open Reschedule a confirmed appointment
 activate Page
 Page -> API: 2: Submit mutually agreed reschedule (proposed interface)
@@ -61,9 +64,9 @@ Page --> Actor: 4.2: Show appropriate error; retain form/draft
 end
 deactivate API
 deactivate Page
+deactivate Actor
 
-legend left
-Scope: Planned: current cancel/recreate does not implement negotiated rescheduling. No active
-replacement-proposal API.
-endlegend
+' Scope note (not rendered):
+' Scope: Planned: current cancel/recreate does not implement negotiated rescheduling. No active
+' replacement-proposal API.
 @enduml

@@ -1,6 +1,7 @@
 @startuml
 title 3.13.2 Review report and apply moderation
-caption UC-083 | Implemented
+caption UC-083
+' Catalogue: UC-083 | Implemented
 skinparam monochrome true
 skinparam shadowing false
 skinparam roundcorner 0
@@ -24,14 +25,16 @@ skinparam sequence {
 }
 
 ' Source: apps/api-node/src/modules/admin/application/admin-reporting.use-cases.ts
+' Main entity: reports
 ' Main entity migration: apps/api-node/src/migrations/002_lost_found_schema.sql
-' One-table abstraction: related repository reads/writes stay inside the service.
+' Single persistence lifeline: related reads/writes remain summarized in the service.
 actor "Admin" as Actor
 participant "Moderation Review Page" as Page
 participant "Admin API" as API
 participant "Reporting Service" as Service
-participant "reports" as Table <<entity>>
+participant "AdminReportingRepository" as Table
 
+activate Actor
 Actor -> Page: 1: Review report and apply moderation
 activate Page
 Page -> Page: 2: Choose action and enter reason
@@ -90,9 +93,9 @@ else Missing/invalid session or required permission
 end
 deactivate API
 deactivate Page
+deactivate Actor
 
-legend bottom left
-Related target updates and moderation/admin audit writes are internal service operations.
-endlegend
+' Scope note (not rendered):
+' Related target updates and moderation/admin audit writes are internal service operations.
 
 @enduml

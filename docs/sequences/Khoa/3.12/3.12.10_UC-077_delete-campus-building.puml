@@ -1,6 +1,7 @@
 @startuml
 title 3.12.10 Delete campus building
-caption UC-077 | Implemented
+caption UC-077
+' Catalogue: UC-077 | Implemented
 skinparam monochrome true
 skinparam shadowing false
 skinparam roundcorner 0
@@ -24,14 +25,16 @@ skinparam sequence {
 }
 
 ' Source: apps/api-node/src/modules/admin/application/admin-catalog.use-cases.ts
+' Main entity: campus_buildings
 ' Main entity migration: apps/api-node/src/migrations/002_lost_found_schema.sql
-' One-table abstraction: related repository reads/writes stay inside the service.
+' Single persistence lifeline: related reads/writes remain summarized in the service.
 actor "Admin" as Actor
 participant "Master Data Administration" as Page
 participant "Admin API" as API
 participant "Admin Catalog Service" as Service
-participant "campus_buildings" as Table <<entity>>
+participant "AdminCatalogRepository" as Table
 
+activate Actor
 Actor -> Page: 1: Open Delete campus building
 activate Page
 Page -> API: 2: DELETE /api/admin/buildings/:id
@@ -65,9 +68,9 @@ Page --> Actor: 4.2: Show appropriate error; retain form/draft
 end
 deactivate API
 deactivate Page
+deactivate Actor
 
-legend left
-Related tables, authorization, transactions and audit remain inside the service. Catalogue status is
-not deployment or manual acceptance.
-endlegend
+' Scope note (not rendered):
+' Related tables, authorization, transactions and audit remain inside the service. Catalogue status is
+' not deployment or manual acceptance.
 @enduml

@@ -1,6 +1,7 @@
 @startuml
 title 3.6.7 Withdraw a claim request
-caption UC-038 | Implemented
+caption UC-038
+' Catalogue: UC-038 | Implemented
 skinparam monochrome true
 skinparam shadowing false
 skinparam roundcorner 0
@@ -24,14 +25,16 @@ skinparam sequence {
 }
 
 ' Source: apps/api-node/src/modules/claims/application/claim.use-cases.ts
+' Main entity: claims
 ' Main entity migration: apps/api-node/src/migrations/002_lost_found_schema.sql
-' One-table abstraction: related repository reads/writes stay inside the service.
+' Single persistence lifeline: related reads/writes remain summarized in the service.
 actor "Claimant" as Actor
 participant "Private Claims Page" as Page
 participant "Claims API" as API
 participant "Claim Service" as Service
-participant "claims" as Table <<entity>>
+participant "ClaimRepository" as Table
 
+activate Actor
 Actor -> Page: 1: Open Withdraw a claim request
 activate Page
 Page -> API: 2: POST /api/claims/:claimId/withdraw
@@ -66,9 +69,9 @@ Page --> Actor: 4.2: Show appropriate error; retain form/draft
 end
 deactivate API
 deactivate Page
+deactivate Actor
 
-legend left
-Related tables, authorization, transactions and audit remain inside the service. Catalogue status is
-not deployment or manual acceptance.
-endlegend
+' Scope note (not rendered):
+' Related tables, authorization, transactions and audit remain inside the service. Catalogue status is
+' not deployment or manual acceptance.
 @enduml

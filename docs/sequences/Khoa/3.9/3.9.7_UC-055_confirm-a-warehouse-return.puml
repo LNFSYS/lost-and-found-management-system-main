@@ -1,6 +1,7 @@
 @startuml
 title 3.9.7 Confirm a warehouse return
-caption UC-055 | Implemented
+caption UC-055
+' Catalogue: UC-055 | Implemented
 skinparam monochrome true
 skinparam shadowing false
 skinparam roundcorner 0
@@ -24,14 +25,16 @@ skinparam sequence {
 }
 
 ' Source: apps/api-node/src/modules/warehouse/application/warehouse.use-cases.ts
+' Main entity: warehouse_items
 ' Main entity migration: apps/api-node/src/migrations/010_notifications_and_warehouse.sql
-' One-table abstraction: related repository reads/writes stay inside the service.
+' Single persistence lifeline: related reads/writes remain summarized in the service.
 actor "Staff / Admin" as Actor
 participant "Warehouse Operations" as Page
 participant "Warehouse API" as API
 participant "Warehouse Service" as Service
-participant "warehouse_items" as Table <<entity>>
+participant "WarehouseRepository" as Table
 
+activate Actor
 Actor -> Page: 1: Open Confirm a warehouse return
 activate Page
 Page -> API: 2: POST /api/staff/warehouse-items/:id/return
@@ -67,9 +70,9 @@ Page --> Actor: 4.2: Show appropriate error; retain form/draft
 end
 deactivate API
 deactivate Page
+deactivate Actor
 
-legend left
-Scope: Online claims require explicit Finder or post-intake Staff verification. Intake/photo
-approval never verifies ownership. EXPIRED but undisposed items retain the same return safeguards.
-endlegend
+' Scope note (not rendered):
+' Scope: Online claims require explicit Finder or post-intake Staff verification. Intake/photo
+' approval never verifies ownership. EXPIRED but undisposed items retain the same return safeguards.
 @enduml

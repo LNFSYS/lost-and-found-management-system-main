@@ -1,6 +1,7 @@
 @startuml
 title 3.6.15 Escalate a claim for staff support
-caption UC-111 | Partial | Implemented slice
+caption UC-111
+' Catalogue: UC-111 | Partial | Implemented slice
 skinparam monochrome true
 skinparam shadowing false
 skinparam roundcorner 0
@@ -24,14 +25,16 @@ skinparam sequence {
 }
 
 ' Source: apps/api-node/src/modules/claims/application/claim.use-cases.ts
+' Main entity: custody_requests
 ' Main entity migration: apps/api-node/src/migrations/053_custody_requests.sql
-' One-table abstraction: related repository reads/writes stay inside the service.
+' Single persistence lifeline: related reads/writes remain summarized in the service.
 actor "Finder" as Actor
 participant "Private Claims Page" as Page
 participant "Claims API" as API
 participant "Claim Service" as Service
-participant "custody_requests" as Table <<entity>>
+participant "CustodyRequestRepository" as Table
 
+activate Actor
 Actor -> Page: 1: Open Escalate a claim for staff support
 activate Page
 Page -> API: 2: POST /api/claims/:id/verification/decision (ESCALATE_TO_CUSTODY)
@@ -67,9 +70,9 @@ Page --> Actor: 4.2: Show appropriate error; retain form/draft
 end
 deactivate API
 deactivate Page
+deactivate Actor
 
-legend left
-Scope: Partial: Finder custody escalation is implemented. General escalation by both participants
-with assigned Staff support cases remains missing; this is not automatic ownership acceptance.
-endlegend
+' Scope note (not rendered):
+' Scope: Partial: Finder custody escalation is implemented. General escalation by both participants
+' with assigned Staff support cases remains missing; this is not automatic ownership acceptance.
 @enduml

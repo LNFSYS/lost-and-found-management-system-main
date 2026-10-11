@@ -1,6 +1,7 @@
 @startuml
 title 3.8.9 Send appointment reminders
-caption UC-134 | Implemented
+caption UC-134
+' Catalogue: UC-134 | Implemented
 skinparam monochrome true
 skinparam shadowing false
 skinparam roundcorner 0
@@ -24,13 +25,15 @@ skinparam sequence {
 }
 
 ' Source: apps/api-node/src/modules/appointments/application/appointment.use-cases.ts
+' Main entity: return_appointments
 ' Main entity migration: apps/api-node/src/migrations/002_lost_found_schema.sql
-' One-table abstraction: related repository reads/writes stay inside the service.
+' Single persistence lifeline: related reads/writes remain summarized in the service.
 actor "Scheduler" as Actor
 participant "Appointment Reminder Task" as Page
 participant "Appointment Service" as Service
-participant "return_appointments" as Table <<entity>>
+participant "AppointmentRepository" as Table
 
+activate Actor
 Actor -> Page: 1: queueReminders() at configured lead time
 activate Page
 Page -> Service: 2: Run task with current eligible context
@@ -50,9 +53,9 @@ Service --> Page: 10: Queued reminder count
 Page --> Actor: 11: Record task outcome
 deactivate Service
 deactivate Page
+deactivate Actor
 
-legend left
-Scope: Default lead is 30 minutes. Existing email worker honors preferences; queuing does not
-guarantee delivery before meeting time.
-endlegend
+' Scope note (not rendered):
+' Scope: Default lead is 30 minutes. Existing email worker honors preferences; queuing does not
+' guarantee delivery before meeting time.
 @enduml

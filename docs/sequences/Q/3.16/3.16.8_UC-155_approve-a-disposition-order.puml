@@ -1,6 +1,7 @@
 @startuml
 title 3.16.8 Approve a disposition order
-caption UC-155 | Partial
+caption UC-155
+' Catalogue: UC-155 | Partial
 skinparam monochrome true
 skinparam shadowing false
 skinparam roundcorner 0
@@ -24,14 +25,16 @@ skinparam sequence {
 }
 
 ' Source: apps/api-node/src/modules/warehouse/application/warehouse.use-cases.ts
+' Main entity: warehouse_action_approvals
 ' Main entity migration: apps/api-node/src/migrations/054_custody_safety_contract.sql
-' One-table abstraction: related repository reads/writes stay inside the service.
+' Single persistence lifeline: related reads/writes remain summarized in the service.
 actor "Admin" as Actor
 participant "Administrative API Client" as Page
 participant "Staff API" as API
 participant "Warehouse Service" as Service
-participant "warehouse_action_approvals" as Table <<entity>>
+participant "WarehouseRepository" as Table
 
+activate Actor
 Actor -> Page: 1: Approve a disposition order
 activate Page
 Page -> Page: 2: Select pending request to approve as a different Admin
@@ -92,10 +95,10 @@ else Missing/invalid session or required permission
 end
 deactivate API
 deactivate Page
+deactivate Actor
 
-legend bottom left
-PARTIAL: independent approval API exists; order review/approval screen is missing. Eligibility is
-rechecked at execution, not certified by approval.
-endlegend
+' Scope note (not rendered):
+' PARTIAL: independent approval API exists; order review/approval screen is missing. Eligibility is
+' rechecked at execution, not certified by approval.
 
 @enduml

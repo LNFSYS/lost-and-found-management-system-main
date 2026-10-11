@@ -1,6 +1,7 @@
 @startuml
 title 3.4.7 Notify owner about a new match
-caption UC-097 | Partial | Implemented slice
+caption UC-097
+' Catalogue: UC-097 | Partial | Implemented slice
 skinparam monochrome true
 skinparam shadowing false
 skinparam roundcorner 0
@@ -24,13 +25,15 @@ skinparam sequence {
 }
 
 ' Source: apps/api-node/src/modules/matching/application/matching.use-cases.ts
+' Main entity: notifications
 ' Main entity migration: apps/api-node/src/migrations/002_lost_found_schema.sql
-' One-table abstraction: related repository reads/writes stay inside the service.
+' Single persistence lifeline: related reads/writes remain summarized in the service.
 actor "System" as Actor
 participant "New Match Notification Task" as Page
 participant "Matching Service" as Service
-participant "notifications" as Table <<entity>>
+participant "NotificationRepository" as Table
 
+activate Actor
 Actor -> Page: 1: notifyNewMatches(postId)
 activate Page
 Page -> Service: 2: Run task with current eligible context
@@ -48,9 +51,9 @@ Service --> Page: 10: Notifications/outbox committed
 Page --> Actor: 11: Record task outcome
 deactivate Service
 deactivate Page
+deactivate Actor
 
-legend left
-Scope: Partial: producer and popup exist; deployment, matching inbox acceptance and candidate CI
-remain separate. Closed posts must not receive a new matching email.
-endlegend
+' Scope note (not rendered):
+' Scope: Partial: producer and popup exist; deployment, matching inbox acceptance and candidate CI
+' remain separate. Closed posts must not receive a new matching email.
 @enduml

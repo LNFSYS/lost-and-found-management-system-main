@@ -1,6 +1,7 @@
 @startuml
 title 3.16.2 View overdue item detail
-caption UC-149 | Partial
+caption UC-149
+' Catalogue: UC-149 | Partial
 skinparam monochrome true
 skinparam shadowing false
 skinparam roundcorner 0
@@ -24,14 +25,16 @@ skinparam sequence {
 }
 
 ' Source: apps/api-node/src/modules/warehouse/application/warehouse.use-cases.ts
+' Main entity: warehouse_items
 ' Main entity migration: apps/api-node/src/migrations/010_notifications_and_warehouse.sql
-' One-table abstraction: related repository reads/writes stay inside the service.
+' Single persistence lifeline: related reads/writes remain summarized in the service.
 actor "Staff / Admin" as Actor
 participant "Warehouse Item Detail" as Page
 participant "Staff API" as API
 participant "Warehouse Service" as Service
-participant "warehouse_items" as Table <<entity>>
+participant "WarehouseRepository" as Table
 
+activate Actor
 Actor -> Page: 1: View overdue item detail
 activate Page
 Page -> Page: 2: Select item; use existing inventory metadata
@@ -69,10 +72,10 @@ else Missing/invalid session or required permission
 end
 deactivate API
 deactivate Page
+deactivate Actor
 
-legend bottom left
-PARTIAL: detail/photos/logs exist; complete conflicts, holds and disposition eligibility context is
-missing. Images use a separate protected request.
-endlegend
+' Scope note (not rendered):
+' PARTIAL: detail/photos/logs exist; complete conflicts, holds and disposition eligibility context is
+' missing. Images use a separate protected request.
 
 @enduml

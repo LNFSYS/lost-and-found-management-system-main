@@ -1,6 +1,7 @@
 @startuml
 title 3.14.2 Export system statistics
-caption UC-085 | Implemented
+caption UC-085
+' Catalogue: UC-085 | Implemented
 skinparam monochrome true
 skinparam shadowing false
 skinparam roundcorner 0
@@ -24,14 +25,16 @@ skinparam sequence {
 }
 
 ' Source: apps/api-node/src/modules/admin/application/admin-reporting.use-cases.ts
+' Main entity: admin_audit_logs
 ' Main entity migration: apps/api-node/src/migrations/039_admin_user_and_config_audit.sql
-' One-table abstraction: related repository reads/writes stay inside the service.
+' Single persistence lifeline: related reads/writes remain summarized in the service.
 actor "Admin" as Actor
 participant "Statistics Export Panel" as Page
 participant "Admin API" as API
 participant "Reporting Service" as Service
-participant "admin_audit_logs" as Table <<entity>>
+participant "AdminAuditRepository" as Table
 
+activate Actor
 Actor -> Page: 1: Export system statistics
 activate Page
 Page -> Page: 2: Choose dates, CSV/JSON and at least one section
@@ -91,10 +94,10 @@ else Missing/invalid session or required permission
 end
 deactivate API
 deactivate Page
+deactivate Actor
 
-legend bottom left
-Aggregate reads are internal repository work. HTTP 200 returns a JSON file envelope, not an
-attachment stream.
-endlegend
+' Scope note (not rendered):
+' Aggregate reads are internal repository work. HTTP 200 returns a JSON file envelope, not an
+' attachment stream.
 
 @enduml

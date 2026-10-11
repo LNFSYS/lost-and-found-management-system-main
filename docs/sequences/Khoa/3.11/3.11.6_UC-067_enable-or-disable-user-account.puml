@@ -1,6 +1,7 @@
 @startuml
 title 3.11.6 Enable or disable user account
-caption UC-067 | Implemented
+caption UC-067
+' Catalogue: UC-067 | Implemented
 skinparam monochrome true
 skinparam shadowing false
 skinparam roundcorner 0
@@ -24,14 +25,16 @@ skinparam sequence {
 }
 
 ' Source: apps/api-node/src/modules/admin/application/admin-user.use-cases.ts
+' Main entity: users
 ' Main entity migration: apps/api-node/src/migrations/001_auth.sql
-' One-table abstraction: related repository reads/writes stay inside the service.
+' Single persistence lifeline: related reads/writes remain summarized in the service.
 actor "Admin" as Actor
 participant "User Administration" as Page
 participant "Admin API" as API
 participant "Admin User Service" as Service
-participant "users" as Table <<entity>>
+participant "AdminUserRepository" as Table
 
+activate Actor
 Actor -> Page: 1: Open Enable or disable user account
 activate Page
 Page -> API: 2: PATCH /api/admin/users/:id/status
@@ -68,8 +71,8 @@ Page --> Actor: 4.2: Show appropriate error; retain form/draft
 end
 deactivate API
 deactivate Page
+deactivate Actor
 
-legend left
-Scope: Account/session validation rejects disabled/revoked sessions, including protected SSE.
-endlegend
+' Scope note (not rendered):
+' Scope: Account/session validation rejects disabled/revoked sessions, including protected SSE.
 @enduml

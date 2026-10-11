@@ -1,6 +1,7 @@
 @startuml
 title 3.6.14 Calculate verification confidence
-caption UC-110 | Planned | Proposed design
+caption UC-110
+' Catalogue: UC-110 | Planned | Proposed design
 skinparam monochrome true
 skinparam shadowing false
 skinparam roundcorner 0
@@ -24,13 +25,15 @@ skinparam sequence {
 }
 
 ' Source: docs/requirements/uc.md
+' Main entity: claims
 ' Main entity migration: apps/api-node/src/migrations/002_lost_found_schema.sql
-' One-table abstraction: related repository reads/writes stay inside the service.
+' Single persistence lifeline: related reads/writes remain summarized in the service.
 actor "System" as Actor
 participant "Proposed Verification Task" as Page
 participant "Claim Service" as Service
-participant "claims" as Table <<entity>>
+participant "ClaimRepository" as Table
 
+activate Actor
 Actor -> Page: 1: Calculate support confidence (proposed task)
 activate Page
 Page -> Service: 2: Run task with current eligible context
@@ -45,9 +48,9 @@ Service --> Page: 7: Support confidence only
 Page --> Actor: 8: Record task outcome
 deactivate Service
 deactivate Page
+deactivate Actor
 
-legend left
-Scope: Planned: current answered-count progress is not this confidence algorithm. No active scoring
-workflow or automatic ownership decision exists.
-endlegend
+' Scope note (not rendered):
+' Scope: Planned: current answered-count progress is not this confidence algorithm. No active scoring
+' workflow or automatic ownership decision exists.
 @enduml

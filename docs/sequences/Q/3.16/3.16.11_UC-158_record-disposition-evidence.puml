@@ -1,6 +1,7 @@
 @startuml
 title 3.16.11 Record disposition evidence
-caption UC-158 | Partial
+caption UC-158
+' Catalogue: UC-158 | Partial
 skinparam monochrome true
 skinparam shadowing false
 skinparam roundcorner 0
@@ -24,14 +25,16 @@ skinparam sequence {
 }
 
 ' Source: apps/api-node/src/modules/warehouse/application/warehouse.use-cases.ts
+' Main entity: warehouse_private_proofs
 ' Main entity migration: apps/api-node/src/migrations/054_custody_safety_contract.sql
-' One-table abstraction: related repository reads/writes stay inside the service.
+' Single persistence lifeline: related reads/writes remain summarized in the service.
 actor "Staff / Admin" as Actor
 participant "Disposition API Client" as Page
 participant "Staff API" as API
 participant "Warehouse Service" as Service
-participant "warehouse_private_proofs" as Table <<entity>>
+participant "WarehouseRepository" as Table
 
+activate Actor
 Actor -> Page: 1: Record disposition evidence
 activate Page
 Page -> Page: 2: Upload protected proofs first; select 1..5 unique proof ids
@@ -100,10 +103,10 @@ else Missing/invalid session or required permission
 end
 deactivate API
 deactivate Page
+deactivate Actor
 
-legend bottom left
-PARTIAL: canonical proof-gated execution exists; dedicated disposition evidence/completion screen is
-missing. Upload precedes execution via the existing proof endpoint.
-endlegend
+' Scope note (not rendered):
+' PARTIAL: canonical proof-gated execution exists; dedicated disposition evidence/completion screen is
+' missing. Upload precedes execution via the existing proof endpoint.
 
 @enduml

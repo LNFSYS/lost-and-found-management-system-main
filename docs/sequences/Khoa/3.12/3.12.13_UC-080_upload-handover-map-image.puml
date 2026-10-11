@@ -1,6 +1,7 @@
 @startuml
 title 3.12.13 Upload handover map image
-caption UC-080 | Implemented
+caption UC-080
+' Catalogue: UC-080 | Implemented
 skinparam monochrome true
 skinparam shadowing false
 skinparam roundcorner 0
@@ -24,14 +25,16 @@ skinparam sequence {
 }
 
 ' Source: apps/api-node/src/modules/admin/application/admin-catalog.use-cases.ts
+' Main entity: handover_points
 ' Main entity migration: apps/api-node/src/migrations/002_lost_found_schema.sql
-' One-table abstraction: related repository reads/writes stay inside the service.
+' Single persistence lifeline: related reads/writes remain summarized in the service.
 actor "Admin" as Actor
 participant "Master Data Administration" as Page
 participant "Admin API" as API
 participant "Admin Catalog Service" as Service
-participant "handover_points" as Table <<entity>>
+participant "AdminCatalogRepository" as Table
 
+activate Actor
 Actor -> Page: 1: Open Upload handover map image
 activate Page
 Page -> API: 2: POST /api/admin/handover-points/:id/map-image (multipart)
@@ -60,9 +63,9 @@ Page --> Actor: 4.2: Show appropriate error; retain form/draft
 end
 deactivate API
 deactivate Page
+deactivate Actor
 
-legend left
-Scope: Current map image is a validated data URL, not private custody/photo evidence or a Cloudinary
-upload. Missing point returns 404.
-endlegend
+' Scope note (not rendered):
+' Scope: Current map image is a validated data URL, not private custody/photo evidence or a Cloudinary
+' upload. Missing point returns 404.
 @enduml

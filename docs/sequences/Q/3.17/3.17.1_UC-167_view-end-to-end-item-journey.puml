@@ -1,6 +1,7 @@
 @startuml
 title 3.17.1 View end-to-end item journey
-caption UC-167 | Implemented
+caption UC-167
+' Catalogue: UC-167 | Implemented
 skinparam monochrome true
 skinparam shadowing false
 skinparam roundcorner 0
@@ -24,14 +25,16 @@ skinparam sequence {
 }
 
 ' Source: apps/api-node/src/modules/activity/application/activity.use-cases.ts
+' Main entity: posts
 ' Main entity migration: apps/api-node/src/migrations/002_lost_found_schema.sql
-' One-table abstraction: related repository reads/writes stay inside the service.
+' Single persistence lifeline: related reads/writes remain summarized in the service.
 actor "LOST Owner / Finder" as Actor
 participant "Item Journey Page" as Page
 participant "Activity API" as API
 participant "Activity Service" as Service
-participant "posts" as Table <<entity>>
+participant "ActivityRepository" as Table
 
+activate Actor
 Actor -> Page: 1: View end-to-end item journey
 activate Page
 Page -> Page: 2: Open item journey from My Posts; read page and asOf
@@ -84,10 +87,10 @@ else Missing/invalid session or required permission
 end
 deactivate API
 deactivate Page
+deactivate Actor
 
-legend bottom left
-posts is the journey anchor. Linked event projections are internal repository work; private content
-is redacted and missing history is never invented.
-endlegend
+' Scope note (not rendered):
+' posts is the journey anchor. Linked event projections are internal repository work; private content
+' is redacted and missing history is never invented.
 
 @enduml

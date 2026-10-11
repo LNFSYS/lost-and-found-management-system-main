@@ -1,6 +1,7 @@
 @startuml
 title 3.4.10 Refresh matches periodically
-caption UC-100 | Implemented
+caption UC-100
+' Catalogue: UC-100 | Implemented
 skinparam monochrome true
 skinparam shadowing false
 skinparam roundcorner 0
@@ -24,13 +25,15 @@ skinparam sequence {
 }
 
 ' Source: apps/api-node/src/modules/matching/application/matching.use-cases.ts
+' Main entity: matching_jobs
 ' Main entity migration: apps/api-node/src/migrations/020_matching_jobs.sql
-' One-table abstraction: related repository reads/writes stay inside the service.
+' Single persistence lifeline: related reads/writes remain summarized in the service.
 actor "Scheduler" as Actor
 participant "Matching Refresh Worker" as Page
 participant "Matching Service" as Service
-participant "matching_jobs" as Table <<entity>>
+participant "MatchingRepository" as Table
 
+activate Actor
 Actor -> Page: 1: runPeriodicRefresh(interval, batch, lease)
 activate Page
 Page -> Service: 2: Run task with current eligible context
@@ -59,9 +62,9 @@ Page --> Actor: 7.5: Record failure without reporting success
 end
 deactivate Service
 deactivate Page
+deactivate Actor
 
-legend left
-Scope: Migration 060 adds lease fencing. Graceful stop waits for in-flight refresh and renewal; no
-blanket force-exit.
-endlegend
+' Scope note (not rendered):
+' Scope: Migration 060 adds lease fencing. Graceful stop waits for in-flight refresh and renewal; no
+' blanket force-exit.
 @enduml

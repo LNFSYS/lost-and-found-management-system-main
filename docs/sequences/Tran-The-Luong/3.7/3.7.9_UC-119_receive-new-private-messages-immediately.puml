@@ -1,6 +1,7 @@
 @startuml
 title 3.7.9 Receive new private messages immediately
-caption UC-119 | Partial | Implemented slice
+caption UC-119
+' Catalogue: UC-119 | Partial | Implemented slice
 skinparam monochrome true
 skinparam shadowing false
 skinparam roundcorner 0
@@ -24,14 +25,16 @@ skinparam sequence {
 }
 
 ' Source: apps/api-node/src/modules/claims/application/claim.use-cases.ts
+' Main entity: chat_messages
 ' Main entity migration: apps/api-node/src/migrations/002_lost_found_schema.sql
-' One-table abstraction: related repository reads/writes stay inside the service.
+' Single persistence lifeline: related reads/writes remain summarized in the service.
 actor "Claimant / Finder" as Actor
 participant "Private Conversation" as Page
 participant "Claims API" as API
 participant "Claim Chat Service" as Service
-participant "chat_messages" as Table <<entity>>
+participant "ClaimRepository" as Table
 
+activate Actor
 Actor -> Page: 1: Open Receive new private messages immediately
 activate Page
 Page -> API: 2: GET /api/claims/:id/messages (10-second Web polling)
@@ -56,9 +59,9 @@ Page --> Actor: 4.2: Show appropriate error; retain form/draft
 end
 deactivate API
 deactivate Page
+deactivate Actor
 
-legend left
-Scope: Partial: server SSE exists with expiry and fail-closed session checks; this Web chat uses
-polling, not an immediate SSE message subscriber. No instant-delivery claim.
-endlegend
+' Scope note (not rendered):
+' Scope: Partial: server SSE exists with expiry and fail-closed session checks; this Web chat uses
+' polling, not an immediate SSE message subscriber. No instant-delivery claim.
 @enduml

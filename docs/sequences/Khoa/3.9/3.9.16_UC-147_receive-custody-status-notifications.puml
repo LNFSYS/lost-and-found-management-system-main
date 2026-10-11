@@ -1,6 +1,7 @@
 @startuml
 title 3.9.16 Receive custody status notifications
-caption UC-147 | Partial | Implemented slice
+caption UC-147
+' Catalogue: UC-147 | Partial | Implemented slice
 skinparam monochrome true
 skinparam shadowing false
 skinparam roundcorner 0
@@ -24,13 +25,15 @@ skinparam sequence {
 }
 
 ' Source: apps/api-node/src/modules/warehouse/application/custody-notifications.ts
+' Main entity: notifications
 ' Main entity migration: apps/api-node/src/migrations/002_lost_found_schema.sql
-' One-table abstraction: related repository reads/writes stay inside the service.
+' Single persistence lifeline: related reads/writes remain summarized in the service.
 actor "System" as Actor
 participant "Custody Event Producer" as Page
 participant "Custody Notification Service" as Service
-participant "notifications" as Table <<entity>>
+participant "NotificationRepository" as Table
 
+activate Actor
 Actor -> Page: 1: Record custody event notifications
 activate Page
 Page -> Service: 2: Run task with current eligible context
@@ -46,9 +49,9 @@ Service --> Page: 8: Custody notification/outbox
 Page --> Actor: 9: Record task outcome
 deactivate Service
 deactivate Page
+deactivate Actor
 
-legend left
-Scope: Partial: request/intake/return producers exist. Complete movement/release coverage and
-provider acceptance are separate gaps.
-endlegend
+' Scope note (not rendered):
+' Scope: Partial: request/intake/return producers exist. Complete movement/release coverage and
+' provider acceptance are separate gaps.
 @enduml

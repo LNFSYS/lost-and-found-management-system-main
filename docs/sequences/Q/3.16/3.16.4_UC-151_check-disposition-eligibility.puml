@@ -1,6 +1,7 @@
 @startuml
 title 3.16.4 Check disposition eligibility
-caption UC-151 | Partial | Proposed design
+caption UC-151
+' Catalogue: UC-151 | Partial | Proposed design
 skinparam monochrome true
 skinparam shadowing false
 skinparam roundcorner 0
@@ -24,14 +25,16 @@ skinparam sequence {
 }
 
 ' Source: apps/api-node/src/modules/warehouse/application/warehouse.use-cases.ts
+' Main entity: warehouse_items
 ' Main entity migration: apps/api-node/src/migrations/010_notifications_and_warehouse.sql
-' One-table abstraction: related repository reads/writes stay inside the service.
+' Single persistence lifeline: related reads/writes remain summarized in the service.
 actor "Staff / Admin" as Actor
 participant "Eligibility Preview (proposed)" as Page
 participant "Staff API" as API
 participant "Warehouse Service" as Service
-participant "warehouse_items" as Table <<entity>>
+participant "WarehouseRepository" as Table
 
+activate Actor
 Actor -> Page: 1: Check disposition eligibility
 activate Page
 Page -> Page: 2: Select warehouse item for disposition preview
@@ -68,10 +71,10 @@ else Missing/invalid session or required permission
 end
 deactivate API
 deactivate Page
+deactivate Actor
 
-legend bottom left
-PARTIAL / PROPOSED PREVIEW: canonical executeDisposition has these guards, but no
-eligibility-preview endpoint or screen exists.
-endlegend
+' Scope note (not rendered):
+' PARTIAL / PROPOSED PREVIEW: canonical executeDisposition has these guards, but no
+' eligibility-preview endpoint or screen exists.
 
 @enduml

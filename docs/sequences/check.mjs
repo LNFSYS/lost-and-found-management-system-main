@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { repositoriesFor } from "./repositories.mjs";
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
 const directory = path.join(root, "docs", "sequences");
@@ -34,11 +35,31 @@ for (const row of rows) {
   const source = fs.readFileSync(path.join(folder, matches[0]), "utf8");
   const participants = new Set([...source.matchAll(/^(?:actor|participant) "[^"]+" as (\w+)/gm)].map(match => match[1]));
   assert(source.includes(`title ${row.number} ${row.name}`), `${row.id}: catalogue title`);
-  assert(source.includes(`caption ${row.id} | ${row.status}`), `${row.id}: catalogue status`);
-  const entities = [...source.matchAll(/^participant "([^"]+)" as Table <<(entity|proposed entity)>>$/gm)];
-  assert.equal(entities.length, 1, `${row.id}: exactly one named entity`);
-  const [entity] = entities;
-  if (entity[2] === "proposed entity") {
+  assert(source.includes(`' Catalogue: ${row.id} | ${row.status}`), `${row.id}: catalogue status metadata`);
+  const captions = [...source.matchAll(/^[ \t]*caption ([^\r\n]+)/gm)];
+  assert.equal(captions.length, 1, `${row.id}: one UC identifier caption`);
+  assert.equal(captions[0][1], row.id, `${row.id}: caption contains only UC identifier`);
+  assert(!/^[ \t]*(?:legend|endlegend|note|end note|footer)\b/m.test(source), `${row.id}: no visible scope notes`);
+  const declarations = [...source.matchAll(/^participant "([^"]+)" as (\w+).*$/gm)];
+  const persistence = declarations.filter(match => match[2] === "Table");
+  assert.equal(persistence.length, 1, `${row.id}: exactly one persistence lifeline`);
+  assert.equal(declarations.at(-1), persistence[0], `${row.id}: persistence lifeline must be last`);
+  assert(!source.includes("<<") && !source.includes(">>"), `${row.id}: no stereotypes`);
+  assert.equal(persistence[0][0], `participant "${persistence[0][1]}" as Table`, `${row.id}: plain label only`);
+  const repositories = repositoriesFor(row.id);
+  assert.equal(persistence[0][1], repositories.map(repository => repository.label).join("\\n"), `${row.id}: repository label matches operations`);
+  for (const repository of repositories) {
+    if (repository.source) {
+      const port = fs.readFileSync(path.join(root, repository.source), "utf8");
+      assert(new RegExp(`export interface ${repository.name}\\b`).test(port), `${row.id}: named repository exists in code`);
+    } else {
+      assert.equal(row.status, "Planned", `${row.id}: proposed repository must not be certified as implemented`);
+      assert(source.includes("Proposed design"), `${row.id}: proposed repository label`);
+    }
+  }
+  const entity = source.match(/^' Main entity: (\w+)( \(proposed\))?$/m);
+  assert(entity, `${row.id}: original table reference retained`);
+  if (entity[2]) {
     assert.equal(row.status, "Planned", `${row.id}: proposed table must not be certified as implemented`);
     assert(source.includes("Proposed design"), `${row.id}: proposed label`);
   } else {
@@ -100,7 +121,14 @@ for (const row of rows) {
   }
   assert.equal(frames.length, 0, `${row.id}: unclosed frame`);
   assert([...active.values()].every(value => value === 0), `${row.id}: unclosed activation`);
-  assert(active.has("Table"), `${row.id}: missing entity activation`);
+  for (const participant of participants) assert(active.has(participant), `${row.id}: missing activation ${participant}`);
+  assert.equal([...source.matchAll(/^[ \t]*activate Actor[ \t]*$/gm)].length, 1, `${row.id}: one actor activation`);
+  assert.equal([...source.matchAll(/^[ \t]*deactivate Actor[ \t]*$/gm)].length, 1, `${row.id}: one actor deactivation`);
+  const actorMessages = [...source.matchAll(/^[ \t]*(\w+)\s+--?>\s+(\w+):\s*\d+(?:\.\d+)?:[^\r\n]*/gm)]
+    .filter(match => match[1] === "Actor" || match[2] === "Actor");
+  assert(actorMessages.length > 0, `${row.id}: actor participates`);
+  assert(source.search(/^[ \t]*activate Actor[ \t]*$/m) < actorMessages[0].index, `${row.id}: actor active before first interaction`);
+  assert(source.search(/^[ \t]*deactivate Actor[ \t]*$/m) > actorMessages.at(-1).index, `${row.id}: actor active through final response`);
   const png = fs.readFileSync(path.join(folder, matches[0].replace(/\.puml$/, ".png")));
   assert(png.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])), `${row.id}: PNG signature`);
   assert(png.length > 1000 && png.readUInt32BE(16) > 500 && png.readUInt32BE(20) > 300, `${row.id}: nonempty rendered image`);
@@ -132,4 +160,4 @@ for (const relative of ["README.md", "Dat/README.md", "Dat/3.1/README.md", "Tran
     if (!/^https?:/.test(match[1])) assert(fs.existsSync(path.resolve(path.dirname(filename), match[1])), `Broken index link in ${relative}: ${match[1]}`);
   }
 }
-console.log(JSON.stringify({ result: "PASS", useCases: rows.length, groups: counts, numberedMessages: messages }, null, 2));
+console.log(JSON.stringify({ result: "PASS", useCases: rows.length, groups: counts, numberedMessages: messages, actorActivationBars: rows.length, ucIdentifierCaptions: rows.length, visibleScopeNotes: 0 }, null, 2));

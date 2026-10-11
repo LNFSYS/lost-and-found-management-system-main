@@ -1,6 +1,7 @@
 @startuml
 title 3.14.5 Export audit and moderation data
-caption UC-166 | Implemented
+caption UC-166
+' Catalogue: UC-166 | Implemented
 skinparam monochrome true
 skinparam shadowing false
 skinparam roundcorner 0
@@ -24,14 +25,16 @@ skinparam sequence {
 }
 
 ' Source: apps/api-node/src/modules/activity/application/activity.use-cases.ts
+' Main entity: admin_audit_logs
 ' Main entity migration: apps/api-node/src/migrations/039_admin_user_and_config_audit.sql
-' One-table abstraction: related repository reads/writes stay inside the service.
+' Single persistence lifeline: related reads/writes remain summarized in the service.
 actor "Admin" as Actor
 participant "Administrative Audit Page" as Page
 participant "Activity API" as API
 participant "Activity Service" as Service
-participant "admin_audit_logs" as Table <<entity>>
+participant "ActivityRepository\nAdminAuditRepository" as Table
 
+activate Actor
 Actor -> Page: 1: Export audit and moderation data
 activate Page
 Page -> Page: 2: Choose filters and CSV/JSON export format
@@ -83,10 +86,10 @@ else Missing/invalid session or required permission
 end
 deactivate API
 deactivate Page
+deactivate Actor
 
-legend bottom left
-ADMIN-source example. Export is a protected attachment; cross-source reads are internal projection
-work.
-endlegend
+' Scope note (not rendered):
+' ADMIN-source example. Export is a protected attachment; cross-source reads are internal projection
+' work.
 
 @enduml

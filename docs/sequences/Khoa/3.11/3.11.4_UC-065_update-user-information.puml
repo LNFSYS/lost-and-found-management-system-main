@@ -1,6 +1,7 @@
 @startuml
 title 3.11.4 Update user information
-caption UC-065 | Implemented
+caption UC-065
+' Catalogue: UC-065 | Implemented
 skinparam monochrome true
 skinparam shadowing false
 skinparam roundcorner 0
@@ -24,14 +25,16 @@ skinparam sequence {
 }
 
 ' Source: apps/api-node/src/modules/admin/application/admin-user.use-cases.ts
+' Main entity: users
 ' Main entity migration: apps/api-node/src/migrations/001_auth.sql
-' One-table abstraction: related repository reads/writes stay inside the service.
+' Single persistence lifeline: related reads/writes remain summarized in the service.
 actor "Admin" as Actor
 participant "User Administration" as Page
 participant "Admin API" as API
 participant "Admin User Service" as Service
-participant "users" as Table <<entity>>
+participant "AdminUserRepository" as Table
 
+activate Actor
 Actor -> Page: 1: Open Update user information
 activate Page
 Page -> API: 2: PATCH /api/admin/users/:id
@@ -68,9 +71,9 @@ Page --> Actor: 4.2: Show appropriate error; retain form/draft
 end
 deactivate API
 deactivate Page
+deactivate Actor
 
-legend left
-Related tables, authorization, transactions and audit remain inside the service. Catalogue status is
-not deployment or manual acceptance.
-endlegend
+' Scope note (not rendered):
+' Related tables, authorization, transactions and audit remain inside the service. Catalogue status is
+' not deployment or manual acceptance.
 @enduml

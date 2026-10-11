@@ -1,6 +1,7 @@
 @startuml
 title 3.3.9 Close or remove my post
-caption UC-022 | Implemented
+caption UC-022
+' Catalogue: UC-022 | Implemented
 skinparam monochrome true
 skinparam shadowing false
 skinparam roundcorner 0
@@ -24,14 +25,16 @@ skinparam sequence {
 }
 
 ' Source: apps/api-node/src/modules/posts/application/post.use-cases.ts
+' Main entity: posts
 ' Main entity migration: apps/api-node/src/migrations/002_lost_found_schema.sql
-' One-table abstraction: related repository reads/writes stay inside the service.
+' Single persistence lifeline: related reads/writes remain summarized in the service.
 actor "Post Owner" as Actor
 participant "My Posts Page" as Page
 participant "Posts API" as API
 participant "Post Service" as Service
-participant "posts" as Table <<entity>>
+participant "PostRepository" as Table
 
+activate Actor
 Actor -> Page: 1: Open Close or remove my post
 activate Page
 Page -> API: 2: DELETE /api/posts/:id
@@ -66,8 +69,8 @@ Page --> Actor: 4.2: Show appropriate error; retain form/draft
 end
 deactivate API
 deactivate Page
+deactivate Actor
 
-legend left
-Scope: No physical deletion of retained operational history. Missing/other-owned post returns 404.
-endlegend
+' Scope note (not rendered):
+' Scope: No physical deletion of retained operational history. Missing/other-owned post returns 404.
 @enduml

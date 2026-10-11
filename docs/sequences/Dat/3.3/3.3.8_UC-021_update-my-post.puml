@@ -1,6 +1,7 @@
 @startuml
 title 3.3.8 Update my post
-caption UC-021 | Implemented
+caption UC-021
+' Catalogue: UC-021 | Implemented
 skinparam monochrome true
 skinparam shadowing false
 skinparam roundcorner 0
@@ -24,14 +25,16 @@ skinparam sequence {
 }
 
 ' Source: apps/api-node/src/modules/posts/application/post.use-cases.ts
+' Main entity: posts
 ' Main entity migration: apps/api-node/src/migrations/002_lost_found_schema.sql
-' One-table abstraction: related repository reads/writes stay inside the service.
+' Single persistence lifeline: related reads/writes remain summarized in the service.
 actor "Post Owner" as Actor
 participant "Edit Post Form" as Page
 participant "Posts API" as API
 participant "Post Service" as Service
-participant "posts" as Table <<entity>>
+participant "PostRepository" as Table
 
+activate Actor
 Actor -> Page: 1: Open Update my post
 activate Page
 Page -> API: 2: PATCH /api/posts/:id
@@ -66,9 +69,9 @@ Page --> Actor: 4.2: Show appropriate error; retain form/draft
 end
 deactivate API
 deactivate Page
+deactivate Actor
 
-legend left
-Scope: Use authenticated owner; preserve operational history. Matching failure cannot roll back the
-committed edit.
-endlegend
+' Scope note (not rendered):
+' Scope: Use authenticated owner; preserve operational history. Matching failure cannot roll back the
+' committed edit.
 @enduml

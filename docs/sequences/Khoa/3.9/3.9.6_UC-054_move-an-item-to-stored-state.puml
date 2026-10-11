@@ -1,6 +1,7 @@
 @startuml
 title 3.9.6 Move an item to stored state
-caption UC-054 | Implemented
+caption UC-054
+' Catalogue: UC-054 | Implemented
 skinparam monochrome true
 skinparam shadowing false
 skinparam roundcorner 0
@@ -24,14 +25,16 @@ skinparam sequence {
 }
 
 ' Source: apps/api-node/src/modules/warehouse/application/warehouse.use-cases.ts
+' Main entity: warehouse_items
 ' Main entity migration: apps/api-node/src/migrations/010_notifications_and_warehouse.sql
-' One-table abstraction: related repository reads/writes stay inside the service.
+' Single persistence lifeline: related reads/writes remain summarized in the service.
 actor "Staff / Admin" as Actor
 participant "Warehouse Operations" as Page
 participant "Warehouse API" as API
 participant "Warehouse Service" as Service
-participant "warehouse_items" as Table <<entity>>
+participant "WarehouseRepository" as Table
 
+activate Actor
 Actor -> Page: 1: Open Move an item to stored state
 activate Page
 Page -> API: 2: PATCH /api/staff/warehouse-items/:id (status=STORED)
@@ -66,9 +69,9 @@ Page --> Actor: 4.2: Show appropriate error; retain form/draft
 end
 deactivate API
 deactivate Page
+deactivate Actor
 
-legend left
-Related tables, authorization, transactions and audit remain inside the service. Catalogue status is
-not deployment or manual acceptance.
-endlegend
+' Scope note (not rendered):
+' Related tables, authorization, transactions and audit remain inside the service. Catalogue status is
+' not deployment or manual acceptance.
 @enduml

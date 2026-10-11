@@ -1,6 +1,7 @@
 @startuml
 title 3.8.15 Report a handover issue
-caption UC-140 | Implemented
+caption UC-140
+' Catalogue: UC-140 | Implemented
 skinparam monochrome true
 skinparam shadowing false
 skinparam roundcorner 0
@@ -24,14 +25,16 @@ skinparam sequence {
 }
 
 ' Source: apps/api-node/src/modules/reports/application/report.use-cases.ts
+' Main entity: reports
 ' Main entity migration: apps/api-node/src/migrations/002_lost_found_schema.sql
-' One-table abstraction: related repository reads/writes stay inside the service.
+' Single persistence lifeline: related reads/writes remain summarized in the service.
 actor "Claimant / Finder" as Actor
 participant "Appointment Issue Report" as Page
 participant "Reports API" as API
 participant "Report Service" as Service
-participant "reports" as Table <<entity>>
+participant "ReportRepository" as Table
 
+activate Actor
 Actor -> Page: 1: Open Report a handover issue
 activate Page
 Page -> API: 2: POST /api/reports (targetType=HANDOVER)
@@ -57,9 +60,9 @@ Page --> Actor: 4.2: Show appropriate error; retain form/draft
 end
 deactivate API
 deactivate Page
+deactivate Actor
 
-legend left
-Scope: Dispute/wrong item/unsafe meeting reports use the existing moderation workflow; filing one is
-not a completed return.
-endlegend
+' Scope note (not rendered):
+' Scope: Dispute/wrong item/unsafe meeting reports use the existing moderation workflow; filing one is
+' not a completed return.
 @enduml

@@ -1,6 +1,7 @@
 @startuml
 title 3.6.18 Record an escalation decision
-caption UC-114 | Partial | Implemented slice
+caption UC-114
+' Catalogue: UC-114 | Partial | Implemented slice
 skinparam monochrome true
 skinparam shadowing false
 skinparam roundcorner 0
@@ -24,14 +25,16 @@ skinparam sequence {
 }
 
 ' Source: apps/api-node/src/modules/warehouse/application/warehouse.use-cases.ts
+' Main entity: claims
 ' Main entity migration: apps/api-node/src/migrations/002_lost_found_schema.sql
-' One-table abstraction: related repository reads/writes stay inside the service.
+' Single persistence lifeline: related reads/writes remain summarized in the service.
 actor "Staff / Admin" as Actor
 participant "Warehouse Claim Verification" as Page
 participant "Warehouse API" as API
 participant "Warehouse Claim Verification Service" as Service
-participant "claims" as Table <<entity>>
+participant "WarehouseRepository" as Table
 
+activate Actor
 Actor -> Page: 1: Open Record an escalation decision
 activate Page
 Page -> API: 2: POST /api/staff/warehouse-items/:id/verify-claim
@@ -65,9 +68,9 @@ Page --> Actor: 4.2: Show appropriate error; retain form/draft
 end
 deactivate API
 deactivate Page
+deactivate Actor
 
-legend left
-Scope: Partial: post-intake approval only. Intake/photo approval is not verification; general Staff
-rejection/more-information escalation remains missing.
-endlegend
+' Scope note (not rendered):
+' Scope: Partial: post-intake approval only. Intake/photo approval is not verification; general Staff
+' rejection/more-information escalation remains missing.
 @enduml

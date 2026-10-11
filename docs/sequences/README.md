@@ -2,6 +2,10 @@
 
 Bộ sơ đồ đối chiếu [uc.md](../requirements/uc.md) và source hiện tại, cập nhật **09/10/2026**.
 Snapshot source/catalogue được đối chiếu: `28067d34901fbf5788faf3b7dc7d66f1689ef05d`.
+Chỉnh nhãn cột cuối ngày **11/10/2026**: bỏ stereotype và dùng tên repository;
+giữ nguyên luồng, số bước, nhánh `alt` và activation bars của snapshot trên.
+Chỉnh phần trình bày cùng ngày: caption chỉ giữ mã UC, bỏ trạng thái và ghi chú dưới ảnh;
+thêm activation bar cho actor ở cả 167 UC. Không thay message hoặc trạng thái catalogue.
 Khi code hoặc catalogue thay đổi sau snapshot này, cần đối chiếu và cập nhật lại sơ đồ tương ứng.
 Có **167 UC nghiệp vụ: 129 Implemented, 20 Partial, 18 Planned**, mỗi UC một nguồn
 PlantUML `.puml` và một ảnh `.png`. Phân nhóm thư mục theo phân công vẽ của bạn:
@@ -22,20 +26,31 @@ thành viên đó đã triển khai tất cả UC trong nhóm.
 ## Quy Ước
 
 - Giữ nền trắng, nét đen, khung chữ nhật, Arial, lifeline và activation bars theo mẫu đã duyệt.
+- Actor (Guest/User/Admin/System...) có activation bar từ hành động đầu tiên tới khi kết thúc
+  trao đổi. Mọi lifeline có activation/deactivation cân bằng.
+- Caption dưới ảnh chỉ hiển thị mã UC, ví dụ `UC-003`, không có trạng thái hay ghi chú scope.
+  Trạng thái và giới hạn thiết kế được lưu trong comment nguồn (`Catalogue`, `Scope note`)
+  và mục lục, không bị xóa khỏi tài liệu đối chiếu.
 - Mỗi UC độc lập, có tên và số theo đúng thứ tự dòng trong catalogue; không đánh lại UC ID.
   Mục `3.13` là moderation/report; dashboard/statistics/audit là `3.14`.
-- Chỉ **một entity chính** ở cuối, đúng tên bảng trong migration. Các join, provider, bảng phụ,
-  transaction và audit được tóm tắt ở Service; không có nghĩa backend chỉ sử dụng một bảng.
+- Chỉ **một lifeline truy cập dữ liệu** ở cuối, dùng tên repository trong code, không có
+  stereotype `<<...>>`. Đây là tầng persistence/repository, không gọi là model layer.
+  Các join, provider, bảng phụ, transaction và audit vẫn được tóm tắt ở Service.
+  UC-146 và UC-166 gộp hai repository liên quan trong cùng ô cuối để giữ nguyên một lifeline
+  và các message đã có; đây là biểu diễn tổng hợp, không phải một repository mới trong code.
+  Cột **Bảng tham chiếu** trong mục lục và comment `Main entity` lưu tên bảng/migration gốc,
+  không phải nhãn hiển thị của lifeline cuối.
 - Luồng chính dùng `1, 2, 3...`. Nhánh thay thế sau bước `N` bắt đầu `(N+1).1`,
   rồi `(N+1).2...`. Ví dụ sau bước 8: success là 9, alternative là 9.1, không phải 8.1.
   Các nhánh else cùng alt tiếp tục hậu tố để không trùng số.
-- Message call là nét liền; return là nét đứt. Scheduler/system dùng task/service/entity thật,
+- Message call là nét liền; return là nét đứt. Scheduler/system dùng task/service/repository thật,
   không dựng UI hoặc HTTP cho tác vụ nền.
-- `Partial` ghi rõ **phần đang chạy** hoặc **thiết kế đề xuất** và phần còn thiếu.
+- `Partial` ghi rõ **phần đang chạy** hoặc **thiết kế đề xuất** và phần còn thiếu trong metadata/mục lục.
   Không coi custody review là general escalation, polling là immediate SSE,
   hay Staff reserve là Finder peer reservation.
-- Cả 18 UC `Planned` ghi **Proposed design**. Bảng có nhãn `proposed entity` là đề xuất,
-  chưa có migration/runtime. Bảng đã có không chứng minh workflow đề xuất đã triển khai.
+- Cả 18 UC `Planned` ghi **Proposed design** trong metadata/mục lục. Repository có hậu tố `(proposed)` là đề xuất,
+  chưa tồn tại trong code; các bảng đề xuất vẫn ghi rõ chưa có migration trong mục lục.
+  Repository hoặc bảng đã có không chứng minh workflow đề xuất đã triển khai.
   Không tự thêm endpoint, migration hoặc nâng trạng thái catalogue.
 - Chấp nhận trao đổi/photo approval không xác minh quyền sở hữu. Intake không biến Staff
   thành Finder và không tự accept claim. Trả đồ vẫn giữ gate recipient, proof, dispute/hold;
@@ -55,7 +70,7 @@ Không có UC nghiệp vụ; xem [ghi chú](Dat/3.1/README.md).
 
 ### 3.2 Authentication & Authorization
 
-| Mục / UC | Use Case | Trạng thái / phạm vi | Entity chính | Migration | Tệp |
+| Mục / UC | Use Case | Trạng thái / phạm vi | Bảng tham chiếu | Migration | Tệp |
 | --- | --- | --- | --- | --- | --- |
 | 3.2.1 / UC-001 | Request registration OTP | Implemented | `email_otps` | [001](../../apps/api-node/src/migrations/001_auth.sql) | [PNG](Dat/3.2/3.2.1_UC-001_request-registration-otp.png) · [Nguồn](Dat/3.2/3.2.1_UC-001_request-registration-otp.puml) |
 | 3.2.2 / UC-002 | Register an account | Implemented | `users` | [001](../../apps/api-node/src/migrations/001_auth.sql) | [PNG](Dat/3.2/3.2.2_UC-002_register-an-account.png) · [Nguồn](Dat/3.2/3.2.2_UC-002_register-an-account.puml) |
@@ -72,7 +87,7 @@ Không có UC nghiệp vụ; xem [ghi chú](Dat/3.1/README.md).
 
 ### 3.3 Public Board & LOST/FOUND Post Management
 
-| Mục / UC | Use Case | Trạng thái / phạm vi | Entity chính | Migration | Tệp |
+| Mục / UC | Use Case | Trạng thái / phạm vi | Bảng tham chiếu | Migration | Tệp |
 | --- | --- | --- | --- | --- | --- |
 | 3.3.1 / UC-013 | Browse the LOST/FOUND board | Implemented | `posts` | [002](../../apps/api-node/src/migrations/002_lost_found_schema.sql) | [PNG](Dat/3.3/3.3.1_UC-013_browse-the-lost-found-board.png) · [Nguồn](Dat/3.3/3.3.1_UC-013_browse-the-lost-found-board.puml) |
 | 3.3.2 / UC-014 | Search and filter posts | Implemented | `posts` | [002](../../apps/api-node/src/migrations/002_lost_found_schema.sql) | [PNG](Dat/3.3/3.3.2_UC-014_search-and-filter-posts.png) · [Nguồn](Dat/3.3/3.3.2_UC-014_search-and-filter-posts.puml) |
@@ -89,7 +104,7 @@ Không có UC nghiệp vụ; xem [ghi chú](Dat/3.1/README.md).
 
 ### 3.4 Matching & Recommendations
 
-| Mục / UC | Use Case | Trạng thái / phạm vi | Entity chính | Migration | Tệp |
+| Mục / UC | Use Case | Trạng thái / phạm vi | Bảng tham chiếu | Migration | Tệp |
 | --- | --- | --- | --- | --- | --- |
 | 3.4.1 / UC-026 | View matching suggestions | Implemented | `match_results` | [002](../../apps/api-node/src/migrations/002_lost_found_schema.sql) | [PNG](Dat/3.4/3.4.1_UC-026_view-matching-suggestions.png) · [Nguồn](Dat/3.4/3.4.1_UC-026_view-matching-suggestions.puml) |
 | 3.4.2 / UC-027 | Recalculate matching suggestions | Implemented | `match_results` | [002](../../apps/api-node/src/migrations/002_lost_found_schema.sql) | [PNG](Dat/3.4/3.4.2_UC-027_recalculate-matching-suggestions.png) · [Nguồn](Dat/3.4/3.4.2_UC-027_recalculate-matching-suggestions.puml) |
@@ -106,7 +121,7 @@ Không có UC nghiệp vụ; xem [ghi chú](Dat/3.1/README.md).
 
 ### 3.5 Matching Model & AI Operations
 
-| Mục / UC | Use Case | Trạng thái / phạm vi | Entity chính | Migration | Tệp |
+| Mục / UC | Use Case | Trạng thái / phạm vi | Bảng tham chiếu | Migration | Tệp |
 | --- | --- | --- | --- | --- | --- |
 | 3.5.1 / UC-017 | Analyze item images with Gemini | Implemented | `item_categories` | [002](../../apps/api-node/src/migrations/002_lost_found_schema.sql) | [PNG](Tran-The-Luong/3.5/3.5.1_UC-017_analyze-item-images-with-gemini.png) · [Nguồn](Tran-The-Luong/3.5/3.5.1_UC-017_analyze-item-images-with-gemini.puml) |
 | 3.5.2 / UC-101 | Collect eligible matching examples | Planned · Đề xuất | `matching_training_examples` | Chưa có; entity đề xuất | [PNG](Tran-The-Luong/3.5/3.5.2_UC-101_collect-eligible-matching-examples.png) · [Nguồn](Tran-The-Luong/3.5/3.5.2_UC-101_collect-eligible-matching-examples.puml) |
@@ -117,7 +132,7 @@ Không có UC nghiệp vụ; xem [ghi chú](Dat/3.1/README.md).
 
 ### 3.6 Claims & Ownership Verification
 
-| Mục / UC | Use Case | Trạng thái / phạm vi | Entity chính | Migration | Tệp |
+| Mục / UC | Use Case | Trạng thái / phạm vi | Bảng tham chiếu | Migration | Tệp |
 | --- | --- | --- | --- | --- | --- |
 | 3.6.1 / UC-032 | View my claim requests | Implemented | `claims` | [002](../../apps/api-node/src/migrations/002_lost_found_schema.sql) | [PNG](Tran-The-Luong/3.6/3.6.1_UC-032_view-my-claim-requests.png) · [Nguồn](Tran-The-Luong/3.6/3.6.1_UC-032_view-my-claim-requests.puml) |
 | 3.6.2 / UC-033 | View claim request details | Implemented | `claims` | [002](../../apps/api-node/src/migrations/002_lost_found_schema.sql) | [PNG](Tran-The-Luong/3.6/3.6.2_UC-033_view-claim-request-details.png) · [Nguồn](Tran-The-Luong/3.6/3.6.2_UC-033_view-claim-request-details.puml) |
@@ -144,7 +159,7 @@ Không có UC nghiệp vụ; xem [ghi chú](Dat/3.1/README.md).
 
 ### 3.7 Private Communication, Evidence & Notifications
 
-| Mục / UC | Use Case | Trạng thái / phạm vi | Entity chính | Migration | Tệp |
+| Mục / UC | Use Case | Trạng thái / phạm vi | Bảng tham chiếu | Migration | Tệp |
 | --- | --- | --- | --- | --- | --- |
 | 3.7.1 / UC-041 | View direct messages | Implemented | `chat_messages` | [002](../../apps/api-node/src/migrations/002_lost_found_schema.sql) | [PNG](Tran-The-Luong/3.7/3.7.1_UC-041_view-direct-messages.png) · [Nguồn](Tran-The-Luong/3.7/3.7.1_UC-041_view-direct-messages.puml) |
 | 3.7.2 / UC-042 | Send a direct message | Implemented | `chat_messages` | [002](../../apps/api-node/src/migrations/002_lost_found_schema.sql) | [PNG](Tran-The-Luong/3.7/3.7.2_UC-042_send-a-direct-message.png) · [Nguồn](Tran-The-Luong/3.7/3.7.2_UC-042_send-a-direct-message.puml) |
@@ -164,7 +179,7 @@ Không có UC nghiệp vụ; xem [ghi chú](Dat/3.1/README.md).
 
 ### 3.8 Handover, Appointment & Direct Return
 
-| Mục / UC | Use Case | Trạng thái / phạm vi | Entity chính | Migration | Tệp |
+| Mục / UC | Use Case | Trạng thái / phạm vi | Bảng tham chiếu | Migration | Tệp |
 | --- | --- | --- | --- | --- | --- |
 | 3.8.1 / UC-126 | List my appointments | Implemented | `return_appointments` | [002](../../apps/api-node/src/migrations/002_lost_found_schema.sql) | [PNG](Tran-The-Luong/3.8/3.8.1_UC-126_list-my-appointments.png) · [Nguồn](Tran-The-Luong/3.8/3.8.1_UC-126_list-my-appointments.puml) |
 | 3.8.2 / UC-127 | View appointment detail | Implemented | `return_appointments` | [002](../../apps/api-node/src/migrations/002_lost_found_schema.sql) | [PNG](Tran-The-Luong/3.8/3.8.2_UC-127_view-appointment-detail.png) · [Nguồn](Tran-The-Luong/3.8/3.8.2_UC-127_view-appointment-detail.puml) |
@@ -186,7 +201,7 @@ Không có UC nghiệp vụ; xem [ghi chú](Dat/3.1/README.md).
 
 ### 3.9 Warehouse Intake, Custody & Transfer
 
-| Mục / UC | Use Case | Trạng thái / phạm vi | Entity chính | Migration | Tệp |
+| Mục / UC | Use Case | Trạng thái / phạm vi | Bảng tham chiếu | Migration | Tệp |
 | --- | --- | --- | --- | --- | --- |
 | 3.9.1 / UC-049 | View active handover points | Implemented | `handover_points` | [002](../../apps/api-node/src/migrations/002_lost_found_schema.sql) | [PNG](Khoa/3.9/3.9.1_UC-049_view-active-handover-points.png) · [Nguồn](Khoa/3.9/3.9.1_UC-049_view-active-handover-points.puml) |
 | 3.9.2 / UC-050 | View warehouse reference data | Implemented | `item_categories` | [002](../../apps/api-node/src/migrations/002_lost_found_schema.sql) | [PNG](Khoa/3.9/3.9.2_UC-050_view-warehouse-reference-data.png) · [Nguồn](Khoa/3.9/3.9.2_UC-050_view-warehouse-reference-data.puml) |
@@ -207,7 +222,7 @@ Không có UC nghiệp vụ; xem [ghi chú](Dat/3.1/README.md).
 
 ### 3.10 Feedback & Reputation
 
-| Mục / UC | Use Case | Trạng thái / phạm vi | Entity chính | Migration | Tệp |
+| Mục / UC | Use Case | Trạng thái / phạm vi | Bảng tham chiếu | Migration | Tệp |
 | --- | --- | --- | --- | --- | --- |
 | 3.10.1 / UC-058 | Check return-feedback eligibility | Implemented | `return_appointments` | [002](../../apps/api-node/src/migrations/002_lost_found_schema.sql) | [PNG](Khoa/3.10/3.10.1_UC-058_check-return-feedback-eligibility.png) · [Nguồn](Khoa/3.10/3.10.1_UC-058_check-return-feedback-eligibility.puml) |
 | 3.10.2 / UC-059 | Submit return feedback | Implemented | `return_feedback` | [018](../../apps/api-node/src/migrations/018_return_feedback.sql) | [PNG](Khoa/3.10/3.10.2_UC-059_submit-return-feedback.png) · [Nguồn](Khoa/3.10/3.10.2_UC-059_submit-return-feedback.puml) |
@@ -215,7 +230,7 @@ Không có UC nghiệp vụ; xem [ghi chú](Dat/3.1/README.md).
 
 ### 3.11 User & Role Administration
 
-| Mục / UC | Use Case | Trạng thái / phạm vi | Entity chính | Migration | Tệp |
+| Mục / UC | Use Case | Trạng thái / phạm vi | Bảng tham chiếu | Migration | Tệp |
 | --- | --- | --- | --- | --- | --- |
 | 3.11.1 / UC-062 | List and search user accounts | Implemented | `users` | [001](../../apps/api-node/src/migrations/001_auth.sql) | [PNG](Khoa/3.11/3.11.1_UC-062_list-and-search-user-accounts.png) · [Nguồn](Khoa/3.11/3.11.1_UC-062_list-and-search-user-accounts.puml) |
 | 3.11.2 / UC-063 | Create a user account | Implemented | `users` | [001](../../apps/api-node/src/migrations/001_auth.sql) | [PNG](Khoa/3.11/3.11.2_UC-063_create-a-user-account.png) · [Nguồn](Khoa/3.11/3.11.2_UC-063_create-a-user-account.puml) |
@@ -227,7 +242,7 @@ Không có UC nghiệp vụ; xem [ghi chú](Dat/3.1/README.md).
 
 ### 3.12 Master Data & Location Administration
 
-| Mục / UC | Use Case | Trạng thái / phạm vi | Entity chính | Migration | Tệp |
+| Mục / UC | Use Case | Trạng thái / phạm vi | Bảng tham chiếu | Migration | Tệp |
 | --- | --- | --- | --- | --- | --- |
 | 3.12.1 / UC-061 | View administrative catalog | Implemented | `item_categories` | [002](../../apps/api-node/src/migrations/002_lost_found_schema.sql) | [PNG](Khoa/3.12/3.12.1_UC-061_view-administrative-catalog.png) · [Nguồn](Khoa/3.12/3.12.1_UC-061_view-administrative-catalog.puml) |
 | 3.12.2 / UC-069 | Create item category | Implemented | `item_categories` | [002](../../apps/api-node/src/migrations/002_lost_found_schema.sql) | [PNG](Khoa/3.12/3.12.2_UC-069_create-item-category.png) · [Nguồn](Khoa/3.12/3.12.2_UC-069_create-item-category.puml) |
@@ -248,7 +263,7 @@ Không có UC nghiệp vụ; xem [ghi chú](Dat/3.1/README.md).
 
 ### 3.13 Moderation & User Reports
 
-| Mục / UC | Use Case | Trạng thái / phạm vi | Entity chính | Migration | Tệp |
+| Mục / UC | Use Case | Trạng thái / phạm vi | Bảng tham chiếu | Migration | Tệp |
 | --- | --- | --- | --- | --- | --- |
 | 3.13.1 / UC-082 | View user reports | Implemented | `reports` | [002](../../apps/api-node/src/migrations/002_lost_found_schema.sql) | [PNG](Q/3.13/3.13.1_UC-082_view-user-reports.png) · [Nguồn](Q/3.13/3.13.1_UC-082_view-user-reports.puml) |
 | 3.13.2 / UC-083 | Review report and apply moderation | Implemented | `reports` | [002](../../apps/api-node/src/migrations/002_lost_found_schema.sql) | [PNG](Q/3.13/3.13.2_UC-083_review-report-and-apply-moderation.png) · [Nguồn](Q/3.13/3.13.2_UC-083_review-report-and-apply-moderation.puml) |
@@ -260,7 +275,7 @@ Không có UC nghiệp vụ; xem [ghi chú](Dat/3.1/README.md).
 
 ### 3.14 Dashboard, Statistics & Audit
 
-| Mục / UC | Use Case | Trạng thái / phạm vi | Entity chính | Migration | Tệp |
+| Mục / UC | Use Case | Trạng thái / phạm vi | Bảng tham chiếu | Migration | Tệp |
 | --- | --- | --- | --- | --- | --- |
 | 3.14.1 / UC-084 | View administration dashboard | Implemented | `posts` | [002](../../apps/api-node/src/migrations/002_lost_found_schema.sql) | [PNG](Q/3.14/3.14.1_UC-084_view-administration-dashboard.png) · [Nguồn](Q/3.14/3.14.1_UC-084_view-administration-dashboard.puml) |
 | 3.14.2 / UC-085 | Export system statistics | Implemented | `admin_audit_logs` | [039](../../apps/api-node/src/migrations/039_admin_user_and_config_audit.sql) | [PNG](Q/3.14/3.14.2_UC-085_export-system-statistics.png) · [Nguồn](Q/3.14/3.14.2_UC-085_export-system-statistics.puml) |
@@ -270,7 +285,7 @@ Không có UC nghiệp vụ; xem [ghi chú](Dat/3.1/README.md).
 
 ### 3.15 System Configuration
 
-| Mục / UC | Use Case | Trạng thái / phạm vi | Entity chính | Migration | Tệp |
+| Mục / UC | Use Case | Trạng thái / phạm vi | Bảng tham chiếu | Migration | Tệp |
 | --- | --- | --- | --- | --- | --- |
 | 3.15.1 / UC-086 | View public system configuration | Implemented | `config_entries` | [002](../../apps/api-node/src/migrations/002_lost_found_schema.sql) | [PNG](Q/3.15/3.15.1_UC-086_view-public-system-configuration.png) · [Nguồn](Q/3.15/3.15.1_UC-086_view-public-system-configuration.puml) |
 | 3.15.2 / UC-087 | List system configurations | Implemented | `config_entries` | [002](../../apps/api-node/src/migrations/002_lost_found_schema.sql) | [PNG](Q/3.15/3.15.2_UC-087_list-system-configurations.png) · [Nguồn](Q/3.15/3.15.2_UC-087_list-system-configurations.puml) |
@@ -282,7 +297,7 @@ Không có UC nghiệp vụ; xem [ghi chú](Dat/3.1/README.md).
 
 ### 3.16 Warehouse Retention & Disposition
 
-| Mục / UC | Use Case | Trạng thái / phạm vi | Entity chính | Migration | Tệp |
+| Mục / UC | Use Case | Trạng thái / phạm vi | Bảng tham chiếu | Migration | Tệp |
 | --- | --- | --- | --- | --- | --- |
 | 3.16.1 / UC-148 | List overdue warehouse items | Partial · Phần đang chạy | `warehouse_items` | [010](../../apps/api-node/src/migrations/010_notifications_and_warehouse.sql) | [PNG](Q/3.16/3.16.1_UC-148_list-overdue-warehouse-items.png) · [Nguồn](Q/3.16/3.16.1_UC-148_list-overdue-warehouse-items.puml) |
 | 3.16.2 / UC-149 | View overdue item detail | Partial · Phần đang chạy | `warehouse_items` | [010](../../apps/api-node/src/migrations/010_notifications_and_warehouse.sql) | [PNG](Q/3.16/3.16.2_UC-149_view-overdue-item-detail.png) · [Nguồn](Q/3.16/3.16.2_UC-149_view-overdue-item-detail.puml) |
@@ -302,7 +317,7 @@ Không có UC nghiệp vụ; xem [ghi chú](Dat/3.1/README.md).
 
 ### 3.17 End-to-End Item Journey
 
-| Mục / UC | Use Case | Trạng thái / phạm vi | Entity chính | Migration | Tệp |
+| Mục / UC | Use Case | Trạng thái / phạm vi | Bảng tham chiếu | Migration | Tệp |
 | --- | --- | --- | --- | --- | --- |
 | 3.17.1 / UC-167 | View end-to-end item journey | Implemented | `posts` | [002](../../apps/api-node/src/migrations/002_lost_found_schema.sql) | [PNG](Q/3.17/3.17.1_UC-167_view-end-to-end-item-journey.png) · [Nguồn](Q/3.17/3.17.1_UC-167_view-end-to-end-item-journey.puml) |
 
@@ -318,5 +333,6 @@ git diff --check
 
 `render.ps1` tìm source đệ quy qua các thư mục thành viên, kiểm tra cú pháp, xuất PNG không nhúng
 source metadata, rồi kiểm tra catalogue. `check.mjs` kiểm tra đủ 167 UC, tên/status,
-entity/migration, source tham chiếu, số bước/alt, activation, PNG và liên kết mục lục.
+repository thực/đề xuất, bảng/migration gốc, source tham chiếu, số bước/alt, activation,
+PNG và liên kết mục lục. `repositories.mjs` đối chiếu nhãn cuối với repository port trong code.
 Không đưa JAR, ảnh contact-sheet hoặc tool cache tạm vào repository.

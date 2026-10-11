@@ -1,6 +1,7 @@
 @startuml
 title 3.6.13 Review private claim evidence
-caption UC-109 | Implemented
+caption UC-109
+' Catalogue: UC-109 | Implemented
 skinparam monochrome true
 skinparam shadowing false
 skinparam roundcorner 0
@@ -24,14 +25,16 @@ skinparam sequence {
 }
 
 ' Source: apps/api-node/src/modules/claims/application/claim.use-cases.ts
+' Main entity: claim_evidence
 ' Main entity migration: apps/api-node/src/migrations/002_lost_found_schema.sql
-' One-table abstraction: related repository reads/writes stay inside the service.
+' Single persistence lifeline: related reads/writes remain summarized in the service.
 actor "Finder" as Actor
 participant "Private Claims Page" as Page
 participant "Claims API" as API
 participant "Claim Service" as Service
-participant "claim_evidence" as Table <<entity>>
+participant "ClaimRepository" as Table
 
+activate Actor
 Actor -> Page: 1: Open Review private claim evidence
 activate Page
 Page -> API: 2: GET /api/claims/:claimId/evidence
@@ -57,9 +60,9 @@ Page --> Actor: 4.2: Show appropriate error; retain form/draft
 end
 deactivate API
 deactivate Page
+deactivate Actor
 
-legend left
-Scope: Image bytes require UC-045 separately. Previewing evidence does not change claim or return
-state.
-endlegend
+' Scope note (not rendered):
+' Scope: Image bytes require UC-045 separately. Previewing evidence does not change claim or return
+' state.
 @enduml

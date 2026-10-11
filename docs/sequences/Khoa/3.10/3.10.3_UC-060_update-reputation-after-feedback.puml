@@ -1,6 +1,7 @@
 @startuml
 title 3.10.3 Update reputation after feedback
-caption UC-060 | Implemented
+caption UC-060
+' Catalogue: UC-060 | Implemented
 skinparam monochrome true
 skinparam shadowing false
 skinparam roundcorner 0
@@ -24,13 +25,15 @@ skinparam sequence {
 }
 
 ' Source: apps/api-node/src/modules/returns/application/return-feedback.use-cases.ts
+' Main entity: reputation_scores
 ' Main entity migration: apps/api-node/src/migrations/002_lost_found_schema.sql
-' One-table abstraction: related repository reads/writes stay inside the service.
+' Single persistence lifeline: related reads/writes remain summarized in the service.
 actor "System" as Actor
 participant "Feedback Reputation Task" as Page
 participant "Return Feedback Service" as Service
-participant "reputation_scores" as Table <<entity>>
+participant "ReturnFeedbackRepository" as Table
 
+activate Actor
 Actor -> Page: 1: Update reputation inside eligible feedback transaction
 activate Page
 Page -> Service: 2: Run task with current eligible context
@@ -50,9 +53,9 @@ Service --> Page: 10: Reputation updated once
 Page --> Actor: 11: Record task outcome
 deactivate Service
 deactivate Page
+deactivate Actor
 
-legend left
-Scope: Current rating deltas: 5=>+6, 4=>+4, 3=>+1, 2=>-1, 1=>-3. No penalty is automatically created
-for unreviewed no-show.
-endlegend
+' Scope note (not rendered):
+' Scope: Current rating deltas: 5=>+6, 4=>+4, 3=>+1, 2=>-1, 1=>-3. No penalty is automatically created
+' for unreviewed no-show.
 @enduml

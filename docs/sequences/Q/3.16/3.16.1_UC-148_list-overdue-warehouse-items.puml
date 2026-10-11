@@ -1,6 +1,7 @@
 @startuml
 title 3.16.1 List overdue warehouse items
-caption UC-148 | Partial
+caption UC-148
+' Catalogue: UC-148 | Partial
 skinparam monochrome true
 skinparam shadowing false
 skinparam roundcorner 0
@@ -24,14 +25,16 @@ skinparam sequence {
 }
 
 ' Source: apps/api-node/src/modules/warehouse/application/warehouse.use-cases.ts
+' Main entity: warehouse_items
 ' Main entity migration: apps/api-node/src/migrations/010_notifications_and_warehouse.sql
-' One-table abstraction: related repository reads/writes stay inside the service.
+' Single persistence lifeline: related reads/writes remain summarized in the service.
 actor "Staff / Admin" as Actor
 participant "Warehouse Inventory" as Page
 participant "Staff API" as API
 participant "Warehouse Service" as Service
-participant "warehouse_items" as Table <<entity>>
+participant "WarehouseRepository" as Table
 
+activate Actor
 Actor -> Page: 1: List overdue warehouse items
 activate Page
 Page -> Page: 2: Select EXPIRED status and page; read overdue indicator
@@ -62,9 +65,9 @@ else Missing/invalid session or required permission
 end
 deactivate API
 deactivate Page
+deactivate Actor
 
-legend bottom left
-PARTIAL: EXPIRED is a status proxy, not an authoritative deadline-and-legal-hold overdue filter.
-endlegend
+' Scope note (not rendered):
+' PARTIAL: EXPIRED is a status proxy, not an authoritative deadline-and-legal-hold overdue filter.
 
 @enduml
