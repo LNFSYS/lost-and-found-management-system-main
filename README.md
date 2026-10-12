@@ -23,9 +23,10 @@ Current repository là baseline Web + Node.js API. Native Mobile, PWA infrastruc
 - Upload media bài đăng qua authenticated Cloudinary/protected proxy hoặc local fallback theo cấu hình module, có kiểm tra loại, kích thước và file signature; legacy local references vẫn được đọc có quyền.
 - Gemini-assisted multi-image analysis tạo bản nháp có thể chỉnh sửa; không tự đăng bài và không tự xác minh quyền sở hữu.
 - Hybrid/rule-based matching với text normalization tiếng Việt, category, location, time, image/OCR tags, tier, score breakdown và explanation.
-- Claim peer-to-peer, participant authorization, private text/image room, guided ownership questions, explicit Finder decision, unread/read, private evidence proxy và in-app notifications đã có runtime. SSE backend có; immediate Web chat subscriber/PWA push còn thiếu.
+- Claim peer-to-peer, participant authorization, private text/image room, guided ownership questions, explicit Finder decision, unread/read, private evidence proxy và in-app notifications đã có runtime. Web chat và notification center dùng authenticated SSE; PWA push vẫn còn thiếu.
 - Lịch hẹn có danh sách/chi tiết, đề xuất thời gian/điểm, accept/reject/cancel, nhắc email, no-show và xác nhận bàn giao hai bên; Admin có audit search/export, User có hành trình vật phẩm từ Bài của tôi. Migration 063 đã áp dụng Aiven ngày 06/10/2026, CI MySQL 8.0/8.4 và shared smoke đã đạt; chưa chứng nhận inbox hoặc bàn giao ngoài đời. Xem [release receipt](docs/audits/dev-main-release-2026-10-06.md) và [runbook](docs/runbooks/appointment-journey-rollout.md).
 - Staff warehouse operations: tiếp nhận, lưu, trả, retention deadline, handover counts và storage log.
+- Notification có event riêng cho claim/escalation, từng bước lịch hẹn/bàn giao và custody movement, reservation, legal hold, disposition; in-app là bản ghi chính, SSE chuyển cập nhật tới Web.
 
 Các mục trên là **current implementation baseline**, không đồng nghĩa mọi workflow trong product scope đã hoàn tất end-to-end.
 
@@ -35,7 +36,7 @@ Luồng nghiệp vụ mục tiêu là:
 
 `LOST/FOUND post → matching suggestion → claim/private verification chat → finder decision → meetup → dual-confirmed direct handover`
 
-Staff custody/warehouse là nhánh hỗ trợ hoặc escalation khi Finder không thể tiếp tục giữ đồ, có dispute, item nhạy cảm/nguy hiểm hoặc policy yêu cầu chuyển vào kho. Basic appointment và dual handover có code/schema/test evidence; nghiệm thu bàn giao vật lý vẫn là bước riêng. Counter-proposal/rescheduling, realtime Web delivery và PWA/native mobile nâng cao vẫn chưa hoàn tất. Matching ảnh hỗ trợ trao đổi, không thay thế kiểm tra vật lý hoặc cho phép Staff trả đồ.
+Staff custody/warehouse là nhánh hỗ trợ hoặc escalation khi Finder không thể tiếp tục giữ đồ, có dispute, item nhạy cảm/nguy hiểm hoặc policy yêu cầu chuyển vào kho. Basic appointment và dual handover có code/schema/test evidence; nghiệm thu bàn giao vật lý vẫn là bước riêng. Counter-proposal/rescheduling và PWA/native mobile nâng cao vẫn chưa hoàn tất. Matching ảnh hỗ trợ trao đổi, không thay thế kiểm tra vật lý hoặc cho phép Staff trả đồ.
 
 ## Trạng thái chưa có runtime evidence
 

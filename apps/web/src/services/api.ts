@@ -674,7 +674,17 @@ export interface ClaimVerificationState {
     createdAt: string;
   }>;
 }
-export type NotificationType = "MATCH_FOUND" | "CLAIM_REQUEST_RECEIVED" | "CLAIM_ACCEPTED" | "CLAIM_MORE_INFO_REQUESTED" | "CLAIM_REJECTED" | "CLAIM_WITHDRAWN" | "CUSTODY_REQUEST_CREATED";
+export type NotificationType =
+  | "MATCH_FOUND"
+  | "CLAIM_REQUEST_RECEIVED" | "CLAIM_ACCEPTED" | "CLAIM_MORE_INFO_REQUESTED" | "CLAIM_REJECTED" | "CLAIM_WITHDRAWN" | "CLAIM_ESCALATED"
+  | "CHAT_MESSAGE_RECEIVED"
+  | "APPOINTMENT_PROPOSED" | "APPOINTMENT_ACCEPTED" | "APPOINTMENT_REJECTED" | "APPOINTMENT_CANCELLED"
+  | "APPOINTMENT_REMINDER" | "APPOINTMENT_NO_SHOW" | "APPOINTMENT_HANDOVER_UPDATED" | "RETURN_COMPLETED"
+  | "CUSTODY_REQUEST_CREATED" | "CUSTODY_ACCEPTED" | "CUSTODY_REJECTED" | "CUSTODY_CANCELLED" | "CUSTODY_INTAKED"
+  | "CUSTODY_RETURNED" | "CUSTODY_OVERDUE" | "CUSTODY_VERIFIED" | "CUSTODY_RESERVED"
+  | "CUSTODY_RESERVATION_RELEASED" | "CUSTODY_MOVED" | "CUSTODY_STATUS_CHANGED" | "CUSTODY_LEGAL_HOLD"
+  | "CUSTODY_DISPOSITION_REQUESTED" | "CUSTODY_DISPOSITION_APPROVED" | "CUSTODY_DISPOSITION_COMPLETED"
+  | "WAREHOUSE_OVERDUE" | "WAREHOUSE_DUE_SOON" | "APPOINTMENT_UPDATED" | "RETURN_UPDATED" | "CUSTODY_UPDATED";
 export interface AppNotification {
   id: string;
   type: NotificationType;
@@ -720,6 +730,110 @@ let refreshInFlight: Promise<SessionResponse | null> | null = null;
 let sessionGeneration = 0;
 let refreshController: AbortController | null = null;
 let refreshFailure: ApiError | null = null;
+
+export interface WorkflowRealtimeNotification {
+  eventId: string;
+  workflow: "CLAIM" | "CHAT" | "APPOINTMENT" | "RETURN" | "CUSTODY";
+  roomId: string | null;
+  notification: AppNotification;
+}
+
+export interface RealtimeHandlers {
+  roomId?: string;
+  onConnected?: () => void;
+  onNotification?: (event: WorkflowRealtimeNotification) => void;
+}
+
+function subscribeRealtime(handlers: RealtimeHandlers) {
+  const controller = new AbortController();
+  const generation = sessionGeneration;
+  const roomQuery = handlers.roomId ? `?roomId=${encodeURIComponent(handlers.roomId)}` : "";
+
+  function wait(milliseconds: number) {
+    return new Promise<void>(resolve => {
+      if (controller.signal.aborted) return resolve();
+      const timer = window.setTimeout(done, milliseconds);
+      function done() {
+        window.clearTimeout(timer);
+        controller.signal.removeEventListener("abort", done);
+        resolve();
+      }
+      controller.signal.addEventListener("abort", done, { once: true });
+    });
+  }
+
+  function dispatch(frame: string) {
+    let event = "message";
+    const data: string[] = [];
+    for (const line of frame.split(/\r?\n/)) {
+      if (line.startsWith("event:")) event = line.slice(6).trim();
+      else if (line.startsWith("data:")) data.push(line.slice(5).trimStart());
+    }
+    if (!data.length) return;
+    let value: unknown;
+    try { value = JSON.parse(data.join("\n")); } catch { return; }
+    if (event === "realtime.connected") handlers.onConnected?.();
+    if (event === "workflow.notification" && value && typeof value === "object") {
+      handlers.onNotification?.(value as WorkflowRealtimeNotification);
+    }
+  }
+
+  async function consume(response: Response) {
+    if (!response.body) throw new Error("Realtime stream body is unavailable");
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    try {
+      while (!controller.signal.aborted) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        for (;;) {
+          const boundary = /\r?\n\r?\n/.exec(buffer);
+          if (!boundary || boundary.index === undefined) break;
+          dispatch(buffer.slice(0, boundary.index));
+          buffer = buffer.slice(boundary.index + boundary[0].length);
+        }
+      }
+    } finally {
+      await reader.cancel().catch(() => undefined);
+      reader.releaseLock();
+    }
+    if (!controller.signal.aborted) throw new Error("Realtime stream ended");
+  }
+
+  void (async () => {
+    let retryDelay = 500;
+    while (!controller.signal.aborted && generation === sessionGeneration) {
+      try {
+        if (!accessToken && !await refreshSession()) return;
+        if (controller.signal.aborted || generation !== sessionGeneration) return;
+        const headers = new Headers({ Accept: "text/event-stream" });
+        if (accessToken) headers.set("authorization", `Bearer ${accessToken}`);
+        const response = await fetch(`${API_URL}/realtime${roomQuery}`, {
+          headers,
+          credentials: "include",
+          cache: "no-store",
+          signal: controller.signal
+        });
+        if (response.status === 401) {
+          if (!await refreshSession()) return;
+          continue;
+        }
+        if (response.status === 403) return;
+        if (!response.ok) throw new Error(`Realtime request failed (${response.status})`);
+        retryDelay = 500;
+        await consume(response);
+      } catch (error) {
+        if (controller.signal.aborted || generation !== sessionGeneration || (error instanceof Error && error.name === "AbortError")) return;
+        await wait(retryDelay);
+        retryDelay = Math.min(10_000, retryDelay * 2);
+      }
+    }
+  })();
+
+  return () => controller.abort();
+}
 
 function isMutation(init: RequestInit) {
   const method = (init.method ?? "GET").toUpperCase();
@@ -889,6 +1003,7 @@ async function mediaBlob(path: string, retry = true, errorMessage = "Khong the t
 }
 
 export const api = {
+  subscribeRealtime: (handlers: RealtimeHandlers) => subscribeRealtime(handlers),
   listAppointments: (filters:{claimId?:string;page?:number}={},signal?:AbortSignal) => raw<{results:import("./workflow-types").Appointment[];total:number}>(`/appointments${queryString(filters)}`,{signal}),
   getAppointment: (id:string,signal?:AbortSignal) => raw<import("./workflow-types").Appointment>(`/appointments/${id}`,{signal}),
   createAppointment: (payload:{claimId:string;proposedAt:string;handoverPointId:string;requestKey:string}) => raw<import("./workflow-types").Appointment>("/appointments",{method:"POST",body:JSON.stringify(payload)}),

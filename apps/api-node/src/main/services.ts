@@ -71,8 +71,6 @@ export function createServices(persistence: Persistence, config: typeof env = en
     id, frontendUrl: config.frontendUrl, logger: console
   });
   const notificationService = createNotificationUseCases({ notificationRepository, notificationEmailRepository, notificationEmailQueue });
-  const appointmentService = createAppointmentUseCases({ repository:persistence.appointmentRepository,transaction,id,
-    hash:security.hashToken,notifications:notificationRepository,emails:notificationEmailQueue,reminderLeadMinutes:config.appointmentReminderMinutes });
   const activityService = createActivityUseCases({ repository:persistence.activityRepository,audit:adminAuditRepository,transaction,id });
   const systemConfigService = createSystemConfigUseCases({
     repository: systemConfigRepository, auditRepository: adminAuditRepository, transaction, idFactory: id
@@ -91,6 +89,9 @@ export function createServices(persistence: Persistence, config: typeof env = en
     policy: config, emailService, withTransaction: transaction, logger: console, uploads: mediaUploads
   });
   const realtimeService = createRealtimeUseCases({ claimRepository, id, validateSession: session => authService.validateAccessSession(session) });
+  const appointmentService = createAppointmentUseCases({ repository:persistence.appointmentRepository,transaction,id,
+    hash:security.hashToken,notifications:notificationRepository,emails:notificationEmailQueue,
+    realtimeNotifier: realtimeService, reminderLeadMinutes:config.appointmentReminderMinutes });
   const custodyDelivery = { notificationRepository, notificationEmailQueue,
     publishCustodyNotification: async (userId: string, notification: import("../modules/notifications/application/index.js").NotificationRecord) => {
       await realtimeService.publishNotification({ userId, notification, workflow: "CUSTODY" });

@@ -1,4 +1,4 @@
-import type { TransactionRunner } from "../../../shared/application/transaction.js";
+import type { TransactionContext, TransactionRunner } from "../../../shared/application/transaction.js";
 import { coordinateUpload, persistUpload, type MediaUploads } from "../../../shared/application/media-upload.js";
 import type { Logger } from "../../../shared/application/logger.port.js";
 import type { PrivateMediaStorage } from "../../../shared/application/media-storage.port.js";
@@ -47,6 +47,18 @@ export function createWarehouseUseCases(options: WarehouseDependencies) {
   }
   async function admin(actorId: string) {
     if (!await warehouseRepository.isAdmin(actorId)) throw new AppError("forbidden", "Chỉ Admin được quản lý legal hold và phê duyệt xử lý");
+  }
+
+  async function recordItemCustodyEvent(itemId: string, claimId: string | null, event: string, db: TransactionContext) {
+    const request = await custodyRequestRepository.findByWarehouseItemId(itemId, db);
+    if (!request) return [];
+    return notifications.record({
+      id: request.id,
+      postId: request.postId,
+      claimId: claimId ?? request.claimId,
+      requesterId: request.requester.id,
+      event
+    }, db);
   }
 
   async function retentionDaysForCategory(categoryId: string | null | undefined) {
@@ -257,7 +269,7 @@ export function createWarehouseUseCases(options: WarehouseDependencies) {
     async updateItem(itemId: string, input: UpdateWarehouseItemInput, actorId: string) {
       await staff(actorId);
       let action: StorageLogAction = "CONDITION_UPDATED";
-      await withTransaction(async (connection) => {
+      const deliveries = await withTransaction(async (connection) => {
         const current = await warehouseRepository.lockItemForUpdate(itemId, connection);
         if (!current) throw new AppError("not_found", "Không tìm thấy vật phẩm trong kho");
         if (current.postId) await warehouseRepository.lockPhysicalPost(current.postId, connection);
@@ -301,7 +313,10 @@ export function createWarehouseUseCases(options: WarehouseDependencies) {
           storageCode: nextStorageCode,
           note: clean(input.note)
         }, connection);
+        if (!statusChanged && nextStorageCode === current.storageCode) return [];
+        return recordItemCustodyEvent(itemId, current.reservedClaimId, nextStatus === "STORED" || nextStorageCode !== current.storageCode ? "MOVED" : "STATUS_CHANGED", connection);
       });
+      await notifications.publish(deliveries);
 
       const item = await warehouseRepository.findItemById(itemId);
       if (!item) throw new AppError("not_found", "Không tìm thấy vật phẩm trong kho");
@@ -448,7 +463,7 @@ export function createWarehouseUseCases(options: WarehouseDependencies) {
     },
     async reserveItem(itemId: string, claimId: string, recipientId: string, actorId: string) {
       await staff(actorId);
-      await withTransaction(async db => {
+      const deliveries = await withTransaction(async db => {
         const item = await warehouseRepository.lockItemForUpdate(itemId, db);
         if (!item || item.legalHold || !["RECEIVED","STORED"].includes(item.status)) throw new AppError("conflict", "Không thể giữ vật phẩm này");
         if (item.postId) await warehouseRepository.lockPhysicalPost(item.postId, db);
@@ -456,38 +471,44 @@ export function createWarehouseUseCases(options: WarehouseDependencies) {
         await warehouseRepository.reserve(itemId, claimId, db);
         await warehouseRepository.updateItemState(itemId, { status: "CLAIMED" }, db);
         await warehouseRepository.createStorageLog({ id: id(), warehouseItemId: itemId, postId: item.postId, handoverPointId: item.handoverPointId, actorId, action: "CLAIMED", fromStatus: item.status, toStatus: "CLAIMED", note: `Verified claim ${claimId}` }, db);
+        return recordItemCustodyEvent(itemId, claimId, "RESERVED", db);
       });
+      await notifications.publish(deliveries);
       return warehouseRepository.findItemById(itemId);
     },
     async releaseReservation(itemId: string, reason: string, actorId: string) {
       await staff(actorId);
       if (!clean(reason)) throw new AppError("bad_request", "Cần lý do giải phóng reservation");
-      await withTransaction(async db => {
+      const deliveries = await withTransaction(async db => {
         const item = await warehouseRepository.lockItemForUpdate(itemId, db);
         if (item?.postId) await warehouseRepository.lockPhysicalPost(item.postId, db);
         if (!item || item.status !== "CLAIMED" || item.legalHold || await warehouseRepository.hasBlockingCases(item.postId, db, undefined, itemId) || !item.storageCode) throw new AppError("conflict", "Reservation còn case đang hoạt động hoặc chưa có vị trí lưu kho");
         await warehouseRepository.reserve(itemId, null, db);
         await warehouseRepository.updateItemState(itemId, { status: "STORED" }, db);
         await warehouseRepository.createStorageLog({ id: id(), warehouseItemId: itemId, postId: item.postId, handoverPointId: item.handoverPointId, actorId, action: "STORED", fromStatus: "CLAIMED", toStatus: "STORED", note: reason.trim() }, db);
+        return recordItemCustodyEvent(itemId, item.reservedClaimId, "RESERVATION_RELEASED", db);
       });
+      await notifications.publish(deliveries);
       return warehouseRepository.findItemById(itemId);
     },
     async legalHold(itemId: string, held: boolean, reason: string, actorId: string) {
       await admin(actorId);
       if (!clean(reason)) throw new AppError("bad_request", "Cần lý do legal hold");
-      await withTransaction(async db => {
+      const deliveries = await withTransaction(async db => {
         const item = await warehouseRepository.lockItemForUpdate(itemId, db);
         if (!item) throw new AppError("not_found", "Không tìm thấy vật phẩm");
-        if (item.legalHold === held) return;
+        if (item.legalHold === held) return [];
         await warehouseRepository.setLegalHold(itemId, held, db);
         await warehouseRepository.createStorageLog({ id: id(), warehouseItemId: itemId, postId: item.postId, handoverPointId: item.handoverPointId, actorId, action: "CONDITION_UPDATED", fromStatus: item.status, toStatus: item.status, note: `Legal hold ${held}: ${reason}` }, db);
+        return recordItemCustodyEvent(itemId, item.reservedClaimId, held ? "LEGAL_HOLD_PLACED" : "LEGAL_HOLD_RELEASED", db);
       });
+      await notifications.publish(deliveries);
     },
     async requestDisposition(itemId: string, target: "DISPOSED" | "DONATED" | "TRANSFERRED", reason: string, actorId: string) {
       await admin(actorId);
       if (!clean(reason)) throw new AppError("bad_request", "Cần lý do xử lý");
       const approvalId = id();
-      return withTransaction(async db => {
+      const result = await withTransaction(async db => {
         const item = await warehouseRepository.lockItemForUpdate(itemId, db);
         if (!item) throw new AppError("not_found", "Không tìm thấy vật phẩm");
         if (item.postId) await warehouseRepository.lockPhysicalPost(item.postId, db);
@@ -495,20 +516,22 @@ export function createWarehouseUseCases(options: WarehouseDependencies) {
           || await warehouseRepository.hasBlockingCases(item.postId, db, undefined, itemId)) throw new AppError("conflict", "Vật phẩm chưa đủ điều kiện lập lệnh xử lý");
         const existing = (await warehouseRepository.listApprovals(itemId, db)).find(order => order.status !== "EXECUTED");
         if (existing) {
-          if (existing.requesterId === actorId && existing.target === target && existing.reason === reason.trim()) return { approvalId: existing.id };
+          if (existing.requesterId === actorId && existing.target === target && existing.reason === reason.trim()) return { approvalId: existing.id, deliveries: [] };
           throw new AppError("conflict", "Vật phẩm đã có lệnh xử lý đang chờ");
         }
         await warehouseRepository.createApproval({ id: approvalId, itemId, actorId, target, reason: reason.trim() }, db);
         await warehouseRepository.createStorageLog({ id: id(), warehouseItemId: itemId, postId: item.postId, handoverPointId: item.handoverPointId, actorId, action: "CONDITION_UPDATED", fromStatus: item.status, toStatus: item.status, note: `DISPOSITION_REQUESTED ${approvalId}: ${reason.trim()}` }, db);
-        return { approvalId };
+        return { approvalId, deliveries: await recordItemCustodyEvent(item.id, item.reservedClaimId, "DISPOSITION_REQUESTED", db) };
       });
+      await notifications.publish(result.deliveries);
+      return { approvalId: result.approvalId };
     },
     async approveDisposition(approvalId: string, actorId: string) {
       await admin(actorId);
-      await withTransaction(async db => {
+      const deliveries = await withTransaction(async db => {
         const approval = await warehouseRepository.lockApproval(approvalId, db);
         if (!approval || approval.requesterId === actorId) throw new AppError("forbidden", "Cần người phê duyệt khác người đề nghị");
-        if (approval.status === "APPROVED") return;
+        if (approval.status === "APPROVED") return [];
         if (approval.status !== "PENDING") throw new AppError("conflict", "Lệnh không còn chờ duyệt");
         const item = await warehouseRepository.lockItemForUpdate(approval.itemId, db);
         if (item?.postId) await warehouseRepository.lockPhysicalPost(item.postId, db);
@@ -517,27 +540,33 @@ export function createWarehouseUseCases(options: WarehouseDependencies) {
           || await warehouseRepository.hasBlockingCases(item.postId, db, undefined, item.id)) throw new AppError("conflict", "Điều kiện xử lý đã thay đổi");
         await warehouseRepository.approveAction(approvalId, actorId, db);
         await warehouseRepository.createStorageLog({ id: id(), warehouseItemId: item.id, postId: item.postId, handoverPointId: item.handoverPointId, actorId, action: "CONDITION_UPDATED", fromStatus: item.status, toStatus: item.status, note: `DISPOSITION_APPROVED ${approvalId}` }, db);
+        return recordItemCustodyEvent(item.id, item.reservedClaimId, "DISPOSITION_APPROVED", db);
       });
+      await notifications.publish(deliveries);
     },
     async executeDisposition(approvalId: string, actorId: string, proofIds: string[] = []) {
       await staff(actorId);
-      try { await withTransaction(async db => {
-        const approval = await warehouseRepository.lockApproval(approvalId, db);
-        if (approval?.status === "EXECUTED") return;
-        if (!approval || approval.status !== "APPROVED") throw new AppError("conflict", "Lệnh chưa được phê duyệt");
-        const item = await warehouseRepository.lockItemForUpdate(approval.itemId, db);
-        if (item?.postId) await warehouseRepository.lockPhysicalPost(item.postId, db);
-        if (!item || !["RECEIVED","STORED","EXPIRED"].includes(item.status) || item.legalHold || !item.retentionDeadline || item.retentionDeadline.getTime() > Date.now() || await warehouseRepository.hasBlockingCases(item.postId, db, undefined, approval.itemId)) throw new AppError("conflict", "Không đủ điều kiện xử lý: retention/claim/appointment/dispute/legal hold");
-        if (!proofIds.length || proofIds.length > 5 || new Set(proofIds).size !== proofIds.length) throw new AppError("bad_request", "Cần chứng từ xử lý riêng tư");
-        for (const proofId of proofIds) {
-          const proof = await warehouseRepository.findProof(proofId, db);
-          if (!proof || proof.itemId !== item.id || proof.actorId !== actorId || proof.attached) throw new AppError("forbidden", "Chứng từ không thuộc vật phẩm/người thực hiện");
-          await warehouseRepository.attachProof(proofId, db);
-        }
-        await warehouseRepository.updateItemState(item.id, { status: approval.target }, db);
-        await warehouseRepository.executeAction(approvalId, db);
-        await warehouseRepository.createStorageLog({ id: id(), warehouseItemId: item.id, postId: item.postId, handoverPointId: item.handoverPointId, actorId, action: approval.target, fromStatus: item.status, toStatus: approval.target, note: `Approval ${approvalId}\nProof references: ${proofIds.join(" ")}` }, db);
-      }); } catch (error) {
+      let deliveries: Awaited<ReturnType<typeof notifications.record>>;
+      try {
+        deliveries = await withTransaction(async db => {
+          const approval = await warehouseRepository.lockApproval(approvalId, db);
+          if (approval?.status === "EXECUTED") return [];
+          if (!approval || approval.status !== "APPROVED") throw new AppError("conflict", "Lệnh chưa được phê duyệt");
+          const item = await warehouseRepository.lockItemForUpdate(approval.itemId, db);
+          if (item?.postId) await warehouseRepository.lockPhysicalPost(item.postId, db);
+          if (!item || !["RECEIVED","STORED","EXPIRED"].includes(item.status) || item.legalHold || !item.retentionDeadline || item.retentionDeadline.getTime() > Date.now() || await warehouseRepository.hasBlockingCases(item.postId, db, undefined, approval.itemId)) throw new AppError("conflict", "Không đủ điều kiện xử lý: retention/claim/appointment/dispute/legal hold");
+          if (!proofIds.length || proofIds.length > 5 || new Set(proofIds).size !== proofIds.length) throw new AppError("bad_request", "Cần chứng từ xử lý riêng tư");
+          for (const proofId of proofIds) {
+            const proof = await warehouseRepository.findProof(proofId, db);
+            if (!proof || proof.itemId !== item.id || proof.actorId !== actorId || proof.attached) throw new AppError("forbidden", "Chứng từ không thuộc vật phẩm/người thực hiện");
+            await warehouseRepository.attachProof(proofId, db);
+          }
+          await warehouseRepository.updateItemState(item.id, { status: approval.target }, db);
+          await warehouseRepository.executeAction(approvalId, db);
+          await warehouseRepository.createStorageLog({ id: id(), warehouseItemId: item.id, postId: item.postId, handoverPointId: item.handoverPointId, actorId, action: approval.target, fromStatus: item.status, toStatus: approval.target, note: `Approval ${approvalId}\nProof references: ${proofIds.join(" ")}` }, db);
+          return recordItemCustodyEvent(item.id, item.reservedClaimId, `DISPOSITION_COMPLETED:${approval.target}`, db);
+        });
+      } catch (error) {
         if (error instanceof AppError) await withTransaction(async db => {
           const approval = await warehouseRepository.lockApproval(approvalId, db);
           const item = approval ? await warehouseRepository.lockItemForUpdate(approval.itemId, db) : null;
@@ -545,6 +574,7 @@ export function createWarehouseUseCases(options: WarehouseDependencies) {
         });
         throw error;
       }
+      await notifications.publish(deliveries);
     },
     async runMaintenance() {
       const deliveries = await withTransaction(async db => {

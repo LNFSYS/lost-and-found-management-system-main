@@ -22,12 +22,12 @@ Node.js là owner duy nhất của notification event, preference, outbox và de
 | --- | --- | --- | --- | --- |
 | Security | OTP đăng ký, reset password, cảnh báo thay đổi bảo mật | Chủ tài khoản | Email ngay, bắt buộc khi cần hoàn tất thao tác | UC-001, UC-006 |
 | Matching | Cặp mới đạt từ 60%, hai bài còn mở và khác chủ | Cả chủ LOST và chủ FOUND | In-app; email theo nhóm preference nghiệp vụ hiện có, mặc định immediate; disabled/delayed-unread/digest/quiet hours được tôn trọng | UC-097 |
-| Claim | Claim mới hoặc trạng thái claim thay đổi | Claimant, Finder | In-app/PWA ngay; email theo preference | UC-123 |
+| Claim | Claim mới, trạng thái thay đổi, quyết định hoặc custody escalation | Claimant, Finder | In-app/realtime ngay; email theo preference | UC-123 |
 | Chat | Có tin nhắn mới từ participant còn lại | Participant còn lại | In-app/realtime ngay; một email sau 5–10 phút nếu vẫn unread, có coalescing | UC-124 |
-| Verification | Có câu hỏi, yêu cầu thêm thông tin hoặc quyết định cần xử lý | Participant cần hành động | In-app/PWA ngay; email action-required | UC-107, UC-108, UC-123 |
-| Appointment | Đề xuất, xác nhận, đổi lịch, hủy, nhắc lịch hoặc no-show | Hai participant | In-app/PWA ngay; email theo preference, reminder được deduplicate | UC-125, UC-128–UC-136 |
-| Handover | Cần xác nhận đã giao/đã nhận hoặc kết quả return | Hai participant | In-app/PWA ngay; email action-required | UC-137–UC-140 |
-| Custody | Transfer request, Staff accept/reject, intake hoặc custody state đổi | Finder và Staff liên quan | In-app/PWA ngay; email action-required | UC-141–UC-147 |
+| Verification | Có câu hỏi, yêu cầu thêm thông tin hoặc quyết định cần xử lý | Participant cần hành động | In-app/realtime ngay; email action-required | UC-107, UC-108, UC-123 |
+| Appointment | Đề xuất, chấp nhận, từ chối, hủy, nhắc lịch, no-show, xác nhận/mâu thuẫn bàn giao hoặc hoàn tất trả | Hai participant | In-app/realtime ngay; email theo preference, reminder được deduplicate | UC-125, UC-128–UC-136 |
+| Handover | Cần xác nhận đã giao/đã nhận hoặc kết quả return | Hai participant | In-app/realtime ngay; email action-required | UC-137–UC-140 |
+| Custody | Transfer request, Staff accept/reject, intake/return, reservation, movement, legal hold hoặc disposition | Finder, claimant và Staff được phép | In-app/realtime ngay; email action-required | UC-141–UC-147 |
 | Operations | Custody/warehouse task overdue, legal hold hoặc approval cần xử lý | Staff/Admin có quyền | In-app ngay; email urgent hoặc digest theo policy | UC-150–UC-156 |
 | Feedback | Return hoàn tất và feedback đã mở | Participant đủ điều kiện | Một thông báo/email; không lặp sau khi đã feedback | UC-058–UC-060 |
 
@@ -101,8 +101,12 @@ Remaining acceptance covers the real provider, full producer/PWA matrix and prov
 
 ## Local appointment reminders - 6 October 2026
 
-Appointment proposals, accept/reject/cancel, reminder/no-show and peer outcomes now create in-app notifications plus optional outbox in the same business transaction. UC-125 is Partial because counter-proposal/rescheduling/full channels remain missing; UC-134 implements the local scheduler. New migration 063 is isolated-tested only, not applied to Aiven.
+Appointment proposals, accept/reject/cancel, reminder/no-show and peer outcomes create action-specific in-app notifications plus optional outbox in the same business transaction. Post-commit realtime publishes to each participant. UC-125 is Partial because counter-proposal/rescheduling and PWA/provider channels remain missing; UC-134 implements the local scheduler. New migration 063 is isolated-tested only, not applied to Aiven.
 
 `APPOINTMENT_REMINDER_MINUTES` defaults to 30 (1-1440). A coalesced 60-second task locks the claim/appointment and conditionally sets the reminder marker, so concurrent workers queue at most one reminder per attempt/recipient. Existing claim preference, quiet hours, unread cancellation and worker lease/uncertainty rules apply; no new preference category or provider guarantee is invented. Final delivery checks require accepted future appointment, accepted participant consent and no pending/intaked custody. Cancellation/no-show suppresses queued reminder delivery; SMTP already accepted before a cancellation race cannot be recalled.
 
 Privacy-safe email uses `/appointments/:id` behind authentication, never a place/time/private note/evidence snapshot. Default immediate mode attempts prompt delivery; disabled/digest/quiet-hours, downtime, slow SMTP or uncertainty quarantine may mean no reminder arrives before the meeting. In-app remains canonical. Actual provider/manual acceptance and exact new candidate CI remain separate from mock-transport/SQL/browser results. Both entrypoints keep their SMTP drain; the API also drains the reminder task before pool closure. Details and evidence: [appointment-journey-rollout.md](../runbooks/appointment-journey-rollout.md).
+
+## Local realtime notification follow-up - 12 October 2026
+
+The Web notification center and active claim room subscribe to the authenticated SSE endpoint. Notification-list resync runs after stream connection/reconnection; a chat event causes an authorized room reload, leaving message bodies out of the notification event. Claim escalation now records both the claim-state event and the custody request event. Custody notifications cover intake/return, reservation and release, stored-state movement, legal hold, overdue, claim verification, and disposition request/approval/completion. PWA push and real-provider delivery acceptance remain unverified.
