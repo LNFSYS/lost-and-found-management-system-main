@@ -541,6 +541,9 @@ export function createClaimUseCases(options: ClaimDependencies) {
         prompt
       });
 
+      let chatNotification: NotificationRecord | null = null;
+      let chatRecipientId: string | null = null;
+      let chatRoomId: string | null = null;
       await withTransaction(async (connection) => {
         const claim = await claimRepository.findByIdForUpdate(claimId, connection);
         const participant = claim ? await claimRepository.findParticipant(claimId, finderId, connection) : null;
@@ -588,12 +591,25 @@ export function createClaimUseCases(options: ClaimDependencies) {
         
         if (room) {
           const messageContent = `🔍 Câu hỏi xác minh:\n${prompt}`;
-          await claimRepository.createMessage({ 
+          const message = await claimRepository.createMessage({
             roomId: room.id, 
             senderId: finderId,
             content: messageContent,
             clientMessageId: `verification-question-${questionId}-${Date.now()}`
           }, connection);
+          if (!message) throw new AppError("internal", "Không thể gửi câu hỏi vào phòng trao đổi");
+          chatRecipientId = counterpartId(claim, finderId);
+          chatRoomId = room.id;
+          chatNotification = chatRecipientId ? await notificationRepository.create({
+            userId: chatRecipientId,
+            type: "CHAT_MESSAGE_RECEIVED",
+            title: "Bạn có câu hỏi xác minh mới",
+            body: "Mở phòng trao đổi riêng để xem và trả lời câu hỏi.",
+            entityType: "CLAIM",
+            entityId: claimId,
+            dedupeKey: `claim:${claimId}:message:${message.id}`
+          }, connection) : null;
+          await queueOptionalEmail({ notification: chatNotification, recipientUserId: chatRecipientId, eventType: "CHAT", roomId: room.id, queryable: connection });
         }
         
         await claimRepository.writeAudit({
@@ -613,6 +629,7 @@ export function createClaimUseCases(options: ClaimDependencies) {
           }
         }, connection);
       });
+      await publishWorkflowNotification({ userId: chatRecipientId, notification: chatNotification, workflow: "CHAT", roomId: chatRoomId });
       return verificationDetails(claimId, finderId);
     },
 
@@ -626,6 +643,9 @@ export function createClaimUseCases(options: ClaimDependencies) {
       if (!answer || answer.length > 500) throw new AppError("invalid_input", "Câu trả lời phải có từ 1 đến 500 ký tự");
       const fingerprint = requestFingerprint({ operation: "ANSWER_VERIFICATION_QUESTION", questionId, answer });
 
+      let chatNotification: NotificationRecord | null = null;
+      let chatRecipientId: string | null = null;
+      let chatRoomId: string | null = null;
       await withTransaction(async (connection) => {
         const claim = await claimRepository.findByIdForUpdate(claimId, connection);
         const participant = claim ? await claimRepository.findParticipant(claimId, claimantId, connection) : null;
@@ -647,12 +667,25 @@ export function createClaimUseCases(options: ClaimDependencies) {
         
         if (room) {
           const messageContent = `🔍 Câu hỏi xác minh:\n${question.prompt}\n\n✏️ Câu trả lời: ${answer}`;
-          await claimRepository.createMessage({ 
+          const message = await claimRepository.createMessage({
             roomId: room.id, 
             senderId: claimantId,
             content: messageContent,
             clientMessageId: `verification-answer-${questionId}-${Date.now()}`
           }, connection);
+          if (!message) throw new AppError("internal", "Không thể gửi câu trả lời vào phòng trao đổi");
+          chatRecipientId = counterpartId(claim, claimantId);
+          chatRoomId = room.id;
+          chatNotification = chatRecipientId ? await notificationRepository.create({
+            userId: chatRecipientId,
+            type: "CHAT_MESSAGE_RECEIVED",
+            title: "Bạn có câu trả lời xác minh mới",
+            body: "Mở phòng trao đổi riêng để xem câu trả lời.",
+            entityType: "CLAIM",
+            entityId: claimId,
+            dedupeKey: `claim:${claimId}:message:${message.id}`
+          }, connection) : null;
+          await queueOptionalEmail({ notification: chatNotification, recipientUserId: chatRecipientId, eventType: "CHAT", roomId: room.id, queryable: connection });
         }
         
         await claimRepository.writeAudit({
@@ -670,6 +703,7 @@ export function createClaimUseCases(options: ClaimDependencies) {
           }
         }, connection);
       });
+      await publishWorkflowNotification({ userId: chatRecipientId, notification: chatNotification, workflow: "CHAT", roomId: chatRoomId });
       return verificationDetails(claimId, claimantId);
     },
 
@@ -802,24 +836,24 @@ export function createClaimUseCases(options: ClaimDependencies) {
         }
 
         const notificationType = input.decision === "ESCALATE_TO_CUSTODY"
-          ? "CUSTODY_REQUEST_CREATED" as const
+          ? "CLAIM_ESCALATED" as const
           : nextStatus === "ACCEPTED"
           ? "CLAIM_ACCEPTED" as const
           : nextStatus === "NEED_MORE_INFO"
             ? "CLAIM_MORE_INFO_REQUESTED" as const
             : "CLAIM_REJECTED" as const;
-        if (input.decision !== "ESCALATE_TO_CUSTODY") decisionNotification = await notificationRepository.create({
+        decisionNotification = await notificationRepository.create({
           userId: claim.claimantId,
           type: notificationType,
-          title: notificationType === "CUSTODY_REQUEST_CREATED"
-            ? "Finder đã đề nghị chuyển vật phẩm sang custody"
+          title: notificationType === "CLAIM_ESCALATED"
+            ? "Finder đã chuyển yêu cầu sang quy trình custody"
             : notificationType === "CLAIM_ACCEPTED"
               ? "Yêu cầu trao đổi riêng đã được xác nhận"
               : notificationType === "CLAIM_MORE_INFO_REQUESTED"
                 ? "Yêu cầu trao đổi cần thêm thông tin"
                 : "Yêu cầu trao đổi đã được cập nhật",
-          body: notificationType === "CUSTODY_REQUEST_CREATED"
-            ? "Yêu cầu bàn giao đang chờ Staff xử lý. Claim chưa được chấp nhận hoặc từ chối."
+          body: notificationType === "CLAIM_ESCALATED"
+            ? "Yêu cầu bàn giao đang chờ Staff xử lý. Trạng thái quyền sở hữu chưa được quyết định."
             : "Đăng nhập để xem trạng thái mới trong khu vực Trao đổi riêng.",
           entityType: "CLAIM",
           entityId: claimId,

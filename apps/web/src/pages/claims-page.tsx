@@ -299,7 +299,8 @@ export function ClaimsPage() {
   const pendingMessage = useRef<{ content: string; clientMessageId: string } | null>(null);
   const pendingOpenDecision = useRef<{ decision: "ACCEPT" | "DECLINE" | "REQUEST_MORE_INFO"; key: string } | null>(null);
   const pendingWithdrawal = useRef<string | null>(null);
-  const pollInFlight = useRef(false);
+  const roomSyncInFlight = useRef(false);
+  const syncAgain = useRef(false);
 
   function isCurrentRoom(id: string, generation: number) {
     return selectedClaimId.current === id && roomRequest.current.generation === generation;
@@ -448,6 +449,31 @@ export function ClaimsPage() {
       setError(failure instanceof Error ? failure.message : "Không thể mở conversation");
     } finally {
       if (isCurrent() && !silent) setRoomLoading(false);
+      if (isCurrent() && roomRequest.current.controller === controller) roomRequest.current.controller = null;
+      if (isCurrent() && syncAgain.current && !roomSyncInFlight.current) {
+        syncAgain.current = false;
+        void synchronizeClaimRoom(id);
+      }
+    }
+  }
+
+  async function synchronizeClaimRoom(id: string) {
+    if (roomRequest.current.controller) {
+      syncAgain.current = true;
+      return;
+    }
+    if (roomSyncInFlight.current) {
+      syncAgain.current = true;
+      return;
+    }
+    roomSyncInFlight.current = true;
+    try {
+      do {
+        syncAgain.current = false;
+        await loadClaimRoom(id, true);
+      } while (syncAgain.current && selectedClaimId.current === id);
+    } finally {
+      roomSyncInFlight.current = false;
     }
   }
 
@@ -483,6 +509,8 @@ export function ClaimsPage() {
     pendingMessage.current = null;
     pendingOpenDecision.current = null;
     pendingWithdrawal.current = null;
+    roomSyncInFlight.current = false;
+    syncAgain.current = false;
     if (claimId) void loadClaimRoom(claimId);
     return () => {
       roomRequest.current.generation += 1;
@@ -493,14 +521,21 @@ export function ClaimsPage() {
   }, [claimId, user?.id]);
 
   useEffect(() => {
-    if (!claimId || !claim?.canSend) return;
-    const timer = window.setInterval(() => {
-      if (pollInFlight.current) return;
-      pollInFlight.current = true;
-      void loadClaimRoom(claimId, true).finally(() => { pollInFlight.current = false; });
-    }, 10_000);
-    return () => window.clearInterval(timer);
-  }, [claimId, claim?.canSend]);
+    const roomId = claim?.room?.id;
+    if (!claimId || !claim?.canSend || !roomId) return;
+    let active = true;
+    const unsubscribe = api.subscribeRealtime({
+      roomId,
+      onConnected: () => { if (active) void synchronizeClaimRoom(claimId); },
+      onNotification: (event) => {
+        if (!active) return;
+        const sameRoomMessage = event.workflow === "CHAT" && event.roomId === roomId;
+        const sameClaimUpdate = event.workflow === "CLAIM" && event.notification.entityType === "CLAIM" && event.notification.entityId === claimId;
+        if (sameRoomMessage || sameClaimUpdate) void synchronizeClaimRoom(claimId);
+      }
+    });
+    return () => { active = false; unsubscribe(); };
+  }, [claimId, claim?.canSend, claim?.room?.id]);
 
   // Stop automatic retries after a failure; the panel offers an explicit retry.
   useEffect(() => {

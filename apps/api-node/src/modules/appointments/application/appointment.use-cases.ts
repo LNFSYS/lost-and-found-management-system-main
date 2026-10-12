@@ -1,12 +1,13 @@
 import { AppError } from "../../../shared/domain/app-error.js";
 import type { TransactionRunner, TransactionContext } from "../../../shared/application/transaction.js";
-import type { NotificationRepository, NotificationEmailQueue } from "../../notifications/application/index.js";
+import type { NotificationRecord, NotificationRepository, NotificationEmailQueue } from "../../notifications/application/index.js";
 import type { Appointment, AppointmentRepository } from "./appointment.repository.port.js";
 
 export type AppointmentAction = "ACCEPT" | "REJECT" | "CANCEL" | "CONFIRM" | "DISPUTE" | "NO_SHOW";
 export function createAppointmentUseCases(options: {
   repository: AppointmentRepository; transaction: TransactionRunner; id: () => string;
   hash: (value: string) => string; notifications: NotificationRepository; emails: NotificationEmailQueue;
+  realtimeNotifier?: { publishNotification(input: { userId: string; notification: NotificationRecord; workflow: "APPOINTMENT" | "RETURN" }): Promise<unknown> | unknown };
   now?: () => Date; reminderLeadMinutes?: number;
 }) {
   const { repository: repo } = options;
@@ -17,14 +18,49 @@ export function createAppointmentUseCases(options: {
   function participant(a: { finderId: string; ownerId: string }, userId: string) {
     if (userId !== a.finderId && userId !== a.ownerId) throw new AppError("forbidden", "Bạn không tham gia lịch hẹn này");
   }
-  async function notify(a: Appointment, action: string, tx: TransactionContext, reminder = false) {
+  type NotificationDelivery = { userId: string; notification: NotificationRecord; workflow: "APPOINTMENT" | "RETURN" };
+  async function notify(a: Appointment, action: string, tx: TransactionContext, reminder = false): Promise<NotificationDelivery[]> {
+    const deliveries: NotificationDelivery[] = [];
+    const type = reminder || action === "REMINDER" ? "APPOINTMENT_REMINDER"
+      : action === "PROPOSED" ? "APPOINTMENT_PROPOSED"
+        : action === "ACCEPT" ? "APPOINTMENT_ACCEPTED"
+          : action === "REJECT" ? "APPOINTMENT_REJECTED"
+            : action === "CANCEL" ? "APPOINTMENT_CANCELLED"
+              : action === "NO_SHOW" ? "APPOINTMENT_NO_SHOW"
+                : a.status === "COMPLETED" ? "RETURN_COMPLETED"
+                  : action.endsWith("_CONFIRM") || action.endsWith("_DISPUTE") ? "APPOINTMENT_HANDOVER_UPDATED" : "APPOINTMENT_UPDATED";
+    const title = type === "APPOINTMENT_PROPOSED" ? "Bạn có đề xuất lịch hẹn mới"
+      : type === "APPOINTMENT_ACCEPTED" ? "Lịch hẹn đã được chấp nhận"
+        : type === "APPOINTMENT_REJECTED" ? "Đề xuất lịch hẹn đã bị từ chối"
+          : type === "APPOINTMENT_CANCELLED" ? "Lịch hẹn đã được hủy"
+            : type === "APPOINTMENT_REMINDER" ? "Sắp đến lịch hẹn trả đồ"
+              : type === "APPOINTMENT_NO_SHOW" ? "Đã ghi nhận việc một bên không đến hẹn"
+                : type === "APPOINTMENT_HANDOVER_UPDATED" ? "Đã cập nhật xác nhận bàn giao"
+                  : type === "RETURN_COMPLETED" ? "Hai bên đã xác nhận hoàn tất trả đồ"
+                    : "Lịch hẹn trả đồ đã cập nhật";
+    const body = type === "APPOINTMENT_PROPOSED" ? "Mở lịch hẹn để xem thời gian, điểm bàn giao và phản hồi đề xuất."
+      : type === "APPOINTMENT_ACCEPTED" ? "Cả hai bên đã thống nhất thời gian và điểm bàn giao."
+        : type === "APPOINTMENT_REJECTED" ? "Mở lịch hẹn để xem trạng thái và tiếp tục trao đổi."
+          : type === "APPOINTMENT_CANCELLED" ? "Mở lịch hẹn để xem trạng thái và lý do cập nhật."
+            : type === "APPOINTMENT_REMINDER" ? "Mở lịch hẹn để kiểm tra giờ và điểm gặp đã được hai bên chấp nhận."
+              : type === "APPOINTMENT_NO_SHOW" ? "Trạng thái lịch hẹn đã cập nhật; việc này không xác nhận đã bàn giao vật phẩm."
+                : type === "APPOINTMENT_HANDOVER_UPDATED" ? "Mở lịch hẹn để xem xác nhận hoặc ý kiến về việc bàn giao."
+                  : type === "RETURN_COMPLETED" ? "Cả hai bên đã xác nhận việc đối chiếu và bàn giao vật phẩm."
+                    : "Mở lịch hẹn để kiểm tra thông tin và trạng thái.";
     for (const userId of new Set([a.finderId, a.ownerId])) {
-      const notification = await options.notifications.create({ userId, type: a.status === "COMPLETED" ? "RETURN_UPDATED" : "APPOINTMENT_UPDATED",
-        title: reminder ? "Sắp đến lịch hẹn trả đồ" : "Lịch hẹn trả đồ đã cập nhật", body: "Mở lịch hẹn để kiểm tra thông tin và trạng thái.",
+      const notification = await options.notifications.create({ userId, type,
+        title, body,
         entityType: reminder ? "APPOINTMENT_REMINDER" : "APPOINTMENT", entityId: a.id,
         dedupeKey: `appointment:${a.id}:${a.version}:${action}:${userId}` }, tx);
-      if (notification) await options.emails.enqueue({ notification, recipientUserId: userId, eventType: "APPOINTMENT" }, tx);
+      if (notification) {
+        await options.emails.enqueue({ notification, recipientUserId: userId, eventType: "APPOINTMENT" }, tx);
+        deliveries.push({ userId, notification, workflow: type === "RETURN_COMPLETED" ? "RETURN" : "APPOINTMENT" });
+      }
     }
+    return deliveries;
+  }
+  async function publish(deliveries: NotificationDelivery[]) {
+    for (const delivery of deliveries) await options.realtimeNotifier?.publishNotification(delivery);
   }
   async function replay(userId: string, key: string, hash: string, tx: TransactionContext) {
     const previous = await repo.replay(userId, key, tx);
@@ -46,11 +82,11 @@ export function createAppointmentUseCases(options: {
       await ready();
       const date = new Date(input.proposedAt);
       const hash = options.hash(JSON.stringify(["CREATE", input.claimId, input.proposedAt, input.handoverPointId]));
-      return options.transaction(async tx => {
+      const result = await options.transaction(async tx => {
         const context = await repo.context(input.claimId, tx);
         if (!context) throw new AppError("not_found", "Không tìm thấy cuộc trao đổi");
         participant(context, userId);
-        const previous = await replay(userId, input.requestKey, hash, tx); if (previous) return previous;
+        const previous = await replay(userId, input.requestKey, hash, tx); if (previous) return { appointment: previous, deliveries: [] as NotificationDelivery[] };
         if (!context.eligible || !await repo.assertSafe(context, tx)) throw new AppError("conflict", "Chưa đủ điều kiện đặt lịch hoặc vật phẩm đang do kho/tranh chấp xử lý");
         if (!Number.isFinite(date.getTime()) || date.getTime() < now().getTime() + 60_000 || date.getTime() > now().getTime() + 90 * 86_400_000)
           throw new AppError("invalid_input", "Lịch hẹn phải sau hiện tại ít nhất 1 phút và trong 90 ngày");
@@ -59,8 +95,11 @@ export function createAppointmentUseCases(options: {
         const id = options.id();
         await repo.create({ id, ...input, postId: context.postId, proposerId: userId, proposedAt: date }, tx);
         await repo.event({ id: options.id(), appointmentId: id, actorId: userId, action: "PROPOSED", key: input.requestKey, hash }, tx);
-        const a = (await repo.find(id, tx))!; await notify(a, "PROPOSED", tx); return a;
+        const a = (await repo.find(id, tx))!;
+        return { appointment: a, deliveries: await notify(a, "PROPOSED", tx) };
       });
+      await publish(result.deliveries);
+      return result.appointment;
     },
     async act(userId: string, id: string, input: { action: AppointmentAction; version: number; requestKey: string; physicallyChecked?: boolean; reason?: string }) {
       await ready();
@@ -69,10 +108,10 @@ export function createAppointmentUseCases(options: {
       const initial = await repo.find(id);
       if (!initial) throw new AppError("not_found", "Không tìm thấy lịch hẹn");
       participant(initial, userId);
-      return options.transaction(async tx => {
+      const result = await options.transaction(async tx => {
         const context = await repo.context(initial.claimId, tx);
         if (!context) throw new AppError("not_found", "Không tìm thấy cuộc trao đổi");
-        const previous = await replay(userId, input.requestKey, hash, tx); if (previous) return previous;
+        const previous = await replay(userId, input.requestKey, hash, tx); if (previous) return { appointment: previous, deliveries: [] as NotificationDelivery[] };
         const a = (await repo.find(id, tx))!;
         if (a.version === 0) throw new AppError("conflict", "Lịch hẹn cũ chỉ có thể xem; cần quản trị đối soát trước khi chuyển đổi xác nhận");
         if (a.version !== input.version) throw new AppError("conflict", "Lịch hẹn vừa thay đổi. Vui lòng tải lại trước khi xác nhận");
@@ -109,23 +148,29 @@ export function createAppointmentUseCases(options: {
         await repo.update(a, time, tx);
         await repo.event({ id: options.id(), appointmentId: id, actorId: userId, action, key: input.requestKey, hash, note:reason }, tx);
         if (a.status === "COMPLETED") await repo.event({ id: options.id(), appointmentId: id, actorId: userId, action: "RETURN_COMPLETED" }, tx);
-        await notify(a, action, tx); return (await repo.find(id, tx))!;
+        return { appointment: (await repo.find(id, tx))!, deliveries: await notify(a, action, tx) };
       });
+      await publish(result.deliveries);
+      return result.appointment;
     },
     async queueReminders() {
-      await ready(); let queued = 0; const time = now();
+      await ready(); let queued = 0; const time = now(); const deliveries: NotificationDelivery[] = [];
       for (const id of await repo.dueReminders(time,options.reminderLeadMinutes ?? 30)) {
         const first = await repo.find(id); if (!first) continue;
-        await options.transaction(async tx => {
+        const result = await options.transaction(async tx => {
           const context = await repo.context(first.claimId, tx);
-          if (!context?.eligible || !await repo.assertSafe(context, tx)) return;
+          if (!context?.eligible || !await repo.assertSafe(context, tx)) return [] as NotificationDelivery[];
           const a = await repo.find(id, tx);
-          if (!a || a.status !== "ACCEPTED" || a.custodyAuthorized || new Date(a.proposedAt).getTime() <= time.getTime()) return;
-          if (!await repo.markReminded(id, time, tx)) return;
-          await notify(a, "REMINDER", tx, true);
-          await repo.event({ id: options.id(), appointmentId: id, actorId: null, action: "REMINDER_QUEUED" }, tx); queued++;
+          if (!a || a.status !== "ACCEPTED" || a.custodyAuthorized || new Date(a.proposedAt).getTime() <= time.getTime()) return [] as NotificationDelivery[];
+          if (!await repo.markReminded(id, time, tx)) return [] as NotificationDelivery[];
+          const pending = await notify(a, "REMINDER", tx, true);
+          await repo.event({ id: options.id(), appointmentId: id, actorId: null, action: "REMINDER_QUEUED" }, tx);
+          return pending;
         });
+        if (result.length) queued++;
+        deliveries.push(...result);
       }
+      await publish(deliveries);
       return { queued };
     }
   };

@@ -1,4 +1,4 @@
-import { Bell, CheckCheck, CheckCircle2, MessageCircle, ScanSearch, X } from "lucide-react";
+import { Bell, CheckCheck, CheckCircle2, Clock3, MessageCircle, ScanSearch, ShieldCheck, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/auth-context";
@@ -7,7 +7,10 @@ import { notificationDestination } from "../services/notification-destination";
 
 function notificationIcon(type: AppNotification["type"]) {
   if (type === "MATCH_FOUND") return <ScanSearch size={17} />;
-  return type === "CLAIM_ACCEPTED" ? <CheckCircle2 size={17} /> : <MessageCircle size={17} />;
+  if (type.startsWith("CUSTODY_") || type.startsWith("WAREHOUSE_")) return <ShieldCheck size={17} />;
+  if (type.startsWith("APPOINTMENT_") || type.startsWith("RETURN_")) return <Clock3 size={17} />;
+  if (type.startsWith("CLAIM_")) return <CheckCircle2 size={17} />;
+  return <MessageCircle size={17} />;
 }
 
 function formatNotificationDate(value: string) {
@@ -19,7 +22,7 @@ export function NotificationCenter() {
   const navigate = useNavigate();
   const centerRef = useRef<HTMLDivElement>(null);
   const knownIds = useRef<Set<string>>(new Set());
-  const initialized = useRef(false);
+  const realtimeVersion = useRef(0);
   const [items, setItems] = useState<AppNotification[]>([]);
   const [unreadTotal, setUnreadTotal] = useState(0);
   const [open, setOpen] = useState(false);
@@ -33,36 +36,45 @@ export function NotificationCenter() {
       setToast(null);
       setOpen(false);
       knownIds.current = new Set();
-      initialized.current = false;
+      realtimeVersion.current = 0;
       return;
     }
 
     let active = true;
     const load = async () => {
+      const observedVersion = realtimeVersion.current;
       try {
         const result = await api.listNotifications(20);
-        if (!active) return;
-        const fresh = initialized.current
-          ? result.items.find((item) => !knownIds.current.has(item.id) && !item.isRead)
-          : undefined;
+        if (!active || observedVersion !== realtimeVersion.current) return;
         setItems(result.items);
         setUnreadTotal(result.unreadTotal);
         knownIds.current = new Set(result.items.map((item) => item.id));
-        initialized.current = true;
-        if (fresh) setToast(fresh);
       } catch {
-        // Notification polling is deliberately non-blocking for the rest of the app.
+        // A notification feed failure must not block the rest of the app.
       } finally {
         if (active) setLoading(false);
       }
     };
 
+    function receiveNotification(event: { notification: AppNotification }) {
+      const notification = event.notification;
+      if (!active || !notification?.id || knownIds.current.has(notification.id)) return;
+      realtimeVersion.current++;
+      knownIds.current.add(notification.id);
+      setItems((current) => [notification, ...current.filter((item) => item.id !== notification.id)].slice(0, 20));
+      if (!notification.isRead) setUnreadTotal((current) => current + 1);
+      setToast(notification);
+    }
+
     setLoading(true);
     void load();
-    const timer = window.setInterval(() => { void load(); }, 10_000);
+    const unsubscribe = api.subscribeRealtime({
+      onConnected: () => { void load(); },
+      onNotification: receiveNotification
+    });
     return () => {
       active = false;
-      window.clearInterval(timer);
+      unsubscribe();
     };
   }, [user]);
 
