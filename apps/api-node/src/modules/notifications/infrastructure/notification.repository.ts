@@ -48,6 +48,15 @@ function mapNotification(row: NotificationRow): NotificationRecord {
 const notificationSelect = `SELECT n.id, n.type, n.title, n.body,
   n.entity_type, n.entity_id, n.is_read, n.read_at, n.created_at
 FROM notifications n`;
+const notificationCategorySql = `CASE
+  WHEN n.type = 'CHAT_MESSAGE_RECEIVED' THEN 'CHAT'
+  WHEN n.type = 'MATCH_FOUND' THEN 'MATCH'
+  WHEN n.type = 'APPOINTMENT_HANDOVER_UPDATED' OR n.type LIKE 'RETURN_%' THEN 'HANDOVER'
+  WHEN n.type LIKE 'APPOINTMENT_%' THEN 'APPOINTMENT'
+  WHEN n.type LIKE 'CUSTODY_%' THEN 'CUSTODY'
+  WHEN n.type LIKE 'WAREHOUSE_%' THEN 'OVERDUE'
+  WHEN n.type = 'FEEDBACK_RECEIVED' THEN 'FEEDBACK'
+  ELSE 'CLAIM' END`;
 
 export function createNotificationRepository(pool: SqlExecutor) {
 
@@ -81,7 +90,11 @@ export function createNotificationRepository(pool: SqlExecutor) {
     async listForUser(userId: string, limit = 20) {
       const safeLimit = Math.min(50, Math.max(1, Math.trunc(limit)));
       const [rows] = await pool.execute<NotificationRow[]>(
-        `${notificationSelect} WHERE n.user_id = ? ORDER BY n.created_at DESC, n.id DESC LIMIT ${safeLimit}`,
+        `${notificationSelect}
+         LEFT JOIN notification_email_preferences p ON p.user_id = n.user_id
+         WHERE n.user_id = ? AND COALESCE(JSON_UNQUOTE(JSON_EXTRACT(p.channel_preferences,
+           CONCAT('$.', ${notificationCategorySql}, '.inAppEnabled'))), 'true') <> 'false'
+         ORDER BY n.created_at DESC, n.id DESC LIMIT ${safeLimit}`,
         [userId]
       );
       return rows.map(mapNotification);
@@ -89,10 +102,25 @@ export function createNotificationRepository(pool: SqlExecutor) {
 
     async countUnreadForUser(userId: string) {
       const [rows] = await pool.execute<RowDataPacket[]>(
-        "SELECT COUNT(*) AS total FROM notifications WHERE user_id = ? AND is_read = FALSE",
+        `SELECT COUNT(*) AS total FROM notifications n
+         LEFT JOIN notification_email_preferences p ON p.user_id = n.user_id
+         WHERE n.user_id = ? AND n.is_read = FALSE
+           AND COALESCE(JSON_UNQUOTE(JSON_EXTRACT(p.channel_preferences,
+             CONCAT('$.', ${notificationCategorySql}, '.inAppEnabled'))), 'true') <> 'false'`,
         [userId]
       );
       return Number(rows[0]?.total ?? 0);
+    },
+
+    async isInAppEnabled(userId: string, type: NotificationType) {
+      const [rows] = await pool.execute<RowDataPacket[]>(
+        `SELECT COALESCE(JSON_UNQUOTE(JSON_EXTRACT(p.channel_preferences,
+          CONCAT('$.', ${notificationCategorySql}, '.inAppEnabled'))), 'true') <> 'false' AS enabled
+         FROM (SELECT ? AS user_id, ? AS type) n
+         LEFT JOIN notification_email_preferences p ON p.user_id = n.user_id`,
+        [userId, type]
+      );
+      return rows[0]?.enabled === 1 || rows[0]?.enabled === true;
     },
 
     async markRead(userId: string, notificationId: string) {

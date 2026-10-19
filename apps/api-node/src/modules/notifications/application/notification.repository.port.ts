@@ -36,7 +36,8 @@ export type NotificationType =
   | "APPOINTMENT_HANDOVER_UPDATED"
   | "RETURN_COMPLETED"
   | "APPOINTMENT_UPDATED"
-  | "RETURN_UPDATED";
+  | "RETURN_UPDATED"
+  | "FEEDBACK_RECEIVED";
 
 export interface NotificationRecord {
   id: string;
@@ -62,6 +63,7 @@ export interface NotificationRepository {
   }, queryable?: TransactionContext): Promise<NotificationRecord | null>;
   listForUser(userId: string, limit?: number): Promise<NotificationRecord[]>;
   countUnreadForUser(userId: string): Promise<number>;
+  isInAppEnabled?(userId: string, type: NotificationType): Promise<boolean>;
   markRead(userId: string, notificationId: string): Promise<boolean>;
   markAllRead(userId: string): Promise<number>;
 }

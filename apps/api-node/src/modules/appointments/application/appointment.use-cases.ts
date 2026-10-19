@@ -53,7 +53,8 @@ export function createAppointmentUseCases(options: {
         entityType: reminder ? "APPOINTMENT_REMINDER" : "APPOINTMENT", entityId: a.id,
         dedupeKey: `appointment:${a.id}:${a.version}:${action}:${userId}` }, tx);
       if (notification) {
-        await options.emails.enqueue({ notification, recipientUserId: userId, eventType: "APPOINTMENT" }, tx);
+        const eventType = type === "APPOINTMENT_HANDOVER_UPDATED" || type === "RETURN_COMPLETED" ? "HANDOVER" : "APPOINTMENT";
+        await options.emails.enqueue({ notification, recipientUserId: userId, eventType }, tx);
         deliveries.push({ userId, notification, workflow: type === "RETURN_COMPLETED" ? "RETURN" : "APPOINTMENT" });
       }
     }

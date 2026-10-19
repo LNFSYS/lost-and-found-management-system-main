@@ -16,6 +16,9 @@ export function createNotificationRoutes({ notificationController, auth }: {
   });
   notificationRoutes.get("/preferences", (request, response, next) => notificationController.getEmailPreferences(request, response).catch(next));
   notificationRoutes.put("/preferences", (request, response, next) => notificationController.updateEmailPreferences(request, response).catch(next));
+  notificationRoutes.get("/push/status", (request, response, next) => notificationController.getPushStatus(request, response).catch(next));
+  notificationRoutes.post("/push/subscriptions", (request, response, next) => notificationController.registerPushSubscription(request, response).catch(next));
+  notificationRoutes.delete("/push/subscriptions", (request, response, next) => notificationController.removePushSubscription(request, response).catch(next));
   notificationRoutes.get("/", (request, response, next) => notificationController.list(request, response).catch(next));
   notificationRoutes.post("/read-all", (request, response, next) => notificationController.markAllRead(request, response).catch(next));
   notificationRoutes.post("/:notificationId/read", (request, response, next) => notificationController.markRead(request, response).catch(next));

@@ -31,6 +31,9 @@ import type {
 } from "./claim.dto.js";
 import type { ClaimRepository, ClaimStatus } from "./claim.repository.port.js";
 import type { ContactPhotoUseCases } from "./contact-photo.use-cases.js";
+import type { ChatSocketUseCases } from "../../realtime/application/chat-socket.use-cases.js";
+import { loadCustodyIntakeSchedule, validateCustodyIntakeTime } from "../../warehouse/domain/intake-schedule.js";
+import type { SystemConfigRepository } from "../../system-config/application/system-config.repository.port.js";
 
 type WorkflowNotificationKind = "CLAIM" | "CHAT" | "APPOINTMENT" | "RETURN" | "CUSTODY";
 
@@ -55,6 +58,8 @@ export interface ClaimDependencies {
       roomId?: string | null;
     }): { delivered: number } | Promise<{ delivered: number; }>;
   };
+  chatSocketNotifier?: Pick<ChatSocketUseCases, "publishMessage">;
+  scheduleRepository?: Pick<SystemConfigRepository, "findByKey">;
   withTransaction: TransactionRunner;
   id: () => string;
   mediaStorage: PrivateMediaStorage;
@@ -141,6 +146,16 @@ export function createClaimUseCases(options: ClaimDependencies) {
       workflow: input.workflow,
       roomId: input.roomId
     });
+  }
+
+  async function publishChatMessage(roomId: string | null, message: Awaited<ReturnType<typeof claimRepository.createMessage>>) {
+    if (!roomId || !message || !options.chatSocketNotifier) return;
+    try {
+      await options.chatSocketNotifier.publishMessage({ roomId, message });
+    } catch {
+      // The committed message remains available through room resync if a socket is unavailable.
+      logger.warn("[claims] WebSocket chat delivery failed");
+    }
   }
 
   async function queueOptionalEmail(input: {
@@ -461,6 +476,7 @@ export function createClaimUseCases(options: ClaimDependencies) {
         return { claimId: claim.id, message, notification, recipientId, roomId };
       });
 
+      await publishChatMessage(result.roomId, result.message);
       await publishWorkflowNotification({
         userId: result.recipientId,
         notification: result.notification,
@@ -525,6 +541,39 @@ export function createClaimUseCases(options: ClaimDependencies) {
       };
     },
 
+    async getHistory(claimId: string, actorId: string, roles: readonly string[] = []) {
+      const claim = await claimRepository.findById(claimId);
+      if (!claim) throw claimNotFound();
+      const participant = await claimRepository.findParticipant(claimId, actorId);
+      const staffAccess = roles.includes("STAFF") || roles.includes("ADMIN");
+      if (!participant && !staffAccess) throw claimNotFound();
+      const events = await (claimRepository.listClaimAuditEvents?.(claimId) ?? claimRepository.listVerificationAuditEvents(claimId));
+      return {
+        claimId,
+        accessScope: participant ? "PARTICIPANT" as const : "STAFF" as const,
+        events: events.map(event => {
+          const metadata = event.metadata;
+          const safeMetadata = metadata ? {
+            ...(typeof metadata.decision === "string" ? { decision: metadata.decision } : {}),
+            ...(typeof metadata.reason === "string" ? { reason: metadata.reason.slice(0, 1000) } : {}),
+            ...(typeof metadata.communicationOnly === "boolean" ? { communicationOnly: metadata.communicationOnly } : {})
+          } : null;
+          const actor = event.actorId === claim.finderId ? "Finder"
+            : event.actorId === claim.claimantId ? "Claimant"
+              : event.action.startsWith("STAFF_") ? "Staff" : "System";
+          return {
+            id: event.id,
+            action: event.action,
+            fromStatus: event.fromStatus,
+            toStatus: event.toStatus,
+            actor,
+            metadata: safeMetadata,
+            createdAt: event.createdAt
+          };
+        })
+      };
+    },
+
     async getVerification(claimId: string, userId: string) {
       return verificationDetails(claimId, userId);
     },
@@ -544,6 +593,7 @@ export function createClaimUseCases(options: ClaimDependencies) {
       let chatNotification: NotificationRecord | null = null;
       let chatRecipientId: string | null = null;
       let chatRoomId: string | null = null;
+      let chatMessage: Awaited<ReturnType<typeof claimRepository.createMessage>> = null;
       await withTransaction(async (connection) => {
         const claim = await claimRepository.findByIdForUpdate(claimId, connection);
         const participant = claim ? await claimRepository.findParticipant(claimId, finderId, connection) : null;
@@ -597,6 +647,7 @@ export function createClaimUseCases(options: ClaimDependencies) {
             content: messageContent,
             clientMessageId: `verification-question-${questionId}-${Date.now()}`
           }, connection);
+          chatMessage = message;
           if (!message) throw new AppError("internal", "Không thể gửi câu hỏi vào phòng trao đổi");
           chatRecipientId = counterpartId(claim, finderId);
           chatRoomId = room.id;
@@ -629,6 +680,7 @@ export function createClaimUseCases(options: ClaimDependencies) {
           }
         }, connection);
       });
+      await publishChatMessage(chatRoomId, chatMessage);
       await publishWorkflowNotification({ userId: chatRecipientId, notification: chatNotification, workflow: "CHAT", roomId: chatRoomId });
       return verificationDetails(claimId, finderId);
     },
@@ -646,6 +698,7 @@ export function createClaimUseCases(options: ClaimDependencies) {
       let chatNotification: NotificationRecord | null = null;
       let chatRecipientId: string | null = null;
       let chatRoomId: string | null = null;
+      let chatMessage: Awaited<ReturnType<typeof claimRepository.createMessage>> = null;
       await withTransaction(async (connection) => {
         const claim = await claimRepository.findByIdForUpdate(claimId, connection);
         const participant = claim ? await claimRepository.findParticipant(claimId, claimantId, connection) : null;
@@ -673,6 +726,7 @@ export function createClaimUseCases(options: ClaimDependencies) {
             content: messageContent,
             clientMessageId: `verification-answer-${questionId}-${Date.now()}`
           }, connection);
+          chatMessage = message;
           if (!message) throw new AppError("internal", "Không thể gửi câu trả lời vào phòng trao đổi");
           chatRecipientId = counterpartId(claim, claimantId);
           chatRoomId = room.id;
@@ -703,6 +757,7 @@ export function createClaimUseCases(options: ClaimDependencies) {
           }
         }, connection);
       });
+      await publishChatMessage(chatRoomId, chatMessage);
       await publishWorkflowNotification({ userId: chatRecipientId, notification: chatNotification, workflow: "CHAT", roomId: chatRoomId });
       return verificationDetails(claimId, claimantId);
     },
@@ -715,6 +770,7 @@ export function createClaimUseCases(options: ClaimDependencies) {
         decision: input.decision,
         reason: input.reason,
         handoverPointId: input.handoverPointId ?? null,
+        requestedIntakeAt: input.requestedIntakeAt?.toISOString() ?? null,
         correctsEventId: input.correctsEventId ?? null
       });
 
@@ -794,6 +850,8 @@ export function createClaimUseCases(options: ClaimDependencies) {
         if (input.decision === "ESCALATE_TO_CUSTODY") {
           if (!custodyRequestRepository) throw new AppError("internal", "Custody request service is unavailable");
           if (!input.handoverPointId) throw new AppError("invalid_input", "Cần chọn quầy nhận bàn giao");
+          if (!input.requestedIntakeAt) throw new AppError("invalid_input", "Cần chọn ngày giờ tiếp nhận dự kiến");
+          validateCustodyIntakeTime(input.requestedIntakeAt, await loadCustodyIntakeSchedule(options.scheduleRepository));
           if (!await warehouseRepository.findHandoverPointById(input.handoverPointId)) {
             throw new AppError("not_found", "Không tìm thấy quầy bàn giao đang hoạt động");
           }
@@ -818,6 +876,7 @@ export function createClaimUseCases(options: ClaimDependencies) {
             requesterId: finderId,
             intakeType: "CUSTODY_TRANSFER",
             handoverPointId: input.handoverPointId,
+            requestedIntakeAt: input.requestedIntakeAt ?? null,
             reason: input.reason,
             idempotencyKey: input.idempotencyKey
           }, connection);
@@ -909,6 +968,7 @@ export function createClaimUseCases(options: ClaimDependencies) {
         }
       });
       await custodyDelivery?.publish(custodyEvents);
+      await publishChatMessage(decisionRoomId, decisionMessage);
       await publishWorkflowNotification({
         userId: decisionNotificationUserId,
         notification: decisionNotification,
@@ -1145,6 +1205,7 @@ export function createClaimUseCases(options: ClaimDependencies) {
         });
         return { message: created, notification, recipientId };
       });
+      await publishChatMessage(room.id, result.message);
       await publishWorkflowNotification({
         userId: result.recipientId,
         notification: result.notification,
@@ -1189,6 +1250,7 @@ export function createClaimUseCases(options: ClaimDependencies) {
         }
         const storage = await mediaStorage.save(claimId, evidenceId, image.extension, file.buffer);
         let chatDelivery: { notification: NotificationRecord; recipientId: string; roomId: string } | null = null;
+        let chatSocketDelivery: { message: NonNullable<Awaited<ReturnType<typeof claimRepository.createMessage>>>; roomId: string } | null = null;
         await persistUpload({ operation, kind: "EVIDENCE", logger,
           unreferenced: async () => await read() === null,
           matches: async () => {
@@ -1225,6 +1287,7 @@ export function createClaimUseCases(options: ClaimDependencies) {
               const message = await claimRepository.createMessage({ roomId: room.id, senderId: userId, content: chat.content,
                 clientMessageId: chat.clientMessageId, mediaUrl: `/api/claims/${claimId}/evidence/${evidenceId}` }, connection);
               if (!message) throw new AppError("internal", "Không thể gửi ảnh");
+              chatSocketDelivery = { message, roomId: room.id };
               const recipientId = counterpartId(lockedClaim, userId);
               if (recipientId) {
                 const notification = await notificationRepository.create({ userId: recipientId, type: "CHAT_MESSAGE_RECEIVED",
@@ -1236,6 +1299,7 @@ export function createClaimUseCases(options: ClaimDependencies) {
             }
           })
         });
+        if (chatSocketDelivery) await publishChatMessage(chatSocketDelivery.roomId, chatSocketDelivery.message);
         if (chatDelivery) {
           const delivery = chatDelivery as { notification: NotificationRecord; recipientId: string; roomId: string };
           await publishWorkflowNotification({ notification: delivery.notification, userId: delivery.recipientId, workflow: "CHAT", roomId: delivery.roomId });

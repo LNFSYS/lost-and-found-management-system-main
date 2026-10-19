@@ -1,6 +1,7 @@
 import type { Request, Response } from "express";
 import type { NotificationUseCases } from "../../application/notification.use-cases.js";
-import { listNotificationsQuerySchema, notificationIdParamSchema, updateNotificationEmailPreferencesSchema } from "./notification.validator.js";
+import { listNotificationsQuerySchema, notificationIdParamSchema, pushSubscriptionDeleteSchema,
+  pushSubscriptionSchema, updateNotificationEmailPreferencesSchema } from "./notification.validator.js";
 
 export function createNotificationController({ notificationService }: {
   notificationService: NotificationUseCases;
@@ -29,6 +30,19 @@ export function createNotificationController({ notificationService }: {
         request.auth!.sub,
         updateNotificationEmailPreferencesSchema.parse(request.body)
       ));
+    },
+
+    async getPushStatus(_request: Request, response: Response) {
+      response.json(notificationService.getPushStatus());
+    },
+
+    async registerPushSubscription(request: Request, response: Response) {
+      response.json(await notificationService.registerPushSubscription(request.auth!.sub, pushSubscriptionSchema.parse(request.body)));
+    },
+
+    async removePushSubscription(request: Request, response: Response) {
+      const { endpoint } = pushSubscriptionDeleteSchema.parse(request.body);
+      response.json(await notificationService.removePushSubscription(request.auth!.sub, endpoint));
     }
   };
   return notificationController;

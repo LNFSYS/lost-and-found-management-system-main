@@ -2,6 +2,7 @@ import { AlertTriangle, CalendarDays, CheckCircle2, Clock3, HelpCircle, LoaderCi
 import { useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useModalFocus } from "../hooks/use-modal-focus";
+import { CustodyIntakeScheduleHint } from "./custody-intake-schedule-hint";
 import { api, type ClaimMessage, type ClaimRecord, type ClaimVerificationState } from "../services/api";
 
 type Decision = "VERIFY_FOR_MEETUP" | "REQUEST_MORE_INFO" | "DECLINE" | "ESCALATE_TO_CUSTODY";
@@ -41,6 +42,7 @@ export function ClaimVerificationPanel({ claim, verification, loading, loadError
   const [reason, setReason] = useState("");
   const [handoverPoints, setHandoverPoints] = useState<Array<{ id: string; name: string; address: string }>>([]);
   const [handoverPointId, setHandoverPointId] = useState("");
+  const [requestedIntakeAt, setRequestedIntakeAt] = useState("");
   const [loadingHandoverPoints, setLoadingHandoverPoints] = useState(false);
   const [correctionMode, setCorrectionMode] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -68,6 +70,7 @@ export function ClaimVerificationPanel({ claim, verification, loading, loadError
     if (value === "VERIFY_FOR_MEETUP" && !verification?.policy.readyForDecision) return;
     setDecision(value);
     setReason("");
+    setRequestedIntakeAt("");
     setError("");
     if (value === "ESCALATE_TO_CUSTODY") {
       setHandoverPoints([]);
@@ -97,6 +100,7 @@ export function ClaimVerificationPanel({ claim, verification, loading, loadError
   async function confirmDecision() {
     if (!verification || !decision || !reason.trim()) return;
     if (decision === "ESCALATE_TO_CUSTODY" && !handoverPointId) return;
+    if (decision === "ESCALATE_TO_CUSTODY" && !requestedIntakeAt) return;
     setBusy(true);
     setError("");
     if (retry.current?.decision !== decision) retry.current = { decision, key: crypto.randomUUID() };
@@ -105,6 +109,7 @@ export function ClaimVerificationPanel({ claim, verification, loading, loadError
         decision,
         reason: reason.trim(),
         handoverPointId: decision === "ESCALATE_TO_CUSTODY" ? handoverPointId : undefined,
+        requestedIntakeAt: decision === "ESCALATE_TO_CUSTODY" ? new Date(requestedIntakeAt).toISOString() : undefined,
         correctsEventId: active ? undefined : latestDecision?.id,
         idempotencyKey: retry.current.key
       });
@@ -192,7 +197,7 @@ export function ClaimVerificationPanel({ claim, verification, loading, loadError
           <button type="button" className="close-btn" onClick={() => setDecision(null)} disabled={busy} title="Đóng"><X /></button>
         </header>
 
-        <div className="claim-custody-hours"><Clock3 /><p>Giờ làm việc Phòng DVSV: thứ Hai–thứ Sáu, buổi sáng 08:00/08:15–12:00 và buổi chiều 13:30–17:00, trừ ngày nghỉ lễ.</p></div>
+        <div className="claim-custody-hours"><Clock3 /><CustodyIntakeScheduleHint /></div>
 
         <form className="modal-form claim-custody-form" onSubmit={(event) => { event.preventDefault(); void confirmDecision(); }}>
           <label htmlFor="claim-custody-handover-point">Điểm quầy nhận bàn giao <span className="required-star">*</span>
@@ -201,6 +206,9 @@ export function ClaimVerificationPanel({ claim, verification, loading, loadError
               {handoverPoints.map((point) => <option key={point.id} value={point.id}>{point.name} - {point.address}</option>)}
             </select>
           </label>
+          <label htmlFor="claim-custody-requested-at">Ngày, giờ dự kiến mang vật phẩm đến quầy <span className="required-star">*</span>
+            <input id="claim-custody-requested-at" type="datetime-local" value={requestedIntakeAt} onChange={event => setRequestedIntakeAt(event.target.value)} required />
+          </label>
           {!loadingHandoverPoints && handoverPoints.length === 0 && <small className="field-hint">Hiện chưa có quầy bàn giao nào đang hoạt động.</small>}
           <label htmlFor="claim-custody-reason">Ghi chú / Lời nhắn cho Staff
             <textarea id="claim-custody-reason" value={reason} onChange={(event) => setReason(event.target.value)} minLength={3} maxLength={1000} placeholder="Ví dụ: Tôi sẽ mang chìa khóa đến quầy vào giờ ra chơi 10h sáng..." required />
@@ -208,7 +216,7 @@ export function ClaimVerificationPanel({ claim, verification, loading, loadError
           {loadingHandoverPoints && <small className="field-hint" role="status"><LoaderCircle className="spin-icon" /> Đang tải quầy bàn giao...</small>}
           {error && <div className="decision-modal-error"><AlertTriangle /> {error}</div>}
           <footer className="custody-modal-actions">
-            <button className="primary-button" type="submit" disabled={busy || loadingHandoverPoints || !handoverPointId || reason.trim().length < 3}>
+            <button className="primary-button" type="submit" disabled={busy || loadingHandoverPoints || !handoverPointId || !requestedIntakeAt || reason.trim().length < 3}>
               {busy ? <LoaderCircle className="spin-icon" /> : <CheckCircle2 size={18} />}
               {busy ? "Đang gửi yêu cầu..." : "Gửi Yêu cầu Bàn giao"}
             </button>

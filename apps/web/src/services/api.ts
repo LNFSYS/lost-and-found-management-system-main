@@ -12,10 +12,18 @@ export interface CurrentUser {
   updatedAt: string;
 }
 export type NotificationEmailMode = "IMMEDIATE" | "DELAYED_UNREAD" | "DIGEST" | "DISABLED";
+export type NotificationCategory = "CHAT" | "CLAIM" | "MATCH" | "APPOINTMENT" | "HANDOVER" | "CUSTODY" | "OVERDUE" | "FEEDBACK";
+export interface NotificationChannelPreference {
+  inAppEnabled: boolean;
+  pushEnabled: boolean;
+  emailMode: NotificationEmailMode;
+}
+export type NotificationChannelPreferences = Record<NotificationCategory, NotificationChannelPreference>;
 export interface NotificationEmailPreferences {
   userId: string;
   chatMode: NotificationEmailMode;
   claimMode: NotificationEmailMode;
+  categories: NotificationChannelPreferences;
   quietHoursStart: string | null;
   quietHoursEnd: string | null;
   timezone: string;
@@ -365,6 +373,7 @@ export interface CustodyRequest {
   rejectionReason: string | null;
   handoverPoint: { id: string; name: string | null; address: string | null } | null;
   confirmedHandoverAt: string | null;
+  requestedIntakeAt?: string | null;
   warehouseItemId: string | null;
   createdAt: string;
   updatedAt: string;
@@ -404,6 +413,7 @@ export interface CreateCustodyRequestPayload {
   postId?: string | null;
   reason?: string | null;
   handoverPointId?: string | null;
+  requestedIntakeAt: string;
   intakeType?: CustodyIntakeType;
   idempotencyKey?: string;
 }
@@ -601,6 +611,8 @@ export interface ClaimMessage {
   content: string | null;
   messageType: "TEXT" | "IMAGE" | "SYSTEM";
   mediaUrl?: string | null;
+  previewUrl?: string;
+  pending?: boolean;
   isRead: boolean;
   readAt: string | null;
   createdAt: string;
@@ -674,6 +686,19 @@ export interface ClaimVerificationState {
     createdAt: string;
   }>;
 }
+export interface ClaimHistoryResponse {
+  claimId: string;
+  accessScope: "PARTICIPANT" | "STAFF";
+  events: Array<{
+    id: string;
+    action: string;
+    fromStatus: ClaimStatus | null;
+    toStatus: ClaimStatus | null;
+    actor: "Finder" | "Claimant" | "Staff" | "System";
+    metadata: { decision?: string; reason?: string; communicationOnly?: boolean } | null;
+    createdAt: string;
+  }>;
+}
 export type NotificationType =
   | "MATCH_FOUND"
   | "CLAIM_REQUEST_RECEIVED" | "CLAIM_ACCEPTED" | "CLAIM_MORE_INFO_REQUESTED" | "CLAIM_REJECTED" | "CLAIM_WITHDRAWN" | "CLAIM_ESCALATED"
@@ -684,7 +709,7 @@ export type NotificationType =
   | "CUSTODY_RETURNED" | "CUSTODY_OVERDUE" | "CUSTODY_VERIFIED" | "CUSTODY_RESERVED"
   | "CUSTODY_RESERVATION_RELEASED" | "CUSTODY_MOVED" | "CUSTODY_STATUS_CHANGED" | "CUSTODY_LEGAL_HOLD"
   | "CUSTODY_DISPOSITION_REQUESTED" | "CUSTODY_DISPOSITION_APPROVED" | "CUSTODY_DISPOSITION_COMPLETED"
-  | "WAREHOUSE_OVERDUE" | "WAREHOUSE_DUE_SOON" | "APPOINTMENT_UPDATED" | "RETURN_UPDATED" | "CUSTODY_UPDATED";
+  | "WAREHOUSE_OVERDUE" | "WAREHOUSE_DUE_SOON" | "APPOINTMENT_UPDATED" | "RETURN_UPDATED" | "CUSTODY_UPDATED" | "FEEDBACK_RECEIVED";
 export interface AppNotification {
   id: string;
   type: NotificationType;
@@ -742,6 +767,13 @@ export interface RealtimeHandlers {
   roomId?: string;
   onConnected?: () => void;
   onNotification?: (event: WorkflowRealtimeNotification) => void;
+}
+
+export interface ClaimChatSocketHandlers {
+  roomId: string;
+  onConnected?: () => void;
+  onReconnected?: () => void;
+  onMessage?: (message: ClaimMessage) => void;
 }
 
 function subscribeRealtime(handlers: RealtimeHandlers) {
@@ -833,6 +865,108 @@ function subscribeRealtime(handlers: RealtimeHandlers) {
   })();
 
   return () => controller.abort();
+}
+
+function subscribeClaimChatSocket(handlers: ClaimChatSocketHandlers) {
+  const generation = sessionGeneration;
+  let stopped = false;
+  let activeSocket: WebSocket | null = null;
+  let retryTimer: number | null = null;
+  let retryDelay = 500;
+  let wasConnected = false;
+
+  function wait(milliseconds: number) {
+    return new Promise<void>(resolve => {
+      if (stopped) return resolve();
+      retryTimer = window.setTimeout(() => {
+        retryTimer = null;
+        resolve();
+      }, milliseconds);
+    });
+  }
+
+  function connectOnce() {
+    return new Promise<{ code: number; connected: boolean }>(resolve => {
+      const socketUrl = new URL(`${API_URL.replace(/\/+$/, "")}/realtime/chat-socket`, window.location.href);
+      socketUrl.protocol = socketUrl.protocol === "https:" ? "wss:" : "ws:";
+      const socket = new WebSocket(socketUrl);
+      activeSocket = socket;
+      let connected = false;
+      let authenticationFailure: "UNAUTHENTICATED" | "FORBIDDEN" | "INVALID_REQUEST" | null = null;
+      const connectionTimeout = window.setTimeout(() => {
+        try { socket.close(); } catch { /* The handshake may already have ended. */ }
+      }, 15_000);
+
+      socket.onopen = () => {
+        void (async () => {
+          if (!accessToken && !await refreshSession()) { socket.close(); return; }
+          if (stopped || generation !== sessionGeneration || !accessToken) { socket.close(); return; }
+          socket.send(JSON.stringify({ type: "authenticate", accessToken, roomId: handlers.roomId }));
+        })().catch(() => socket.close());
+      };
+
+      socket.onmessage = event => {
+        if (typeof event.data !== "string") return;
+        let value: unknown;
+        try { value = JSON.parse(event.data); } catch { return; }
+        if (!value || typeof value !== "object") return;
+        const payload = value as Record<string, unknown>;
+        if (payload.type === "auth_error") {
+          if (payload.code === "UNAUTHENTICATED" || payload.code === "FORBIDDEN" || payload.code === "INVALID_REQUEST") {
+            authenticationFailure = payload.code;
+          }
+          return;
+        }
+        if (payload.type === "ready") {
+          window.clearTimeout(connectionTimeout);
+          connected = true;
+          retryDelay = 500;
+          if (wasConnected) handlers.onReconnected?.();
+          else handlers.onConnected?.();
+          wasConnected = true;
+          return;
+        }
+        if (payload.type === "chat.message" && payload.roomId === handlers.roomId && payload.message && typeof payload.message === "object") {
+          handlers.onMessage?.(payload.message as ClaimMessage);
+        }
+      };
+
+      socket.onclose = event => {
+        window.clearTimeout(connectionTimeout);
+        if (activeSocket === socket) activeSocket = null;
+        if (authenticationFailure === "FORBIDDEN") resolve({ code: 4403, connected });
+        else if (authenticationFailure === "INVALID_REQUEST") resolve({ code: 4400, connected });
+        else resolve({ code: authenticationFailure === "UNAUTHENTICATED" ? 4401 : event.code, connected });
+      };
+      socket.onerror = () => { /* The close event drives the retry loop. */ };
+    });
+  }
+
+  void (async () => {
+    while (!stopped && generation === sessionGeneration) {
+      if (!accessToken) {
+        const session = await refreshSession().catch(() => null);
+        if (!session) return;
+      }
+      const result = await connectOnce();
+      if (stopped || generation !== sessionGeneration) return;
+      if (result.code === 4403 || result.code === 4400) return;
+      if (result.code === 4401) {
+        const session = await refreshSession().catch(() => null);
+        if (!session) return;
+      }
+      await wait(retryDelay);
+      retryDelay = Math.min(10_000, retryDelay * 2);
+    }
+  })();
+
+  return () => {
+    stopped = true;
+    if (retryTimer !== null) window.clearTimeout(retryTimer);
+    retryTimer = null;
+    try { activeSocket?.close(1000, "Room changed"); } catch { /* The socket is already closed. */ }
+    activeSocket = null;
+  };
 }
 
 function isMutation(init: RequestInit) {
@@ -1004,6 +1138,7 @@ async function mediaBlob(path: string, retry = true, errorMessage = "Khong the t
 
 export const api = {
   subscribeRealtime: (handlers: RealtimeHandlers) => subscribeRealtime(handlers),
+  subscribeClaimChatSocket: (handlers: ClaimChatSocketHandlers) => subscribeClaimChatSocket(handlers),
   listAppointments: (filters:{claimId?:string;page?:number}={},signal?:AbortSignal) => raw<{results:import("./workflow-types").Appointment[];total:number}>(`/appointments${queryString(filters)}`,{signal}),
   getAppointment: (id:string,signal?:AbortSignal) => raw<import("./workflow-types").Appointment>(`/appointments/${id}`,{signal}),
   createAppointment: (payload:{claimId:string;proposedAt:string;handoverPointId:string;requestKey:string}) => raw<import("./workflow-types").Appointment>("/appointments",{method:"POST",body:JSON.stringify(payload)}),
@@ -1076,6 +1211,7 @@ export const api = {
   },
   findConversationByPost,
   getClaim: (claimId: string, signal?: AbortSignal) => raw<ClaimRecord>(`/claims/${claimId}`, { signal }),
+  getClaimHistory: (claimId: string, signal?: AbortSignal) => raw<ClaimHistoryResponse>(`/claims/${claimId}/history`, { signal }),
   createClaim: (payload: ({ postId: string } | { lostPostId: string; foundPostId: string }) & { description?: string; requestKey?: string; contactCheckId?: string; sourceFoundPostId?: string }) => {
     const requestKey = payload.requestKey ?? crypto.randomUUID();
     return raw<ClaimRecord & { idempotent: boolean }>("/claims", { method: "POST", headers: { "Idempotency-Key": requestKey }, body: JSON.stringify({ ...payload, requestKey: undefined }) });
@@ -1130,6 +1266,7 @@ export const api = {
     decision: "VERIFY_FOR_MEETUP" | "REQUEST_MORE_INFO" | "DECLINE" | "ESCALATE_TO_CUSTODY";
     reason: string;
     handoverPointId?: string;
+    requestedIntakeAt?: string;
     correctsEventId?: string;
     idempotencyKey: string;
   }) => raw<{ claim: ClaimRecord; verification: ClaimVerificationState; message: ClaimMessage | null }>(`/claims/${claimId}/verification/decision`, {
@@ -1140,6 +1277,9 @@ export const api = {
   markAllNotificationsRead: () => raw<{ read: boolean; count: number }>("/notifications/read-all", { method: "POST" }),
   getNotificationEmailPreferences: () => raw<{ preferences: NotificationEmailPreferences }>("/notifications/preferences").then((result) => result.preferences),
   updateNotificationEmailPreferences: (payload: Omit<NotificationEmailPreferences, "userId" | "updatedAt">) => raw<{ preferences: NotificationEmailPreferences }>("/notifications/preferences", { method: "PUT", body: JSON.stringify(payload) }).then((result) => result.preferences),
+  getPushNotificationStatus: () => raw<{ enabled: boolean; publicKey: string | null }>("/notifications/push/status"),
+  registerPushSubscription: (payload: { endpoint: string; p256dh: string; auth: string }) => raw<{ registered: boolean }>("/notifications/push/subscriptions", { method: "POST", body: JSON.stringify(payload) }),
+  removePushSubscription: (endpoint: string) => raw<{ removed: boolean }>("/notifications/push/subscriptions", { method: "DELETE", body: JSON.stringify({ endpoint }) }),
   getAdminCatalog: () => raw<AdminCatalog>("/admin/catalog"),
   createAdminCategory: (payload: Required<Pick<AdminCategoryPayload, "name">> & AdminCategoryPayload) => raw<AdminCategory>("/admin/categories", { method: "POST", body: JSON.stringify(payload) }),
   updateAdminCategory: (id: string, payload: AdminCategoryPayload) => raw<AdminCategory>(`/admin/categories/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),

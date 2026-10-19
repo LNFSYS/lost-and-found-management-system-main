@@ -30,6 +30,7 @@ const HomePage = lazy(async () => {
 const AppointmentsPage=lazy(async()=>({default:(await import("./pages/appointments-page")).AppointmentsPage}));
 const ItemJourneyPage=lazy(async()=>({default:(await import("./pages/item-journey-page")).ItemJourneyPage}));
 const AdminAuditPage=lazy(async()=>({default:(await import("./pages/admin-audit-page")).AdminAuditPage}));
+const ClaimHistoryPage=lazy(async()=>({default:(await import("./pages/claim-history-page")).ClaimHistoryPage}));
 
 function AdminHome() {
   const { user } = useAuth();
@@ -72,6 +73,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
               <Route path="/posts/:postId/matches" element={<PostMatchesPage />} />
               <Route path="/posts/:postId" element={<PostDetailPage />} />
               <Route path="/claims" element={<ClaimsPage />} />
+              <Route path="/claims/:claimId/history" element={<Suspense fallback={<p role="status">Đang tải lịch sử claim...</p>}><ClaimHistoryPage /></Suspense>} />
               <Route path="/claims/:claimId" element={<ClaimsPage />} />
               <Route path="/reports" element={<ReportsPage />} />
             </Route>

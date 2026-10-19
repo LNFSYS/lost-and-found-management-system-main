@@ -23,7 +23,7 @@ Current repository là baseline Web + Node.js API. Native Mobile, PWA infrastruc
 - Upload media bài đăng qua authenticated Cloudinary/protected proxy hoặc local fallback theo cấu hình module, có kiểm tra loại, kích thước và file signature; legacy local references vẫn được đọc có quyền.
 - Gemini-assisted multi-image analysis tạo bản nháp có thể chỉnh sửa; không tự đăng bài và không tự xác minh quyền sở hữu.
 - Hybrid/rule-based matching với text normalization tiếng Việt, category, location, time, image/OCR tags, tier, score breakdown và explanation.
-- Claim peer-to-peer, participant authorization, private text/image room, guided ownership questions, explicit Finder decision, unread/read, private evidence proxy và in-app notifications đã có runtime. Web chat và notification center dùng authenticated SSE; PWA push vẫn còn thiếu.
+- Claim peer-to-peer, participant authorization, private text/image room, guided ownership questions, explicit Finder decision, unread/read, private evidence proxy và in-app notifications đã có runtime. Web chat dùng participant-authorized WebSocket để đẩy message trực tiếp; notification center dùng authenticated SSE. PWA push vẫn còn thiếu.
 - Lịch hẹn có danh sách/chi tiết, đề xuất thời gian/điểm, accept/reject/cancel, nhắc email, no-show và xác nhận bàn giao hai bên; Admin có audit search/export, User có hành trình vật phẩm từ Bài của tôi. Migration 063 đã áp dụng Aiven ngày 06/10/2026, CI MySQL 8.0/8.4 và shared smoke đã đạt; chưa chứng nhận inbox hoặc bàn giao ngoài đời. Xem [release receipt](docs/audits/dev-main-release-2026-10-06.md) và [runbook](docs/runbooks/appointment-journey-rollout.md).
 - Staff warehouse operations: tiếp nhận, lưu, trả, retention deadline, handover counts và storage log.
 - Notification có event riêng cho claim/escalation, từng bước lịch hẹn/bàn giao và custody movement, reservation, legal hold, disposition; in-app là bản ghi chính, SSE chuyển cập nhật tới Web.
@@ -42,7 +42,7 @@ Staff custody/warehouse là nhánh hỗ trợ hoặc escalation khi Finder khôn
 
 - Automated evidence confidence và multiple-claimant reservation policy end-to-end.
 - Counter-proposal và mutually agreed rescheduling; basic booking/dual-confirmation đã có code/schema và test evidence, production deployment/manual UAT chưa được chứng nhận.
-- Immediate Web chat SSE subscriber và full PWA notification/push matrix; image message và persisted unread/read đã có.
+- Block acceptance và full PWA notification/push matrix; image message và persisted unread/read đã có.
 - Overdue disposition, donation/transfer/disposal document flow và dispute escalation.
 - PWA installability và browser/device verification đầy đủ; manifest, service worker, offline shell và mobile-browser flow đã có ở mức hiện tại.
 - Native Mobile Application.

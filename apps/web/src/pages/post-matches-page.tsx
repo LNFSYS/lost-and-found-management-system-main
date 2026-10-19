@@ -23,6 +23,7 @@ import {
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { AccessibleDialog } from "../components/accessible-dialog";
+import { CustodyIntakeScheduleHint } from "../components/custody-intake-schedule-hint";
 import { useAuth } from "../context/auth-context";
 import { PostImage } from "./posts-page";
 import {
@@ -155,6 +156,7 @@ export function PostMatchesPage() {
   const [custodyModalOpen, setCustodyModalOpen] = useState(false);
   const [handoverPoints, setHandoverPoints] = useState<Array<{ id: string; name: string; address?: string | null }>>([]);
   const [selectedHandoverPointId, setSelectedHandoverPointId] = useState("");
+  const [requestedIntakeAt, setRequestedIntakeAt] = useState("");
   const [custodyReason, setCustodyReason] = useState("");
   const [loadingCustodyOptions, setLoadingCustodyOptions] = useState(false);
   const [submittingCustody, setSubmittingCustody] = useState(false);
@@ -239,6 +241,7 @@ export function PostMatchesPage() {
 
   async function openCustodyModal() {
     setCustodyError("");
+    setRequestedIntakeAt("");
     setCustodyNotice("");
     setLoadingCustodyOptions(true);
     try {
@@ -275,12 +278,14 @@ export function PostMatchesPage() {
   async function submitCustodyRequest(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!data || !selectedHandoverPointId) return;
+    if (!requestedIntakeAt) { setCustodyError("Chọn ngày và giờ dự kiến bàn giao."); return; }
     setSubmittingCustody(true);
     setCustodyError("");
     try {
       await api.createCustodyRequest({
         postId: data.source.id,
         handoverPointId: selectedHandoverPointId,
+        requestedIntakeAt: new Date(requestedIntakeAt).toISOString(),
         reason: custodyReason || "Bàn giao vật phẩm bài nhặt được cho quầy Staff",
         intakeType: "CUSTODY_TRANSFER"
       });
@@ -355,7 +360,7 @@ export function PostMatchesPage() {
               {loadingCustodyOptions ? <LoaderCircle className="spin-icon" /> : <PackageCheck />}<span><strong>{loadingCustodyOptions ? "Đang tải điểm bàn giao..." : "Gửi tại quầy DVSV"}</strong><small>Gửi yêu cầu bàn giao custody</small></span>
             </button>
           </div>
-          <p className="found-item-choice__hours">Giờ làm việc Phòng DVSV: thứ Hai–thứ Sáu, buổi sáng 08:00/08:15–12:00 và buổi chiều 13:30–17:00, trừ ngày nghỉ lễ.</p>
+          <CustodyIntakeScheduleHint className="found-item-choice__hours" />
           {keepItemConfirmed && <p className="found-item-choice__status" role="status">Vật phẩm vẫn do bạn giữ; bài FOUND tiếp tục mở và các kết quả matching không thay đổi.</p>}
           {custodyNotice && <p className="found-item-choice__status" role="status">{custodyNotice}</p>}
           {custodyError && <p className="found-item-choice__error" role="alert">{custodyError}</p>}
@@ -413,7 +418,7 @@ export function PostMatchesPage() {
           <div>
             <h3 id="matches-custody-title">Yêu cầu bàn giao cho Phòng DVSV</h3>
             <p>Chọn quầy tiếp nhận cho vật phẩm <strong>{data.source.title}</strong>.</p>
-            <p className="custody-hours-note">Giờ làm việc: thứ Hai–thứ Sáu, 08:00/08:15–12:00 và 13:30–17:00, trừ ngày nghỉ lễ.</p>
+            <CustodyIntakeScheduleHint className="custody-hours-note" />
           </div>
           <button type="button" className="close-btn" aria-label="Đóng" onClick={() => setCustodyModalOpen(false)}><X size={18} /></button>
         </div>
@@ -424,6 +429,10 @@ export function PostMatchesPage() {
               <option value="">-- Chọn điểm quầy bàn giao --</option>
               {handoverPoints.map((point) => <option key={point.id} value={point.id}>{point.name}{point.address ? ` - ${point.address}` : ""}</option>)}
             </select>
+          </label>
+          <label className="input-field">
+            <span>Ngày, giờ dự kiến mang vật phẩm đến quầy <strong className="required-star">*</strong></span>
+            <input type="datetime-local" value={requestedIntakeAt} onChange={event => setRequestedIntakeAt(event.target.value)} required />
           </label>
           <label className="input-field">
             <span>Ghi chú cho Staff</span>

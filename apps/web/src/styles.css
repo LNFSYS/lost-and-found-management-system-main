@@ -8480,6 +8480,8 @@ textarea {
 .claim-chat-image { display: block; width: 220px; max-width: 100%; height: 180px; padding: 0; border: 0; background: #f0f4f7; cursor: zoom-in; }
 .claim-chat-image img { width: 100%; height: 100%; object-fit: contain; }
 .claim-chat-image-expanded { display: block; max-width: 100%; max-height: 65vh; margin: auto; object-fit: contain; }
+.claim-message-image-preview { display: block; width: 220px; max-width: 100%; max-height: 180px; object-fit: contain; border-radius: 5px; }
+.claim-message-pending { display: block; margin-top: 3px; color: #8aa0b1; font-size: .58rem; text-align: right; }
 .claim-image-draft { min-width: 0; display: flex; align-items: center; gap: 10px; padding: 6px; border: 1px solid #bed4e4; border-radius: 5px; background: #f4f9fd; }
 .claim-image-draft img { width: 64px; height: 56px; object-fit: contain; }
 .claim-image-draft span { flex: 1; min-width: 0; font-size: .75rem; overflow-wrap: anywhere; }
@@ -8834,6 +8836,18 @@ textarea {
 .quiet-hours-inputs label { display: grid; gap: 5px; color: #657986; font-size: .68rem; font-weight: 800; }
 .quiet-hours-inputs input { min-width: 0; min-height: 38px; padding: 0 9px; border: 1px solid #c5d5de; border-radius: 5px; color: #304b5a; background: #fff; font: inherit; }
 .notification-security-note { margin: 0; padding: 11px 13px; border-left: 3px solid #2775a9; border-radius: 4px; color: #516b79; background: #f1f8fc; font-size: .71rem; line-height: 1.5; }
+.notification-channel-grid { overflow-x: auto; border: 1px solid #d9e4e9; border-radius: 8px; }
+.notification-channel-row { min-width: 690px; display: grid; grid-template-columns: minmax(250px, 1fr) 112px 100px 180px; align-items: center; gap: 12px; padding: 12px 15px; border-top: 1px solid #e4ecef; color: #48616f; font-size: .75rem; }
+.notification-channel-row:first-child { border-top: 0; }
+.notification-channel-row--heading { position: sticky; top: 0; z-index: 1; color: #345164; background: #f3f8fa; font-size: .7rem; font-weight: 850; }
+.notification-channel-label { display: grid; gap: 3px; }
+.notification-channel-label strong { color: #294657; font-size: .78rem; }
+.notification-channel-label small { color: #71838e; font-size: .67rem; line-height: 1.4; }
+.notification-channel-check { display: flex; justify-content: center; }
+.notification-channel-check input { width: 18px; height: 18px; accent-color: var(--fpt-blue); }
+.notification-channel-check input:disabled { cursor: not-allowed; }
+.notification-channel-email select { width: 100%; min-height: 36px; padding: 0 8px; border: 1px solid #c5d5de; border-radius: 5px; color: #304b5a; background: #fff; font: inherit; }
+.notification-preferences-page .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 @media (max-width: 620px) { .notification-preferences-page { padding: 24px 14px 36px; } .notification-preferences-card { padding: 17px; } .notification-mode-grid, .quiet-hours-inputs { grid-template-columns: 1fr; } }
 
 /* ─────────────── Staff Page Modern UI & Smooth Animations ─────────────── */
@@ -9387,7 +9401,15 @@ textarea {
 .custody-modal--claim-transfer .custody-modal__header p { margin-top: 5px; font-size: 0.8rem; line-height: 1.4; }
 .claim-custody-hours { display: grid; grid-template-columns: 16px minmax(0, 1fr); align-items: start; gap: 9px; padding: 10px; border-left: 2px solid var(--fpt-blue); color: #64748b; background: #eff6ff; }
 .claim-custody-hours svg { width: 16px; margin-top: 2px; color: var(--fpt-blue); }
-.claim-custody-hours p { margin: 0; font-size: 0.78rem; line-height: 1.45; }
+.custody-intake-schedule-hint { min-width: 0; display: grid; gap: 6px; color: #52697a; font-size: 0.75rem; line-height: 1.4; }
+.custody-intake-schedule-hint__title { margin: 0; color: #29485f; font-size: 0.78rem; font-weight: 850; }
+.custody-intake-schedule-hint__line { min-width: 0; display: grid; grid-template-columns: minmax(115px, 0.85fr) minmax(0, 1.15fr); align-items: start; gap: 10px; }
+.custody-intake-schedule-hint__line span { color: #647b8a; }
+.custody-intake-schedule-hint__line strong { color: #35566d; font-weight: 750; text-align: right; overflow-wrap: anywhere; }
+.custody-intake-schedule-hint__line--closed { padding-top: 5px; border-top: 1px solid #d7e6ef; }
+.custody-intake-schedule-hint__empty { margin: 0; color: #647b8a; }
+.found-item-choice__hours { padding: 10px 12px; border: 1px solid #dce8ef; border-radius: 8px; background: #f5fafc; }
+@media (max-width: 540px) { .custody-intake-schedule-hint__line { grid-template-columns: 1fr; gap: 2px; } .custody-intake-schedule-hint__line strong { text-align: left; } }
 .claim-custody-form { margin-top: 2px; }
 .claim-custody-form label { display: grid; gap: 7px; color: #334155; font-size: 0.82rem; font-weight: 750; }
 .claim-custody-form select, .claim-custody-form textarea { width: 100%; min-height: 44px; padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 8px; color: #1e293b; background: #fff; font: inherit; font-size: 0.8rem; }
@@ -9678,4 +9700,5 @@ textarea {
 /* Warehouse list controls share the width of the operational surface. */
 .warehouse-pagination { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 0; min-height: 60px; flex-wrap: wrap; }
 .warehouse-pagination span { font-size: 14px; }
-.post-journey-link{display:flex;align-items:center;gap:8px;color:#0868b4;border-top:1px solid #dbe5ef;padding:14px 0;margin-top:12px;font-size:14px;font-weight:600}
+.post-journey-link{width:max-content;max-width:100%;display:inline-flex;align-items:center;gap:8px;color:#0868b4;border:1px solid #d5e4ee;border-radius:9px;background:#f7fbfe;padding:10px 13px;margin-top:14px;font-size:13px;font-weight:750;text-decoration:none;transition:background .15s ease,border-color .15s ease,transform .15s ease}
+.post-journey-link:hover{border-color:#a9cbe0;background:#eff8fd;transform:translateY(-1px)}

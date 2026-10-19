@@ -32,7 +32,16 @@ function formatTime(value: string | null) {
 
 function mergeMessages(current: ClaimMessage[], incoming: ClaimMessage[]) {
   const messages = new Map(current.map((message) => [message.id, message]));
-  incoming.forEach((message) => messages.set(message.id, message));
+  let changed = false;
+  incoming.forEach((message) => {
+    if (message.clientMessageId && messages.delete(`optimistic:${message.clientMessageId}`)) changed = true;
+    const existing = messages.get(message.id);
+    if (!existing || JSON.stringify(existing) !== JSON.stringify(message)) {
+      messages.set(message.id, message);
+      changed = true;
+    }
+  });
+  if (!changed) return current;
   return [...messages.values()].sort((left, right) => left.createdAt.localeCompare(right.createdAt) || left.id.localeCompare(right.id));
 }
 
@@ -79,9 +88,11 @@ function MessageBubble({ message, own, user, onReplyQuestion }: { message: Claim
   
   return <div className={`claim-message ${own ? "own" : ""}`}>
     {!own && <small>{message.sender.fullName}</small>}
-    {message.messageType === "IMAGE" && message.mediaUrl && <ClaimChatImage url={message.mediaUrl} />}
+    {message.messageType === "IMAGE" && message.previewUrl && <img className="claim-message-image-preview" src={message.previewUrl} alt="Ảnh đang gửi" />}
+    {message.messageType === "IMAGE" && !message.previewUrl && message.mediaUrl && <ClaimChatImage url={message.mediaUrl} />}
     <p>{message.content}</p>
     <time dateTime={message.createdAt}>{formatTime(message.createdAt)}</time>
+    {message.pending && <span className="claim-message-pending" role="status">Đang gửi…</span>}
     {shouldShowReply && onReplyQuestion && <button type="button" className="claim-reply-question" onClick={() => onReplyQuestion(message.content ?? "")}><MessageCircle /> Trả lời câu hỏi</button>}
     {!own && <Link className="claim-report-link" to={`/reports?targetType=MESSAGE&targetId=${message.id}`} title="Báo cáo tin nhắn"><FileWarning /> Báo cáo</Link>}
   </div>;
@@ -92,6 +103,7 @@ function DirectMessageDraft({ postId, sourceFoundPostId, viewer }: { postId: str
   const [post, setPost] = useState<PostSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [draft, setDraft] = useState("");
+  const [optimisticMessage, setOptimisticMessage] = useState<ClaimMessage | null>(null);
   const [sending, setSending] = useState(false);
   const [contactCheckId, setContactCheckId] = useState<string | null>(null);
   const [error, setError] = useState("");
@@ -151,6 +163,7 @@ function DirectMessageDraft({ postId, sourceFoundPostId, viewer }: { postId: str
     setLoading(true);
     setError("");
     setContactCheckId(null);
+    setOptimisticMessage(null);
     pendingMessage.current = null;
     void (async () => {
       try {
@@ -183,12 +196,30 @@ function DirectMessageDraft({ postId, sourceFoundPostId, viewer }: { postId: str
       : { content, clientMessageId: crypto.randomUUID() };
     pendingMessage.current = retry;
     const generation = draftGeneration.current;
+    setOptimisticMessage({
+      id: `optimistic:${retry.clientMessageId}`,
+      roomId: `draft:${post.id}`,
+      sender: { id: viewer?.id ?? "draft-user", fullName: viewer?.fullName ?? "Bạn" },
+      clientMessageId: retry.clientMessageId,
+      content,
+      messageType: "TEXT",
+      isRead: false,
+      readAt: null,
+      createdAt: new Date().toISOString(),
+      pending: true
+    });
+    setDraft("");
     try {
       const result = await api.createDirectMessage(post.id, content, retry.clientMessageId, sourceFoundPostId, contactCheckId ?? undefined);
       if (generation !== draftGeneration.current) return;
       pendingMessage.current = null;
+      setOptimisticMessage(null);
       navigate(`/claims/${result.claim.id}`, { replace: true });
     } catch (reason) {
+      if (generation === draftGeneration.current) {
+        setOptimisticMessage(null);
+        setDraft(current => current || content);
+      }
       if (generation === draftGeneration.current) setError(reason instanceof Error ? reason.message : "Không thể gửi tin nhắn");
     } finally {
       if (generation === draftGeneration.current) setSending(false);
@@ -231,7 +262,7 @@ function DirectMessageDraft({ postId, sourceFoundPostId, viewer }: { postId: str
         {error && <p className="field-error contact-draft-error" role="alert">{error}</p>}
         {post.type === "LOST" ? <div className="claim-private-banner"><MessageCircle /><div><strong>{sending ? "Đang mở cuộc trò chuyện..." : "Đối chiếu ảnh để mở cuộc trò chuyện"}</strong>{error && contactCheckId && <button type="button" disabled={sending} onClick={() => void openContact(contactCheckId)}>Thử mở lại</button>}</div></div>
           : <div className="claim-private-banner"><MessageCircle /><div><strong>Cuộc trò chuyện chưa được lưu</strong><span>Chỉ khi bạn gửi tin nhắn đầu tiên, cuộc trò chuyện mới xuất hiện trong danh sách.</span></div></div>}
-        <div className="claim-messages"><div className="claim-messages__empty"><MessageCircle /><span>Chưa có tin nhắn.</span></div></div>
+        <div className="claim-messages">{optimisticMessage ? <MessageBubble message={optimisticMessage} own user={viewer} /> : <div className="claim-messages__empty"><MessageCircle /><span>Chưa có tin nhắn.</span></div>}</div>
       </div>
       <form className="claim-message-form claim-message-form--draft" onSubmit={submit}>
         <div className="input-row">
@@ -409,7 +440,7 @@ export function ClaimsPage() {
     try {
       const current = await api.getClaim(id, controller.signal);
       if (!isCurrent()) return;
-      setClaim(current);
+      setClaim(existing => silent && existing && JSON.stringify(existing) === JSON.stringify(current) ? existing : current);
       if (!current.canSend) {
         setMessages([]);
         setEvidence([]);
@@ -424,13 +455,17 @@ export function ClaimsPage() {
       if (!isCurrent()) return;
       setMessages((existing) => silent ? mergeMessages(existing, messageResult.items) : messageResult.items);
       if (!silent || !messageCursorRef.current) updateMessageCursor(messageResult.nextCursor);
-      setEvidence(evidenceResult.items);
+      setEvidence(existing => silent && JSON.stringify(existing) === JSON.stringify(evidenceResult.items) ? existing : evidenceResult.items);
       setClaims((items) => {
-        if (!items.some(item => item.id === id)) {
+        const existing = items.find(item => item.id === id);
+        if (!existing) {
           const latest = mergeMessages([], messageResult.items).at(-1);
           return [{ ...current, conversation: { lastMessage: latest?.content ?? "", lastMessageAt: latest?.createdAt ?? current.updatedAt, unreadCount: 0 } }, ...items];
         }
-        return items.map(item => item.id === id && item.conversation ? { ...item, conversation: { ...item.conversation, unreadCount: 0 } } : item);
+        if (!existing.conversation || existing.conversation.unreadCount !== 0) {
+          return items.map(item => item.id === id && item.conversation ? { ...item, conversation: { ...item.conversation, unreadCount: 0 } } : item);
+        }
+        return items;
       });
 
       // Verification failures must not hide the chat or erase a sent message.
@@ -526,16 +561,49 @@ export function ClaimsPage() {
     let active = true;
     const unsubscribe = api.subscribeRealtime({
       roomId,
-      onConnected: () => { if (active) void synchronizeClaimRoom(claimId); },
       onNotification: (event) => {
         if (!active) return;
-        const sameRoomMessage = event.workflow === "CHAT" && event.roomId === roomId;
         const sameClaimUpdate = event.workflow === "CLAIM" && event.notification.entityType === "CLAIM" && event.notification.entityId === claimId;
-        if (sameRoomMessage || sameClaimUpdate) void synchronizeClaimRoom(claimId);
+        if (sameClaimUpdate) {
+          void api.getClaim(claimId).then(updated => {
+            if (active && isCurrentRoom(claimId, roomRequest.current.generation)) applyClaimUpdate(updated);
+          }).catch(() => undefined);
+        }
       }
     });
     return () => { active = false; unsubscribe(); };
   }, [claimId, claim?.canSend, claim?.room?.id]);
+
+  useEffect(() => {
+    const roomId = claim?.room?.id;
+    if (!claimId || !claim?.canSend || !roomId) return;
+    let active = true;
+    const generation = roomRequest.current.generation;
+    const unsubscribe = api.subscribeClaimChatSocket({
+      onConnected: () => { if (active) void synchronizeClaimRoom(claimId); },
+      roomId,
+      onReconnected: () => { if (active) void synchronizeClaimRoom(claimId); },
+      onMessage: (message) => {
+        if (!active || !isCurrentRoom(claimId, generation) || message.roomId !== roomId) return;
+        setMessages(current => mergeMessages(current, [message]));
+        setClaims(current => current.map(item => item.id === claimId ? {
+          ...item,
+          conversation: {
+            lastMessage: message.content ?? (message.messageType === "IMAGE" ? "Ảnh" : ""),
+            lastMessageAt: message.createdAt,
+            unreadCount: 0,
+            custodyEscalated: item.conversation?.custodyEscalated
+          }
+        } : item));
+        if (message.messageType === "IMAGE") {
+          void api.listClaimEvidence(claimId).then(result => {
+            if (active && isCurrentRoom(claimId, generation)) setEvidence(result.items);
+          }).catch(() => undefined);
+        }
+      }
+    });
+    return () => { active = false; unsubscribe(); };
+  }, [claimId, claim?.canSend, claim?.room?.id, user?.id]);
 
   // Stop automatic retries after a failure; the panel offers an explicit retry.
   useEffect(() => {
@@ -596,12 +664,26 @@ export function ClaimsPage() {
     pendingQuestion.current = retry; sendInFlight.current = true; setSending(true); setError("");
     setQuestionsExpanded(false);
     questionToggle.current?.focus();
+    const optimisticId = `optimistic:${retry.key}`;
+    setMessages(current => mergeMessages(current, [{
+      id: optimisticId,
+      roomId: claim?.room?.id ?? claimId,
+      sender: { id: user?.id ?? "", fullName: user?.fullName ?? "Bạn" },
+      clientMessageId: retry.key,
+      content: question,
+      messageType: "TEXT",
+      isRead: false,
+      readAt: null,
+      createdAt: new Date().toISOString(),
+      pending: true
+    }]));
     try {
       const sent = await api.sendClaimMessage(claimId, question, retry.key);
       if (!isCurrentRoom(claimId, generation)) return;
       setMessages(current => mergeMessages(current, [sent])); pendingQuestion.current = null;
     } catch (reason) {
       if (isCurrentRoom(claimId, generation)) {
+        setMessages(current => current.filter(message => message.id !== optimisticId));
         setError(reason instanceof Error ? reason.message : "Không thể gửi câu hỏi");
         setQuestionsExpanded(true);
       }
@@ -627,13 +709,31 @@ export function ClaimsPage() {
     
     const retry = pendingMessage.current?.content === finalContent ? pendingMessage.current : { content: finalContent, clientMessageId: crypto.randomUUID() };
     pendingMessage.current = retry;
+    let optimisticId = "";
     try {
       const imageRetry = chatFile ? pendingImage.current?.file === chatFile && pendingImage.current.content === content
         ? pendingImage.current : { file: chatFile, content, key: crypto.randomUUID() } : null;
       if (imageRetry) pendingImage.current = imageRetry;
+      const clientMessageId = imageRetry?.key ?? retry.clientMessageId;
+      optimisticId = `optimistic:${clientMessageId}`;
+      setMessages(current => mergeMessages(current, [{
+        id: optimisticId,
+        roomId: claim?.room?.id ?? claimId,
+        sender: { id: user?.id ?? "", fullName: user?.fullName ?? "Bạn" },
+        clientMessageId,
+        content: imageRetry ? imageRetry.content : finalContent,
+        messageType: imageRetry ? "IMAGE" : "TEXT",
+        previewUrl: imageRetry ? chatPreview : undefined,
+        isRead: false,
+        readAt: null,
+        createdAt: new Date().toISOString(),
+        pending: true
+      }]));
+      setMessageDraft(current => current === content || current.trim() === content ? "" : current);
+      setReplyingToQuestion(current => current === replyingToQuestion ? null : current);
       const sent = imageRetry ? await api.sendClaimImage(claimId, imageRetry.file, imageRetry.content, imageRetry.key)
         : await api.sendClaimMessage(claimId, finalContent, retry.clientMessageId);
-      setClaims((items) => items.map((item) => item.id === claimId ? { ...item, conversation: { lastMessage: finalContent, lastMessageAt: sent.createdAt, unreadCount: 0, custodyEscalated: item.conversation?.custodyEscalated } } : item));
+      setClaims((items) => items.map((item) => item.id === claimId ? { ...item, conversation: { lastMessage: sent.content ?? (sent.messageType === "IMAGE" ? "Ảnh" : ""), lastMessageAt: sent.createdAt, unreadCount: 0, custodyEscalated: item.conversation?.custodyEscalated } } : item));
       if (!isCurrentRoom(claimId, generation)) return;
       setMessages((current) => mergeMessages(current, [sent]));
       if (imageRetry) {
@@ -641,11 +741,14 @@ export function ClaimsPage() {
         if (pendingImage.current?.key === imageRetry.key) pendingImage.current = null;
         void api.listClaimEvidence(claimId).then(result => { if (isCurrentRoom(claimId, generation)) setEvidence(result.items); }).catch(() => {});
       }
-      setMessageDraft(current => current === content || current.trim() === content ? "" : current);
-      setReplyingToQuestion(current => current === replyingToQuestion ? null : current);
       if (pendingMessage.current?.clientMessageId === retry.clientMessageId) pendingMessage.current = null;
     } catch (failure) {
-      if (isCurrentRoom(claimId, generation)) setError(failure instanceof Error ? failure.message : "Không thể gửi tin nhắn");
+      if (isCurrentRoom(claimId, generation)) {
+        if (optimisticId) setMessages(current => current.filter(message => message.id !== optimisticId));
+        setMessageDraft(current => current || content);
+        setReplyingToQuestion(current => current ?? replyingToQuestion);
+        setError(failure instanceof Error ? failure.message : "Không thể gửi tin nhắn");
+      }
     } finally { if (isCurrentRoom(claimId, generation)) { sendInFlight.current = false; setSending(false); } }
   }
 
@@ -752,6 +855,7 @@ export function ClaimsPage() {
                 </aside>}
                 <div className="claim-chat-review">
                   <ClaimVerificationPanel key={`review:${claim.id}`} claim={claim} verification={verification} loading={verificationLoading} loadError={verificationError} onRetry={() => void loadVerification(claim.id, true)} onVerificationChange={value => { if (isCurrentRoom(claim.id, displayedGeneration)) setVerification(value); }} onClaimChange={value => { if (isCurrentRoom(claim.id, displayedGeneration)) applyClaimUpdate(value); }} onDecisionMessage={(message) => { if (isCurrentRoom(claim.id, displayedGeneration)) setMessages((current) => mergeMessages(current, [message])); }} />
+                  <Link className="secondary-button" to={`/claims/${claim.id}/history`}><Clock3 size={16} /> Lịch sử claim và xác minh</Link>
                 </div>
                 {claim.canSend && claim.finderId === user?.id && suggestedQuestions.length > 0 && <section className="claim-question-suggestions" aria-label="Câu hỏi đối chiếu vật phẩm">
                   <button ref={questionToggle} type="button" className="claim-question-toggle" aria-expanded={questionsExpanded} aria-controls="claim-question-options" title={questionsExpanded ? "Thu gọn câu hỏi" : "Mở câu hỏi gợi ý"} onClick={() => setQuestionsExpanded(value => !value)}><MessageCircle aria-hidden="true" /><span>Câu hỏi gợi ý ({Math.min(3, suggestedQuestions.length)})</span>{questionsExpanded ? <ChevronUp aria-hidden="true" /> : <ChevronDown aria-hidden="true" />}</button>

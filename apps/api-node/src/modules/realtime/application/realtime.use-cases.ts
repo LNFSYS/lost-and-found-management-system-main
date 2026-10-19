@@ -1,7 +1,7 @@
 import { AppError } from "../../../shared/domain/app-error.js";
 import type { AccessTokenPayload } from "../../../shared/domain/auth.js";
 import type { ClaimRepository } from "../../claims/application/index.js";
-import type { NotificationRecord } from "../../notifications/application/index.js";
+import type { NotificationRecord, NotificationRepository } from "../../notifications/application/index.js";
 
 export type WorkflowNotificationKind = "CLAIM" | "CHAT" | "APPOINTMENT" | "RETURN" | "CUSTODY";
 
@@ -27,8 +27,9 @@ export interface WorkflowNotificationInput {
   roomId?: string | null;
 }
 
-export function createRealtimeUseCases({ claimRepository, id, validateSession, clock = Date.now, validationTimeoutMs = 5000 }: {
+export function createRealtimeUseCases({ claimRepository, notifications, id, validateSession, clock = Date.now, validationTimeoutMs = 5000 }: {
   claimRepository: Pick<ClaimRepository, "findRoomForParticipant">;
+  notifications?: Pick<NotificationRepository, "isInAppEnabled">;
   id: () => string;
   validateSession?: (session: AccessTokenPayload) => Promise<boolean>;
   clock?: () => number;
@@ -158,6 +159,13 @@ export function createRealtimeUseCases({ claimRepository, id, validateSession, c
     },
 
     async publishNotification(input: WorkflowNotificationInput) {
+      if (notifications?.isInAppEnabled) {
+        try {
+          if (!await notifications.isInAppEnabled(input.userId, input.notification.type)) return { delivered: 0 };
+        } catch {
+          return { delivered: 0 };
+        }
+      }
       const connectionIds = connectionsByUser.get(input.userId) ?? new Set<string>();
       let delivered = 0;
       const eventId = input.notification.id;

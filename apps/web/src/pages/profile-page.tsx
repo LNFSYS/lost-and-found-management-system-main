@@ -259,7 +259,7 @@ export function ProfilePage() {
           >
             {editing ? <X size={17} /> : <PencilLine size={17} />} {editing ? "Hủy" : "Chỉnh sửa"}
           </button>
-          <Link className="secondary-button" to="/notification-preferences"><Mail size={17} /> Email thông báo</Link>
+          <Link className="secondary-button" to="/notification-preferences"><Mail size={17} /> Kênh thông báo</Link>
         </div>
       </article>
 

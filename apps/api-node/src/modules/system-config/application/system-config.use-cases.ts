@@ -15,7 +15,8 @@ const PUBLIC_CONFIG_KEYS = new Set([
   "matching.threshold",
   "matching.suggestion_threshold",
   "matching.notification_threshold",
-  "privacy.private_found_enabled"
+  "privacy.private_found_enabled",
+  "custody.intake.schedule"
 ]);
 
 const SENSITIVE_CONFIG_KEY = /(^|[._])(secret|password|pass|token|credential|credentials|private[_-]?key|api[_-]?key|access[_-]?key|client[_-]?secret|jwt[_-]?secret|encryption[_-]?key|salt)([._]|$)/i;

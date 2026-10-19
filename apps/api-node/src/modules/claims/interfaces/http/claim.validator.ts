@@ -58,11 +58,15 @@ export const verificationDecisionSchema = z.object({
   decision: z.enum(["VERIFY_FOR_MEETUP", "REQUEST_MORE_INFO", "DECLINE", "ESCALATE_TO_CUSTODY"]),
   reason: z.string().trim().min(3).max(1000),
   handoverPointId: uuid.optional(),
+  requestedIntakeAt: z.coerce.date().optional(),
   correctsEventId: uuid.optional(),
   idempotencyKey: safeKey
 }).superRefine((input, context) => {
   if (input.decision === "ESCALATE_TO_CUSTODY" && !input.handoverPointId) {
     context.addIssue({ code: "custom", path: ["handoverPointId"], message: "Chọn điểm quầy nhận bàn giao" });
+  }
+  if (input.decision === "ESCALATE_TO_CUSTODY" && !input.requestedIntakeAt) {
+    context.addIssue({ code: "custom", path: ["requestedIntakeAt"], message: "Chọn ngày và giờ dự kiến tiếp nhận" });
   }
 });
 
