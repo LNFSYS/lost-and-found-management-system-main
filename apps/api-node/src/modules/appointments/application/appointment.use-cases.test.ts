@@ -6,7 +6,7 @@ import type { Appointment, AppointmentRepository } from "./appointment.repositor
 import type { TransactionContext } from "../../../shared/application/transaction.js";
 import type { NotificationEmailQueue, NotificationRepository } from "../../notifications/application/index.js";
 
-function fixture() {
+function fixture(realtimeDeliveries?: string[]) {
   let time=new Date("2026-10-06T01:00:00Z");let safe=true;let ready=true;let inTransaction=false;
   const a:Appointment={id:"appointment",claimId:"claim",postId:"post",title:"Keys",finderId:"finder",ownerId:"owner",proposerId:"finder",status:"ACCEPTED",
     proposedAt:"2026-10-06T00:30:00Z",handoverPointId:"point",location:"Desk",itemImageUrl:null,version:1,finderResponse:"PENDING",ownerResponse:"PENDING",noShowUserId:null,custodyAuthorized:false,completedAt:null,events:[]};
@@ -19,7 +19,8 @@ function fixture() {
   const notifications:NotificationRepository={create:async input=>({id:randomUUID(),type:input.type,title:input.title,body:null,entityType:input.entityType!,entityId:input.entityId!,isRead:false,readAt:null,createdAt:time.toISOString()}),
     listForUser:async()=>[],countUnreadForUser:async()=>0,markRead:async()=>true,markAllRead:async()=>0};
   const emailQueue:NotificationEmailQueue={enqueue:async input=>{emails.push(input.recipientUserId);},cancelForNotification:async()=>0,cancelForRoom:async()=>0,cancelForUser:async()=>0};
-  const service=createAppointmentUseCases({repository:repo,transaction:async work=>{inTransaction=true;try{return await work({} as TransactionContext);}finally{inTransaction=false;}},id:randomUUID,hash:x=>x,notifications,emails:emailQueue,now:()=>time});
+  const service=createAppointmentUseCases({repository:repo,transaction:async work=>{inTransaction=true;try{return await work({} as TransactionContext);}finally{inTransaction=false;}},id:randomUUID,hash:x=>x,notifications,emails:emailQueue,now:()=>time,
+    realtimeNotifier:realtimeDeliveries ? {publishNotification:input=>{assert.equal(inTransaction,false,"Publish only after the transaction completes");realtimeDeliveries.push(`${input.userId}:${input.notification.type}:${input.workflow}`);}} : undefined});
   return {service,a,repo,emails,updates:()=>updates,setSafe:(v:boolean)=>{safe=v;},setReady:(v:boolean)=>{ready=v;},setTime:(v:string)=>{time=new Date(v);}};
 }
 test("Only the actual Finder/owner can acknowledge; Staff is not a substitute",async()=>{const f=fixture();await assert.rejects(f.service.act("staff",f.a.id,{action:"CONFIRM",version:1,requestKey:randomUUID(),physicallyChecked:true}),{code:"forbidden"});assert.equal(f.updates(),0);});
@@ -40,4 +41,56 @@ test("Legacy appointments cannot be modified through a forged API action",async(
 });
 test("Mutual negative review may cancel with reason without fabricating physical receipt",async()=>{const f=fixture();f.a.finderResponse="DISPUTED";f.a.ownerResponse="DISPUTED";
   await f.service.act("owner",f.a.id,{action:"CANCEL",version:1,requestKey:randomUUID(),reason:"Both reviewed: no valid handover"});assert.equal(f.a.status,"CANCELLED");assert.equal(f.a.completedAt,null);
+});
+
+test("Custom locations are normalized, stored without a desk and replayed once", async () => {
+  const f=fixture();let writes=0;
+  f.repo.pointExists=async()=>{throw new Error("Custom location must not require a desk");};
+  f.repo.create=async input=>{writes++;f.a.handoverPointId=input.handoverPointId;f.a.location=input.customLocation;};
+  const input={claimId:"claim",proposedAt:"2026-10-07T00:30:00Z",customLocation:"  Library entrance  ",requestKey:randomUUID()};
+  assert.equal((await f.service.create("finder",input)).location,"Library entrance");
+  await f.service.create("finder",{...input,customLocation:"Library entrance"});
+  assert.equal(writes,1);assert.equal(f.a.handoverPointId,null);assert.equal(f.emails.length,2);
+  await assert.rejects(f.service.create("finder",{...input,customLocation:"Main gate"}),{code:"conflict"});
+});
+
+test("Custom location cannot bypass eligibility, authorization or active appointment gates", async () => {
+  const input={claimId:"claim",proposedAt:"2026-10-07T00:30:00Z",customLocation:"Library entrance",requestKey:randomUUID()};
+  const f=fixture();await assert.rejects(f.service.create("staff",input),{code:"forbidden"});
+  f.setSafe(false);await assert.rejects(f.service.create("finder",input),{code:"conflict"});
+  f.setSafe(true);f.repo.active=async()=>true;await assert.rejects(f.service.create("finder",input),{code:"conflict"});
+});
+
+test("Proposal requires exactly one valid location and preserves existing point payloads", async () => {
+  const f=fixture();let writes=0;
+  f.repo.create=async input=>{writes++;assert.equal(input.customLocation,null);assert.equal(input.handoverPointId,"point");};
+  const base={claimId:"claim",proposedAt:"2026-10-07T00:30:00Z",requestKey:randomUUID()};
+  for(const location of [{},{customLocation:"  "},{customLocation:"ab"},{customLocation:"x".repeat(256)},
+    {customLocation:"Library\nentrance"},{handoverPointId:"point",customLocation:"Library entrance"}]){
+    await assert.rejects(f.service.create("finder",{...base,...location}),{code:"invalid_input"});
+  }
+  await f.service.create("finder",{...base,handoverPointId:"point"});assert.equal(writes,1);
+});
+
+for (const location of [{handoverPointId:"point"},{customLocation:"Library entrance"}]) {
+  test(`Proposal with ${"customLocation" in location ? "custom location" : "handover point"} publishes once after commit`, async () => {
+    const deliveries:string[]=[];
+    const f=fixture(deliveries);let writes=0;
+    f.repo.create=async input=>{writes++;f.a.handoverPointId=input.handoverPointId;f.a.location=input.customLocation ?? "Desk";};
+    const input={claimId:"claim",proposedAt:"2026-10-07T00:30:00Z",requestKey:randomUUID(),...location};
+    const first=await f.service.create("finder",input);
+    assert.equal(first.handoverPointId,"handoverPointId" in location ? "point" : null);
+    assert.equal(first.location,"customLocation" in location ? "Library entrance" : "Desk");
+    assert.deepEqual(deliveries,["finder:APPOINTMENT_PROPOSED:APPOINTMENT","owner:APPOINTMENT_PROPOSED:APPOINTMENT"]);
+    await f.service.create("finder",input);
+    assert.equal(writes,1);assert.equal(deliveries.length,2);assert.equal(f.emails.length,2);
+  });
+}
+
+test("Failed proposal transaction does not publish realtime notifications", async () => {
+  const deliveries:string[]=[];
+  const f=fixture(deliveries);
+  f.repo.create=async()=>{throw new Error("Controlled transaction failure");};
+  await assert.rejects(f.service.create("finder",{claimId:"claim",proposedAt:"2026-10-07T00:30:00Z",customLocation:"Library entrance",requestKey:randomUUID()}),/Controlled transaction failure/);
+  assert.deepEqual(deliveries,[]);assert.deepEqual(f.emails,[]);
 });

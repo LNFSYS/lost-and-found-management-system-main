@@ -615,7 +615,8 @@ export function ClaimsPage() {
   }, [claimId, claim?.canSend, verificationError]);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    const messagePane = messagesEndRef.current?.closest(".claim-chat-scroll");
+    messagePane?.scrollTo({ top: messagePane.scrollHeight, behavior: "smooth" });
   }, [messages]);
 
   async function loadOlderMessages() {
@@ -855,7 +856,7 @@ export function ClaimsPage() {
                 </aside>}
                 <div className="claim-chat-review">
                   <ClaimVerificationPanel key={`review:${claim.id}`} claim={claim} verification={verification} loading={verificationLoading} loadError={verificationError} onRetry={() => void loadVerification(claim.id, true)} onVerificationChange={value => { if (isCurrentRoom(claim.id, displayedGeneration)) setVerification(value); }} onClaimChange={value => { if (isCurrentRoom(claim.id, displayedGeneration)) applyClaimUpdate(value); }} onDecisionMessage={(message) => { if (isCurrentRoom(claim.id, displayedGeneration)) setMessages((current) => mergeMessages(current, [message])); }} />
-                  <Link className="secondary-button" to={`/claims/${claim.id}/history`}><Clock3 size={16} /> Lịch sử claim và xác minh</Link>
+                  <Link className="claim-history-link" to={`/claims/${claim.id}/history`}><Clock3 size={16} /> Lịch sử claim và xác minh</Link>
                 </div>
                 {claim.canSend && claim.finderId === user?.id && suggestedQuestions.length > 0 && <section className="claim-question-suggestions" aria-label="Câu hỏi đối chiếu vật phẩm">
                   <button ref={questionToggle} type="button" className="claim-question-toggle" aria-expanded={questionsExpanded} aria-controls="claim-question-options" title={questionsExpanded ? "Thu gọn câu hỏi" : "Mở câu hỏi gợi ý"} onClick={() => setQuestionsExpanded(value => !value)}><MessageCircle aria-hidden="true" /><span>Câu hỏi gợi ý ({Math.min(3, suggestedQuestions.length)})</span>{questionsExpanded ? <ChevronUp aria-hidden="true" /> : <ChevronDown aria-hidden="true" />}</button>

@@ -25,6 +25,7 @@ async function prepare(page:Page,userId=finder,admin=false){
 }
 test("proposal opens from claim context and keyboard submits a stable retry key",async({page})=>{
   await prepare(page);const calls:Array<Record<string,unknown>>=[];
+  await page.route(/\/api\/appointments\?.*claimId=/,route=>route.fulfill({json:{results:[],total:0}}));
   await page.route("**/api/appointments",async route=>{if(route.request().method()!=="POST")return route.fallback();calls.push(route.request().postDataJSON());
     if(calls.length===1)return route.fulfill({status:503,json:{message:"Kết nối tạm thời lỗi, thử lại"}});return route.fulfill({status:201,json:appointment({status:"PENDING"})});});
   await page.goto(`/appointments?claimId=${claim}`);await page.getByLabel("Thời gian hẹn").fill(new Date(Date.now()+86400000).toISOString().slice(0,16));await page.getByLabel("Điểm hẹn").selectOption(point);

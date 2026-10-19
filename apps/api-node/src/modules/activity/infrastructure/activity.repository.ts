@@ -2,6 +2,7 @@ import type { RowDataPacket } from "mysql2";
 import { claimantIdSql, finderIdSql } from "../../../shared/infrastructure/claim-identity-sql.js";
 import { sqlExecutor, type SqlExecutor } from "../../../shared/infrastructure/transaction-context.js";
 import type { ActivityEvent, ActivityRepository, JourneySummary } from "../application/activity.repository.port.js";
+import { journeyMediaCte } from "./journey-media.js";
 
 // Never select free-form notes, JSON snapshots, contact details or media references.
 const auditUnion = `
@@ -55,6 +56,7 @@ export function createActivityRepository(pool: SqlExecutor): ActivityRepository 
         UNION ALL SELECT CONCAT('CLAIM_CREATED:',c.id),'CLAIM','CLAIM_CREATED','CLAIM',c.id,NULL,c.created_at,NULL,NULL FROM claims c JOIN allowed_claims ac ON ac.id=c.id
         UNION ALL SELECT CONCAT('CLAIM:',e.id),'CLAIM',e.action,'CLAIM',e.claim_id,NULL,e.created_at,e.from_status,e.to_status FROM claim_audit_events e JOIN allowed_claims ac ON ac.id=e.claim_id WHERE e.action<>'DIRECT_RETURN_COMPLETED'
         UNION ALL SELECT CONCAT('CHAT:',room.id),'CHAT','CONVERSATION_OPENED','CLAIM',room.claim_id,NULL,room.created_at,NULL,NULL FROM chat_rooms room JOIN allowed_claims ac ON ac.id=room.claim_id
+        UNION ALL SELECT event_id,'CHAT','PHOTO_SHARED','CLAIM',target_id,NULL,event_at,NULL,NULL FROM image_media WHERE kind='CLAIM'
         UNION ALL SELECT CONCAT('CUSTODY:',e.id),'CUSTODY',e.action,'CUSTODY',e.custody_request_id,NULL,e.created_at,e.from_status,e.to_status FROM custody_request_audit e JOIN relevant_custody rc ON rc.id=e.custody_request_id
         UNION ALL SELECT CONCAT('WAREHOUSE:',sl.id),'WAREHOUSE',sl.action,'WAREHOUSE',sl.warehouse_item_id,NULL,sl.created_at,sl.from_status,sl.to_status FROM storage_logs sl
           WHERE sl.warehouse_item_id IN (SELECT warehouse_item_id FROM relevant_custody)
@@ -63,10 +65,14 @@ export function createActivityRepository(pool: SqlExecutor): ActivityRepository 
         UNION ALL SELECT CONCAT('FEEDBACK:',f.id),'FEEDBACK','FEEDBACK_RECORDED','APPOINTMENT',f.appointment_id,NULL,f.created_at,NULL,NULL FROM return_feedback f JOIN return_appointments a ON a.id=f.appointment_id JOIN allowed_claims ac ON ac.id=a.claim_id`;
       const appt = await hasAppointments() ? ` UNION ALL SELECT CONCAT('APPOINTMENT:',e.id),'APPOINTMENT',e.action,'APPOINTMENT',e.appointment_id,NULL,e.created_at,NULL,NULL
         FROM appointment_events e JOIN return_appointments a ON a.id=e.appointment_id JOIN allowed_claims ac ON ac.id=a.claim_id WHERE e.action NOT IN ('REMINDER_QUEUED','RETURN_COMPLETED')` : "";
-      const values = [...contextValues,postId,postId,postId,postId,new Date(asOf)];
-      const base = `${cte}, events AS (${events}${appt})`;
+      const values = [postId,userId,new Date(asOf),...contextValues,postId,postId,postId,postId,new Date(asOf)];
+      const base = `${journeyMediaCte}, ${cte.replace(/^WITH /, "")}, events AS (${events}${appt})`;
       const [count] = await pool.execute<RowDataPacket[]>(`${base} SELECT COUNT(*) total FROM events WHERE created_at<=?`,values);
       const [rows] = await pool.execute<RowDataPacket[]>(`${base} SELECT * FROM events WHERE created_at<=? ORDER BY created_at,id LIMIT 50 OFFSET ${(page-1)*50}`,values);
+      const eventIds = rows.map(row => String(row.id));
+      const [images] = eventIds.length ? await pool.execute<RowDataPacket[]>(`${journeyMediaCte}
+        SELECT event_id,id,kind,uploaded_at FROM image_media WHERE event_id IN (${eventIds.map(()=>"?").join(",")})
+        ORDER BY uploaded_at,id`,[postId,userId,new Date(asOf),...eventIds]) : [[]];
       const [stock] = await pool.execute<RowDataPacket[]>(`${cte} SELECT wi.status,wi.received_at,wi.returned_at FROM warehouse_items wi
         WHERE wi.deleted_at IS NULL AND (wi.id IN (SELECT warehouse_item_id FROM relevant_custody) OR wi.post_id IN (SELECT id FROM physical_posts))
         ORDER BY wi.received_at DESC,wi.id DESC LIMIT 2`,contextValues);
@@ -87,7 +93,15 @@ export function createActivityRepository(pool: SqlExecutor): ActivityRepository 
         locationClass:ambiguous?"UNKNOWN":held?"WAREHOUSE":other?"OTHER_DISPOSITION":returned?"RETURNED":post[0].type === "FOUND"||holder.length?"FINDER_HELD":"UNKNOWN",
         receivedAt,returnedAt,custodyHours:receivedAt?Math.max(0,Math.round(((returnedAt?new Date(returnedAt).getTime():Date.now())-new Date(receivedAt).getTime())/36000)/100):null,
         feedbackEligible:Boolean(r?.feedback_eligible)};
-      return { title:post[0].title,status:post[0].status,results:rows.map(map),total:Number(count[0].total),summary };
+      return { title:post[0].title,status:post[0].status,results:rows.map(row=>({...map(row),images:images.filter(i=>i.event_id===row.id).map(i=>({
+        id:String(i.id),kind:i.kind,createdAt:new Date(i.uploaded_at).toISOString(),
+        url:`/api/posts/${postId}/journey/images/${i.kind}/${i.id}?asOf=${encodeURIComponent(asOf)}`
+      }))})),total:Number(count[0].total),summary };
+    },
+    async journeyImage(postId,userId,kind,imageId,asOf) {
+      const [rows] = await pool.execute<RowDataPacket[]>(`${journeyMediaCte}
+        SELECT storage_ref,format,kind FROM image_media WHERE kind=? AND id=? LIMIT 1`,[postId,userId,new Date(asOf),kind,imageId]);
+      return rows[0] ? { storageRef:String(rows[0].storage_ref),format:String(rows[0].format),kind:rows[0].kind } : null;
     }
   };
 }

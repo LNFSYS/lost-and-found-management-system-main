@@ -12,6 +12,10 @@ const claimId = "11111111-1111-4111-8111-111111111111";
 const claimantId = "22222222-2222-4222-8222-222222222222";
 const finderId = "33333333-3333-4333-8333-333333333333";
 const roomId = "44444444-4444-4444-8444-444444444444";
+const requestedIntakeAt = new Date();
+requestedIntakeAt.setUTCDate(requestedIntakeAt.getUTCDate() + 1);
+requestedIntakeAt.setUTCHours(2, 0, 0, 0);
+while ([0, 6].includes(requestedIntakeAt.getUTCDay())) requestedIntakeAt.setUTCDate(requestedIntakeAt.getUTCDate() + 1);
 
 // Verification decisions now persist an in-app notification in the same transaction.
 // Keep this focused harness self-contained while individual notification tests assert the payload.
@@ -213,7 +217,7 @@ test("LOST conversation without an approved Finder photo cannot request custody"
     warehouseRepository: { findHandoverPointById: async () => "point" } as unknown as WarehouseRepository
   });
   await assert.rejects(service.decideVerification(claimId, finderId, {
-    decision: "ESCALATE_TO_CUSTODY", reason: "Request physical custody", handoverPointId: "point", idempotencyKey: "lost-custody-gate"
+    decision: "ESCALATE_TO_CUSTODY", reason: "Request physical custody", handoverPointId: "point", requestedIntakeAt, idempotencyKey: "lost-custody-gate"
   }), error => (error as { code: string }).code === "forbidden");
   assert.equal(requests, 0);
   assert.equal(escalation, 0);
@@ -401,6 +405,40 @@ test("an authorized correction appends a correction event instead of replacing h
   assert.equal(harness.audits[1]?.metadata?.correctsEventId, originalDecision.id);
 });
 
+test("Finder may switch a meetup decision to custody after cancellation, retaining history and replay", async () => {
+  const harness=commonRepository({listVerificationQuestions:async()=>[answeredQuestion("case-accessory")]});
+  const requests:unknown[]=[];
+  const custody=unexpectedPort<CustodyRequestRepository>("custody");
+  custody.lockEligiblePost=async()=>true;custody.findActiveByPostId=async()=>null;
+  custody.hasWarehouseItem=async()=>false;custody.findPendingByClaimId=async()=>null;
+  custody.createRequest=async input=>{requests.push(input);};custody.writeAudit=async()=>{};
+  custody.notificationRecipients=async()=>[claimantId];custody.isStaff=async()=>false;
+  const warehouse=unexpectedPort<WarehouseRepository>("warehouse");
+  warehouse.findHandoverPointById=async id=>({id} as never);
+  const service=createTestClaimUseCases({claimRepository:harness.repository,custodyRequestRepository:custody,warehouseRepository:warehouse});
+  await service.decideVerification(claimId,finderId,{decision:"VERIFY_FOR_MEETUP",reason:"Compare the item in person",idempotencyKey:"first-meetup"});
+  const original=harness.audits[0]!;
+  const input={decision:"ESCALATE_TO_CUSTODY" as const,reason:"Our schedules no longer align",handoverPointId:"desk",requestedIntakeAt,correctsEventId:original.id,idempotencyKey:"switch-custody"};
+  harness.repository.hasActiveAppointment=async()=>true;
+  await assert.rejects(service.decideVerification(claimId,finderId,input),{code:"conflict"});assert.equal(requests.length,0);
+  harness.repository.hasActiveAppointment=async()=>false;
+  await assert.rejects(service.decideVerification(claimId,claimantId,input),{code:"not_found"});
+  await assert.rejects(service.decideVerification(claimId,finderId,{...input,correctsEventId:"stale"}),{code:"conflict"});
+  const result=await service.decideVerification(claimId,finderId,input);
+  await service.decideVerification(claimId,finderId,input);
+  assert.equal(result.claim.status,"ACCEPTED");assert.equal(requests.length,1);assert.equal(harness.audits.length,2);
+  assert.equal(harness.audits[0],original);assert.equal(harness.audits[1].action,"CUSTODY_ESCALATED");
+  assert.equal(harness.audits[1].metadata?.correctsEventId,original.id);
+});
+
+for(const action of ["DIRECT_RETURN_COMPLETED","STAFF_CUSTODY_VERIFIED"])test(`Custody correction cannot bypass ${action}`,async()=>{
+  const harness=commonRepository({findByIdForUpdate:async()=>claim("ACCEPTED")});
+  harness.audits.push({id:"completed",claimId,actorId:finderId,action,fromStatus:"ACCEPTED",toStatus:"ACCEPTED",metadata:null,createdAt:"2026-10-10T01:00:00Z"});
+  const service=createTestClaimUseCases({claimRepository:harness.repository});
+  await assert.rejects(service.decideVerification(claimId,finderId,{decision:"ESCALATE_TO_CUSTODY",reason:"Cannot overwrite completion",handoverPointId:"desk",correctsEventId:"completed",idempotencyKey:"blocked"}),{code:"conflict"});
+  assert.equal(harness.audits.length,1);
+});
+
 test("custody escalation creates one pending request without accepting or rejecting the claim", async () => {
   let currentStatus: ClaimStatus = "CONVERSATION_OPEN";
   let currentFinderDecision: FinderDecision = "ACCEPTED";
@@ -467,6 +505,7 @@ test("custody escalation creates one pending request without accepting or reject
     decision: "ESCALATE_TO_CUSTODY" as const,
     reason: "Finder cannot keep the item safely",
     handoverPointId: "66666666-6666-4666-8666-666666666666",
+    requestedIntakeAt,
     idempotencyKey: "custody-escalation-1"
   };
 
@@ -488,13 +527,14 @@ test("custody escalation creates one pending request without accepting or reject
   assert.equal(custodyRequests[0]?.claimId, claimId);
   assert.equal(custodyRequests[0]?.requesterId, finderId);
   assert.equal(custodyRequests[0]?.handoverPointId, input.handoverPointId);
+  assert.deepEqual(custodyRequests[0]?.requestedIntakeAt, input.requestedIntakeAt);
   assert.equal(custodyRequests[0]?.idempotencyKey, input.idempotencyKey);
   assert.equal(custodyAudits.length, 1);
   assert.equal(custodyAudits[0]?.action, "CREATED");
   assert.equal(custodyAudits[0]?.fromStatus, null);
   assert.equal(custodyAudits[0]?.toStatus, "PENDING");
-  assert.equal(notifications.length, 1);
-  assert.equal(notifications[0]?.type, "CUSTODY_REQUEST_CREATED");
+  assert.equal(notifications.length, 2);
+  assert.deepEqual(new Set(notifications.map(item => item.type)), new Set(["CUSTODY_REQUEST_CREATED", "CLAIM_ESCALATED"]));
   assert.equal(harness.audits[0]?.action, "CUSTODY_ESCALATED");
   assert.equal(harness.audits[0]?.fromStatus, "CONVERSATION_OPEN");
   assert.equal(harness.audits[0]?.toStatus, "CONVERSATION_OPEN");

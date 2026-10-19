@@ -52,14 +52,25 @@ function AppointmentSchedule({ proposedAt }: { proposedAt: string }) {
 
 export function AppointmentsPage() {
   const { appointmentId }=useParams();const [query]=useSearchParams();const claimId=query.get("claimId") ?? undefined;
-  const { user }=useAuth();const navigate=useNavigate();
+  const navigate=useNavigate();
+  return <AppointmentWorkspace key={claimId ?? "all"} claimId={claimId} appointmentId={appointmentId}
+    onSelect={id=>navigate(id ? `/appointments/${id}` : claimId ? `/appointments?claimId=${claimId}` : "/appointments")} />;
+}
+
+export function AppointmentWorkspace({ claimId, appointmentId, embedded = false, canPropose = true, onSelect, onBusyChange }: {
+  claimId?: string; appointmentId?: string; embedded?: boolean; canPropose?: boolean;
+  onSelect: (id?: string) => void; onBusyChange?: (busy: boolean) => void;
+}) {
+  const { user }=useAuth();
   const [items,setItems]=useState<Appointment[]>([]);const [selected,setSelected]=useState<Appointment|null>(null);
   const [total,setTotal]=useState(0);const [page,setPage]=useState(1);const [error,setError]=useState("");
   const [loading,setLoading]=useState(true);const [busy,setBusy]=useState(false);const [reload,setReload]=useState(0);
   const [date,setDate]=useState("");const [point,setPoint]=useState("");const [checked,setChecked]=useState(false);
+  const [locationMode,setLocationMode]=useState<"point"|"custom">("point");const [customLocation,setCustomLocation]=useState("");
   const [reason,setReason]=useState("");const [clock,setClock]=useState(Date.now());
   const [points,setPoints]=useState<Array<{id:string;name:string;address:string}>>([]);
   const generation=useRef(0);const mutation=useRef<number|null>(null);const retry=useRef<{fingerprint:string;key:string}|null>(null);
+  useEffect(()=>{onBusyChange?.(busy);return()=>onBusyChange?.(false);},[busy,onBusyChange]);
   useEffect(()=>{setChecked(false);setReason("");},[appointmentId]);
   useEffect(()=>{const timer=setInterval(()=>setClock(Date.now()),30000);return()=>clearInterval(timer);},[]);
   useEffect(()=>{const token=++generation.current;const controller=new AbortController();setLoading(true);setError("");setSelected(null);setChecked(false);setBusy(false);
@@ -80,10 +91,12 @@ export function AppointmentsPage() {
   function key(fingerprint:string){if(retry.current?.fingerprint!==fingerprint)retry.current={fingerprint,key:crypto.randomUUID()};return retry.current.key;}
   async function create(event:React.FormEvent) {
     event.preventDefault();if(mutation.current===generation.current||!claimId)return;
-    const time=new Date(date);if(!date||!Number.isFinite(time.getTime())||!point){setError("Vui lòng chọn thời gian và điểm hẹn");return;}
+    const time=new Date(date);const location=customLocation.trim();
+    if(!date||!Number.isFinite(time.getTime())||(locationMode==="point"?!point:location.length<3||location.length>255)){setError("Vui lòng chọn thời gian và điểm hẹn hoặc nhập địa điểm riêng (3–255 ký tự)");return;}
     const token=generation.current;mutation.current=token;setBusy(true);setError("");
-    try {const a=await api.createAppointment({claimId,proposedAt:time.toISOString(),handoverPointId:point,requestKey:key(JSON.stringify([claimId,date,point]))});
-      if(generation.current===token){retry.current=null;navigate(`/appointments/${a.id}`);}}
+    const destination=locationMode==="point"?{handoverPointId:point}:{customLocation:location};
+    try {const a=await api.createAppointment({claimId,proposedAt:time.toISOString(),...destination,requestKey:key(JSON.stringify([claimId,date,destination]))});
+      if(generation.current===token){retry.current=null;onSelect(a.id);}}
     catch(e){if(generation.current===token)setError(e instanceof Error?e.message:"Không thể tạo lịch");}
     finally{if(mutation.current===token)mutation.current=null;if(generation.current===token)setBusy(false);}
   }
@@ -99,8 +112,10 @@ export function AppointmentsPage() {
   const ended=selected&&["COMPLETED","CANCELLED","REJECTED"].includes(selected.status);
   const occurred=selected&&new Date(selected.proposedAt).getTime()<=clock;
   const finder=selected?.finderId===user?.id;
-  return <section className="workflow-page appointments-page">
-    <header className="workflow-heading"><h1><CalendarDays/> Lịch hẹn trả đồ</h1><div><Link to="/appointments">Tất cả lịch</Link><button type="button" title="Tải lại lịch hẹn" aria-label="Tải lại lịch hẹn" disabled={busy} onClick={()=>setReload(v=>v+1)}><RotateCw size={18}/></button></div></header>
+  return <section className={`workflow-page appointments-page${embedded ? " appointments-page--embedded" : ""}`} aria-busy={busy}>
+    <header className="workflow-heading">{!embedded && <h1><CalendarDays/> Lịch hẹn trả đồ</h1>}<div>
+      {embedded ? appointmentId && <button type="button" disabled={busy} onClick={()=>onSelect()}><ChevronLeft size={18}/> Danh sách lịch</button> : <Link to="/appointments">Tất cả lịch</Link>}
+      <button type="button" title="Tải lại lịch hẹn" aria-label="Tải lại lịch hẹn" disabled={busy} onClick={()=>setReload(v=>v+1)}><RotateCw size={18}/></button></div></header>
     {error&&<p className="workflow-error" role="alert">{error}</p>}
     {loading?<p role="status">Đang tải lịch hẹn...</p>:selected?<>
       <section className="appointment-overview" aria-label="Thông tin lịch hẹn">
@@ -114,7 +129,7 @@ export function AppointmentsPage() {
             <div><dt><UserRound size={16} /> Người nhặt</dt><dd>{responseLabel[selected.finderResponse]}</dd></div>
             <div><dt><UserRound size={16} /> Người mất</dt><dd>{responseLabel[selected.ownerResponse]}</dd></div>
           </dl>
-          <Link className="appointment-conversation" to={`/claims/${selected.claimId}`}><MessageCircle size={18} /> Mở cuộc trao đổi <ArrowRight size={16} /></Link>
+          {!embedded && <Link className="appointment-conversation" to={`/claims/${selected.claimId}`}><MessageCircle size={18} /> Mở cuộc trao đổi <ArrowRight size={16} /></Link>}
         </div>
       </section>
       {selected.custodyAuthorized&&<p>Staff đã hoàn tất trả đồ tại quầy. Lịch này không dùng xác nhận bàn giao trực tiếp.</p>}
@@ -135,27 +150,34 @@ export function AppointmentsPage() {
         {((selected.finderResponse==="PENDING"&&selected.ownerResponse==="PENDING")||(selected.finderResponse==="DISPUTED"&&selected.ownerResponse==="DISPUTED"))&&<button disabled={busy} onClick={()=>void act("CANCEL")}><XCircle/> Hủy lịch</button>}
       </div>}
       <h2>Nhật ký lịch hẹn</h2><ol className="workflow-timeline">{selected.events.map(e=><li key={e.id}><strong>{eventLabel[e.action]??e.action}</strong><time>{displayTime(e.createdAt)}</time>{e.note&&<p>{e.note}</p>}</li>)}</ol>
-      {ended&&selected.status!=="COMPLETED"&&<Link to={`/appointments?claimId=${selected.claimId}`}>Đề xuất lịch khác</Link>}
+      {ended&&selected.status!=="COMPLETED"&&(embedded ? <button type="button" onClick={()=>onSelect()}>Đề xuất lịch khác</button> : <Link to={`/appointments?claimId=${selected.claimId}`}>Đề xuất lịch khác</Link>)}
     </>:<>
-      {claimId&&<form className="workflow-proposal" onSubmit={e=>void create(e)}><h2>Đề xuất lịch mới</h2>
+      {!canPropose && <p role="status">Vật phẩm đang chuyển sang kho. Lịch hẹn trực tiếp chỉ được xem; việc tiếp nhận và trả đồ sẽ do Staff xử lý.</p>}
+      {claimId&&canPropose&&!items.some(a=>["PENDING","ACCEPTED","RESCHEDULED"].includes(a.status))&&<form className="workflow-proposal" onSubmit={e=>void create(e)}><h2>Đề xuất lịch mới</h2>
         <label>Thời gian hẹn<input required type="datetime-local" value={date} disabled={busy} onChange={e=>setDate(e.target.value)}/></label>
-        <label>Điểm hẹn<select required value={point} disabled={busy} onChange={e=>setPoint(e.target.value)}><option value="">Chọn điểm hẹn</option>{points.map(p=><option key={p.id} value={p.id}>{p.name} · {p.address}</option>)}</select></label>
+        <fieldset className="appointment-location-choice" disabled={busy}><legend>Địa điểm</legend>
+          <label><input type="radio" name="appointment-location" checked={locationMode==="point"} onChange={()=>setLocationMode("point")}/> Điểm bàn giao</label>
+          <label><input type="radio" name="appointment-location" checked={locationMode==="custom"} onChange={()=>setLocationMode("custom")}/> Địa điểm riêng</label>
+        </fieldset>
+        {locationMode==="point" ? <label>Điểm hẹn<select required value={point} disabled={busy} onChange={e=>setPoint(e.target.value)}><option value="">Chọn điểm hẹn</option>{points.map(p=><option key={p.id} value={p.id}>{p.name} · {p.address}</option>)}</select></label>
+          : <label>Địa điểm hẹn riêng<input required minLength={3} maxLength={255} value={customLocation} disabled={busy} placeholder="Ví dụ: Sảnh thư viện, cổng chính" onChange={e=>setCustomLocation(e.target.value)}/></label>}
         <button type="submit" disabled={busy}><CalendarDays/> Gửi đề xuất</button></form>}
-      {!error && <p className="appointment-list-count">{total} lịch hẹn</p>}
+      {!error && (!embedded || total > 0) && <p className="appointment-list-count">{total} lịch hẹn</p>}
       {items.length ? <ul className="appointment-list">{items.map(a => <li key={a.id}>
         <article className="appointment-card">
           <AppointmentImage appointment={a} />
           <div className="appointment-card__body">
             <div className="appointment-card__meta"><span className={`workflow-status appointment-status appointment-status--${a.status.toLowerCase()}`}>{appointmentStatus[a.status]}</span>
               <span className="appointment-channel">{a.custodyAuthorized ? <PackageCheck size={15} /> : <UserRound size={15} />}{a.custodyAuthorized ? "Tại kho" : "Trực tiếp"}</span></div>
-            <h2><Link to={`/appointments/${a.id}`}>{a.title}</Link></h2>
+            <h2>{embedded ? a.title : <Link to={`/appointments/${a.id}`}>{a.title}</Link>}</h2>
             <AppointmentSchedule proposedAt={a.proposedAt} />
             <p className="appointment-location"><MapPin size={17} /><span>{a.location ?? "Chưa ghi nhận điểm hẹn"}</span></p>
           </div>
-          <footer className="appointment-card__footer"><span>{a.finderId === user?.id ? "Bạn là người nhặt" : "Bạn là người mất"}</span><Link to={`/appointments/${a.id}`} aria-label={`Xem lịch hẹn ${a.title}`}>Xem lịch hẹn <ArrowRight size={16} /></Link></footer>
+          <footer className="appointment-card__footer"><span>{a.finderId === user?.id ? "Bạn là người nhặt" : "Bạn là người mất"}</span>
+            {embedded ? <button type="button" disabled={busy} onClick={()=>onSelect(a.id)} aria-label={`Xem lịch hẹn ${a.title}`}>Xem lịch hẹn <ArrowRight size={16}/></button> : <Link to={`/appointments/${a.id}`} aria-label={`Xem lịch hẹn ${a.title}`}>Xem lịch hẹn <ArrowRight size={16} /></Link>}</footer>
         </article>
-      </li>)}</ul> : !error && <div className="appointment-empty"><CalendarDays size={36} /><h2>Chưa có lịch hẹn</h2></div>}
-      <div className="workflow-pagination"><button aria-label="Trang trước" disabled={page===1||busy} onClick={()=>setPage(p=>p-1)}><ChevronLeft/></button><span>Trang {page} · {total} lịch</span><button aria-label="Trang sau" disabled={page*20>=total||busy} onClick={()=>setPage(p=>p+1)}><ChevronRight/></button></div>
+      </li>)}</ul> : !error && !embedded && <div className="appointment-empty"><CalendarDays size={36} /><h2>Chưa có lịch hẹn</h2></div>}
+      {(!embedded || total > 20) && <div className="workflow-pagination"><button aria-label="Trang trước" disabled={page===1||busy} onClick={()=>setPage(p=>p-1)}><ChevronLeft/></button><span>Trang {page} · {total} lịch</span><button aria-label="Trang sau" disabled={page*20>=total||busy} onClick={()=>setPage(p=>p+1)}><ChevronRight/></button></div>}
     </>}
   </section>;
 }

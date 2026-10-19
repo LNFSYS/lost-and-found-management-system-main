@@ -81,7 +81,6 @@ export function createServices(persistence: Persistence, config: typeof env = en
   }) : null;
   const notificationService = createNotificationUseCases({ notificationRepository, notificationEmailRepository, notificationEmailQueue,
     pushPublicKey: notificationPushConfigured ? config.notificationPush.publicKey : null });
-  const activityService = createActivityUseCases({ repository:persistence.activityRepository,audit:adminAuditRepository,transaction,id });
   const systemConfigService = createSystemConfigUseCases({
     repository: systemConfigRepository, auditRepository: adminAuditRepository, transaction, idFactory: id
   });
@@ -113,6 +112,8 @@ export function createServices(persistence: Persistence, config: typeof env = en
     config: config.cloudinary, namespace: "warehouse-proof", allowLocalWrites: config.nodeEnv !== "production",
     fallback: createPrivateMediaStorage({ uploadDir: config.uploadDir, namespace: "warehouse-proof", invalidPathMessage: "Invalid proof path", notFoundMessage: "Proof not found" })
   });
+  const activityService = createActivityUseCases({ repository:persistence.activityRepository,audit:adminAuditRepository,transaction,id,
+    media: { post:postMediaStorage,claim:claimMediaStorage,warehouse:proofStorage } });
   const warehouseService = createWarehouseUseCases({ warehouseRepository, custodyRequestRepository, proofStorage, sourceMediaStorage: postMediaStorage, contactMediaStorage: claimMediaStorage, ...custodyDelivery, withTransaction: transaction, id, uploads: mediaUploads, logger: console });
   const custodyRequestService = createCustodyRequestUseCases({ custodyRequestRepository, warehouseRepository, ...custodyDelivery, withTransaction: transaction, id, scheduleRepository: systemConfigRepository });
   const returnFeedbackService = createReturnFeedbackUseCases({

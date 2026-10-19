@@ -1,9 +1,9 @@
 # 3. Business Use Case Catalogue - FPTU Lost & Found System (LNFS)
 
-Current statuses retain the appointment, peer handover, audit and item-journey follow-up on 6 October 2026, originally based on `dev@195b134`, plus the local 7 October matching notification follow-up. See [the implementation and rollout record](../runbooks/appointment-journey-rollout.md). The preceding [71-row status review](../audits/uc-status-review-2026-10-06.md) remains a historical snapshot; its earlier 97 Implemented goals were retained, not newly re-certified. General Staff escalation, counter-proposal/rescheduling, full disposition screens and delivery-channel coverage remain separate gaps. Migrations 061/062/063 and the 16 warehouse-media transfers retain their dated rollout evidence; this matching follow-up introduces no migration. Candidate CI/deployment, non-warehouse legacy media and manual acceptance remain separate. See [the database rollout record](../runbooks/database-warehouse-recovery.md).
+Statuses were re-reviewed on 15 October 2026 against `main@7ff7569` and the controlled UAT findings recorded on 11 October. UC-090, UC-098 and UC-099 are Partial pending configuration-history pagination/legacy-row isolation and repair of owner dismiss/feedback requests that returned 404 for displayed matches. Current totals: **126 Implemented, 24 Partial, 18 Planned**. The preceding [71-row status review](../audits/uc-status-review-2026-10-06.md) and dated rollout records remain historical snapshots; they are not rewritten by this review. General Staff escalation, counter-proposal/rescheduling, full disposition screens and delivery-channel coverage remain separate gaps. Migrations 061/062/063 and the 16 warehouse-media transfers retain their dated rollout evidence. Candidate CI/deployment, non-warehouse legacy media and manual acceptance remain separate. See [the implementation and rollout record](../runbooks/appointment-journey-rollout.md) and [the database rollout record](../runbooks/database-warehouse-recovery.md).
 
-- **Implemented:** 129 use cases
-- **Partial:** 21 use cases
+- **Implemented:** 126 use cases
+- **Partial:** 24 use cases
 - **Planned:** 18 use cases
 - **Total:** 168 business use cases
 
@@ -24,15 +24,15 @@ The retained 21 September snapshot (not a fresh author audit) contains 73 commit
 
 ### Remaining Work Allocation
 
-Completed UC work above is not reassigned. The 39 currently Partial/Planned UCs retain their existing assignees; newly implemented rows are removed from the remaining list, not reassigned. UC-168 stays with Khoa for complete delivery preferences. Local implementation attribution is not a new author/commit audit.
+The 42 currently Partial/Planned UCs retain their existing assignees, with UC-090, UC-098 and UC-099 assigned to Dat based on the configuration and matching-feedback modules. Completed UC work is not reassigned. UC-168 stays with Khoa for complete delivery preferences. This allocation is not a new author/commit audit.
 
 | Assignee | Remaining UC IDs | Count | Main responsibility |
 | --- | --- | ---: | --- |
 | Luong | UC-110 to UC-118; UC-129, UC-132 | 11 | Confidence support, general Staff escalation, multiple-claimant comparison/reservation and counter-proposal/rescheduling. |
 | Quan | UC-097; UC-101 to UC-105; UC-164 | 7 | New-match notifications/model operations and full authorized claim-history scope. |
 | Khoa | UC-119, UC-123, UC-125, UC-142, UC-168 | 5 | Immediate Web realtime, complete claim/appointment producers, intake scheduling and delivery preferences. |
-| Dat | UC-147 to UC-162 | 16 | Custody notifications, overdue handling, legal holds, disposition orders, evidence, and donation campaigns. |
-| **Total** | **Partial/Planned rows only** | **39** | **All currently Partial or Planned business UCs are assigned once.** |
+| Dat | UC-090, UC-098 to UC-099, UC-147 to UC-162 | 19 | Configuration-history pagination and legacy isolation, matching feedback/dismissal, custody notifications, overdue handling, legal holds and disposition workflows. |
+| **Total** | **Partial/Planned rows only** | **42** | **All currently Partial or Planned business UCs are assigned once.** |
 
 ### 3.2 Authentication & Authorization
 
@@ -80,7 +80,7 @@ Completed UC work above is not reassigned. The 39 currently Partial/Planned UCs 
 
 **Commit evidence:** Quan implemented and hardened persisted matching, scoring, access control, and explanations in `4d6841b` and `489cdc9`.
 
-**Runtime evidence:** UC-098 to UC-100 are Implemented: actor-scoped feedback/dismissal, Web controls, paginated HTTP results and a fenced, bounded refresh worker are active on `dev`. Migration 060 is applied on Aiven; historical receipts are in [matching review](../audits/matching-feedback-review.md). Source-owner filtering before pagination has owner/Staff/Admin regressions. Exact baseline CI and remaining manual/operational acceptance are separated in [the status review](../audits/uc-status-review-2026-10-06.md). On 7 October, UC-097 moves to Partial: local new-match producer, transactional email and Web popup exist, but candidate CI, deployment and matching inbox acceptance remain unverified. See [matching notification rules](../workflows/matching-notification-rules.md). No new UC ID is introduced.
+**Runtime evidence:** UC-098 and UC-099 are Partial. Their actor-scoped APIs and Web controls exist, but controlled UAT against `main@7ff7569` on 11 October returned 404 for the owner dismiss/feedback requests using a match displayed by the UI; neither action persisted. Fix and positive-path regression evidence are still required. UC-100 remains Implemented: the fenced, bounded refresh worker is active. Migration 060 is applied on Aiven; historical receipts are in [matching review](../audits/matching-feedback-review.md). Source-owner filtering before pagination has owner/Staff/Admin regressions. On 7 October, UC-097 moved to Partial: the new-match producer, transactional email and Web popup exist, but candidate CI, deployment and matching-inbox acceptance remain separate. See [matching notification rules](../workflows/matching-notification-rules.md). No new UC ID is introduced.
 
 | ID | Use Case | Actors | Use Case Description | Status |
 | --- | --- | --- | --- | --- |
@@ -91,8 +91,8 @@ Completed UC work above is not reassigned. The 39 currently Partial/Planned UCs 
 | UC-030 | Calculate matching score | System | Compare LOST and FOUND posts using normalized text, category, location, time, image tags, and safe OCR signals. | Implemented |
 | UC-031 | Store active match results | System | Persist calculated active LOST-FOUND results while retaining permitted inactive saved history; deleted/hidden/private candidates remain guarded. | Implemented |
 | UC-097 | Notify owner about a new match | System, Post Owner | Notify both active post owners once when a calculated pair reaches 60%; honor preferences and recheck open posts before email. | Partial |
-| UC-098 | Dismiss a match suggestion | Post Owner | Hide a suggestion that the owner has reviewed and determined is not relevant. Dismissal is scoped to the actor and source post and does not resurface during later refreshes. | Implemented |
-| UC-099 | Submit match feedback | Post Owner | Mark a suggestion once as useful, irrelevant, or incorrect using an idempotent correlation key; feedback remains separate from ownership and workflow state. | Implemented |
+| UC-098 | Dismiss a match suggestion | Post Owner | Hide a suggestion that the owner has reviewed and determined is not relevant. Dismissal is scoped to the actor and source post and does not resurface during later refreshes. | Partial |
+| UC-099 | Submit match feedback | Post Owner | Mark a suggestion once as useful, irrelevant, or incorrect using an idempotent correlation key; feedback remains separate from ownership and workflow state. | Partial |
 | UC-100 | Refresh matches periodically | Scheduler | Recalculate eligible active LOST and FOUND candidates with just-in-time fenced leases, heartbeat, bounded retries and graceful shutdown, without deciding ownership. | Implemented |
 
 ### 3.5 Matching Model & AI Operations
@@ -169,17 +169,17 @@ Completed UC work above is not reassigned. The 39 currently Partial/Planned UCs 
 
 ### 3.8 Handover, Appointment & Direct Return
 
-**Local runtime evidence:** the appointments module/routes and Web list/detail/proposal/actions implement the goals below with authorized roles, optimistic versions, request-key replay and immutable events. Reminders reuse the existing transactional outbox. Unit, HTTP, isolated SQL and browser evidence are recorded in [the rollout runbook](../runbooks/appointment-journey-rollout.md). This is uncommitted local code, not deployed acceptance; Aiven still requires migration 063.
+**Runtime evidence:** the appointments module/routes and Web list/detail/proposal/actions are committed on `main` (`4325a3b`, `562b103`, `7ff7569`) and implement the goals below with authorized roles, optimistic versions, request-key replay and immutable events. Reminders reuse the existing transactional outbox. Unit, HTTP, isolated SQL and browser evidence are recorded in [the rollout runbook](../runbooks/appointment-journey-rollout.md). Committed source is not deployed acceptance; the recorded rollout still requires migration 063 on Aiven.
 
 **Remaining work:** UC-129 and UC-132 remain assigned to Luong. Neither cancelling then creating another attempt nor rejecting a proposal is an implementation of negotiated rescheduling/counter-proposal.
 
-**Proposal versus appointment:** The top-of-chat Finder decision can explicitly propose a communication-only meetup after LOST photo approval without minimum verification answers. That decision alone does not book time/place or authorize warehouse release. The separate appointment link opens a real proposal with an active handover point and future time; the counterpart must accept. Ordinary FOUND verification retains its answer gate. Completion still needs actual physical checks and both confirmations; pending disputes, competing claims, inactive participants or custody block it. UC-140 has appointment discovery and an in-workflow HANDOVER report link.
+**Proposal versus appointment:** The top-of-chat Finder decision can explicitly propose a communication-only meetup after LOST photo approval without minimum verification answers. That decision alone does not book time/place or authorize warehouse release. The chat appointment button opens an accessible in-place popup to list, propose and manage appointments; select an active handover point or a custom location (3-255 characters), and a future time. The counterpart must accept. Finder may switch a valid meetup decision to custody after explicitly cancelling any active attempt under UC-133; retain the original decision/history and require physical Staff intake/verification/return. Ordinary FOUND verification retains its answer gate. Completion still needs actual physical checks and both confirmations; pending disputes, competing claims, inactive participants or custody block it. UC-140 has appointment discovery and an in-workflow HANDOVER report link.
 
 | ID | Use Case | Actors | Use Case Description | Status |
 | --- | --- | --- | --- | --- |
-| UC-126 | List my appointments | Claimant, Finder | View participant-scoped paginated appointment cards with public item photo (when available), title, schedule, place and status through the calendar navigation or conversation link. Private evidence is not used as a thumbnail. | Implemented |
+| UC-126 | List my appointments | Claimant, Finder | View participant-scoped paginated appointment cards with public item photo (when available), title, schedule, place and status through calendar navigation or an in-chat popup without leaving the conversation. Private evidence is not used as a thumbnail. | Implemented |
 | UC-127 | View appointment detail | Claimant, Finder | View and enlarge the public item photo when available, alongside place, time, participant responses, state and immutable attempt history. Missing/private images use an explicit placeholder. Legacy appointments without workflow metadata are explicitly read-only. | Implemented |
-| UC-128 | Propose a meetup appointment | Claimant, Finder | Propose a future time and active handover point for an eligible accepted conversation, without treating a communication-only photo proposal as ownership proof. | Implemented |
+| UC-128 | Propose a meetup appointment | Claimant, Finder | Propose a future time and either an active handover point or a custom location (3-255 characters) for an eligible accepted conversation, from calendar or the in-chat popup. Custom location does not authorize Staff intake; a communication-only photo proposal is not ownership proof. | Implemented |
 | UC-129 | Counter-propose an appointment | Claimant, Finder | Suggest a different place or time instead of accepting the current proposal. | Planned |
 | UC-130 | Accept an appointment proposal | Claimant, Finder | The counterpart accepts an eligible pending future proposal; the proposer cannot accept their own proposal. | Implemented |
 | UC-131 | Decline an appointment proposal | Claimant, Finder | The counterpart declines a pending proposal while preserving claim and appointment history. | Implemented |
@@ -313,7 +313,7 @@ Completed UC work above is not reassigned. The 39 currently Partial/Planned UCs 
 | UC-087 | List system configurations | Admin | Browse and filter runtime configuration entries. | Implemented |
 | UC-088 | Create system configuration | Admin | Create a typed configuration entry and record its initial history and audit data. | Implemented |
 | UC-089 | View system configuration details | Admin | Inspect one runtime configuration entry and its current typed value. | Implemented |
-| UC-090 | View configuration history | Admin | View the paginated change history of a configuration entry. | Implemented |
+| UC-090 | View configuration history | Admin | View the paginated change history of a configuration entry. | Partial |
 | UC-091 | Update system configuration | Admin | Change a typed runtime value and record the actor, reason, previous value, and new value. | Implemented |
 | UC-092 | Delete system configuration | Admin | Delete an eligible configuration entry and record the administrative action. | Implemented |
 
@@ -347,11 +347,11 @@ Completed UC work above is not reassigned. The 39 currently Partial/Planned UCs 
 
 **Relationship to existing use cases:** UC-167 is a read-only projection and does not replace the state-changing use cases that produce its events. Matching-quality feedback remains UC-098 to UC-100, while post-return participant feedback remains UC-058 to UC-060. Appointment, no-show, direct handover, and custody outcomes remain owned by UC-126 to UC-147.
 
-**State progression rules:** A terminal claim, appointment attempt, transfer request, or handover attempt is never moved backward to an earlier status. Retrying creates a new linked attempt while preserving the prior event. A cancellation, no-show, failed handover, or conflicting confirmation must not mark the item returned. The current custodian is derived from authoritative events: the Finder retains the item until confirmed Staff intake or completed direct handover; Staff holds it after intake; return feedback is available only after an authorized completed-return outcome. The timeline must redact private messages, verification answers, evidence, contact data, and unrelated claims.
+**State progression rules:** A terminal claim, appointment attempt, transfer request, or handover attempt is never moved backward to an earlier status. Retrying creates a new linked attempt while preserving the prior event. A cancellation, no-show, failed handover, or conflicting confirmation must not mark the item returned. The current custodian is derived from authoritative events: the Finder retains the item until confirmed Staff intake or completed direct handover; Staff holds it after intake; return feedback is available only after an authorized completed-return outcome. The timeline must redact private message text, verification answers, documents, contact data, storage references and unrelated claims. Eligible item/photos already shared with the viewer may appear at their milestones via an authenticated, relationship-scoped proxy; a photo does not prove possession or ownership.
 
 | ID | Use Case | Actors | Use Case Description | Status |
 | --- | --- | --- | --- | --- |
-| UC-167 | View end-to-end item journey | LOST Post Owner, Finder | View the permitted chronological journey and current-custody summary from My Posts, including linked warehouse history. Only owned posts and actual participant cases are accessible; private messages, answers, recipient details, proof/media and unrelated cases remain redacted. Historical gaps stay explicit. | Implemented |
+| UC-167 | View end-to-end item journey | LOST Post Owner, Finder | View the permitted chronological journey and current-custody summary from My Posts, including linked warehouse history and eligible post, shared PHOTO, confirmed intake and completed-return photos, with an accessible enlarged preview. Only owned posts and actual participant cases are accessible; return photos require the actual recipient or that return's Finder. Private message text, answers, documents, recipient details, raw media references and unrelated cases remain redacted. Draft/unattached photos and offline recipient receipts remain private; historical gaps stay explicit. | Implemented |
 
 ### 3.18 Notification Delivery Preferences
 

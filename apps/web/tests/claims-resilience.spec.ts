@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { readFileSync } from "node:fs";
 
 const session = {
   accessToken: "e2e-access-token",
@@ -55,6 +56,14 @@ const claimB = {
   room: { id: "room-b" }
 };
 
+function futureIntakeDateTime() {
+  const date = new Date();
+  date.setDate(date.getDate() + 1);
+  date.setHours(9, 0, 0, 0);
+  while ([0, 6].includes(date.getDay())) date.setDate(date.getDate() + 1);
+  return new Date(date.getTime() - date.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
+}
+
 async function fulfillJson(route: Parameters<Page["route"]>[0], body: unknown) {
   await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
 }
@@ -98,6 +107,199 @@ test("LOST Finder sees all four decision buttons without automatic ownership app
   await expect(page.getByText("Đang tải trạng thái xác minh...")).toHaveCount(0);
   await page.getByRole("button", { name: "Chuyển sang custody" }).scrollIntoViewIfNeeded();
   await page.screenshot({ path: test.info().outputPath("lost-finder-controls-desktop.png"), fullPage: true });
+});
+
+for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 }]) {
+  test(`custody review stays compact and opens keyboard-accessible details at ${viewport.width}px`, async ({ page }) => {
+    await page.setViewportSize(viewport);
+    await setupDirectLostRoom(page);
+    const reason = "Tôi sẽ bàn giao vật phẩm tại quầy để nhân viên đối chiếu và ghi nhận tình trạng. ".repeat(10);
+    await page.route(`**/api/claims/${directLostClaim.id}/verification`, route => fulfillJson(route, {
+      ...directLostVerification,
+      appointmentEligible: true,
+      roomEscalation: { escalatedAt: "2026-10-10T02:00:00.000Z", escalatedBy: session.user.id, reason },
+      history: [{ id: "custody-event", action: "CUSTODY_ESCALATED", actorId: session.user.id, createdAt: "2026-10-10T02:00:00.000Z", metadata: { decision: "ESCALATE_TO_CUSTODY", reason } }]
+    }));
+    await page.route(`**/api/claims/${directLostClaim.id}/messages*`, route => fulfillJson(route, {
+      room: { id: directLostClaim.roomId, claimId: directLostClaim.id, status: directLostClaim.status, participantRole: "FINDER", createdAt: directLostClaim.createdAt },
+      items: [{ id: "message-visible", roomId: directLostClaim.roomId, sender: directLostClaim.claimant, content: "Cảm ơn bạn, tôi vẫn có thể trao đổi ở đây.", messageType: "TEXT", createdAt: "2026-10-10T02:01:00.000Z", isRead: true, readAt: null }],
+      hasMore: false, nextCursor: null
+    }));
+    await page.goto(`/claims/${directLostClaim.id}`);
+    const header = page.locator(".claim-chat-header");
+    await expect(header.getByText("Đã gửi yêu cầu chuyển sang custody", { exact: true })).toHaveCount(1);
+    await expect(header).not.toContainText(reason);
+    await expect(header.getByRole("button", { name: "Điều chỉnh quyết định" })).toHaveCount(0);
+    await expect(header.getByRole("button", { name: "Lịch hẹn", exact: true })).toBeVisible();
+    await expect(page.getByText("Cảm ơn bạn, tôi vẫn có thể trao đổi ở đây.", { exact: true })).toBeVisible();
+    await page.evaluate(() => document.fonts.ready);
+    await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
+    const review = await page.locator(".claim-chat-review").boundingBox();
+    const chat = await page.locator(".claim-chat-scroll").boundingBox();
+    expect(review!.height).toBeLessThan(220);
+    expect(chat!.height).toBeGreaterThan(220);
+    await expect(header.locator(".review-progress strong")).toHaveCSS("font-size", "13px");
+    await expect(header.locator(".review-outcome > strong")).toHaveCSS("font-size", "13px");
+    await page.screenshot({ path: test.info().outputPath(`compact-custody-${viewport.width}.png`) });
+    await page.getByLabel("Tin nhắn riêng").fill("Bản nháp không bị mất khi xem chi tiết");
+
+    const detailsButton = header.getByRole("button", { name: "Chi tiết xác minh", exact: true });
+    await detailsButton.click();
+    const dialog = page.getByRole("dialog", { name: "Chi tiết xác minh", exact: true });
+    await expect(dialog).toBeVisible();
+    await expect(dialog).toContainText(reason.trim());
+    await expect(dialog.getByRole("button", { name: "Đóng chi tiết xác minh" })).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(dialog.getByRole("button", { name: "Đóng chi tiết xác minh" })).toBeFocused();
+    await page.keyboard.press("Shift+Tab");
+    await expect(dialog.getByRole("button", { name: "Đóng chi tiết xác minh" })).toBeFocused();
+    await page.screenshot({ path: test.info().outputPath(`verification-details-${viewport.width}.png`) });
+    await page.keyboard.press("Escape");
+    await expect(dialog).toHaveCount(0);
+    await expect(detailsButton).toBeFocused();
+    await expect(page.getByLabel("Tin nhắn riêng")).toHaveValue("Bản nháp không bị mất khi xem chi tiết");
+    expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(1);
+  });
+}
+
+test("accepted review keeps the appointment and correction controls without repeating long reasons", async ({ page }) => {
+  await setupDirectLostRoom(page);
+  const reason = "Đã đối chiếu những đặc điểm riêng của vật phẩm trước khi đề xuất gặp mặt.";
+  await page.route(`**/api/claims/${directLostClaim.id}/verification`, route => fulfillJson(route, {
+    ...directLostVerification,
+    status: "ACCEPTED",
+    appointmentEligible: true,
+    policy: { ...directLostVerification.policy, readyForDecision: true, answeredCount: 1 },
+    history: [{ id: "accepted-event", action: "VERIFICATION_ACCEPTED", actorId: session.user.id, createdAt: "2026-10-10T02:00:00.000Z", metadata: { decision: "VERIFY_FOR_MEETUP", reason } }]
+  }));
+  await page.goto(`/claims/${directLostClaim.id}`);
+  const header = page.locator(".claim-chat-header");
+  await expect(header.getByText("Đủ điều kiện đặt lịch", { exact: true })).toBeVisible();
+  await expect(header).not.toContainText(reason);
+  await expect(header.getByRole("button", { name: "Lịch hẹn", exact: true })).toBeVisible();
+  await header.getByRole("button", { name: "Điều chỉnh quyết định", exact: true }).click();
+  await expect(header.locator(".review-actions button")).toHaveCount(4);
+  await expect(header.getByRole("button", { name: "Chuyển sang custody", exact: true })).toBeEnabled();
+  await header.getByRole("button", { name: "Ẩn lựa chọn quyết định", exact: true }).click();
+  await expect(header.locator(".review-actions button")).toHaveCount(0);
+});
+
+const meetupVerification={...directLostVerification,status:"ACCEPTED",appointmentEligible:true,
+  policy:{...directLostVerification.policy,readyForDecision:true,photoContactEligible:true},
+  history:[{id:"accepted-event",action:"VERIFICATION_ACCEPTED",actorId:session.user.id,createdAt:"2026-10-10T02:00:00Z",metadata:{decision:"VERIFY_FOR_MEETUP",reason:"Compare in person"}}]};
+function chatAppointment(overrides:Record<string,unknown>={}){
+  return {id:"chat-appointment",claimId:directLostClaim.id,postId:directLostClaim.foundPostId,title:"Balo bị mất",proposerId:session.user.id,
+    finderId:session.user.id,ownerId:"lost-owner",status:"PENDING",proposedAt:new Date(Date.now()+86400000).toISOString(),
+    handoverPointId:null,location:"Sảnh thư viện",version:1,finderResponse:"PENDING",ownerResponse:"PENDING",noShowUserId:null,
+    custodyAuthorized:false,completedAt:null,itemImageUrl:`/api/posts/${directLostClaim.foundPostId}/media/item-image`,events:[],...overrides};
+}
+async function setupChatAppointments(page:Page){
+  await setupDirectLostRoom(page,[{...directLostClaim,status:"ACCEPTED"}]);
+  await page.route(`**/api/claims/${directLostClaim.id}/verification`,route=>fulfillJson(route,meetupVerification));
+  await page.route("**/api/handover-points",route=>fulfillJson(route,{handoverPoints:[{id:"desk-a",name:"Quầy Staff",address:"Sảnh A",isActive:true}]}));
+  await page.route(/\/api\/appointments(?:\?.*)?$/,route=>fulfillJson(route,{results:[],total:0}));
+  await page.route("**/api/appointments/chat-appointment",route=>fulfillJson(route,chatAppointment()));
+  const image=readFileSync(new URL("./fixtures/appointment-item.png",import.meta.url));
+  await page.route("**/api/posts/*/media/item-image",route=>route.fulfill({contentType:"image/png",body:image}));
+}
+
+for(const width of [1440,390])test(`chat appointment popup creates a custom-location meeting, preserves draft and traps focus (${width}px)`,async({page},info)=>{
+  await page.setViewportSize({width,height:900});await setupChatAppointments(page);
+  const calls:Array<Record<string,unknown>>=[];let release:()=>void=()=>{};
+  await page.route("**/api/appointments",async route=>{
+    if(route.request().method()!=="POST")return route.fallback();
+    calls.push(route.request().postDataJSON());
+    if(calls.length===1)return route.fulfill({status:503,json:{message:"Tạm thời mất kết nối, thử lại"}});
+    await new Promise<void>(resolve=>{release=resolve;});await fulfillJson(route,chatAppointment());
+  });
+  await page.goto(`/claims/${directLostClaim.id}`);
+  await page.getByLabel("Tin nhắn riêng").fill("Giữ lại bản nháp của tôi");
+  const open=page.locator(".review-tools").getByRole("button",{name:"Lịch hẹn",exact:true});await open.click();
+  const dialog=page.getByRole("dialog",{name:"Lịch hẹn trả đồ",exact:true});const close=dialog.getByRole("button",{name:"Đóng lịch hẹn"});
+  await expect(close).toBeFocused();await expect(dialog.getByLabel("Thời gian hẹn")).toBeVisible();
+  await page.keyboard.press("Shift+Tab");expect(await dialog.evaluate(element=>element.contains(document.activeElement))).toBe(true);
+  await page.keyboard.press("Tab");await expect(close).toBeFocused();
+  await page.getByLabel("Tin nhắn riêng").evaluate(element=>(element as HTMLElement).focus());await expect(close).toBeFocused();
+  await dialog.getByRole("radio",{name:"Địa điểm riêng",exact:true}).check();
+  await dialog.getByLabel("Thời gian hẹn").fill(new Date(Date.now()+86400000).toISOString().slice(0,16));
+  await dialog.getByLabel("Địa điểm hẹn riêng").fill("  Sảnh thư viện  ");
+  await page.screenshot({path:info.outputPath(`chat-appointment-proposal-${width}.png`)});
+  await dialog.getByRole("button",{name:"Gửi đề xuất"}).click();await expect(dialog.getByRole("alert")).toContainText("Tạm thời mất kết nối");
+  await dialog.getByRole("button",{name:"Gửi đề xuất"}).click();await expect(close).toBeDisabled();
+  await page.keyboard.press("Escape");await expect(dialog).toBeVisible();release();
+  await expect(dialog.locator(".appointment-overview")).toBeVisible();
+  expect(calls[0].requestKey).toBe(calls[1].requestKey);expect(calls[1]).toMatchObject({claimId:directLostClaim.id,customLocation:"Sảnh thư viện"});
+  expect(calls[1].handoverPointId).toBeUndefined();await expect(page).toHaveURL(`/claims/${directLostClaim.id}`);
+  const preview=dialog.getByRole("button",{name:"Phóng to ảnh Balo bị mất",exact:true});await expect(preview).toBeVisible();await preview.click();
+  await expect(page.getByRole("dialog",{name:"Ảnh vật phẩm",exact:true})).toBeVisible();await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog",{name:"Ảnh vật phẩm",exact:true})).toHaveCount(0);await expect(dialog).toBeVisible();await expect(preview).toBeFocused();
+  await page.screenshot({path:info.outputPath(`chat-appointment-detail-${width}.png`)});
+  expect(await dialog.evaluate(element=>element.scrollWidth<=element.clientWidth+1)).toBe(true);
+  await page.keyboard.press("Escape");await expect(dialog).toHaveCount(0);await expect(open).toBeFocused();
+  await expect(page.getByLabel("Tin nhắn riêng")).toHaveValue("Giữ lại bản nháp của tôi");
+});
+
+test("chat popup cancels an existing meetup before Finder changes to custody",async({page})=>{
+  await setupChatAppointments(page);let a=chatAppointment({status:"ACCEPTED",version:2});let cancelled:Record<string,unknown>|null=null;
+  await page.route(/\/api\/appointments(?:\?.*)?$/,route=>fulfillJson(route,{results:[a],total:1}));
+  await page.route("**/api/appointments/chat-appointment",route=>fulfillJson(route,a));
+  await page.route("**/api/appointments/chat-appointment/actions",route=>{
+    cancelled=route.request().postDataJSON();a={...a,status:"CANCELLED",version:3};return fulfillJson(route,a);
+  });
+  let transfer:Record<string,unknown>|null=null;
+  await page.route(`**/api/claims/${directLostClaim.id}/verification/decision`,route=>{
+    transfer=route.request().postDataJSON();return fulfillJson(route,{claim:{...directLostClaim,status:"ACCEPTED"},verification:{...meetupVerification,roomEscalation:{escalatedAt:new Date().toISOString(),escalatedBy:session.user.id,reason:"Không rảnh cùng giờ"}},message:null});
+  });
+  await page.goto(`/claims/${directLostClaim.id}`);await page.getByRole("button",{name:"Lịch hẹn",exact:true}).click();
+  const dialog=page.getByRole("dialog",{name:"Lịch hẹn trả đồ",exact:true});
+  await expect(dialog.getByLabel("Thời gian hẹn")).toHaveCount(0);
+  await dialog.getByRole("button",{name:"Xem lịch hẹn Balo bị mất",exact:true}).click();
+  await dialog.getByLabel("Lý do hủy / ghi chú đối soát").fill("Không rảnh cùng giờ, bàn giao cho Staff");
+  await dialog.getByRole("button",{name:"Hủy lịch",exact:true}).click();await expect(dialog.getByText("Đã hủy",{exact:true})).toBeVisible();
+  expect(cancelled).toMatchObject({action:"CANCEL",version:2});await page.keyboard.press("Escape");
+  await page.getByRole("button",{name:"Điều chỉnh quyết định",exact:true}).click();
+  await page.getByRole("button",{name:"Chuyển sang custody",exact:true}).click();
+  const custody=page.getByRole("dialog",{name:"Yêu cầu Bàn giao cho Quầy Staff (Custody)"});
+  await custody.locator("#claim-custody-requested-at").fill(futureIntakeDateTime());
+  await custody.getByLabel("Ghi chú / Lời nhắn cho Staff").fill("Không rảnh cùng giờ");
+  await custody.getByRole("button",{name:"Gửi Yêu cầu Bàn giao"}).click();
+  await expect(custody).toHaveCount(0);expect(transfer).toMatchObject({decision:"ESCALATE_TO_CUSTODY",correctsEventId:"accepted-event",handoverPointId:"desk-a"});
+  await expect(page.getByText("Đã gửi yêu cầu chuyển sang custody",{exact:true})).toBeVisible();
+  await expect(page).toHaveURL(`/claims/${directLostClaim.id}`);
+  await page.getByRole("button",{name:"Lịch hẹn",exact:true}).click();
+  await expect(dialog.getByLabel("Thời gian hẹn")).toHaveCount(0);await expect(dialog.getByRole("status")).toContainText("Vật phẩm đang chuyển sang kho");
+  await page.keyboard.press("Escape");
+});
+
+test("the owner accepts the counterpart proposal inside chat without Finder correction controls",async({page})=>{
+  await setupChatAppointments(page);
+  await page.route(`**/api/claims/${directLostClaim.id}`,route=>fulfillJson(route,{...directLostClaim,status:"ACCEPTED",finderId:"other-finder",claimantId:session.user.id,
+    finder:{id:"other-finder",fullName:"Finder"},claimant:{id:session.user.id,fullName:session.user.fullName}}));
+  await page.route(`**/api/claims/${directLostClaim.id}/verification`,route=>fulfillJson(route,{...meetupVerification,participantRole:"CLAIMANT"}));
+  let a=chatAppointment({finderId:"other-finder",proposerId:"other-finder",ownerId:session.user.id});let action:Record<string,unknown>|null=null;
+  await page.route(/\/api\/appointments(?:\?.*)?$/,route=>fulfillJson(route,{results:[a],total:1}));
+  await page.route("**/api/appointments/chat-appointment",route=>fulfillJson(route,a));
+  await page.route("**/api/appointments/chat-appointment/actions",route=>{action=route.request().postDataJSON();a={...a,status:"ACCEPTED",version:2};return fulfillJson(route,a);});
+  await page.goto(`/claims/${directLostClaim.id}`);await expect(page.getByRole("button",{name:"Điều chỉnh quyết định",exact:true})).toHaveCount(0);
+  await page.getByRole("button",{name:"Lịch hẹn",exact:true}).click();const dialog=page.getByRole("dialog",{name:"Lịch hẹn trả đồ",exact:true});
+  await dialog.getByRole("button",{name:"Xem lịch hẹn Balo bị mất",exact:true}).click();
+  await dialog.getByRole("button",{name:"Chấp nhận lịch",exact:true}).click();
+  await expect(dialog.getByText("Đã chấp nhận",{exact:true})).toBeVisible();expect(action).toMatchObject({action:"ACCEPT",version:1});
+  await expect(dialog.getByRole("button",{name:"Xác nhận đã nhận đồ",exact:true})).toBeDisabled();await expect(page).toHaveURL(`/claims/${directLostClaim.id}`);
+  await page.keyboard.press("Escape");
+});
+
+test("closing and reopening the popup ignores the earlier list response",async({page})=>{
+  await setupChatAppointments(page);let reads=0;let finish:()=>void=()=>{};
+  await page.route(/\/api\/appointments(?:\?.*)?$/,async route=>{
+    if(++reads===1){await new Promise<void>(resolve=>{finish=resolve;});return fulfillJson(route,{results:[chatAppointment({title:"Obsolete response"})],total:1});}
+    return fulfillJson(route,{results:[],total:0});
+  });
+  await page.goto(`/claims/${directLostClaim.id}`);const open=page.getByRole("button",{name:"Lịch hẹn",exact:true});
+  await open.click();await expect.poll(()=>reads).toBe(1);await page.keyboard.press("Escape");await open.click();
+  await expect(page.getByRole("dialog").getByLabel("Thời gian hẹn")).toBeVisible();finish();
+  await expect.poll(()=>reads).toBe(2);await expect(page.getByText("Obsolete response",{exact:true})).toHaveCount(0);
+  await page.keyboard.press("Escape");
 });
 
 test("verification failure is red, stops automatic retries and recovers without losing the message draft", async ({ page }) => {
@@ -156,7 +358,7 @@ test("ignores a late claim-room response after switching to another room", async
   await page.route("**/api/claims/dddddddd-dddd-4ddd-8ddd-dddddddddddd/messages*", (route) => {
     if (route.request().method() === "POST") return fulfillJson(route, {
       id: "message-b", roomId: "room-b", sender: { id: "e2e-user", fullName: "Sinh viên Demo" },
-      clientMessageId: "11111111-1111-4111-8111-111111111111", content: "Thông tin của phòng B", messageType: "TEXT",
+      clientMessageId: route.request().headers()["idempotency-key"], content: "Thông tin của phòng B", messageType: "TEXT",
       isRead: false, readAt: null, createdAt: "2026-09-06T00:01:00.000Z"
     });
     return fulfillJson(route, { room: { id: "room-b", claimId: claimB.id, status: claimB.status, participantRole: "CLAIMANT", createdAt: claimB.createdAt }, items: [], hasMore: false, nextCursor: null });
@@ -246,7 +448,7 @@ test("Finder makes an explicit appointment-eligible decision in the private room
   });
 
   await page.goto(`/claims/${finderClaim.id}`);
-  await expect(page.getByText("OWNERSHIP REVIEW")).toBeVisible();
+  await expect(page.getByText("Xác minh vật phẩm", { exact: true })).toBeVisible();
   await expect(page.getByText("Có thể đưa ra quyết định", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Đề xuất gặp mặt" }).click();
   await page.getByLabel("Lý do / nhận xét").fill("Các câu trả lời riêng phù hợp với vật phẩm");
@@ -319,8 +521,9 @@ test("Finder can request custody from chat without closing or deciding the claim
   await page.goto(`/claims/${finderClaim.id}`);
   await page.getByRole("button", { name: /custody/i }).click();
   await expect(page.getByRole("heading", { name: "Yêu cầu Bàn giao cho Quầy Staff (Custody)" })).toBeVisible();
-  await expect(page.locator(".claim-custody-hours")).toContainText("08:00/08:15–12:00");
+  await expect(page.locator(".claim-custody-hours")).toContainText("08:00–12:00");
   await page.locator("#claim-custody-handover-point").selectOption(handoverPointId);
+  await page.locator("#claim-custody-requested-at").fill(futureIntakeDateTime());
   await page.locator("#claim-custody-reason").fill(reason);
   await page.getByRole("button", { name: "Gửi Yêu cầu Bàn giao" }).click();
 
@@ -331,6 +534,43 @@ test("Finder can request custody from chat without closing or deciding the claim
   expect(decisionBody?.decision).toBe("ESCALATE_TO_CUSTODY");
   expect(decisionBody?.reason).toBe(reason);
   expect(decisionBody?.handoverPointId).toBe(handoverPointId);
+  expect(typeof decisionBody?.requestedIntakeAt).toBe("string");
+});
+
+test("custody retries preserve their key until the requested intake time changes", async ({ page }) => {
+  await setupDirectLostRoom(page);
+  await page.route(`**/api/claims/${directLostClaim.id}/verification`, route => fulfillJson(route, directLostVerification));
+  await page.route("**/api/handover-points", route => fulfillJson(route, {
+    handoverPoints: [{ id: "66666666-6666-4666-8666-666666666666", name: "Campus desk", address: "Campus", isActive: true }]
+  }));
+  const calls: Array<{ key: string | undefined; time: string }> = [];
+  await page.route(`**/api/claims/${directLostClaim.id}/verification/decision`, route => {
+    const body = route.request().postDataJSON();
+    calls.push({ key: route.request().headers()["idempotency-key"], time: body.requestedIntakeAt });
+    return route.fulfill({ status: 503, json: { message: "Synthetic scheduling failure" } });
+  });
+  await page.goto(`/claims/${directLostClaim.id}`);
+  await page.getByRole("button", { name: "Chuyển sang custody", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Yêu cầu Bàn giao cho Quầy Staff (Custody)" });
+  const input = dialog.locator("#claim-custody-requested-at");
+  const time = futureIntakeDateTime();
+  await input.fill(time);
+  await dialog.getByLabel("Ghi chú / Lời nhắn cho Staff").fill("Bring the item to Staff");
+  const submit = dialog.getByRole("button", { name: "Gửi Yêu cầu Bàn giao" });
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    await submit.click();
+    await expect.poll(() => calls.length).toBe(attempt);
+    await expect(dialog).toContainText("Synthetic scheduling failure");
+    await expect(submit).toBeEnabled();
+  }
+  await input.fill(time.replace("T09:00", "T10:00"));
+  await submit.click();
+  await expect.poll(() => calls.length).toBe(3);
+  await expect(submit).toBeEnabled();
+  expect(calls[0].key).toBeTruthy();
+  expect(calls[1]).toEqual(calls[0]);
+  expect(calls[2].key).not.toBe(calls[0].key);
+  expect(calls[2].time).not.toBe(calls[0].time);
 });
 
 function secondMutationRoom() {
@@ -502,7 +742,7 @@ test("finishing the previous room's send cannot unlock a pending send in the cur
     await page.route(`**/api/claims/${claim.id}/messages`, async route => {
       if (route.request().method() !== "POST") return route.fallback();
       await new Promise<void>(resolve => releases.set(claim.id, resolve));
-      await fulfillJson(route, { id: `message-${claim.id}`, roomId: claim.roomId, sender: { id: session.user.id, fullName: session.user.fullName }, content: route.request().postDataJSON().content, messageType: "TEXT", createdAt: "2026-10-05T01:00:00Z" });
+      await fulfillJson(route, { id: `message-${claim.id}`, roomId: claim.roomId, sender: { id: session.user.id, fullName: session.user.fullName }, clientMessageId: route.request().headers()["idempotency-key"], content: route.request().postDataJSON().content, messageType: "TEXT", createdAt: "2026-10-05T01:00:00Z" });
     });
   }
   await page.goto(`/claims/${directLostClaim.id}`);
@@ -516,8 +756,11 @@ test("finishing the previous room's send cannot unlock a pending send in the cur
   await expect.poll(() => releases.has(second.id)).toBe(true);
   await settleMutation(page, `/claims/${directLostClaim.id}/messages`, releases.get(directLostClaim.id)!);
   await expect(page.getByRole("button", { name: "Gửi tin nhắn" })).toBeDisabled();
-  await expect(page.getByLabel("Tin nhắn riêng")).toHaveValue("PENDING_B");
+  await expect(page.getByLabel("Tin nhắn riêng")).toHaveValue("");
+  await expect(page.locator(".claim-messages .claim-message-pending")).toHaveCount(1);
+  await expect(page.locator(".claim-messages")).toContainText("PENDING_B");
   await settleMutation(page, `/claims/${second.id}/messages`, releases.get(second.id)!);
   await expect(page.locator(".claim-messages")).toContainText("PENDING_B");
   await expect(page.locator(".claim-messages")).not.toContainText("PENDING_A");
+  await expect(page.locator(".claim-messages .claim-message-pending")).toHaveCount(0);
 });

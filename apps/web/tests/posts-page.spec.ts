@@ -24,7 +24,7 @@ function post(id: string, title: string, owner = "Nguyễn Minh An") {
   };
 }
 
-async function prepare(page: Page, requests: string[]) {
+async function prepare(page: Page, requests: string[], destination = "/posts") {
   await page.route("**/api/auth/refresh", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(session) }));
   await page.route("**/api/posts/catalog", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(catalog) }));
   await page.route(/\/api\/posts(?:\?.*)?$/, (route) => {
@@ -43,19 +43,63 @@ async function prepare(page: Page, requests: string[]) {
     contentType: "application/json",
     body: JSON.stringify(post("post-public", "Ví da nam màu nâu"))
   }));
-  await page.goto("/posts");
+  await page.goto(destination);
 }
 
-test("shows the public board and loads the current user's posts in a separate tab", async ({ page }) => {
+test("header navigation switches between the public board and only the current user's posts", async ({ page }) => {
   const requests: string[] = [];
   await prepare(page, requests);
   await expect(page.getByRole("heading", { name: "Bài đăng", exact: true })).toBeVisible();
   await expect(page.getByText("Ví da nam màu nâu")).toBeVisible();
   await expect(page.getByRole("link",{name:"Xem hành trình vật phẩm",exact:true})).toHaveCount(0);
-  await page.getByRole("tab", { name: "Bài đăng của tôi" }).click();
+  await expect(page.getByRole("tablist", { name: "Phạm vi bài đăng" })).toHaveCount(0);
+  await expect(page.getByText("Tìm báo cáo thất lạc, theo dõi vật phẩm bạn đã đăng và xem trạng thái xử lý.")).toHaveCount(0);
+  await page.locator(".topbar").getByRole("link", { name: "Bài của tôi", exact: true }).click();
+  await expect(page).toHaveURL(/\/my-posts$/);
+  await expect(page.getByRole("heading", { name: "Bài đăng của tôi", exact: true })).toBeVisible();
   await expect(page.getByText("Thẻ sinh viên của tôi")).toBeVisible();
+  await expect(page.getByText("Ví da nam màu nâu")).toHaveCount(0);
+  await expect(page.locator(".posts-toolbar")).toHaveCount(0);
   await expect(page.getByRole("link",{name:"Xem hành trình vật phẩm",exact:true})).toHaveAttribute("href","/posts/post-mine/journey");
   expect(requests.some((url) => url.includes("/api/posts/mine?"))).toBeTruthy();
+  await page.screenshot({ path: test.info().outputPath("my-posts-desktop.png"), fullPage: true });
+  await page.locator(".topbar").getByRole("link", { name: "Bài đăng", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Bài đăng", exact: true })).toBeVisible();
+  await expect(page.getByText("Ví da nam màu nâu")).toBeVisible();
+  await expect(page.getByText("Thẻ sinh viên của tôi")).toHaveCount(0);
+  await expect(page.getByLabel("Danh mục", { exact: true })).toBeVisible();
+});
+
+test("My Posts loads directly without hidden public-board filters on mobile", async ({ page }) => {
+  const requests: string[] = [];
+  await page.setViewportSize({ width: 390, height: 844 });
+  await prepare(page, requests, `/my-posts?type=FOUND&categoryId=${catalog.categories[1].id}`);
+  await expect(page.getByRole("heading", { name: "Bài đăng của tôi", exact: true })).toBeVisible();
+  await expect(page.getByText("Thẻ sinh viên của tôi")).toBeVisible();
+  await expect(page.locator(".posts-toolbar, .posts-tabs")).toHaveCount(0);
+  const mineRequest = requests.find(url => url.includes("/api/posts/mine?"));
+  expect(mineRequest).toBeTruthy();
+  const query = new URL(mineRequest!).searchParams;
+  expect(query.get("sort")).toBe("newest");
+  expect(query.has("type")).toBeFalsy();
+  expect(query.has("categoryId")).toBeFalsy();
+  expect(query.has("q")).toBeFalsy();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(1);
+  await page.screenshot({ path: test.info().outputPath("my-posts-mobile.png"), fullPage: true });
+});
+
+test("public filters do not carry over to My Posts through header navigation", async ({ page }) => {
+  const requests: string[] = [];
+  await prepare(page, requests);
+  await page.getByLabel("Tìm kiếm bài đăng").fill("ví da");
+  await page.getByRole("button", { name: "Tìm", exact: true }).click();
+  await page.getByLabel("Loại bài", { exact: true }).selectOption("FOUND");
+  await expect.poll(() => requests.some(url => url.includes("q=v%C3%AD+da") && url.includes("type=FOUND"))).toBeTruthy();
+  await page.locator(".topbar").getByRole("link", { name: "Bài của tôi", exact: true }).click();
+  await expect(page.getByText("Thẻ sinh viên của tôi")).toBeVisible();
+  const query = new URL(requests.find(url => url.includes("/api/posts/mine?"))!).searchParams;
+  expect(query.has("q")).toBeFalsy();
+  expect(query.has("type")).toBeFalsy();
 });
 
 test("applies search and category filters without horizontal overflow", async ({ page }) => {
@@ -68,6 +112,7 @@ test("applies search and category filters without horizontal overflow", async ({
   await expect.poll(() => requests.some((url) => url.includes("q=v%C3%AD+da") && url.includes(`categoryId=${catalog.categories[1].id}`))).toBeTruthy();
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   expect(overflow).toBeLessThanOrEqual(1);
+  await page.screenshot({ path: test.info().outputPath("posts-mobile.png"), fullPage: true });
 });
 
 test("opens a dedicated post detail page from a board card", async ({ page }) => {

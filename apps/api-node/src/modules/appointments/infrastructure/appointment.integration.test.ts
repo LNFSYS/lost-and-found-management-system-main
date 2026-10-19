@@ -28,6 +28,46 @@ async function schedule(f:Parameters<Parameters<typeof withActorJourney>[0]>[0],
 }
 function viewer(id:string,admin=false):AccessTokenPayload{return {sub:id,email:"fixture@example.invalid",roles:[admin?"ADMIN":"STUDENT"],sessionVersion:0};}
 
+test("SQL: custom-location proposals persist, replay and notify the actual participants",isolatedJourney,async()=>runFixture(async(f,s,c)=>{
+  const input={claimId:c,proposedAt:new Date(Date.now()+20*60_000).toISOString(),customLocation:"  Library entrance  ",requestKey:randomUUID()};
+  const a=await s.create(f.ids.finder,input);const replay=await s.create(f.ids.finder,{...input,customLocation:"Library entrance"});
+  assert.equal(replay.id,a.id);assert.equal(a.handoverPointId,null);assert.equal(a.location,"Library entrance");
+  assert.equal((await s.list(f.ids.owner,1,c)).results[0].location,"Library entrance");
+  const [rows]=await f.pool.execute<RowDataPacket[]>("SELECT custom_location,handover_point_id FROM return_appointments WHERE claim_id=?",[c]);
+  assert.equal(rows.length,1);assert.equal(rows[0].custom_location,"Library entrance");assert.equal(rows[0].handover_point_id,null);
+  const accepted=await s.act(f.ids.owner,a.id,{action:"ACCEPT",version:a.version,requestKey:randomUUID()});assert.equal(accepted.status,"ACCEPTED");
+  await assert.rejects(s.create(f.ids.finder,{...input,requestKey:randomUUID()}),{code:"conflict"});
+  await assert.rejects(s.create(f.ids.outsider,{...input,requestKey:randomUUID()}),{code:"forbidden"});
+}));
+
+for(const photoOnly of [false,true])test(`SQL: meetup cancellation -> custody -> physical Staff return (${photoOnly?"no FOUND":"linked FOUND"})`,isolatedJourney,async()=>withActorJourney(async f=>{
+  const check=await f.contactPhotos.analyze(f.ids.lost,f.ids.finder,f.image);
+  if(photoOnly)await f.pool.execute("DELETE FROM posts WHERE id=?",[f.ids.found]);
+  const direct=await f.claims.createDirectMessage(f.ids.finder,{postId:f.ids.lost,contactCheckId:check.checkId!,
+    ...(photoOnly?{}:{sourceFoundPostId:f.ids.found}),content:"Found these keys",clientMessageId:randomUUID()});
+  const c=direct.claim.id;
+  const verified=await f.claims.decideVerification(c,f.ids.finder,{decision:"VERIFY_FOR_MEETUP",reason:"Compare the keys in person",idempotencyKey:randomUUID()});
+  const original=verified.verification.history.find(event=>event.action==="VERIFICATION_ACCEPTED")!;
+  const a=await f.services.appointmentService.create(f.ids.finder,{claimId:c,proposedAt:new Date(Date.now()+20*60_000).toISOString(),customLocation:"Main library entrance",requestKey:randomUUID()});
+  const accepted=await f.services.appointmentService.act(f.ids.owner,a.id,{action:"ACCEPT",version:a.version,requestKey:randomUUID()});
+  const transfer={decision:"ESCALATE_TO_CUSTODY" as const,reason:"Schedules conflict; hand over to Staff",handoverPointId:f.point,correctsEventId:original.id,idempotencyKey:randomUUID()};
+  await assert.rejects(f.claims.decideVerification(c,f.ids.finder,transfer),{code:"conflict"});
+  await f.services.appointmentService.act(f.ids.finder,a.id,{action:"CANCEL",version:accepted.version,requestKey:randomUUID(),reason:"Schedules conflict; use custody"});
+  await f.claims.decideVerification(c,f.ids.finder,transfer);await f.claims.decideVerification(c,f.ids.finder,transfer);
+  const [requests]=await f.pool.execute<RowDataPacket[]>("SELECT id FROM custody_requests WHERE claim_id=?",[c]);assert.equal(requests.length,1);
+  const requestId=String(requests[0].id);
+  const receipt=await f.services.custodyRequestService.confirmIntake(requestId,await f.evidence(requestId),f.ids.staff);
+  const item=receipt!.warehouseItemId!;
+  await f.services.warehouseService.verifyCustodyClaim(item,{claimId:c,recipientId:f.ids.owner,verified:true,reason:"Physically compared private keys and recipient identity"},f.ids.staff);
+  const proof=await f.services.warehouseService.uploadProof(item,f.image,f.ids.staff);
+  const returned=await f.services.warehouseService.returnItem(item,{claimId:c,recipientId:f.ids.owner,receiverName:"Fixture owner",receiverIdentity:"ID-123456",receiverPhone:"0359123456",proofImage:proof.id},f.ids.staff);
+  assert.equal(returned!.status,"RETURNED");assert.equal((await f.services.appointmentService.get(f.ids.owner,a.id)).status,"CANCELLED");
+  const [history]=await f.pool.execute<RowDataPacket[]>("SELECT action,actor_id FROM claim_audit_events WHERE claim_id=?",[c]);
+  assert.equal(history.filter(e=>e.action==="VERIFICATION_ACCEPTED").length,1);
+  assert.equal(history.filter(e=>e.action==="CUSTODY_ESCALATED"&&e.actor_id===f.ids.finder).length,1);
+  assert.equal(history.filter(e=>e.action==="STAFF_CUSTODY_VERIFIED").length,1);
+}));
+
 test("SQL: appointment previews select public ITEM media only and preserve participant access",isolatedJourney,async()=>runFixture(async(f,s,c)=>{
   const a=await schedule(f,s,c);
   const image=randomUUID();const evidence=randomUUID();

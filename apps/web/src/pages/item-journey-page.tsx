@@ -5,6 +5,7 @@ import {
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api } from "../services/api";
+import { JourneyImages } from "../components/journey-images";
 import { displayTime, eventLabel, sourceLabel, stateLabel, type Journey } from "../services/workflow-types";
 import "./workflow-pages.css";
 
@@ -46,6 +47,10 @@ function durationLabel(hours: number) {
 
 export function ItemJourneyPage() {
   const { postId } = useParams();
+  return <ItemJourney key={postId} postId={postId} />;
+}
+
+function ItemJourney({ postId }: { postId: string | undefined }) {
   const [journey, setJourney] = useState<Journey | null>(null);
   const [page, setPage] = useState(1);
   const [error, setError] = useState("");
@@ -134,6 +139,7 @@ export function ItemJourneyPage() {
                   {event.fromStatus && event.toStatus && <span aria-hidden="true">→</span>}
                   {event.toStatus && <strong>{stateLabel[event.toStatus] ?? event.toStatus}</strong>}
                 </p>}
+                {Boolean(event.images?.length) && <JourneyImages images={event.images!} />}
               </article>
             </li>;
           })}

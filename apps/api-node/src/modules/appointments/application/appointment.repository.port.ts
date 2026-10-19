@@ -22,7 +22,7 @@ export interface AppointmentRepository {
   find(id: string, tx?: TransactionContext): Promise<Appointment | null>;
   list(userId: string, page: number, claimId?: string): Promise<{ results: Appointment[]; total: number }>;
   replay(actorId: string, key: string, tx: TransactionContext): Promise<{ appointmentId: string; hash: string } | null>;
-  create(input: { id: string; claimId: string; postId: string; proposerId: string; proposedAt: Date; handoverPointId: string }, tx: TransactionContext): Promise<void>;
+  create(input: { id: string; claimId: string; postId: string; proposerId: string; proposedAt: Date; handoverPointId: string | null; customLocation: string | null }, tx: TransactionContext): Promise<void>;
   active(claimId: string, tx: TransactionContext): Promise<boolean>;
   pointExists(id: string, tx: TransactionContext): Promise<boolean>;
   update(appointment: Appointment, now: Date, tx: TransactionContext): Promise<void>;

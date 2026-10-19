@@ -47,9 +47,11 @@ Web là channel hiện có; PWA có manifest/service worker/offline shell nhưng
 | [Clean Architecture](architecture/CLEAN_ARCHITECTURE.md) | Module contracts và dependency rules |
 | [Source map](architecture/CLEAN_ARCHITECTURE_FILE_MAP.md) | Mapping source |
 | [Sơ đồ draw.io](architecture/LNFS_NODE_ONLY_ARCHITECTURE.drawio) | System/FE/BE packages, giữ template |
+| [Use case diagrams theo vai trò](architecture/use-cases/README.md) | Tổng quát và chi tiết Guest, User Lost/Finder, Staff, Admin; phủ 168 UC |
 | [LOST contact photo](workflows/lost-contact-photo-rules.md) | Finder liên hệ LOST không phải tạo FOUND giả |
 | [Warehouse intake evidence](workflows/warehouse-intake-evidence.md) | Ảnh SOURCE_POST/INTAKE/RETURN và tiếp nhận |
 | [Warehouse policy](workflows/warehouse-retention-and-status-rules.md) | Retention, hold, disposition và quyền trả đồ |
+| [Sensitive items and privacy rules](workflows/sensitive-items-and-privacy-rules.md) | Phân loại đồ nhạy cảm, trách nhiệm bàn giao và kiểm soát dữ liệu |
 | [Notification email](workflows/notification-email-rules.md) | Preference, retry, lease và delivery limits |
 
 Matching/Gemini chỉ hỗ trợ quyết định, không chứng nhận quyền sở hữu. Staff tiếp nhận không tự trở thành Finder hoặc tự accept claim. Dual completion cần xác nhận vật lý hợp lệ; tranh chấp/custody/legal hold vẫn phải chặn outcome không hợp lệ.

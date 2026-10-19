@@ -418,7 +418,8 @@ test("opens My Posts from the top navigation after matching", async ({ page }) =
   await page.getByRole("dialog", { name: "Chưa có gợi ý phù hợp" }).getByRole("button", { name: "Đã hiểu" }).click();
   await page.locator(".topbar").getByRole("link", { name: "Bài của tôi" }).click();
   await expect(page).toHaveURL(/\/my-posts$/);
-  await expect(page.getByRole("tab", { name: "Bài đăng của tôi" })).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByRole("heading", { name: "Bài đăng của tôi", exact: true })).toBeVisible();
+  await expect(page.locator(".posts-tabs, .posts-toolbar")).toHaveCount(0);
 });
 
 test("rates and dismisses a persisted match without starting a claim", async ({ page }) => {
