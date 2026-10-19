@@ -1,10 +1,88 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { claimRepository, claimService, createTestClaimUseCases, matchingRepository, notificationRepository } from "../../../test/use-case-fixtures.js";
+import { claimRepository, claimService, createTestClaimUseCases, fakeTransaction, matchingRepository, notificationRepository } from "../../../test/use-case-fixtures.js";
+import type { ClaimRepository } from "./claim.repository.port.js";
+import type { NotificationRepository } from "../../notifications/application/index.js";
+import type { PrivateMediaStorage } from "../../../shared/application/media-storage.port.js";
+import { recordTransactionOutcome } from "../../../shared/application/transaction.js";
+import { unexpectedPort } from "../../../test/unexpected-port.js";
 
 const claimId = "11111111-1111-4111-8111-111111111111";
 const claimantId = "22222222-2222-4222-8222-222222222222";
 const outsideUserId = "33333333-3333-4333-8333-333333333333";
+
+for (const outcome of ["COMMITTED", "ROLLED_BACK", "COMMIT_ACK_LOST"] as const) {
+  test(`chat image delivery preserves its post-transaction contract: ${outcome}`, async () => {
+    const claim = sampleClaim();
+    const repo = unexpectedPort<ClaimRepository>("image claim repository");
+    const notifications = unexpectedPort<NotificationRepository>("image notifications");
+    const storage = unexpectedPort<PrivateMediaStorage>("image storage");
+    let evidence: Awaited<ReturnType<ClaimRepository["findEvidence"]>> = null;
+    let message: Awaited<ReturnType<ClaimRepository["createMessage"]>> = null;
+    let writing = false;
+    let removed = 0;
+    const deliveries: unknown[] = [];
+    const workflow: unknown[] = [];
+    repo.findById = repo.findByIdForUpdate = async () => claim;
+    repo.findParticipant = async () => ({ claimId, userId: claimantId, role: "CLAIMANT", consentStatus: "ACCEPTED", joinedAt: claim.createdAt, fullName: "Claimant" });
+    repo.findRoomByClaim = async () => ({ id: claim.roomId, claimId, createdAt: claim.createdAt, escalatedAt: null, escalatedBy: null, escalationReason: null });
+    repo.findMessageByClientId = async () => message;
+    repo.findEvidence = async () => evidence;
+    repo.createEvidence = async input => {
+      evidence = { ...input, uploadedBy: { id: input.uploadedBy, fullName: "Claimant" },
+        description: input.description ?? null, evidenceType: "PHOTO", createdAt: claim.createdAt,
+        url: `/api/claims/${claimId}/evidence/${input.id}` };
+    };
+    repo.writeAudit = async () => undefined;
+    repo.createMessage = async input => {
+      message = { id: "image-message", roomId: input.roomId, sender: { id: claimantId, fullName: "Claimant" },
+        clientMessageId: input.clientMessageId ?? null, content: input.content, messageType: "IMAGE",
+        mediaUrl: input.mediaUrl, isRead: false, readAt: null, createdAt: claim.createdAt };
+      return message;
+    };
+    notifications.create = async input => ({ id: "image-notification", type: input.type, title: input.title,
+      body: input.body ?? null, entityType: input.entityType ?? null, entityId: input.entityId ?? null,
+      isRead: false, readAt: null, createdAt: claim.createdAt });
+    storage.save = async () => ({ secureUrl: "private://claim-evidence/synthetic-image", publicId: "synthetic-image" });
+    storage.remove = async () => { removed++; };
+    const failure = new Error("Synthetic transaction outcome");
+    const service = createTestClaimUseCases({
+      claimRepository: repo, notificationRepository: notifications, mediaStorage: storage,
+      withTransaction: async work => {
+        writing = true;
+        try {
+          const result = await fakeTransaction(work);
+          if (outcome === "ROLLED_BACK") {
+            evidence = null;
+            message = null;
+            recordTransactionOutcome(failure, "ROLLED_BACK");
+            throw failure;
+          }
+          if (outcome === "COMMIT_ACK_LOST") throw failure;
+          return result;
+        } finally { writing = false; }
+      },
+      chatSocketNotifier: { async publishMessage(input) { assert.equal(writing, false); deliveries.push(input); return { delivered: 1 }; } },
+      realtimeNotifier: { publishNotification(input) { assert.equal(writing, false); workflow.push(input); return { delivered: 1 }; } }
+    });
+    const buffer = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    const request = service.uploadChatImage(claimId, claimantId, { content: "Synthetic image", clientMessageId: "image-request" },
+      { buffer, size: buffer.length, mimetype: "image/png" });
+    if (outcome === "ROLLED_BACK") {
+      await assert.rejects(request, error => error === failure);
+      assert.equal(removed, 1);
+      assert.deepEqual(deliveries, []);
+      assert.deepEqual(workflow, []);
+    } else {
+      const sent = await request;
+      assert.equal(sent.messageType, "IMAGE");
+      assert.deepEqual(deliveries, [{ roomId: claim.roomId, message: sent }]);
+      assert.equal(workflow.length, 1);
+      assert.equal(removed, 0);
+      assert.doesNotMatch(JSON.stringify(workflow), /private:\/\/|Synthetic image/);
+    }
+  });
+}
 
 function sampleClaim() {
   return {

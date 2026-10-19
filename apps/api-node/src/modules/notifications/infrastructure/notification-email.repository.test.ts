@@ -3,6 +3,21 @@ import test from "node:test";
 import { createNotificationEmailRepository } from "./notification-email.repository.js";
 import type { SqlExecutor } from "../../../shared/infrastructure/transaction-context.js";
 
+test("reading a notification cancels pending push as well as its email delivery", async () => {
+  const calls: Array<{ sql: string; values: unknown }> = [];
+  const executor = { execute: async (sql: string, values: unknown) => {
+    calls.push({ sql, values });
+    return [{ affectedRows: 1 }, []] as never;
+  } } as unknown as SqlExecutor;
+  const repository = createNotificationEmailRepository(executor);
+  assert.equal(await repository.cancelForNotification("user-a", "notification-a"), 1);
+  assert.equal(calls.length, 2);
+  assert.match(calls[0].sql, /UPDATE notification_email_outbox/);
+  assert.match(calls[1].sql, /UPDATE notification_push_outbox/);
+  assert.match(calls[1].sql, /status = 'PENDING'/);
+  for (const call of calls) assert.deepEqual(call.values, ["user-a", "notification-a"]);
+});
+
 test("digest coalescing keeps event categories separate", async () => {
   const calls: Array<{ sql: string; params: unknown[] }> = [];
   const executor = {

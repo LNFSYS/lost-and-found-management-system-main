@@ -58,8 +58,12 @@ test("verification writes require bounded input and an idempotency key", () => {
     decision: "VERIFY_FOR_MEETUP", reason: "Hai câu trả lời phù hợp", idempotencyKey: key
   }).decision, "VERIFY_FOR_MEETUP");
   assert.equal(verificationDecisionSchema.parse({
-    decision: "ESCALATE_TO_CUSTODY", reason: "Finder needs a safe handover", handoverPointId: foundPostId, idempotencyKey: key
+    decision: "ESCALATE_TO_CUSTODY", reason: "Finder needs a safe handover", handoverPointId: foundPostId,
+    requestedIntakeAt: "2026-11-02T02:00:00.000Z", idempotencyKey: key
   }).handoverPointId, foundPostId);
+  assert.throws(() => verificationDecisionSchema.parse({
+    decision: "ESCALATE_TO_CUSTODY", reason: "Finder needs a safe handover", handoverPointId: foundPostId, idempotencyKey: key
+  }), error => error instanceof Error && error.message.includes("requestedIntakeAt"));
   assert.throws(() => verificationDecisionSchema.parse({
     decision: "ESCALATE_TO_CUSTODY", reason: "Finder needs a safe handover", idempotencyKey: key
   }));

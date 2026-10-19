@@ -2,7 +2,6 @@ import type { Server as HttpServer, IncomingMessage } from "node:http";
 import { WebSocket, WebSocketServer } from "ws";
 import { z } from "zod";
 import type { AccessTokenPayload } from "../../../../shared/domain/auth.js";
-import { isOriginAllowed, parseAllowedOrigins } from "../../../../shared/infrastructure/config/cors.js";
 import type { ChatSocketUseCases } from "../../application/chat-socket.use-cases.js";
 
 const socketPath = "/api/realtime/chat-socket";
@@ -13,13 +12,11 @@ const roomIdSchema = z.string().uuid();
 export function createChatSocketServer(input: {
   server: HttpServer;
   chatSocketService: ChatSocketUseCases;
-  frontendUrl: string;
-  nodeEnv: string;
+  isOriginAllowed(origin: string | undefined): boolean;
   verifyAccessToken(token: string): AccessTokenPayload;
   validateAccessSession(session: AccessTokenPayload): Promise<boolean>;
   authorizeRoom(userId: string, roomId: string): Promise<void>;
 }) {
-  const allowedOrigins = parseAllowedOrigins(input.frontendUrl);
   const webSockets = new WebSocketServer({ noServer: true, maxPayload: 8 * 1024, perMessageDeflate: false });
   const upgradeHandler = (request: IncomingMessage, socket: import("node:net").Socket, head: Buffer) => {
     let requestPath: string;
@@ -29,7 +26,7 @@ export function createChatSocketServer(input: {
 
     const originHeader = request.headers.origin;
     const origin = Array.isArray(originHeader) ? originHeader[0] : originHeader;
-    if (!isOriginAllowed(origin, allowedOrigins, input.nodeEnv)) {
+    if (!input.isOriginAllowed(origin)) {
       socket.write("HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n");
       socket.destroy();
       return;

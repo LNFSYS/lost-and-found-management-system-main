@@ -1,6 +1,6 @@
 # LNFS Clean Architecture
 
-Updated: 2026-09-09. Current backend: **Node.js + TypeScript modular monolith**.
+Updated: 2026-10-20. Current backend: **Node.js + TypeScript modular monolith**.
 
 ## Ownership
 
@@ -22,6 +22,7 @@ apps/api-node/src/
     matching/                   explainable rule-based scoring
     claims/                     requests, consent, private room and evidence
     notifications/              in-app notification feed
+    realtime/                   WebSocket chat and SSE notification delivery
     warehouse/                  custody, retention and storage logs
     returns/                    feedback, idempotency and reputation
     admin/                      users, catalog, moderation, reports, audit
@@ -55,6 +56,14 @@ main            ---> factories from all outer and inner packages
 - Shared cannot import business modules. No framework, generic repository, DI container or base entity was added.
 
 `npm run check:architecture` parses TypeScript imports, re-exports, import types and literal dynamic imports. It rejects outward dependencies, core external packages/environment/console, deep cross-module imports, unresolved source imports and dependency cycles, including type-only cycles. Checker self-tests cover allowed and forbidden graphs. `npm test` invokes it, so the existing CI verify job enforces it.
+
+### Realtime And Intake Boundaries
+
+- Claims declares its outgoing chat notification port in `ClaimDependencies`; it does not import the realtime service implementation. The chat hub reads the message contract through claims' public application entry point. `main` wires the hub into the port.
+- Custody schedule parsing and time validation stay in the warehouse domain. Reading `custody.intake.schedule` belongs to the warehouse application loader, using the public system-config repository contract. Invalid configuration or a failed read does not silently fall back to default opening hours.
+- The WebSocket adapter receives an Origin predicate from `main`. Composition uses the same CORS policy as HTTP, keeping configuration infrastructure out of the socket interface's imports. Chat remains based on `ws`, not Socket.IO; existing message payloads and HTTP paths are unchanged.
+
+These boundaries are checked without changing architecture rules, skipping tests or altering migration SQL. They do not add an actor goal or change custody eligibility.
 
 ## Transactions
 

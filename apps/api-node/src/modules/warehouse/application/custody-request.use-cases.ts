@@ -8,8 +8,9 @@ import type { WarehouseRepository } from "./warehouse.repository.port.js";
 import { custodyNotifications, type CustodyNotifications } from "./custody-notifications.js";
 import { custodyFingerprint } from "./custody-fingerprint.js";
 import { intakeFingerprint, prepareIntakeEvidence, serializeWarehouseImage, validateIntakeEvidence } from "./intake-evidence.js";
-import { loadCustodyIntakeSchedule, validateCustodyIntakeTime } from "../domain/intake-schedule.js";
-import type { SystemConfigRepository } from "../../system-config/application/system-config.repository.port.js";
+import { validateCustodyIntakeTime } from "../domain/intake-schedule.js";
+import { loadCustodyIntakeSchedule } from "./intake-schedule.js";
+import type { SystemConfigRepository } from "../../system-config/application/index.js";
 
 const clean = (value: string | null | undefined) => value?.trim() || null;
 export interface CustodyRequestDependencies extends CustodyNotifications {

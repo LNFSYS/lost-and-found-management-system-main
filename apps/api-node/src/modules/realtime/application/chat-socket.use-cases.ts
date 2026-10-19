@@ -1,4 +1,4 @@
-import type { ClaimRepository } from "../../claims/application/claim.repository.port.js";
+import type { ClaimRepository } from "../../claims/application/index.js";
 
 export type ChatMessageRecord = NonNullable<Awaited<ReturnType<ClaimRepository["createMessage"]>>>;
 

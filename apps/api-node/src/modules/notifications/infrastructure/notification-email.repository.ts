@@ -257,7 +257,7 @@ export function createNotificationEmailRepository(pool: SqlExecutor) {
          WHERE recipient_user_id = ? AND notification_id = ? AND status IN ('PENDING', 'PROCESSING')`,
         [userId, notificationId]
       );
-      await this.cancelPendingPush(userId, notificationId);
+      await notificationEmailRepository.cancelPendingPush(userId, notificationId);
       return result.affectedRows;
     },
 

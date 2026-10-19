@@ -8,7 +8,7 @@ import type { ImageUpload } from "../../../shared/domain/upload.js";
 import type { MatchingRepository } from "../../matching/application/index.js";
 import type { NotificationEmailQueue, NotificationRecord, NotificationRepository } from "../../notifications/application/index.js";
 import type { CustodyRequestRepository, WarehouseRepository } from "../../warehouse/application/index.js";
-import { custodyNotifications } from "../../warehouse/application/index.js";
+import { custodyNotifications, loadCustodyIntakeSchedule, validateCustodyIntakeTime } from "../../warehouse/application/index.js";
 import { canSubmitVerificationDecision, canUseRoom, isAppointmentEligible } from "../domain/claim-policy.js";
 import {
   findVerificationPrompt,
@@ -31,11 +31,10 @@ import type {
 } from "./claim.dto.js";
 import type { ClaimRepository, ClaimStatus } from "./claim.repository.port.js";
 import type { ContactPhotoUseCases } from "./contact-photo.use-cases.js";
-import type { ChatSocketUseCases } from "../../realtime/application/chat-socket.use-cases.js";
-import { loadCustodyIntakeSchedule, validateCustodyIntakeTime } from "../../warehouse/domain/intake-schedule.js";
-import type { SystemConfigRepository } from "../../system-config/application/system-config.repository.port.js";
+import type { SystemConfigRepository } from "../../system-config/application/index.js";
 
 type WorkflowNotificationKind = "CLAIM" | "CHAT" | "APPOINTMENT" | "RETURN" | "CUSTODY";
+type ClaimChatMessage = NonNullable<Awaited<ReturnType<ClaimRepository["createMessage"]>>>;
 
 function claimNotFound() {
   return new AppError("not_found", "Không tìm thấy yêu cầu xác minh");
@@ -58,7 +57,9 @@ export interface ClaimDependencies {
       roomId?: string | null;
     }): { delivered: number } | Promise<{ delivered: number; }>;
   };
-  chatSocketNotifier?: Pick<ChatSocketUseCases, "publishMessage">;
+  chatSocketNotifier?: {
+    publishMessage(input: { roomId: string; message: ClaimChatMessage }): Promise<{ delivered: number }>;
+  };
   scheduleRepository?: Pick<SystemConfigRepository, "findByKey">;
   withTransaction: TransactionRunner;
   id: () => string;
@@ -1248,8 +1249,10 @@ export function createClaimUseCases(options: ClaimDependencies) {
           return safe;
         }
         const storage = await mediaStorage.save(claimId, evidenceId, image.extension, file.buffer);
-        let chatDelivery: { notification: NotificationRecord; recipientId: string; roomId: string } | null = null;
-        let chatSocketDelivery: { message: NonNullable<Awaited<ReturnType<typeof claimRepository.createMessage>>>; roomId: string } | null = null;
+        const deliveries: {
+          notification?: { notification: NotificationRecord; recipientId: string; roomId: string };
+          chat?: { message: ClaimChatMessage; roomId: string };
+        } = {};
         await persistUpload({ operation, kind: "EVIDENCE", logger,
           unreferenced: async () => await read() === null,
           matches: async () => {
@@ -1286,21 +1289,21 @@ export function createClaimUseCases(options: ClaimDependencies) {
               const message = await claimRepository.createMessage({ roomId: room.id, senderId: userId, content: chat.content,
                 clientMessageId: chat.clientMessageId, mediaUrl: `/api/claims/${claimId}/evidence/${evidenceId}` }, connection);
               if (!message) throw new AppError("internal", "Không thể gửi ảnh");
-              chatSocketDelivery = { message, roomId: room.id };
+              deliveries.chat = { message, roomId: room.id };
               const recipientId = counterpartId(lockedClaim, userId);
               if (recipientId) {
                 const notification = await notificationRepository.create({ userId: recipientId, type: "CHAT_MESSAGE_RECEIVED",
                   title: "Bạn có ảnh mới trong phòng trao đổi riêng", body: "Mở cuộc trò chuyện để xem ảnh.",
                   entityType: "CLAIM", entityId: claimId, dedupeKey: `claim:${claimId}:message:${message.id}` }, connection);
-                if (notification) chatDelivery = { notification, recipientId, roomId: room.id };
+                if (notification) deliveries.notification = { notification, recipientId, roomId: room.id };
                 await queueOptionalEmail({ notification, recipientUserId: recipientId, eventType: "CHAT", roomId: room.id, queryable: connection });
               }
             }
           })
         });
-        if (chatSocketDelivery) await publishChatMessage(chatSocketDelivery.roomId, chatSocketDelivery.message);
-        if (chatDelivery) {
-          const delivery = chatDelivery as { notification: NotificationRecord; recipientId: string; roomId: string };
+        if (deliveries.chat) await publishChatMessage(deliveries.chat.roomId, deliveries.chat.message);
+        if (deliveries.notification) {
+          const delivery = deliveries.notification;
           await publishWorkflowNotification({ notification: delivery.notification, userId: delivery.recipientId, workflow: "CHAT", roomId: delivery.roomId });
         }
         const evidence = (await claimRepository.findEvidence(claimId, evidenceId));

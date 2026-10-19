@@ -1,6 +1,7 @@
 import { createServer } from "node:http";
 import jwt from "jsonwebtoken";
 import { env } from "../shared/infrastructure/config/env.js";
+import { isOriginAllowed, parseAllowedOrigins } from "../shared/infrastructure/config/cors.js";
 import type { AccessTokenPayload } from "../shared/domain/auth.js";
 import { createChatSocketServer } from "../modules/realtime/interfaces/socket/chat-socket.server.js";
 import { createApp } from "./app.js";
@@ -16,11 +17,11 @@ import { createBackgroundTask, createShutdownHandler } from "./background-task.j
 
 const app = createApp();
 export const server = createServer(app);
+const allowedOrigins = parseAllowedOrigins(env.frontendUrl);
 const chatSocketServer = createChatSocketServer({
   server,
   chatSocketService: services.chatSocketService,
-  frontendUrl: env.frontendUrl,
-  nodeEnv: env.nodeEnv,
+  isOriginAllowed: origin => isOriginAllowed(origin, allowedOrigins, env.nodeEnv),
   verifyAccessToken: token => jwt.verify(token, env.jwtAccessSecret) as AccessTokenPayload,
   validateAccessSession: session => services.authService.validateAccessSession(session),
   authorizeRoom: async (userId, roomId) => { await services.realtimeService.authorizeRooms(userId, [roomId]); }

@@ -38,6 +38,7 @@ const emailWorker = createNotificationEmailWorker({
   leaseSeconds: 0.12, id: () => "lease", frontendUrl: "https://fixture.example.invalid", logger: { warn() {} }
 });
 replace("../shared/infrastructure/config/env.ts", { env: {
+  frontendUrl: "https://fixture.example.invalid", nodeEnv: "production",
   port: 0, notificationEmail: { workerEnabled: outcome !== "disabled", workerPollSeconds: 0.01 },
   matchingRefresh: { enabled: true, pollSeconds: 0.01 }
 } });
@@ -53,7 +54,11 @@ replace("../main/runtime.ts", { services: {
   chatSocketService: { stop: () => { events.push("chat-hub.stop"); } },
   realtimeService: { authorizeRooms: async () => [], stop: () => { events.push("sse.stop"); } }
 } });
-replace("../modules/realtime/interfaces/socket/chat-socket.server.ts", { createChatSocketServer: () => ({ stop: () => { events.push("chat-socket.stop"); } }) });
+replace("../modules/realtime/interfaces/socket/chat-socket.server.ts", { createChatSocketServer: input => {
+  assert.equal(input.isOriginAllowed("https://fixture.example.invalid"), true);
+  assert.equal(input.isOriginAllowed("https://untrusted.example.invalid"), false);
+  return { stop: () => { events.push("chat-socket.stop"); } };
+} });
 replace("../main/warehouse-maintenance-schema.ts", { checkWarehouseMaintenanceSchema: async () => {
   await delay(90); assert.equal(poolClosed, false); events.push("warehouse.schema"); return { ready: true, missing: [] };
 } });

@@ -1,5 +1,4 @@
 import { AppError } from "../../../shared/domain/app-error.js";
-import type { SystemConfigRepository } from "../../system-config/application/system-config.repository.port.js";
 
 export interface CustodyIntakeSchedule {
   timezone: string;
@@ -60,11 +59,6 @@ export function parseCustodyIntakeSchedule(value?: string | null): CustodyIntake
     throw new AppError("unavailable", "Danh sách ngày nghỉ custody không hợp lệ");
   }
   return { timezone: parsed.timezone, weeklyHours, holidays: holidays as string[] };
-}
-
-export async function loadCustodyIntakeSchedule(repository?: Pick<SystemConfigRepository, "findByKey">) {
-  const config = await repository?.findByKey("custody.intake.schedule");
-  return parseCustodyIntakeSchedule(config?.configValue);
 }
 
 export function validateCustodyIntakeTime(value: Date, schedule: CustodyIntakeSchedule, now = Date.now()) {
