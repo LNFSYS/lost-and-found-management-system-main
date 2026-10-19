@@ -32,6 +32,8 @@ import type {
 import type { ClaimRepository, ClaimStatus } from "./claim.repository.port.js";
 import type { ContactPhotoUseCases } from "./contact-photo.use-cases.js";
 import type { ChatSocketUseCases } from "../../realtime/application/chat-socket.use-cases.js";
+import { loadCustodyIntakeSchedule, validateCustodyIntakeTime } from "../../warehouse/domain/intake-schedule.js";
+import type { SystemConfigRepository } from "../../system-config/application/system-config.repository.port.js";
 
 type WorkflowNotificationKind = "CLAIM" | "CHAT" | "APPOINTMENT" | "RETURN" | "CUSTODY";
 
@@ -57,6 +59,7 @@ export interface ClaimDependencies {
     }): { delivered: number } | Promise<{ delivered: number; }>;
   };
   chatSocketNotifier?: Pick<ChatSocketUseCases, "publishMessage">;
+  scheduleRepository?: Pick<SystemConfigRepository, "findByKey">;
   withTransaction: TransactionRunner;
   id: () => string;
   mediaStorage: PrivateMediaStorage;
@@ -538,6 +541,39 @@ export function createClaimUseCases(options: ClaimDependencies) {
       };
     },
 
+    async getHistory(claimId: string, actorId: string, roles: readonly string[] = []) {
+      const claim = await claimRepository.findById(claimId);
+      if (!claim) throw claimNotFound();
+      const participant = await claimRepository.findParticipant(claimId, actorId);
+      const staffAccess = roles.includes("STAFF") || roles.includes("ADMIN");
+      if (!participant && !staffAccess) throw claimNotFound();
+      const events = await (claimRepository.listClaimAuditEvents?.(claimId) ?? claimRepository.listVerificationAuditEvents(claimId));
+      return {
+        claimId,
+        accessScope: participant ? "PARTICIPANT" as const : "STAFF" as const,
+        events: events.map(event => {
+          const metadata = event.metadata;
+          const safeMetadata = metadata ? {
+            ...(typeof metadata.decision === "string" ? { decision: metadata.decision } : {}),
+            ...(typeof metadata.reason === "string" ? { reason: metadata.reason.slice(0, 1000) } : {}),
+            ...(typeof metadata.communicationOnly === "boolean" ? { communicationOnly: metadata.communicationOnly } : {})
+          } : null;
+          const actor = event.actorId === claim.finderId ? "Finder"
+            : event.actorId === claim.claimantId ? "Claimant"
+              : event.action.startsWith("STAFF_") ? "Staff" : "System";
+          return {
+            id: event.id,
+            action: event.action,
+            fromStatus: event.fromStatus,
+            toStatus: event.toStatus,
+            actor,
+            metadata: safeMetadata,
+            createdAt: event.createdAt
+          };
+        })
+      };
+    },
+
     async getVerification(claimId: string, userId: string) {
       return verificationDetails(claimId, userId);
     },
@@ -734,6 +770,7 @@ export function createClaimUseCases(options: ClaimDependencies) {
         decision: input.decision,
         reason: input.reason,
         handoverPointId: input.handoverPointId ?? null,
+        requestedIntakeAt: input.requestedIntakeAt?.toISOString() ?? null,
         correctsEventId: input.correctsEventId ?? null
       });
 
@@ -813,6 +850,8 @@ export function createClaimUseCases(options: ClaimDependencies) {
         if (input.decision === "ESCALATE_TO_CUSTODY") {
           if (!custodyRequestRepository) throw new AppError("internal", "Custody request service is unavailable");
           if (!input.handoverPointId) throw new AppError("invalid_input", "Cần chọn quầy nhận bàn giao");
+          if (!input.requestedIntakeAt) throw new AppError("invalid_input", "Cần chọn ngày giờ tiếp nhận dự kiến");
+          validateCustodyIntakeTime(input.requestedIntakeAt, await loadCustodyIntakeSchedule(options.scheduleRepository));
           if (!await warehouseRepository.findHandoverPointById(input.handoverPointId)) {
             throw new AppError("not_found", "Không tìm thấy quầy bàn giao đang hoạt động");
           }
@@ -837,6 +876,7 @@ export function createClaimUseCases(options: ClaimDependencies) {
             requesterId: finderId,
             intakeType: "CUSTODY_TRANSFER",
             handoverPointId: input.handoverPointId,
+            requestedIntakeAt: input.requestedIntakeAt ?? null,
             reason: input.reason,
             idempotencyKey: input.idempotencyKey
           }, connection);

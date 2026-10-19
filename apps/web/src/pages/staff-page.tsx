@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode, type ImgHTMLAttributes } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import {
   AlertTriangle,
   Archive,
@@ -305,6 +305,12 @@ function CustodyQueueTab({
                         <span><strong>Điểm bàn giao:</strong> {request.handoverPoint.name}</span>
                       </div>
                     )}
+                    {request.claimId && (
+                      <div className="custody-meta-item">
+                        <History size={14} />
+                        <Link to={`/claims/${request.claimId}/history`}>Mở lịch sử claim / xác minh</Link>
+                      </div>
+                    )}
                     <div className="custody-meta-item">
                       <Calendar size={14} />
                       <span><strong>Tạo lúc:</strong> {formatDateTime(request.createdAt)}</span>
@@ -313,6 +319,12 @@ function CustodyQueueTab({
                       <div className="custody-meta-item">
                         <Clock3 size={14} />
                         <span><strong>Hẹn bàn giao:</strong> {formatDateTime(request.confirmedHandoverAt)}</span>
+                      </div>
+                    )}
+                    {request.requestedIntakeAt && (
+                      <div className="custody-meta-item">
+                        <Clock3 size={14} />
+                        <span><strong>Giờ Finder dự kiến:</strong> {formatDateTime(request.requestedIntakeAt)}</span>
                       </div>
                     )}
                     {request.handler && (

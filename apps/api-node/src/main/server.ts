@@ -36,6 +36,14 @@ const notificationWorkerTimer = env.notificationEmail.workerEnabled
   ? setInterval(() => { void notificationEmailTask.tick(); }, env.notificationEmail.workerPollSeconds * 1_000)
   : null;
 if (env.notificationEmail.workerEnabled) void notificationEmailTask.tick();
+const notificationPushTask = services.notificationPushWorker ? createBackgroundTask(
+  () => services.notificationPushWorker!.runOnce(),
+  error => console.warn("notification_push_worker_tick_failed", notificationEmailWorkerError(error))
+) : null;
+const notificationPushTimer = env.notificationEmail.workerEnabled && notificationPushTask
+  ? setInterval(() => { void notificationPushTask.tick(); }, env.notificationEmail.workerPollSeconds * 1_000)
+  : null;
+if (env.notificationEmail.workerEnabled && notificationPushTask) void notificationPushTask.tick();
 const warehouseMaintenance = createWarehouseMaintenanceTask({
   checkSchema: () => checkWarehouseMaintenanceSchema(pool),
   runOnce: async () => { await services.warehouseService.runMaintenance(); await services.claimService.cleanupContactPhotos(); },
@@ -89,6 +97,7 @@ const shutdown = createShutdownHandler(async () => {
   clearInterval(warehouseMaintenanceTimer);
   clearInterval(appointmentReminderTimer);
   if (notificationWorkerTimer) clearInterval(notificationWorkerTimer);
+  if (notificationPushTimer) clearInterval(notificationPushTimer);
   if (matchingRefreshTimer) clearInterval(matchingRefreshTimer);
   const httpClosed = new Promise<void>((resolve, reject) => {
     chatSocketServer.stop();
@@ -99,7 +108,8 @@ const shutdown = createShutdownHandler(async () => {
   // Drain HTTP, schema checks, SMTP acknowledgements and lease heartbeats before DB closure.
   const drained = await Promise.allSettled([
     httpClosed, warehouseMaintenance.stop(), matchingRefreshTask.stop(), matchingRefreshWorker.stop(), appointmentReminderTask.stop(),
-    notificationEmailTask.stop(), services.notificationEmailWorker.stop()
+    notificationEmailTask.stop(), services.notificationEmailWorker.stop(),
+    ...(notificationPushTask && services.notificationPushWorker ? [notificationPushTask.stop(), services.notificationPushWorker.stop()] : [])
   ]);
   await pool.end();
   if (drained.some(result => result.status === "rejected")) throw new Error("Shutdown drain failed");

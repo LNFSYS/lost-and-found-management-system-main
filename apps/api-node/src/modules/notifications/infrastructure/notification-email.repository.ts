@@ -1,10 +1,14 @@
 import type { ResultSetHeader, RowDataPacket } from "mysql2";
 import type { PoolConnection } from "mysql2/promise";
+import { createHash } from "node:crypto";
+import { id } from "../../../shared/infrastructure/security.js";
 import type { TransactionContext } from "../../../shared/application/transaction.js";
 import { sqlExecutor, type SqlExecutor } from "../../../shared/infrastructure/transaction-context.js";
 import type {
-  LeasedNotificationEmail, NotificationEmailOutboxItem, NotificationEmailPreferences, NotificationEmailRepository
+  LeasedNotificationEmail, LeasedNotificationPush, NotificationEmailOutboxItem, NotificationEmailPreferences, NotificationEmailRepository,
+  NotificationPushSubscriptionInput
 } from "../application/notification-email.repository.port.js";
+import { normalizeChannelPreferences } from "../application/notification-channels.js";
 
 type Queryable = Pick<PoolConnection, "execute"> | TransactionContext;
 
@@ -12,6 +16,7 @@ interface PreferenceRow extends RowDataPacket {
   user_id: string;
   chat_mode: NotificationEmailPreferences["chatMode"];
   claim_mode: NotificationEmailPreferences["claimMode"];
+  channel_preferences: unknown;
   quiet_hours_start: string | null;
   quiet_hours_end: string | null;
   timezone: string;
@@ -36,6 +41,17 @@ interface OutboxRow extends RowDataPacket {
   entity_accessible?: number;
 }
 
+interface PushOutboxRow extends RowDataPacket {
+  id: string;
+  notification_id: string;
+  recipient_user_id: string;
+  subscription_id: string;
+  endpoint: string;
+  p256dh_key: string;
+  auth_key: string;
+  attempt_count: number;
+}
+
 function asIso(value: Date | string) {
   return value instanceof Date ? value.toISOString() : new Date(value).toISOString();
 }
@@ -49,6 +65,7 @@ function mapPreference(row: PreferenceRow): NotificationEmailPreferences {
     userId: row.user_id,
     chatMode: row.chat_mode,
     claimMode: row.claim_mode,
+    categories: normalizeChannelPreferences(row.channel_preferences, row.chat_mode, row.claim_mode),
     quietHoursStart: time(row.quiet_hours_start),
     quietHoursEnd: time(row.quiet_hours_end),
     timezone: row.timezone,
@@ -80,7 +97,7 @@ export function createNotificationEmailRepository(pool: SqlExecutor) {
       const executor = sqlExecutor(queryable);
       await executor.execute("INSERT IGNORE INTO notification_email_preferences (user_id) VALUES (?)", [userId]);
       const [rows] = await executor.execute<PreferenceRow[]>(
-        `SELECT user_id, chat_mode, claim_mode, TIME_FORMAT(quiet_hours_start, '%H:%i') AS quiet_hours_start,
+        `SELECT user_id, chat_mode, claim_mode, channel_preferences, TIME_FORMAT(quiet_hours_start, '%H:%i') AS quiet_hours_start,
           TIME_FORMAT(quiet_hours_end, '%H:%i') AS quiet_hours_end, timezone, updated_at
          FROM notification_email_preferences WHERE user_id = ? LIMIT 1`,
         [userId]
@@ -92,11 +109,13 @@ export function createNotificationEmailRepository(pool: SqlExecutor) {
     async updatePreferences(userId: string, input: Omit<NotificationEmailPreferences, "userId" | "updatedAt">) {
       await pool.execute(
         `INSERT INTO notification_email_preferences
-          (user_id, chat_mode, claim_mode, quiet_hours_start, quiet_hours_end, timezone)
-         VALUES (?, ?, ?, ?, ?, ?)
+          (user_id, chat_mode, claim_mode, channel_preferences, quiet_hours_start, quiet_hours_end, timezone)
+         VALUES (?, ?, ?, ?, ?, ?, ?)
          ON DUPLICATE KEY UPDATE chat_mode = VALUES(chat_mode), claim_mode = VALUES(claim_mode),
-           quiet_hours_start = VALUES(quiet_hours_start), quiet_hours_end = VALUES(quiet_hours_end), timezone = VALUES(timezone)`,
-        [userId, input.chatMode, input.claimMode, input.quietHoursStart, input.quietHoursEnd, input.timezone]
+           channel_preferences = VALUES(channel_preferences), quiet_hours_start = VALUES(quiet_hours_start),
+           quiet_hours_end = VALUES(quiet_hours_end), timezone = VALUES(timezone)`,
+        [userId, input.chatMode, input.claimMode, JSON.stringify(input.categories ?? normalizeChannelPreferences(null, input.chatMode, input.claimMode)),
+          input.quietHoursStart, input.quietHoursEnd, input.timezone]
       );
       return this.getPreferences(userId);
     },
@@ -112,6 +131,125 @@ export function createNotificationEmailRepository(pool: SqlExecutor) {
       );
     },
 
+    async enqueuePush(input: { notificationId: string; recipientUserId: string; roomId?: string | null; }, queryable: Queryable) {
+      await sqlExecutor(queryable).execute(
+        `INSERT INTO notification_push_outbox (id, notification_id, recipient_user_id, subscription_id, room_id)
+         SELECT UUID(), ?, ?, s.id, ? FROM notification_push_subscriptions s WHERE s.user_id = ?
+         ON DUPLICATE KEY UPDATE id = id`,
+        [input.notificationId, input.recipientUserId, input.roomId ?? null, input.recipientUserId]
+      );
+    },
+
+    async getPushSubscriptions(userId: string) {
+      const [rows] = await pool.execute<PushOutboxRow[]>(
+        `SELECT id AS subscription_id, endpoint, p256dh_key, auth_key FROM notification_push_subscriptions WHERE user_id = ? ORDER BY created_at DESC`,
+        [userId]
+      );
+      return rows.map((row) => ({ endpoint: row.endpoint, p256dh: row.p256dh_key, auth: row.auth_key }));
+    },
+
+    async savePushSubscription(input: NotificationPushSubscriptionInput) {
+      const endpointHash = createHash("sha256").update(input.endpoint).digest("hex");
+      await pool.execute(
+        `INSERT INTO notification_push_subscriptions (id, user_id, endpoint_hash, endpoint, p256dh_key, auth_key)
+         VALUES (?, ?, ?, ?, ?, ?)
+         ON DUPLICATE KEY UPDATE user_id = VALUES(user_id), endpoint = VALUES(endpoint),
+           p256dh_key = VALUES(p256dh_key), auth_key = VALUES(auth_key)`,
+        [id(), input.userId, endpointHash, input.endpoint, input.p256dh, input.auth]
+      );
+    },
+
+    async deletePushSubscription(userId: string, endpoint: string) {
+      const endpointHash = createHash("sha256").update(endpoint).digest("hex");
+      await pool.execute("DELETE FROM notification_push_subscriptions WHERE user_id = ? AND endpoint_hash = ?", [userId, endpointHash]);
+    },
+
+    async claimPushDue(input: { limit: number; leaseToken: string; leaseSeconds: number; }) {
+      const safeLimit = Math.min(100, Math.max(1, Math.trunc(input.limit)));
+      await pool.execute(
+        `UPDATE notification_push_outbox SET status = 'CANCELLED', cancelled_at = UTC_TIMESTAMP(),
+          last_error_code = 'PUSH_LEASE_EXPIRED_UNCERTAIN', lease_token = NULL, lease_expires_at = NULL
+         WHERE status = 'PROCESSING' AND (lease_expires_at IS NULL OR lease_expires_at <= UTC_TIMESTAMP())`
+      );
+      const [candidates] = await pool.execute<PushOutboxRow[]>(
+        `SELECT id FROM notification_push_outbox WHERE status = 'PENDING' AND due_at <= UTC_TIMESTAMP()
+         ORDER BY due_at ASC, created_at ASC LIMIT ${safeLimit}`
+      );
+      const claimedIds: string[] = [];
+      for (const candidate of candidates) {
+        const [result] = await pool.execute<ResultSetHeader>(
+          `UPDATE notification_push_outbox SET status = 'PROCESSING', lease_token = ?,
+            lease_expires_at = DATE_ADD(UTC_TIMESTAMP(), INTERVAL ? SECOND), attempt_count = attempt_count + 1
+           WHERE id = ? AND status = 'PENDING' AND due_at <= UTC_TIMESTAMP()`,
+          [input.leaseToken, input.leaseSeconds, candidate.id]
+        );
+        if (result.affectedRows) claimedIds.push(candidate.id);
+      }
+      if (!claimedIds.length) return [] as LeasedNotificationPush[];
+      const [rows] = await pool.execute<PushOutboxRow[]>(
+        `SELECT o.id, o.notification_id, o.recipient_user_id, o.subscription_id, s.endpoint, s.p256dh_key, s.auth_key,
+          o.attempt_count
+         FROM notification_push_outbox o
+         JOIN notification_push_subscriptions s ON s.id = o.subscription_id AND s.user_id = o.recipient_user_id
+         JOIN notifications n ON n.id = o.notification_id AND n.user_id = o.recipient_user_id AND n.is_read = FALSE
+         LEFT JOIN notification_email_preferences p ON p.user_id = o.recipient_user_id
+         WHERE o.status = 'PROCESSING' AND o.lease_token = ? AND o.lease_expires_at > UTC_TIMESTAMP()
+           AND COALESCE(JSON_UNQUOTE(JSON_EXTRACT(p.channel_preferences, CONCAT('$.', CASE
+             WHEN n.type = 'CHAT_MESSAGE_RECEIVED' THEN 'CHAT'
+             WHEN n.type = 'MATCH_FOUND' THEN 'MATCH'
+             WHEN n.type = 'APPOINTMENT_HANDOVER_UPDATED' OR n.type LIKE 'RETURN_%' THEN 'HANDOVER'
+             WHEN n.type LIKE 'APPOINTMENT_%' THEN 'APPOINTMENT'
+             WHEN n.type LIKE 'CUSTODY_%' THEN 'CUSTODY'
+             WHEN n.type LIKE 'WAREHOUSE_%' THEN 'OVERDUE'
+             WHEN n.type = 'FEEDBACK_RECEIVED' THEN 'FEEDBACK'
+             ELSE 'CLAIM' END, '.pushEnabled'))), 'false') = 'true'`,
+        [input.leaseToken]
+      );
+      const leased = rows.map((row) => ({ id: row.id, notificationId: row.notification_id, recipientUserId: row.recipient_user_id,
+        subscriptionId: row.subscription_id, endpoint: row.endpoint, p256dh: row.p256dh_key, auth: row.auth_key,
+        attemptCount: Number(row.attempt_count) }));
+      const leasedIds = new Set(leased.map((item) => item.id));
+      const staleIds = claimedIds.filter((claimedId) => !leasedIds.has(claimedId));
+      for (const staleId of staleIds) await pool.execute(
+        `UPDATE notification_push_outbox SET status = 'CANCELLED', cancelled_at = UTC_TIMESTAMP(), lease_token = NULL, lease_expires_at = NULL
+         WHERE id = ? AND status = 'PROCESSING' AND lease_token = ?`, [staleId, input.leaseToken]
+      );
+      return leased;
+    },
+
+    async markPushSent(leaseToken: string, outboxId: string) {
+      await pool.execute(
+        `UPDATE notification_push_outbox SET status = 'SENT', sent_at = UTC_TIMESTAMP(), lease_token = NULL, lease_expires_at = NULL
+         WHERE id = ? AND status = 'PROCESSING' AND lease_token = ? AND lease_expires_at > UTC_TIMESTAMP()`,
+        [outboxId, leaseToken]
+      );
+    },
+
+    async releasePushForRetry(input: { leaseToken: string; outboxId: string; dueAt: Date; errorCode: string; }) {
+      await pool.execute(
+        `UPDATE notification_push_outbox SET status = 'PENDING', due_at = ?, last_error_code = ?, lease_token = NULL, lease_expires_at = NULL
+         WHERE id = ? AND status = 'PROCESSING' AND lease_token = ? AND lease_expires_at > UTC_TIMESTAMP()`,
+        [input.dueAt, input.errorCode, input.outboxId, input.leaseToken]
+      );
+    },
+
+    async cancelPushLease(leaseToken: string, outboxId: string, errorCode?: string) {
+      await pool.execute(
+        `UPDATE notification_push_outbox SET status = 'CANCELLED', cancelled_at = COALESCE(cancelled_at, UTC_TIMESTAMP()),
+          last_error_code = COALESCE(?, last_error_code), lease_token = NULL, lease_expires_at = NULL
+         WHERE id = ? AND status = 'PROCESSING' AND lease_token = ?`,
+        [errorCode ?? null, outboxId, leaseToken]
+      );
+    },
+
+    async cancelPendingPush(userId: string, notificationId: string) {
+      await pool.execute(
+        `UPDATE notification_push_outbox SET status = 'CANCELLED', cancelled_at = COALESCE(cancelled_at, UTC_TIMESTAMP()),
+          lease_token = NULL, lease_expires_at = NULL WHERE recipient_user_id = ? AND notification_id = ? AND status = 'PENDING'`,
+        [userId, notificationId]
+      );
+    },
+
     async cancelForNotification(userId: string, notificationId: string) {
       const [result] = await pool.execute<ResultSetHeader>(
         `UPDATE notification_email_outbox SET status = 'CANCELLED', cancelled_at = COALESCE(cancelled_at, UTC_TIMESTAMP()),
@@ -119,6 +257,7 @@ export function createNotificationEmailRepository(pool: SqlExecutor) {
          WHERE recipient_user_id = ? AND notification_id = ? AND status IN ('PENDING', 'PROCESSING')`,
         [userId, notificationId]
       );
+      await this.cancelPendingPush(userId, notificationId);
       return result.affectedRows;
     },
 
@@ -127,6 +266,12 @@ export function createNotificationEmailRepository(pool: SqlExecutor) {
         `UPDATE notification_email_outbox SET status = 'CANCELLED', cancelled_at = COALESCE(cancelled_at, UTC_TIMESTAMP()),
           lease_token = NULL, lease_expires_at = NULL
          WHERE recipient_user_id = ? AND room_id = ? AND event_type = 'CHAT' AND status IN ('PENDING', 'PROCESSING')`,
+        [userId, roomId]
+      );
+      await pool.execute(
+        `UPDATE notification_push_outbox SET status = 'CANCELLED', cancelled_at = COALESCE(cancelled_at, UTC_TIMESTAMP()),
+          lease_token = NULL, lease_expires_at = NULL
+         WHERE recipient_user_id = ? AND room_id = ? AND status = 'PENDING'`,
         [userId, roomId]
       );
       return result.affectedRows;
@@ -138,6 +283,10 @@ export function createNotificationEmailRepository(pool: SqlExecutor) {
           lease_token = NULL, lease_expires_at = NULL
          WHERE recipient_user_id = ? AND status IN ('PENDING', 'PROCESSING')`,
         [userId]
+      );
+      await pool.execute(
+        `UPDATE notification_push_outbox SET status = 'CANCELLED', cancelled_at = COALESCE(cancelled_at, UTC_TIMESTAMP()),
+          lease_token = NULL, lease_expires_at = NULL WHERE recipient_user_id = ? AND status = 'PENDING'`, [userId]
       );
       return result.affectedRows;
     },

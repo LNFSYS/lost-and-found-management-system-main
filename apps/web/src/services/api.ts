@@ -12,10 +12,18 @@ export interface CurrentUser {
   updatedAt: string;
 }
 export type NotificationEmailMode = "IMMEDIATE" | "DELAYED_UNREAD" | "DIGEST" | "DISABLED";
+export type NotificationCategory = "CHAT" | "CLAIM" | "MATCH" | "APPOINTMENT" | "HANDOVER" | "CUSTODY" | "OVERDUE" | "FEEDBACK";
+export interface NotificationChannelPreference {
+  inAppEnabled: boolean;
+  pushEnabled: boolean;
+  emailMode: NotificationEmailMode;
+}
+export type NotificationChannelPreferences = Record<NotificationCategory, NotificationChannelPreference>;
 export interface NotificationEmailPreferences {
   userId: string;
   chatMode: NotificationEmailMode;
   claimMode: NotificationEmailMode;
+  categories: NotificationChannelPreferences;
   quietHoursStart: string | null;
   quietHoursEnd: string | null;
   timezone: string;
@@ -365,6 +373,7 @@ export interface CustodyRequest {
   rejectionReason: string | null;
   handoverPoint: { id: string; name: string | null; address: string | null } | null;
   confirmedHandoverAt: string | null;
+  requestedIntakeAt?: string | null;
   warehouseItemId: string | null;
   createdAt: string;
   updatedAt: string;
@@ -404,6 +413,7 @@ export interface CreateCustodyRequestPayload {
   postId?: string | null;
   reason?: string | null;
   handoverPointId?: string | null;
+  requestedIntakeAt: string;
   intakeType?: CustodyIntakeType;
   idempotencyKey?: string;
 }
@@ -601,6 +611,8 @@ export interface ClaimMessage {
   content: string | null;
   messageType: "TEXT" | "IMAGE" | "SYSTEM";
   mediaUrl?: string | null;
+  previewUrl?: string;
+  pending?: boolean;
   isRead: boolean;
   readAt: string | null;
   createdAt: string;
@@ -674,6 +686,19 @@ export interface ClaimVerificationState {
     createdAt: string;
   }>;
 }
+export interface ClaimHistoryResponse {
+  claimId: string;
+  accessScope: "PARTICIPANT" | "STAFF";
+  events: Array<{
+    id: string;
+    action: string;
+    fromStatus: ClaimStatus | null;
+    toStatus: ClaimStatus | null;
+    actor: "Finder" | "Claimant" | "Staff" | "System";
+    metadata: { decision?: string; reason?: string; communicationOnly?: boolean } | null;
+    createdAt: string;
+  }>;
+}
 export type NotificationType =
   | "MATCH_FOUND"
   | "CLAIM_REQUEST_RECEIVED" | "CLAIM_ACCEPTED" | "CLAIM_MORE_INFO_REQUESTED" | "CLAIM_REJECTED" | "CLAIM_WITHDRAWN" | "CLAIM_ESCALATED"
@@ -684,7 +709,7 @@ export type NotificationType =
   | "CUSTODY_RETURNED" | "CUSTODY_OVERDUE" | "CUSTODY_VERIFIED" | "CUSTODY_RESERVED"
   | "CUSTODY_RESERVATION_RELEASED" | "CUSTODY_MOVED" | "CUSTODY_STATUS_CHANGED" | "CUSTODY_LEGAL_HOLD"
   | "CUSTODY_DISPOSITION_REQUESTED" | "CUSTODY_DISPOSITION_APPROVED" | "CUSTODY_DISPOSITION_COMPLETED"
-  | "WAREHOUSE_OVERDUE" | "WAREHOUSE_DUE_SOON" | "APPOINTMENT_UPDATED" | "RETURN_UPDATED" | "CUSTODY_UPDATED";
+  | "WAREHOUSE_OVERDUE" | "WAREHOUSE_DUE_SOON" | "APPOINTMENT_UPDATED" | "RETURN_UPDATED" | "CUSTODY_UPDATED" | "FEEDBACK_RECEIVED";
 export interface AppNotification {
   id: string;
   type: NotificationType;
@@ -1186,6 +1211,7 @@ export const api = {
   },
   findConversationByPost,
   getClaim: (claimId: string, signal?: AbortSignal) => raw<ClaimRecord>(`/claims/${claimId}`, { signal }),
+  getClaimHistory: (claimId: string, signal?: AbortSignal) => raw<ClaimHistoryResponse>(`/claims/${claimId}/history`, { signal }),
   createClaim: (payload: ({ postId: string } | { lostPostId: string; foundPostId: string }) & { description?: string; requestKey?: string; contactCheckId?: string; sourceFoundPostId?: string }) => {
     const requestKey = payload.requestKey ?? crypto.randomUUID();
     return raw<ClaimRecord & { idempotent: boolean }>("/claims", { method: "POST", headers: { "Idempotency-Key": requestKey }, body: JSON.stringify({ ...payload, requestKey: undefined }) });
@@ -1240,6 +1266,7 @@ export const api = {
     decision: "VERIFY_FOR_MEETUP" | "REQUEST_MORE_INFO" | "DECLINE" | "ESCALATE_TO_CUSTODY";
     reason: string;
     handoverPointId?: string;
+    requestedIntakeAt?: string;
     correctsEventId?: string;
     idempotencyKey: string;
   }) => raw<{ claim: ClaimRecord; verification: ClaimVerificationState; message: ClaimMessage | null }>(`/claims/${claimId}/verification/decision`, {
@@ -1250,6 +1277,9 @@ export const api = {
   markAllNotificationsRead: () => raw<{ read: boolean; count: number }>("/notifications/read-all", { method: "POST" }),
   getNotificationEmailPreferences: () => raw<{ preferences: NotificationEmailPreferences }>("/notifications/preferences").then((result) => result.preferences),
   updateNotificationEmailPreferences: (payload: Omit<NotificationEmailPreferences, "userId" | "updatedAt">) => raw<{ preferences: NotificationEmailPreferences }>("/notifications/preferences", { method: "PUT", body: JSON.stringify(payload) }).then((result) => result.preferences),
+  getPushNotificationStatus: () => raw<{ enabled: boolean; publicKey: string | null }>("/notifications/push/status"),
+  registerPushSubscription: (payload: { endpoint: string; p256dh: string; auth: string }) => raw<{ registered: boolean }>("/notifications/push/subscriptions", { method: "POST", body: JSON.stringify(payload) }),
+  removePushSubscription: (endpoint: string) => raw<{ removed: boolean }>("/notifications/push/subscriptions", { method: "DELETE", body: JSON.stringify({ endpoint }) }),
   getAdminCatalog: () => raw<AdminCatalog>("/admin/catalog"),
   createAdminCategory: (payload: Required<Pick<AdminCategoryPayload, "name">> & AdminCategoryPayload) => raw<AdminCategory>("/admin/categories", { method: "POST", body: JSON.stringify(payload) }),
   updateAdminCategory: (id: string, payload: AdminCategoryPayload) => raw<AdminCategory>(`/admin/categories/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),

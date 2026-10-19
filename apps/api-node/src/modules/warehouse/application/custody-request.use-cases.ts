@@ -8,6 +8,8 @@ import type { WarehouseRepository } from "./warehouse.repository.port.js";
 import { custodyNotifications, type CustodyNotifications } from "./custody-notifications.js";
 import { custodyFingerprint } from "./custody-fingerprint.js";
 import { intakeFingerprint, prepareIntakeEvidence, serializeWarehouseImage, validateIntakeEvidence } from "./intake-evidence.js";
+import { loadCustodyIntakeSchedule, validateCustodyIntakeTime } from "../domain/intake-schedule.js";
+import type { SystemConfigRepository } from "../../system-config/application/system-config.repository.port.js";
 
 const clean = (value: string | null | undefined) => value?.trim() || null;
 export interface CustodyRequestDependencies extends CustodyNotifications {
@@ -15,6 +17,7 @@ export interface CustodyRequestDependencies extends CustodyNotifications {
   warehouseRepository: WarehouseRepository;
   withTransaction: TransactionRunner;
   id: () => string;
+  scheduleRepository?: Pick<SystemConfigRepository, "findByKey">;
 }
 
 export function createCustodyRequestUseCases(options: CustodyRequestDependencies) {
@@ -89,6 +92,9 @@ export function createCustodyRequestUseCases(options: CustodyRequestDependencies
         if (existing) return { request: existing, idempotent: true, deliveries: [] };
         if (await repo.hasWarehouseItem(postId, db)) throw new AppError("conflict", "Vật phẩm đã được tiếp nhận; không thể yêu cầu lần nữa");
         if (!input.handoverPointId || !await warehouse.findHandoverPointById(input.handoverPointId)) throw new AppError("bad_request", "Cần điểm bàn giao đang hoạt động");
+        if (input.requestedIntakeAt) {
+          validateCustodyIntakeTime(input.requestedIntakeAt, await loadCustodyIntakeSchedule(options.scheduleRepository));
+        }
         const requestId = id();
         await repo.createRequest({ ...input, id: requestId, postId, requesterId: actorId, intakeType: "CUSTODY_TRANSFER", reason: clean(input.reason) }, db);
         await repo.writeAudit({ id: id(), custodyRequestId: requestId, actorId, action: "CREATED", fromStatus: null, toStatus: "PENDING" }, db);

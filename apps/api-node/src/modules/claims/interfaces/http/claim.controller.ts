@@ -64,6 +64,10 @@ export function createClaimController({ claimService }: {
       response.json(await claimService.getClaim(claimId(request), request.auth!.sub));
     },
 
+    async getHistory(request: Request, response: Response) {
+      response.json(await claimService.getHistory(claimId(request), request.auth!.sub, request.auth!.roles));
+    },
+
     async decide(request: Request, response: Response) {
       response.json(await claimService.decide(claimId(request), request.auth!.sub, claimDecisionSchema.parse({
         ...request.body,

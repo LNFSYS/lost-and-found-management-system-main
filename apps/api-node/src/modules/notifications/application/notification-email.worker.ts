@@ -134,7 +134,8 @@ export function createNotificationEmailWorker(options: {
     const leased = await options.repository.listLease(leaseToken);
     if (!leased.length) return { sent: 0, skipped: 1 };
     const preferences = await options.repository.getPreferences(item.recipientUserId);
-    const mode = item.eventType === "CHAT" ? preferences.chatMode : preferences.claimMode;
+    const mode = preferences.categories?.[item.eventType].emailMode
+      ?? (item.eventType === "CHAT" ? preferences.chatMode : preferences.claimMode);
     if (mode === "DISABLED") {
       await options.repository.cancelLease(leaseToken);
       return { sent: 0, skipped: leased.length };

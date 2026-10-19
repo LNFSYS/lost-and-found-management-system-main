@@ -589,7 +589,10 @@ export function createWarehouseUseCases(options: WarehouseDependencies) {
                 title: item.overdue ? "Vật phẩm đã quá hạn lưu giữ" : "Vật phẩm sắp hết hạn lưu giữ",
                 body: "Đăng nhập khu vực nội bộ để kiểm tra thời hạn và điều kiện xử lý.",
                 entityType: "WAREHOUSE_ITEM", entityId: item.id, dedupeKey: `retention:${item.id}:${item.deadline}:${event}:${userId}` }, db);
-              if (notification) pending.push({ userId, notification });
+              if (notification) {
+                await options.notificationEmailQueue?.enqueue({ notification, recipientUserId: userId, eventType: "OVERDUE" }, db);
+                pending.push({ userId, notification });
+              }
             }
           }
         }

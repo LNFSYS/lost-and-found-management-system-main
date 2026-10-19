@@ -95,6 +95,7 @@ export const testServices = {
   activityService: unexpectedPort<import("../main/services.js").ApplicationServices["activityService"]>("activityService"),
   notificationService,
   notificationEmailWorker: { runOnce: async () => ({ sent: 0, skipped: 0, deferred: 0, failed: 0 }), stop: async () => undefined },
+  notificationPushWorker: null,
   systemConfigService, adminUserService, adminReportingService, adminCatalogService, warehouseService, returnFeedbackService,
   reportService, matchingService, postService, claimService, realtimeService,
   chatSocketService: unexpectedPort<import("../main/services.js").ApplicationServices["chatSocketService"]>("chatSocketService"),

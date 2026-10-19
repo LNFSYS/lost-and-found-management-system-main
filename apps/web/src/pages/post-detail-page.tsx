@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useNetworkStatus } from "../hooks/use-network-status";
 import { useStaleDataNotice } from "../hooks/use-stale-data-notice";
+import { CustodyIntakeScheduleHint } from "../components/custody-intake-schedule-hint";
 import { PostCard, PostImage } from "./posts-page";
 import { api, type PostSummary } from "../services/api";
 
@@ -29,6 +30,7 @@ export function PostDetailPage() {
   const [custodyModalOpen, setCustodyModalOpen] = useState(false);
   const [handoverPoints, setHandoverPoints] = useState<Array<{ id: string; name: string; address?: string | null }>>([]);
   const [selectedHpId, setSelectedHpId] = useState("");
+  const [requestedIntakeAt, setRequestedIntakeAt] = useState("");
   const [custodyReason, setCustodyReason] = useState("");
   const [submittingCustody, setSubmittingCustody] = useState(false);
   const [custodyNotice, setCustodyNotice] = useState("");
@@ -36,6 +38,7 @@ export function PostDetailPage() {
 
   const openCustodyModal = useCallback(async () => {
     setCustodyError("");
+    setRequestedIntakeAt("");
     try {
       const res = await api.listPublicHandoverPoints();
       setHandoverPoints(res.handoverPoints);
@@ -51,6 +54,7 @@ export function PostDetailPage() {
   async function submitCustodyRequest(e: FormEvent) {
     e.preventDefault();
     if (!post || !selectedHpId) return;
+    if (!requestedIntakeAt) { setCustodyError("Chọn ngày và giờ dự kiến bàn giao."); return; }
     setSubmittingCustody(true);
     setCustodyError("");
     setCustodyNotice("");
@@ -58,6 +62,7 @@ export function PostDetailPage() {
       await api.createCustodyRequest({
         postId: post.id,
         handoverPointId: selectedHpId,
+        requestedIntakeAt: new Date(requestedIntakeAt).toISOString(),
         reason: custodyReason || "Bàn giao vật phẩm bài nhặt được cho quầy Staff",
         intakeType: "CUSTODY_TRANSFER"
       });
@@ -207,7 +212,7 @@ export function PostDetailPage() {
             <div>
               <h3>Yêu cầu Bàn giao cho Quầy Staff (Custody)</h3>
               <p>Chuyển giao vật phẩm bài đăng <strong>{post.title}</strong> cho nhân viên lưu kho.</p>
-              <p className="custody-hours-note">Giờ làm việc Phòng DVSV: thứ Hai–thứ Sáu, buổi sáng 08:00/08:15–12:00 và buổi chiều 13:30–17:00, trừ ngày nghỉ lễ.</p>
+              <CustodyIntakeScheduleHint className="custody-hours-note" />
             </div>
             <button type="button" className="close-btn" onClick={() => setCustodyModalOpen(false)}><X size={18} /></button>
           </div>
@@ -221,6 +226,11 @@ export function PostDetailPage() {
                   <option key={point.id} value={point.id}>{point.name} - {point.address}</option>
                 ))}
               </select>
+            </label>
+
+            <label className="input-field">
+              <span>Ngày, giờ dự kiến mang vật phẩm đến quầy <strong className="required-star">*</strong></span>
+              <input type="datetime-local" value={requestedIntakeAt} onChange={event => setRequestedIntakeAt(event.target.value)} required />
             </label>
 
             <label className="input-field">

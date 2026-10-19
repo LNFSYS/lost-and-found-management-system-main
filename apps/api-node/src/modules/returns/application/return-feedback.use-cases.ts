@@ -2,6 +2,7 @@ import type { TransactionRunner } from "../../../shared/application/transaction.
 import { AppError } from "../../../shared/domain/app-error.js";
 import type { AccessTokenPayload, ActivitySummary } from "../../../shared/domain/auth.js";
 import type { AdminAuditRepository } from "../../admin/application/index.js";
+import type { NotificationEmailQueue, NotificationRecord, NotificationRepository } from "../../notifications/application/index.js";
 import type { ReturnFeedbackInput } from "./return-feedback.dto.js";
 import type { ReturnAppointmentForFeedback, ReturnFeedbackRecord, ReturnFeedbackRepository } from "./return-feedback.repository.port.js";
 
@@ -78,6 +79,9 @@ export interface ReturnFeedbackDependencies {
   adminAuditRepository: AdminAuditRepository;
   runInTransaction: TransactionRunner;
   id: () => string;
+  notifications?: NotificationRepository;
+  emails?: NotificationEmailQueue;
+  realtimeNotifier?: { publishNotification(input: { userId: string; notification: NotificationRecord; workflow: "RETURN" }): Promise<unknown> | unknown };
 }
 export function createReturnFeedbackUseCases(options: ReturnFeedbackDependencies) {
   const { repository, adminAuditRepository, runInTransaction, id } = options;
@@ -129,14 +133,14 @@ export function createReturnFeedbackUseCases(options: ReturnFeedbackDependencies
 
     async submitFeedback(appointmentId: string, input: ReturnFeedbackInput, viewer: AccessTokenPayload) {
       const idempotencyKey = input.idempotencyKey ?? null;
-      return runInTransaction(async (connection) => {
+      const result = await runInTransaction(async (connection) => {
         // Lock before any consistent read so a concurrent retry sees the committed feedback.
         const appointment = await repository.findAppointmentForFeedback(appointmentId, connection, true);
         if (!appointment) throw new AppError("not_found", "Khong tim thay return appointment");
         if (!isParticipant(appointment, viewer.sub)) throw new AppError("forbidden", "Chi participant cua return moi duoc gui feedback");
         if (idempotencyKey) {
           const existing = await repository.findFeedbackByIdempotency(appointmentId, viewer.sub, idempotencyKey, connection);
-          if (existing) return { feedback: responseFeedback(existing), reputationEventCreated: false, idempotent: true };
+          if (existing) return { feedback: responseFeedback(existing), reputationEventCreated: false, idempotent: true, notification: null as NotificationRecord | null, recipientId: null as string | null };
         }
 
         const reason = returnEligibilityReason(appointment);
@@ -176,8 +180,23 @@ export function createReturnFeedbackUseCases(options: ReturnFeedbackDependencies
 
         const created = await repository.findFeedbackById(feedbackId, connection);
         if (!created) throw new AppError("internal", "Khong the doc lai feedback vua tao");
-        return { feedback: responseFeedback(created), reputationEventCreated: true, idempotent: false };
+        const notification = options.notifications ? await options.notifications.create({
+          userId: targetId,
+          type: "FEEDBACK_RECEIVED",
+          title: "Bạn vừa nhận được feedback sau khi hoàn tất bàn giao",
+          body: "Mở lịch sử bàn giao để xem thông báo mới.",
+          entityType: "APPOINTMENT",
+          entityId: appointment.id,
+          dedupeKey: `return-feedback:${feedbackId}:${targetId}`
+        }, connection) : null;
+        if (notification) await options.emails?.enqueue({ notification, recipientUserId: targetId, eventType: "FEEDBACK" }, connection);
+        return { feedback: responseFeedback(created), reputationEventCreated: true, idempotent: false,
+          notification, recipientId: notification ? targetId : null };
       });
+      if (result.notification && result.recipientId) {
+        await options.realtimeNotifier?.publishNotification({ userId: result.recipientId, notification: result.notification, workflow: "RETURN" });
+      }
+      return { feedback: result.feedback, reputationEventCreated: result.reputationEventCreated, idempotent: result.idempotent };
     }
   };
   return returnFeedbackService;

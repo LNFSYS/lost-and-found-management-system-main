@@ -19,6 +19,7 @@
     "migrate:reconcile-claim": "tsx src/migrations/run-reconciliation.ts"
   },
   "dependencies": {
+    "@types/web-push": "^3.6.4",
     "bcryptjs": "^2.4.3",
     "cloudinary": "^2.11.0",
     "cookie-parser": "^1.4.7",
@@ -31,6 +32,7 @@
     "multer": "^2.4.0",
     "mysql2": "^3.11.5",
     "nodemailer": "^10.0.14",
+    "web-push": "^3.6.7",
     "ws": "^8.22.0",
     "zod": "^3.24.1"
   },

@@ -45,6 +45,15 @@ function boundedNumber(name: string, fallback: number, minimum: number, maximum:
   return value;
 }
 
+const vapid = {
+  publicKey: process.env.VAPID_PUBLIC_KEY?.trim() || null,
+  privateKey: process.env.VAPID_PRIVATE_KEY?.trim() || null,
+  subject: process.env.VAPID_SUBJECT?.trim() || null
+};
+if (Object.values(vapid).some(Boolean) && Object.values(vapid).some((value) => !value)) {
+  throw new Error("Set VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, and VAPID_SUBJECT together to enable browser push notifications");
+}
+
 export const env = {
   nodeEnv: process.env.NODE_ENV ?? "development",
   port: number("API_PORT", 3001),
@@ -81,6 +90,9 @@ export const env = {
     digestDelayMinutes: boundedNumber("NOTIFICATION_EMAIL_DIGEST_DELAY_MINUTES", 60, 15, 1_440),
     workerPollSeconds: boundedNumber("NOTIFICATION_EMAIL_WORKER_POLL_SECONDS", 30, 5, 300),
     workerEnabled: bool("NOTIFICATION_EMAIL_WORKER_ENABLED", true)
+  },
+  notificationPush: {
+    ...vapid
   },
   appointmentReminderMinutes: boundedNumber("APPOINTMENT_REMINDER_MINUTES",30,1,1440),
   matchingRefresh: {

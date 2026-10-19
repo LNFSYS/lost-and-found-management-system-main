@@ -749,6 +749,13 @@ export function createClaimRepository(pool: SqlExecutor) {
       return rows.map(mapAuditEvent);
     },
 
+    async listClaimAuditEvents(claimId: string, queryable: Queryable = pool) {
+      const [rows] = await sqlExecutor(queryable).execute<ClaimAuditRow[]>(
+        `${auditSelect} WHERE claim_id = ? ORDER BY created_at ASC, id ASC`, [claimId]
+      );
+      return rows.map(mapAuditEvent);
+    },
+
     async listRoomsForUser(userId: string) {
       const [rows] = await pool.execute<ClaimRow[]>(
         `${claimSelect}
