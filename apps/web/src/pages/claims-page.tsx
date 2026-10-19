@@ -32,7 +32,15 @@ function formatTime(value: string | null) {
 
 function mergeMessages(current: ClaimMessage[], incoming: ClaimMessage[]) {
   const messages = new Map(current.map((message) => [message.id, message]));
-  incoming.forEach((message) => messages.set(message.id, message));
+  let changed = false;
+  incoming.forEach((message) => {
+    const existing = messages.get(message.id);
+    if (!existing || JSON.stringify(existing) !== JSON.stringify(message)) {
+      messages.set(message.id, message);
+      changed = true;
+    }
+  });
+  if (!changed) return current;
   return [...messages.values()].sort((left, right) => left.createdAt.localeCompare(right.createdAt) || left.id.localeCompare(right.id));
 }
 
@@ -409,7 +417,7 @@ export function ClaimsPage() {
     try {
       const current = await api.getClaim(id, controller.signal);
       if (!isCurrent()) return;
-      setClaim(current);
+      setClaim(existing => silent && existing && JSON.stringify(existing) === JSON.stringify(current) ? existing : current);
       if (!current.canSend) {
         setMessages([]);
         setEvidence([]);
@@ -424,13 +432,17 @@ export function ClaimsPage() {
       if (!isCurrent()) return;
       setMessages((existing) => silent ? mergeMessages(existing, messageResult.items) : messageResult.items);
       if (!silent || !messageCursorRef.current) updateMessageCursor(messageResult.nextCursor);
-      setEvidence(evidenceResult.items);
+      setEvidence(existing => silent && JSON.stringify(existing) === JSON.stringify(evidenceResult.items) ? existing : evidenceResult.items);
       setClaims((items) => {
-        if (!items.some(item => item.id === id)) {
+        const existing = items.find(item => item.id === id);
+        if (!existing) {
           const latest = mergeMessages([], messageResult.items).at(-1);
           return [{ ...current, conversation: { lastMessage: latest?.content ?? "", lastMessageAt: latest?.createdAt ?? current.updatedAt, unreadCount: 0 } }, ...items];
         }
-        return items.map(item => item.id === id && item.conversation ? { ...item, conversation: { ...item.conversation, unreadCount: 0 } } : item);
+        if (!existing.conversation || existing.conversation.unreadCount !== 0) {
+          return items.map(item => item.id === id && item.conversation ? { ...item, conversation: { ...item.conversation, unreadCount: 0 } } : item);
+        }
+        return items;
       });
 
       // Verification failures must not hide the chat or erase a sent message.
@@ -526,16 +538,49 @@ export function ClaimsPage() {
     let active = true;
     const unsubscribe = api.subscribeRealtime({
       roomId,
-      onConnected: () => { if (active) void synchronizeClaimRoom(claimId); },
       onNotification: (event) => {
         if (!active) return;
-        const sameRoomMessage = event.workflow === "CHAT" && event.roomId === roomId;
         const sameClaimUpdate = event.workflow === "CLAIM" && event.notification.entityType === "CLAIM" && event.notification.entityId === claimId;
-        if (sameRoomMessage || sameClaimUpdate) void synchronizeClaimRoom(claimId);
+        if (sameClaimUpdate) {
+          void api.getClaim(claimId).then(updated => {
+            if (active && isCurrentRoom(claimId, roomRequest.current.generation)) applyClaimUpdate(updated);
+          }).catch(() => undefined);
+        }
       }
     });
     return () => { active = false; unsubscribe(); };
   }, [claimId, claim?.canSend, claim?.room?.id]);
+
+  useEffect(() => {
+    const roomId = claim?.room?.id;
+    if (!claimId || !claim?.canSend || !roomId) return;
+    let active = true;
+    const generation = roomRequest.current.generation;
+    const unsubscribe = api.subscribeClaimChatSocket({
+      onConnected: () => { if (active) void synchronizeClaimRoom(claimId); },
+      roomId,
+      onReconnected: () => { if (active) void synchronizeClaimRoom(claimId); },
+      onMessage: (message) => {
+        if (!active || !isCurrentRoom(claimId, generation) || message.roomId !== roomId) return;
+        setMessages(current => mergeMessages(current, [message]));
+        setClaims(current => current.map(item => item.id === claimId ? {
+          ...item,
+          conversation: {
+            lastMessage: message.content ?? (message.messageType === "IMAGE" ? "Ảnh" : ""),
+            lastMessageAt: message.createdAt,
+            unreadCount: 0,
+            custodyEscalated: item.conversation?.custodyEscalated
+          }
+        } : item));
+        if (message.messageType === "IMAGE") {
+          void api.listClaimEvidence(claimId).then(result => {
+            if (active && isCurrentRoom(claimId, generation)) setEvidence(result.items);
+          }).catch(() => undefined);
+        }
+      }
+    });
+    return () => { active = false; unsubscribe(); };
+  }, [claimId, claim?.canSend, claim?.room?.id, user?.id]);
 
   // Stop automatic retries after a failure; the panel offers an explicit retry.
   useEffect(() => {

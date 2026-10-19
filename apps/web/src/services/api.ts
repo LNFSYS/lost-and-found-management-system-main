@@ -744,6 +744,13 @@ export interface RealtimeHandlers {
   onNotification?: (event: WorkflowRealtimeNotification) => void;
 }
 
+export interface ClaimChatSocketHandlers {
+  roomId: string;
+  onConnected?: () => void;
+  onReconnected?: () => void;
+  onMessage?: (message: ClaimMessage) => void;
+}
+
 function subscribeRealtime(handlers: RealtimeHandlers) {
   const controller = new AbortController();
   const generation = sessionGeneration;
@@ -833,6 +840,108 @@ function subscribeRealtime(handlers: RealtimeHandlers) {
   })();
 
   return () => controller.abort();
+}
+
+function subscribeClaimChatSocket(handlers: ClaimChatSocketHandlers) {
+  const generation = sessionGeneration;
+  let stopped = false;
+  let activeSocket: WebSocket | null = null;
+  let retryTimer: number | null = null;
+  let retryDelay = 500;
+  let wasConnected = false;
+
+  function wait(milliseconds: number) {
+    return new Promise<void>(resolve => {
+      if (stopped) return resolve();
+      retryTimer = window.setTimeout(() => {
+        retryTimer = null;
+        resolve();
+      }, milliseconds);
+    });
+  }
+
+  function connectOnce() {
+    return new Promise<{ code: number; connected: boolean }>(resolve => {
+      const socketUrl = new URL(`${API_URL.replace(/\/+$/, "")}/realtime/chat-socket`, window.location.href);
+      socketUrl.protocol = socketUrl.protocol === "https:" ? "wss:" : "ws:";
+      const socket = new WebSocket(socketUrl);
+      activeSocket = socket;
+      let connected = false;
+      let authenticationFailure: "UNAUTHENTICATED" | "FORBIDDEN" | "INVALID_REQUEST" | null = null;
+      const connectionTimeout = window.setTimeout(() => {
+        try { socket.close(); } catch { /* The handshake may already have ended. */ }
+      }, 15_000);
+
+      socket.onopen = () => {
+        void (async () => {
+          if (!accessToken && !await refreshSession()) { socket.close(); return; }
+          if (stopped || generation !== sessionGeneration || !accessToken) { socket.close(); return; }
+          socket.send(JSON.stringify({ type: "authenticate", accessToken, roomId: handlers.roomId }));
+        })().catch(() => socket.close());
+      };
+
+      socket.onmessage = event => {
+        if (typeof event.data !== "string") return;
+        let value: unknown;
+        try { value = JSON.parse(event.data); } catch { return; }
+        if (!value || typeof value !== "object") return;
+        const payload = value as Record<string, unknown>;
+        if (payload.type === "auth_error") {
+          if (payload.code === "UNAUTHENTICATED" || payload.code === "FORBIDDEN" || payload.code === "INVALID_REQUEST") {
+            authenticationFailure = payload.code;
+          }
+          return;
+        }
+        if (payload.type === "ready") {
+          window.clearTimeout(connectionTimeout);
+          connected = true;
+          retryDelay = 500;
+          if (wasConnected) handlers.onReconnected?.();
+          else handlers.onConnected?.();
+          wasConnected = true;
+          return;
+        }
+        if (payload.type === "chat.message" && payload.roomId === handlers.roomId && payload.message && typeof payload.message === "object") {
+          handlers.onMessage?.(payload.message as ClaimMessage);
+        }
+      };
+
+      socket.onclose = event => {
+        window.clearTimeout(connectionTimeout);
+        if (activeSocket === socket) activeSocket = null;
+        if (authenticationFailure === "FORBIDDEN") resolve({ code: 4403, connected });
+        else if (authenticationFailure === "INVALID_REQUEST") resolve({ code: 4400, connected });
+        else resolve({ code: authenticationFailure === "UNAUTHENTICATED" ? 4401 : event.code, connected });
+      };
+      socket.onerror = () => { /* The close event drives the retry loop. */ };
+    });
+  }
+
+  void (async () => {
+    while (!stopped && generation === sessionGeneration) {
+      if (!accessToken) {
+        const session = await refreshSession().catch(() => null);
+        if (!session) return;
+      }
+      const result = await connectOnce();
+      if (stopped || generation !== sessionGeneration) return;
+      if (result.code === 4403 || result.code === 4400) return;
+      if (result.code === 4401) {
+        const session = await refreshSession().catch(() => null);
+        if (!session) return;
+      }
+      await wait(retryDelay);
+      retryDelay = Math.min(10_000, retryDelay * 2);
+    }
+  })();
+
+  return () => {
+    stopped = true;
+    if (retryTimer !== null) window.clearTimeout(retryTimer);
+    retryTimer = null;
+    try { activeSocket?.close(1000, "Room changed"); } catch { /* The socket is already closed. */ }
+    activeSocket = null;
+  };
 }
 
 function isMutation(init: RequestInit) {
@@ -1004,6 +1113,7 @@ async function mediaBlob(path: string, retry = true, errorMessage = "Khong the t
 
 export const api = {
   subscribeRealtime: (handlers: RealtimeHandlers) => subscribeRealtime(handlers),
+  subscribeClaimChatSocket: (handlers: ClaimChatSocketHandlers) => subscribeClaimChatSocket(handlers),
   listAppointments: (filters:{claimId?:string;page?:number}={},signal?:AbortSignal) => raw<{results:import("./workflow-types").Appointment[];total:number}>(`/appointments${queryString(filters)}`,{signal}),
   getAppointment: (id:string,signal?:AbortSignal) => raw<import("./workflow-types").Appointment>(`/appointments/${id}`,{signal}),
   createAppointment: (payload:{claimId:string;proposedAt:string;handoverPointId:string;requestKey:string}) => raw<import("./workflow-types").Appointment>("/appointments",{method:"POST",body:JSON.stringify(payload)}),

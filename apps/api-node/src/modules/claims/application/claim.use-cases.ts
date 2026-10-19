@@ -31,6 +31,7 @@ import type {
 } from "./claim.dto.js";
 import type { ClaimRepository, ClaimStatus } from "./claim.repository.port.js";
 import type { ContactPhotoUseCases } from "./contact-photo.use-cases.js";
+import type { ChatSocketUseCases } from "../../realtime/application/chat-socket.use-cases.js";
 
 type WorkflowNotificationKind = "CLAIM" | "CHAT" | "APPOINTMENT" | "RETURN" | "CUSTODY";
 
@@ -55,6 +56,7 @@ export interface ClaimDependencies {
       roomId?: string | null;
     }): { delivered: number } | Promise<{ delivered: number; }>;
   };
+  chatSocketNotifier?: Pick<ChatSocketUseCases, "publishMessage">;
   withTransaction: TransactionRunner;
   id: () => string;
   mediaStorage: PrivateMediaStorage;
@@ -141,6 +143,16 @@ export function createClaimUseCases(options: ClaimDependencies) {
       workflow: input.workflow,
       roomId: input.roomId
     });
+  }
+
+  async function publishChatMessage(roomId: string | null, message: Awaited<ReturnType<typeof claimRepository.createMessage>>) {
+    if (!roomId || !message || !options.chatSocketNotifier) return;
+    try {
+      await options.chatSocketNotifier.publishMessage({ roomId, message });
+    } catch {
+      // The committed message remains available through room resync if a socket is unavailable.
+      logger.warn("[claims] WebSocket chat delivery failed");
+    }
   }
 
   async function queueOptionalEmail(input: {
@@ -461,6 +473,7 @@ export function createClaimUseCases(options: ClaimDependencies) {
         return { claimId: claim.id, message, notification, recipientId, roomId };
       });
 
+      await publishChatMessage(result.roomId, result.message);
       await publishWorkflowNotification({
         userId: result.recipientId,
         notification: result.notification,
@@ -544,6 +557,7 @@ export function createClaimUseCases(options: ClaimDependencies) {
       let chatNotification: NotificationRecord | null = null;
       let chatRecipientId: string | null = null;
       let chatRoomId: string | null = null;
+      let chatMessage: Awaited<ReturnType<typeof claimRepository.createMessage>> = null;
       await withTransaction(async (connection) => {
         const claim = await claimRepository.findByIdForUpdate(claimId, connection);
         const participant = claim ? await claimRepository.findParticipant(claimId, finderId, connection) : null;
@@ -597,6 +611,7 @@ export function createClaimUseCases(options: ClaimDependencies) {
             content: messageContent,
             clientMessageId: `verification-question-${questionId}-${Date.now()}`
           }, connection);
+          chatMessage = message;
           if (!message) throw new AppError("internal", "Không thể gửi câu hỏi vào phòng trao đổi");
           chatRecipientId = counterpartId(claim, finderId);
           chatRoomId = room.id;
@@ -629,6 +644,7 @@ export function createClaimUseCases(options: ClaimDependencies) {
           }
         }, connection);
       });
+      await publishChatMessage(chatRoomId, chatMessage);
       await publishWorkflowNotification({ userId: chatRecipientId, notification: chatNotification, workflow: "CHAT", roomId: chatRoomId });
       return verificationDetails(claimId, finderId);
     },
@@ -646,6 +662,7 @@ export function createClaimUseCases(options: ClaimDependencies) {
       let chatNotification: NotificationRecord | null = null;
       let chatRecipientId: string | null = null;
       let chatRoomId: string | null = null;
+      let chatMessage: Awaited<ReturnType<typeof claimRepository.createMessage>> = null;
       await withTransaction(async (connection) => {
         const claim = await claimRepository.findByIdForUpdate(claimId, connection);
         const participant = claim ? await claimRepository.findParticipant(claimId, claimantId, connection) : null;
@@ -673,6 +690,7 @@ export function createClaimUseCases(options: ClaimDependencies) {
             content: messageContent,
             clientMessageId: `verification-answer-${questionId}-${Date.now()}`
           }, connection);
+          chatMessage = message;
           if (!message) throw new AppError("internal", "Không thể gửi câu trả lời vào phòng trao đổi");
           chatRecipientId = counterpartId(claim, claimantId);
           chatRoomId = room.id;
@@ -703,6 +721,7 @@ export function createClaimUseCases(options: ClaimDependencies) {
           }
         }, connection);
       });
+      await publishChatMessage(chatRoomId, chatMessage);
       await publishWorkflowNotification({ userId: chatRecipientId, notification: chatNotification, workflow: "CHAT", roomId: chatRoomId });
       return verificationDetails(claimId, claimantId);
     },
@@ -909,6 +928,7 @@ export function createClaimUseCases(options: ClaimDependencies) {
         }
       });
       await custodyDelivery?.publish(custodyEvents);
+      await publishChatMessage(decisionRoomId, decisionMessage);
       await publishWorkflowNotification({
         userId: decisionNotificationUserId,
         notification: decisionNotification,
@@ -1145,6 +1165,7 @@ export function createClaimUseCases(options: ClaimDependencies) {
         });
         return { message: created, notification, recipientId };
       });
+      await publishChatMessage(room.id, result.message);
       await publishWorkflowNotification({
         userId: result.recipientId,
         notification: result.notification,
@@ -1189,6 +1210,7 @@ export function createClaimUseCases(options: ClaimDependencies) {
         }
         const storage = await mediaStorage.save(claimId, evidenceId, image.extension, file.buffer);
         let chatDelivery: { notification: NotificationRecord; recipientId: string; roomId: string } | null = null;
+        let chatSocketDelivery: { message: NonNullable<Awaited<ReturnType<typeof claimRepository.createMessage>>>; roomId: string } | null = null;
         await persistUpload({ operation, kind: "EVIDENCE", logger,
           unreferenced: async () => await read() === null,
           matches: async () => {
@@ -1225,6 +1247,7 @@ export function createClaimUseCases(options: ClaimDependencies) {
               const message = await claimRepository.createMessage({ roomId: room.id, senderId: userId, content: chat.content,
                 clientMessageId: chat.clientMessageId, mediaUrl: `/api/claims/${claimId}/evidence/${evidenceId}` }, connection);
               if (!message) throw new AppError("internal", "Không thể gửi ảnh");
+              chatSocketDelivery = { message, roomId: room.id };
               const recipientId = counterpartId(lockedClaim, userId);
               if (recipientId) {
                 const notification = await notificationRepository.create({ userId: recipientId, type: "CHAT_MESSAGE_RECEIVED",
@@ -1236,6 +1259,7 @@ export function createClaimUseCases(options: ClaimDependencies) {
             }
           })
         });
+        if (chatSocketDelivery) await publishChatMessage(chatSocketDelivery.roomId, chatSocketDelivery.message);
         if (chatDelivery) {
           const delivery = chatDelivery as { notification: NotificationRecord; recipientId: string; roomId: string };
           await publishWorkflowNotification({ notification: delivery.notification, userId: delivery.recipientId, workflow: "CHAT", roomId: delivery.roomId });

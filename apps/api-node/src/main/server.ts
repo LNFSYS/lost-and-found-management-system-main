@@ -1,4 +1,8 @@
+import { createServer } from "node:http";
+import jwt from "jsonwebtoken";
 import { env } from "../shared/infrastructure/config/env.js";
+import type { AccessTokenPayload } from "../shared/domain/auth.js";
+import { createChatSocketServer } from "../modules/realtime/interfaces/socket/chat-socket.server.js";
 import { createApp } from "./app.js";
 import { pool } from "./database.js";
 import { services } from "./runtime.js";
@@ -11,7 +15,17 @@ import { matchingRefreshWorkerError, type MatchingRefreshPhase } from "./matchin
 import { createBackgroundTask, createShutdownHandler } from "./background-task.js";
 
 const app = createApp();
-const server = app.listen(env.port, () => console.info(`LNFS auth API listening on http://localhost:${env.port}`));
+export const server = createServer(app);
+const chatSocketServer = createChatSocketServer({
+  server,
+  chatSocketService: services.chatSocketService,
+  frontendUrl: env.frontendUrl,
+  nodeEnv: env.nodeEnv,
+  verifyAccessToken: token => jwt.verify(token, env.jwtAccessSecret) as AccessTokenPayload,
+  validateAccessSession: session => services.authService.validateAccessSession(session),
+  authorizeRoom: async (userId, roomId) => { await services.realtimeService.authorizeRooms(userId, [roomId]); }
+});
+server.listen(env.port, () => console.info(`LNFS auth API listening on http://localhost:${env.port}`));
 const notificationEmailTask = createBackgroundTask(
   () => services.notificationEmailWorker.runOnce(),
   error => {
@@ -77,6 +91,8 @@ const shutdown = createShutdownHandler(async () => {
   if (notificationWorkerTimer) clearInterval(notificationWorkerTimer);
   if (matchingRefreshTimer) clearInterval(matchingRefreshTimer);
   const httpClosed = new Promise<void>((resolve, reject) => {
+    chatSocketServer.stop();
+    services.chatSocketService.stop();
     server.close(error => error ? reject(error) : resolve());
   });
   services.realtimeService.stop();

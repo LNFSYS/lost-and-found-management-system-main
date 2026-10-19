@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { mock } from "node:test";
-import { createServer, get } from "node:http";
+import { get } from "node:http";
 import { createNotificationEmailWorker } from "../modules/notifications/application/notification-email.worker.ts";
 
 const [entry, outcome] = process.argv.slice(2);
@@ -49,8 +49,11 @@ replace("../main/database.ts", { pool: { end: async () => {
 replace("../main/runtime.ts", { services: {
   notificationEmailWorker: emailWorker, matchingService: {},
   warehouseService: { runMaintenance: async () => { assert.equal(poolClosed, false); } },
-  realtimeService: { stop: () => { events.push("sse.stop"); } }
+  authService: { validateAccessSession: async () => true },
+  chatSocketService: { stop: () => { events.push("chat-hub.stop"); } },
+  realtimeService: { authorizeRooms: async () => [], stop: () => { events.push("sse.stop"); } }
 } });
+replace("../modules/realtime/interfaces/socket/chat-socket.server.ts", { createChatSocketServer: () => ({ stop: () => { events.push("chat-socket.stop"); } }) });
 replace("../main/warehouse-maintenance-schema.ts", { checkWarehouseMaintenanceSchema: async () => {
   await delay(90); assert.equal(poolClosed, false); events.push("warehouse.schema"); return { ready: true, missing: [] };
 } });
@@ -62,19 +65,13 @@ replace("../modules/matching/application/matching-refresh.worker.ts", { createMa
   runOnce: async () => { assert.equal(matchingStopped, true); },
   stop: async () => { matchingStopped = true; }
 }) });
-replace("../main/app.ts", { createApp: () => ({ listen: (port, callback) => {
-  const server = createServer(async (_request, response) => {
+replace("../main/app.ts", { createApp: () => async (_request, response) => {
     startHttp();
     await delay(210);
     assert.equal(poolClosed, false);
     events.push("http.completed");
     response.end("done");
-  });
-  return server.listen(port, "127.0.0.1", () => {
-    callback();
-    get(`http://127.0.0.1:${server.address().port}`, response => response.resume());
-  });
-} }) });
+  } });
 process.on("beforeExit", () => {
   assert.equal(events.filter(event => event === "pool.end").length, 1);
   if (outcome === "disabled") assert.equal(claims, 0);
@@ -83,7 +80,7 @@ process.on("beforeExit", () => {
     assert.ok(events.indexOf("pool.end") > events.indexOf("smtp.completed"));
     assert.ok(events.indexOf("pool.end") > events.indexOf(outcome === "success" ? "smtp.ack" : "smtp.cancel"));
     if (entry === "server") {
-      for (const phase of ["http.completed", "warehouse.schema", "matching.schema", "sse.stop"]) {
+      for (const phase of ["http.completed", "warehouse.schema", "matching.schema", "chat-socket.stop", "chat-hub.stop", "sse.stop"]) {
         assert.ok(events.indexOf(phase) >= 0);
         assert.ok(events.indexOf("pool.end") > events.indexOf(phase));
       }
@@ -91,4 +88,9 @@ process.on("beforeExit", () => {
   }
   console.info("shutdown_drained", JSON.stringify(events));
 });
-await import(source(`../main/${entry}.ts`));
+const imported = await import(source(`../main/${entry}.ts`));
+if (entry === "server") {
+  const address = imported.server.address();
+  assert.ok(address && typeof address === "object");
+  get(`http://127.0.0.1:${address.port}`, response => response.resume());
+}

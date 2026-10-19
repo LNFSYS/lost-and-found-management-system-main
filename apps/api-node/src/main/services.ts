@@ -18,6 +18,7 @@ import { createImageAnalysisUseCases } from "../modules/posts/application/image-
 import { createPostUseCases } from "../modules/posts/application/post.use-cases.js";
 import { createGeminiImageAnalyzer } from "../modules/posts/infrastructure/gemini-image-analyzer.js";
 import { createRealtimeUseCases } from "../modules/realtime/application/realtime.use-cases.js";
+import { createChatSocketUseCases } from "../modules/realtime/application/chat-socket.use-cases.js";
 import { createReturnFeedbackUseCases } from "../modules/returns/application/return-feedback.use-cases.js";
 import { createReportUseCases } from "../modules/reports/application/report.use-cases.js";
 import { createSystemConfigUseCases } from "../modules/system-config/application/system-config.use-cases.js";
@@ -89,6 +90,7 @@ export function createServices(persistence: Persistence, config: typeof env = en
     policy: config, emailService, withTransaction: transaction, logger: console, uploads: mediaUploads
   });
   const realtimeService = createRealtimeUseCases({ claimRepository, id, validateSession: session => authService.validateAccessSession(session) });
+  const chatSocketService = createChatSocketUseCases();
   const appointmentService = createAppointmentUseCases({ repository:persistence.appointmentRepository,transaction,id,
     hash:security.hashToken,notifications:notificationRepository,emails:notificationEmailQueue,
     realtimeNotifier: realtimeService, reminderLeadMinutes:config.appointmentReminderMinutes });
@@ -121,6 +123,7 @@ export function createServices(persistence: Persistence, config: typeof env = en
       authorizeTarget: postId => postService.getPost(postId), mediaStorage: claimMediaStorage, transaction, id, uploads: mediaUploads, logger: console }),
     claimRepository, matchingRepository, notificationRepository, custodyRequestRepository, warehouseRepository, notificationEmailQueue,
     realtimeNotifier: realtimeService,
+    chatSocketNotifier: chatSocketService,
     withTransaction: transaction, id, mediaStorage: claimMediaStorage,
     hashIdempotencyPayload: security.hashToken, logger: console, uploads: mediaUploads
   });
@@ -129,7 +132,7 @@ export function createServices(persistence: Persistence, config: typeof env = en
     appointmentService, activityService,
     notificationService, notificationEmailWorker, systemConfigService, adminUserService, adminReportingService,
     adminCatalogService, warehouseService, custodyRequestService, returnFeedbackService, matchingService,
-    postService, claimService, realtimeService, reportService, authService, geminiImageService
+    postService, claimService, realtimeService, chatSocketService, reportService, authService, geminiImageService
   };
 }
 export type ApplicationServices = ReturnType<typeof createServices>;
