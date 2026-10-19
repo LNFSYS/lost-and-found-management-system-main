@@ -1,0 +1,50 @@
+[
+  {
+    "key": "00-overview",
+    "width": 2320,
+    "height": 2590,
+    "catalogueUCs": 0,
+    "nodes": 26,
+    "relations": 32
+  },
+  {
+    "key": "01-guest",
+    "width": 1420,
+    "height": 1912,
+    "catalogueUCs": 11,
+    "nodes": 14,
+    "relations": 13
+  },
+  {
+    "key": "02-user-lost",
+    "width": 2020,
+    "height": 11018,
+    "catalogueUCs": 80,
+    "nodes": 83,
+    "relations": 79
+  },
+  {
+    "key": "03-user-finder",
+    "width": 2020,
+    "height": 12346,
+    "catalogueUCs": 91,
+    "nodes": 94,
+    "relations": 90
+  },
+  {
+    "key": "04-staff",
+    "width": 2020,
+    "height": 6708,
+    "catalogueUCs": 49,
+    "nodes": 52,
+    "relations": 50
+  },
+  {
+    "key": "05-admin",
+    "width": 2020,
+    "height": 13582,
+    "catalogueUCs": 95,
+    "nodes": 100,
+    "relations": 98
+  }
+]
