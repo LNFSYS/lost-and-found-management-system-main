@@ -22,7 +22,7 @@ apps/api-node/src/
     matching/                   explainable rule-based scoring
     claims/                     requests, consent, private room and evidence
     notifications/              in-app notification feed
-    realtime/                   WebSocket chat and SSE notification delivery
+    realtime/                   Socket.IO chat and SSE notification delivery
     warehouse/                  custody, retention and storage logs
     returns/                    feedback, idempotency and reputation
     admin/                      users, catalog, moderation, reports, audit
@@ -61,7 +61,8 @@ main            ---> factories from all outer and inner packages
 
 - Claims declares its outgoing chat notification port in `ClaimDependencies`; it does not import the realtime service implementation. The chat hub reads the message contract through claims' public application entry point. `main` wires the hub into the port.
 - Custody schedule parsing and time validation stay in the warehouse domain. Reading `custody.intake.schedule` belongs to the warehouse application loader, using the public system-config repository contract. Invalid configuration or a failed read does not silently fall back to default opening hours.
-- The WebSocket adapter receives an Origin predicate from `main`. Composition uses the same CORS policy as HTTP, keeping configuration infrastructure out of the socket interface's imports. Chat remains based on `ws`, not Socket.IO; existing message payloads and HTTP paths are unchanged.
+- The Socket.IO adapter receives an Origin predicate from `main`. Composition uses the same CORS policy as HTTP, keeping configuration infrastructure out of the socket interface's imports. Both polling and WebSocket handshakes enforce that policy. Room membership and the access session are checked at connection, before each private delivery and periodically; timeouts fail closed. JWT expiry disconnects the socket.
+- Chat now uses Socket.IO at `/api/realtime/chat-socket`, with `ready`, `chat.message` and `auth_error` events. Text/image writes still use the existing idempotent HTTP endpoints and publish only after commit; reconnect signals the Web client to resynchronize through HTTP. Notification delivery remains authenticated SSE. Old native-WebSocket clients are not protocol-compatible, so API and Web must be deployed together. See the [Socket.IO rollout notes](../runbooks/socketio-chat-rollout.md).
 
 These boundaries are checked without changing architecture rules, skipping tests or altering migration SQL. They do not add an actor goal or change custody eligibility.
 
