@@ -20,7 +20,8 @@ export function AppLayout() {
   const isAdmin = user?.roles.includes("ADMIN");
   const hasAdminWorkspace = user?.roles.some(role => role === "STAFF" || role === "ADMIN");
   const viewingOwnMatch = /^\/posts\/[^/]+\/matches$/.test(location.pathname);
-  return <div className="app-shell">
+  const viewingChat = /^\/claims(?:\/[^/]+)?\/?$/.test(location.pathname);
+  return <div className={`app-shell${viewingChat ? " app-shell--chat" : ""}`}>
     <header className="topbar">
       <Link className="brand" to="/home"><span className="brand-mark"><i>F</i><i>P</i><i>T</i></span><span>Lost &amp; Found<small>FPTU Đà Nẵng</small></span></Link>
       <nav ref={navigation} aria-label="Điều hướng chính">

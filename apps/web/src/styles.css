@@ -8396,18 +8396,20 @@ textarea {
 .claim-chat-header span i { width: 7px; height: 7px; border-radius: 50%; background: #35a369; }
 .claim-chat-header small { overflow: hidden; color: #738694; font-size: .65rem; text-overflow: ellipsis; white-space: nowrap; }
 .claim-chat-header .claim-close-button { color: #a33d34; border-color: #e0b7b2; }
-.claim-lost-safety-note { grid-column: 1 / -1; min-width: 0; padding: 12px 14px; display: flex; align-items: flex-start; gap: 10px; border-left: 3px solid #b53e36; color: #82342d; background: #fff3f1; }
-.claim-lost-safety-note > svg { width: 20px; height: 20px; flex-shrink: 0; }
+.claim-chat-header > .claim-chat-context { grid-column: 1 / -1; align-items: start; gap: 10px; }
+.claim-chat-header > .claim-chat-context--with-safety { grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 12px 16px; }
+.claim-chat-review { min-width: 0; display: grid; gap: 3px; }
+.claim-lost-safety-note { min-width: 0; padding: 10px 12px; display: flex; align-items: flex-start; gap: 8px; border-left: 3px solid #b53e36; color: #82342d; background: #fff3f1; }
+.claim-lost-safety-note > svg { width: 18px; height: 18px; flex-shrink: 0; }
 .claim-lost-safety-note > div { min-width: 0; }
-.claim-lost-safety-note strong { display: block; color: #82342d; font-size: .8rem; line-height: 1.5; }
-.claim-lost-safety-note p { margin: 4px 0 0; font-size: .75rem; line-height: 1.6; overflow-wrap: anywhere; }
+.claim-lost-safety-note strong { display: block; color: #82342d; font-size: 13px; line-height: 1.45; }
+.claim-lost-safety-note p { margin: 4px 0 0; font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
 .claim-private-banner { margin: 12px 20px 0; padding: 10px 12px; display: flex; align-items: center; gap: 10px; border: 1px solid #d4e3ec; border-left: 3px solid var(--fpt-blue); background: #f6fafc; }
 .claim-private-banner > svg { width: 18px; color: var(--fpt-blue); }
 .claim-private-banner > div { display: grid; gap: 2px; }
 .claim-private-banner strong { color: var(--ink-soft); font-size: .72rem; }
 .claim-private-banner span { color: #758896; font-size: .64rem; }
 .claim-chat-scroll { min-height: 0; overflow-y: auto; display: flex; flex-direction: column; overflow-x: hidden; }
-.claim-chat-header > .claim-chat-review { grid-column: 1 / -1; }
 .claim-chat-review > .claim-history-link { min-height: 34px; padding: 6px 0; display: inline-flex; align-items: center; gap: 6px; color: var(--fpt-blue); font-size: 13px; line-height: 1.4; font-weight: 600; text-decoration: none; }
 .claim-chat-review > .claim-history-link:hover { text-decoration: underline; }
 .claim-chat-review .review-panel { padding: 10px 0 0 10px; border-top: 1px solid #dfe7ec; gap: 8px; }
@@ -8426,6 +8428,8 @@ textarea {
 .review-tools svg { width: 16px; height: 16px; flex-shrink: 0; }
 .claim-chat-review .review-tools > .review-appointment-link { color: var(--fpt-blue); border-color: #bfd5e8; }
 .claim-chat-review .review-tools > button:hover, .claim-chat-review .review-tools > a:hover { background: #f2f7fb; border-color: #8aafc9; }
+.claim-chat-context--with-safety .review-panel { padding-top: 0; border-top: 0; gap: 6px; }
+.claim-chat-context--with-safety .review-progress { gap: 2px 10px; }
 .review-details-modal > header h3 { margin: 0; font-size: 18px; }
 .review-details-modal > p { font-size: 14px; line-height: 1.6; overflow-wrap: anywhere; }
 .review-details-modal dl { margin: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
@@ -8696,6 +8700,18 @@ textarea {
   .decision-modal-backdrop, .evidence-modal-backdrop { padding: 10px; }
   .decision-modal > footer { display: grid; grid-template-columns: 1fr 1fr; }
 }
+@media (min-width: 1121px) {
+  .app-shell--chat { height: 100dvh; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+  .app-shell--chat > .topbar, .app-shell--chat > .offline-banner { flex-shrink: 0; }
+  .app-shell--chat > .workspace { min-height: 0; flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+  .app-shell--chat .claims-page { min-height: 0; flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+  .app-shell--chat .claims-page > .claim-alert { flex-shrink: 0; }
+  .app-shell--chat .claims-layout { height: auto; min-height: 0; flex: 1; }
+  .app-shell--chat .claim-chat { grid-template-rows: minmax(0, auto) minmax(80px, 1fr) auto; }
+  .app-shell--chat .claim-chat-header { min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+  .app-shell--chat .claim-chat-scroll, .app-shell--chat .claim-list, .app-shell--chat .claim-inspector { overscroll-behavior: contain; }
+}
+
 /* Moderation report lifecycle */
 .reports-page { max-width: 1280px; margin: 0 auto; padding: 28px; }
 .reports-heading { display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #dbe3ec; padding-bottom: 20px; }
