@@ -1,3 +1,5 @@
+import { io, type Socket } from "socket.io-client";
+
 export type Role = "USER" | "STUDENT" | "LECTURER" | "STAFF" | "ADMIN";
 export interface CurrentUser {
   id: string;
@@ -870,75 +872,95 @@ function subscribeRealtime(handlers: RealtimeHandlers) {
 function subscribeClaimChatSocket(handlers: ClaimChatSocketHandlers) {
   const generation = sessionGeneration;
   let stopped = false;
-  let activeSocket: WebSocket | null = null;
+  let activeSocket: Socket | null = null;
   let retryTimer: number | null = null;
+  let finishWait: (() => void) | null = null;
+  let cancelConnection: (() => void) | null = null;
   let retryDelay = 500;
   let wasConnected = false;
+  type CloseCode = "UNAUTHENTICATED" | "FORBIDDEN" | "INVALID_REQUEST" | "CONNECTION_LOST";
 
   function wait(milliseconds: number) {
     return new Promise<void>(resolve => {
       if (stopped) return resolve();
+      finishWait = resolve;
       retryTimer = window.setTimeout(() => {
         retryTimer = null;
+        finishWait = null;
         resolve();
       }, milliseconds);
     });
   }
 
   function connectOnce() {
-    return new Promise<{ code: number; connected: boolean }>(resolve => {
-      const socketUrl = new URL(`${API_URL.replace(/\/+$/, "")}/realtime/chat-socket`, window.location.href);
-      socketUrl.protocol = socketUrl.protocol === "https:" ? "wss:" : "ws:";
-      const socket = new WebSocket(socketUrl);
+    return new Promise<{ code: CloseCode; connected: boolean }>(resolve => {
+      const endpoint = new URL(`${API_URL.replace(/\/+$/, "")}/realtime/chat-socket`, window.location.href);
+      const socket = io(endpoint.origin, {
+        path: endpoint.pathname,
+        auth: { accessToken, roomId: handlers.roomId },
+        withCredentials: true,
+        autoConnect: false,
+        forceNew: true,
+        reconnection: false,
+        timeout: 15_000
+      });
       activeSocket = socket;
       let connected = false;
-      let authenticationFailure: "UNAUTHENTICATED" | "FORBIDDEN" | "INVALID_REQUEST" | null = null;
-      const connectionTimeout = window.setTimeout(() => {
-        try { socket.close(); } catch { /* The handshake may already have ended. */ }
-      }, 15_000);
-
-      socket.onopen = () => {
-        void (async () => {
-          if (!accessToken && !await refreshSession()) { socket.close(); return; }
-          if (stopped || generation !== sessionGeneration || !accessToken) { socket.close(); return; }
-          socket.send(JSON.stringify({ type: "authenticate", accessToken, roomId: handlers.roomId }));
-        })().catch(() => socket.close());
-      };
-
-      socket.onmessage = event => {
-        if (typeof event.data !== "string") return;
-        let value: unknown;
-        try { value = JSON.parse(event.data); } catch { return; }
-        if (!value || typeof value !== "object") return;
-        const payload = value as Record<string, unknown>;
-        if (payload.type === "auth_error") {
-          if (payload.code === "UNAUTHENTICATED" || payload.code === "FORBIDDEN" || payload.code === "INVALID_REQUEST") {
-            authenticationFailure = payload.code;
-          }
-          return;
-        }
-        if (payload.type === "ready") {
-          window.clearTimeout(connectionTimeout);
-          connected = true;
-          retryDelay = 500;
-          if (wasConnected) handlers.onReconnected?.();
-          else handlers.onConnected?.();
-          wasConnected = true;
-          return;
-        }
-        if (payload.type === "chat.message" && payload.roomId === handlers.roomId && payload.message && typeof payload.message === "object") {
-          handlers.onMessage?.(payload.message as ClaimMessage);
-        }
-      };
-
-      socket.onclose = event => {
-        window.clearTimeout(connectionTimeout);
+      let ready = false;
+      let authenticationFailure: CloseCode | null = null;
+      let settled = false;
+      const current = () => !stopped && !settled && generation === sessionGeneration;
+      const readyTimeout = window.setTimeout(() => finish("CONNECTION_LOST"), 15_000);
+      const finish = (code: CloseCode) => {
+        if (settled) return;
+        settled = true;
+        window.clearTimeout(readyTimeout);
+        if (cancelConnection === cancel) cancelConnection = null;
         if (activeSocket === socket) activeSocket = null;
-        if (authenticationFailure === "FORBIDDEN") resolve({ code: 4403, connected });
-        else if (authenticationFailure === "INVALID_REQUEST") resolve({ code: 4400, connected });
-        else resolve({ code: authenticationFailure === "UNAUTHENTICATED" ? 4401 : event.code, connected });
+        socket.removeAllListeners();
+        socket.disconnect();
+        resolve({ code, connected });
       };
-      socket.onerror = () => { /* The close event drives the retry loop. */ };
+      const cancel = () => finish("CONNECTION_LOST");
+      cancelConnection = cancel;
+
+      socket.on("connect", () => {
+        if (!current()) { finish("CONNECTION_LOST"); return; }
+        connected = true;
+      });
+      socket.on("ready", (payload: unknown) => {
+        if (!current() || ready || !payload || typeof payload !== "object" || (payload as Record<string, unknown>).roomId !== handlers.roomId) return;
+        ready = true;
+        window.clearTimeout(readyTimeout);
+        retryDelay = 500;
+        if (wasConnected) handlers.onReconnected?.();
+        else handlers.onConnected?.();
+        wasConnected = true;
+      });
+      socket.on("auth_error", (payload: unknown) => {
+        if (!payload || typeof payload !== "object") return;
+        const code = (payload as Record<string, unknown>).code;
+        if (code === "UNAUTHENTICATED" || code === "FORBIDDEN" || code === "INVALID_REQUEST") finish(code);
+      });
+      socket.on("chat.message", (payload: unknown) => {
+        if (!current() || !ready || !payload || typeof payload !== "object") return;
+        const event = payload as Record<string, unknown>;
+        if (event.roomId === handlers.roomId && event.message && typeof event.message === "object") {
+          handlers.onMessage?.(event.message as ClaimMessage);
+        }
+      });
+      socket.on("connect_error", error => {
+        const code = (error as Error & { data?: { code?: unknown } }).data?.code;
+        if (code === "UNAUTHENTICATED" || code === "FORBIDDEN" || code === "INVALID_REQUEST") authenticationFailure = code;
+        finish(authenticationFailure ?? "CONNECTION_LOST");
+      });
+      socket.on("disconnect", () => finish(authenticationFailure ?? "CONNECTION_LOST"));
+
+      if (stopped || generation !== sessionGeneration || !accessToken) {
+        finish("UNAUTHENTICATED");
+        return;
+      }
+      socket.connect();
     });
   }
 
@@ -950,8 +972,8 @@ function subscribeClaimChatSocket(handlers: ClaimChatSocketHandlers) {
       }
       const result = await connectOnce();
       if (stopped || generation !== sessionGeneration) return;
-      if (result.code === 4403 || result.code === 4400) return;
-      if (result.code === 4401) {
+      if (result.code === "FORBIDDEN" || result.code === "INVALID_REQUEST") return;
+      if (result.code === "UNAUTHENTICATED") {
         const session = await refreshSession().catch(() => null);
         if (!session) return;
       }
@@ -964,7 +986,10 @@ function subscribeClaimChatSocket(handlers: ClaimChatSocketHandlers) {
     stopped = true;
     if (retryTimer !== null) window.clearTimeout(retryTimer);
     retryTimer = null;
-    try { activeSocket?.close(1000, "Room changed"); } catch { /* The socket is already closed. */ }
+    finishWait?.();
+    finishWait = null;
+    cancelConnection?.();
+    try { activeSocket?.disconnect(); } catch { /* The socket is already closed. */ }
     activeSocket = null;
   };
 }
