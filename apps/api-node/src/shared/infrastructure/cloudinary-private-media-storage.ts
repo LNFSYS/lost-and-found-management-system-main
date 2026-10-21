@@ -4,10 +4,28 @@ import { AppError } from "../domain/app-error.js";
 import { mediaContentType, type ImageFormat } from "../domain/media.js";
 
 type CloudinaryClient = typeof cloudinary;
-type Fetcher = (input: string) => Promise<Response>;
+type Fetcher = (input: string, init?: RequestInit) => Promise<Response>;
 type CloudinaryConfig = { cloudName: string | null; apiKey: string | null; apiSecret: string | null; };
 type ConfiguredCloudinary = { cloudName: string; apiKey: string; apiSecret: string; };
 type MediaNamespace = "post-media" | "claim-evidence" | "warehouse-proof";
+const DELIVERY_TIMEOUT_MS = 15_000;
+
+function deliveryFailure(error: unknown): AppError {
+  const cause = error instanceof Error ? (error as Error & { cause?: unknown }).cause : undefined;
+  const code = typeof cause === "object" && cause !== null && "code" in cause ? String(cause.code) : undefined;
+  const timedOut = (error instanceof Error && ["TimeoutError", "AbortError"].includes(error.name))
+    || code === "ETIMEDOUT" || code === "UND_ERR_CONNECT_TIMEOUT";
+  return new AppError(timedOut ? "upstream_timeout" : "upstream_failure", timedOut
+    ? "Dich vu anh phan hoi qua cham, vui long thu lai"
+    : "Dich vu anh tam thoi khong kha dung, vui long thu lai");
+}
+
+function deliveryCauseCode(error: unknown): string | undefined {
+  const cause = error instanceof Error ? (error as Error & { cause?: unknown }).cause : undefined;
+  if (typeof cause !== "object" || cause === null || !("code" in cause)) return undefined;
+  const code = String(cause.code);
+  return /^[A-Z][A-Z0-9_]{1,40}$/.test(code) ? code : undefined;
+}
 
 function isConfigured(config: CloudinaryConfig): config is ConfiguredCloudinary {
   return Boolean(config.cloudName && config.apiKey && config.apiSecret);
@@ -77,9 +95,24 @@ export function createCloudinaryPrivateMediaStorage(options: {
       resource_type: "image",
       format: image
     });
-    const response = await fetcher(deliveryUrl);
-    if (!response.ok) throw new AppError("not_found", "Khong the tai anh media");
-    return { body: Buffer.from(await response.arrayBuffer()), contentType: mediaContentType(image) };
+    let response: Response;
+    try {
+      response = await fetcher(deliveryUrl, { signal: AbortSignal.timeout(DELIVERY_TIMEOUT_MS) });
+    } catch (error) {
+      console.warn("media_delivery_failed", { namespace: options.namespace, stage: "fetch", causeCode: deliveryCauseCode(error) });
+      throw deliveryFailure(error);
+    }
+    if (!response.ok) {
+      console.warn("media_delivery_failed", { namespace: options.namespace, stage: "response", status: response.status });
+      throw new AppError(response.status === 404 ? "not_found" : "upstream_failure", response.status === 404
+        ? "Khong the tai anh media" : "Dich vu anh tam thoi khong kha dung, vui long thu lai");
+    }
+    try {
+      return { body: Buffer.from(await response.arrayBuffer()), contentType: mediaContentType(image) };
+    } catch (error) {
+      console.warn("media_delivery_failed", { namespace: options.namespace, stage: "body", causeCode: deliveryCauseCode(error) });
+      throw deliveryFailure(error);
+    }
   }
 
   return {

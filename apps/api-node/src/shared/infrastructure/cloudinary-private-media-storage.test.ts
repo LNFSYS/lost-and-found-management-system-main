@@ -11,7 +11,7 @@ test("provider existing response requires protected delivery and never invents u
     upload_stream: (options: any, callback: any) => ({ end() { assert.equal(options.overwrite, false); callback(null, { existing: true }); } })
   } } as unknown as typeof cloudinary;
   const storage = createCloudinaryPrivateMediaStorage({ config: { cloudName: "test", apiKey: "test", apiSecret: "test" }, namespace: "warehouse-proof", client,
-    fetcher: async () => { reads++; return { ok: available, arrayBuffer: async () => new ArrayBuffer(4) } as Response; } });
+    fetcher: async () => { reads++; return { ok: available, status: available ? 200 : 503, arrayBuffer: async () => new ArrayBuffer(4) } as Response; } });
   assert.equal((await storage.save(owner, id, "jpg", Buffer.alloc(4))).publicId, `lnfs/warehouse-proof/${owner}/${id}`);
   available = false;
   await assert.rejects(storage.save(owner, id, "jpg", Buffer.alloc(4)));
@@ -110,4 +110,46 @@ test("Cloudinary private media storage uses the local fallback when credentials 
 
   assert.equal(saved, true);
   assert.equal(result.secureUrl, "/uploads/post-media/owner/media.jpg");
+});
+
+test("private delivery network failure is retryable, does not read local fallback, and does not log signed URLs", async (t) => {
+  const warnings: unknown[][] = [];
+  t.mock.method(console, "warn", (...args: unknown[]) => { warnings.push(args); });
+  let fallbackReads = 0;
+  const storage = createCloudinaryPrivateMediaStorage({
+    config: { cloudName: "test", apiKey: "test", apiSecret: "test" }, namespace: "warehouse-proof",
+    client: { config() {}, url: () => "https://signed.example/private?secret=never-log" } as unknown as typeof cloudinary,
+    fallback: { save: async () => { throw new Error("Unused"); }, resolve: async () => { fallbackReads++; throw new Error("Must not read local"); }, remove: async () => {} },
+    fetcher: async (_url, init) => {
+      assert.ok(init?.signal);
+      throw new TypeError("fetch failed", { cause: Object.assign(new Error("reset"), { code: "ECONNRESET" }) });
+    }
+  });
+
+  await assert.rejects(storage.resolve("cloudinary://warehouse-proof/11111111-1111-4111-8111-111111111111/22222222-2222-4222-8222-222222222222.jpg"),
+    (error: unknown) => (error as { code: string }).code === "upstream_failure");
+  assert.equal(fallbackReads, 0);
+  assert.equal(warnings.length, 1);
+  assert.equal((warnings[0][1] as { causeCode: string }).causeCode, "ECONNRESET");
+  assert.doesNotMatch(JSON.stringify(warnings), /signed\.example|never-log/);
+});
+
+test("private delivery distinguishes timeout, missing image, provider errors, and failed response body", async (t) => {
+  t.mock.method(console, "warn", () => {});
+  const reference = "cloudinary://warehouse-proof/11111111-1111-4111-8111-111111111111/22222222-2222-4222-8222-222222222222.jpg";
+  const createStorage = (fetcher: (input: string, init?: RequestInit) => Promise<Response>) => createCloudinaryPrivateMediaStorage({
+    config: { cloudName: "test", apiKey: "test", apiSecret: "test" }, namespace: "warehouse-proof",
+    client: { config() {}, url: () => "https://signed.example/private" } as unknown as typeof cloudinary,
+    fetcher
+  });
+  for (const [fetcher, expected] of [
+    [async () => { throw new DOMException("timed out", "TimeoutError"); }, "upstream_timeout"],
+    [async () => ({ ok: false, status: 404 }) as Response, "not_found"],
+    [async () => ({ ok: false, status: 503 }) as Response, "upstream_failure"],
+    [async () => ({ ok: false, status: 403 }) as Response, "upstream_failure"],
+    [async () => ({ ok: true, arrayBuffer: async () => { throw new TypeError("body interrupted"); } }) as unknown as Response, "upstream_failure"]
+  ] as const) {
+    await assert.rejects(createStorage(fetcher).resolve(reference),
+      (error: unknown) => (error as { code: string }).code === expected);
+  }
 });
