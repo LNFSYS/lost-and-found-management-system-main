@@ -22,6 +22,7 @@ export function NotificationCenter() {
   const navigate = useNavigate();
   const centerRef = useRef<HTMLDivElement>(null);
   const knownIds = useRef<Set<string>>(new Set());
+  const readRequests = useRef<Set<string>>(new Set());
   const realtimeVersion = useRef(0);
   const [items, setItems] = useState<AppNotification[]>([]);
   const [unreadTotal, setUnreadTotal] = useState(0);
@@ -105,19 +106,24 @@ export function NotificationCenter() {
   async function openNotification(item: AppNotification) {
     setOpen(false);
     setToast(null);
-    if (!item.isRead) {
-      setItems((current) => current.map((entry) => entry.id === item.id ? { ...entry, isRead: true } : entry));
-      setUnreadTotal((current) => Math.max(0, current - 1));
-      void api.markNotificationRead(item.id).catch(() => undefined);
-    }
     navigate(notificationDestination(item));
+    if (!item.isRead && !readRequests.current.has(item.id)) {
+      readRequests.current.add(item.id);
+      void api.markNotificationRead(item.id).then(() => {
+        realtimeVersion.current++;
+        setItems((current) => current.map((entry) => entry.id === item.id ? { ...entry, isRead: true } : entry));
+        setUnreadTotal((current) => Math.max(0, current - 1));
+      }).catch(() => undefined).finally(() => readRequests.current.delete(item.id));
+    }
   }
 
   function markAllRead() {
     if (!unreadCount) return;
-    setItems((current) => current.map((item) => ({ ...item, isRead: true })));
-    setUnreadTotal(0);
-    void api.markAllNotificationsRead().catch(() => undefined);
+    void api.markAllNotificationsRead().then(() => {
+      realtimeVersion.current++;
+      setItems((current) => current.map((item) => ({ ...item, isRead: true })));
+      setUnreadTotal(0);
+    }).catch(() => undefined);
   }
 
   return <>

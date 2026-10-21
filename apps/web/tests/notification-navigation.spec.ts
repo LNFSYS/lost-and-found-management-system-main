@@ -134,3 +134,17 @@ for (const missingTarget of [notification("UNKNOWN", "unknown-1"), notification(
     await expect.poll(() => reads.length).toBe(1);
   });
 }
+
+test("bell keeps a notification unread when offline prevents its destination from loading", async ({ page, context }) => {
+  const { reads } = await prepare(page, notification("CLAIM", "claim-1"));
+  await context.setOffline(true);
+  await page.evaluate(() => window.dispatchEvent(new Event("offline")));
+  await page.locator(".notification-trigger").click();
+  await page.locator(".notification-item").click();
+
+  await expect(page).toHaveURL(/\/claims\/claim-1$/);
+  await expect.poll(() => reads.length).toBe(0);
+  await page.locator(".notification-trigger").click();
+  await expect(page.locator(".notification-item.unread .notification-item__dot")).toHaveCount(1);
+  await context.setOffline(false);
+});
