@@ -1,5 +1,5 @@
 import { AlertTriangle, ChevronDown, ChevronUp, Clock3, FileCheck2, FileWarning, Image, LockKeyhole, MessageCircle, Plus, RefreshCw, Search, Send, ShieldCheck, X } from "lucide-react";
-import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { ClaimEvidencePanel } from "../components/claim-evidence-panel";
 import { ClaimItemPanel } from "../components/claim-item-panel";
@@ -98,7 +98,7 @@ function MessageBubble({ message, own, user, onReplyQuestion }: { message: Claim
   </div>;
 }
 
-function DirectMessageDraft({ postId, sourceFoundPostId, viewer }: { postId: string; sourceFoundPostId?: string; viewer?: { id: string; fullName: string } }) {
+function DirectMessageDraft({ postId, sourceFoundPostId, viewer, onClaimCreated }: { postId: string; sourceFoundPostId?: string; viewer?: { id: string; fullName: string }; onClaimCreated: (claim: ClaimRecord, message: ClaimMessage) => void }) {
   const navigate = useNavigate();
   const [post, setPost] = useState<PostSummary | null>(null);
   const [loading, setLoading] = useState(true);
@@ -106,13 +106,10 @@ function DirectMessageDraft({ postId, sourceFoundPostId, viewer }: { postId: str
   const [optimisticMessage, setOptimisticMessage] = useState<ClaimMessage | null>(null);
   const [sending, setSending] = useState(false);
   const [contactCheckId, setContactCheckId] = useState<string | null>(null);
+  const [contactQuestions, setContactQuestions] = useState<string[]>([]);
   const [error, setError] = useState("");
   const pendingMessage = useRef<{ content: string; clientMessageId: string } | null>(null);
   const draftGeneration = useRef(0);
-  const openingContact = useRef(false);
-  const contactRequest = useRef<{ checkId: string; key: string; questions: string[] } | null>(null);
-  const currentDraft = useRef(draft);
-  currentDraft.current = draft;
   const draftClaim = useMemo<ClaimRecord | null>(() => {
     if (!post) return null;
     const currentUser = viewer ?? { id: "draft-user", fullName: "Bạn" };
@@ -163,6 +160,7 @@ function DirectMessageDraft({ postId, sourceFoundPostId, viewer }: { postId: str
     setLoading(true);
     setError("");
     setContactCheckId(null);
+    setContactQuestions([]);
     setOptimisticMessage(null);
     pendingMessage.current = null;
     void (async () => {
@@ -213,8 +211,13 @@ function DirectMessageDraft({ postId, sourceFoundPostId, viewer }: { postId: str
       const result = await api.createDirectMessage(post.id, content, retry.clientMessageId, sourceFoundPostId, contactCheckId ?? undefined);
       if (generation !== draftGeneration.current) return;
       pendingMessage.current = null;
-      setOptimisticMessage(null);
-      navigate(`/claims/${result.claim.id}`, { replace: true });
+      onClaimCreated(result.claim, result.message);
+      navigate(`/claims/${result.claim.id}`, { replace: true, state: {
+        claimId: result.claim.id,
+        contactQuestions: post.type === "LOST" ? contactQuestions : [],
+        initialClaim: result.claim,
+        initialMessage: result.message
+      } });
     } catch (reason) {
       if (generation === draftGeneration.current) {
         setOptimisticMessage(null);
@@ -226,24 +229,10 @@ function DirectMessageDraft({ postId, sourceFoundPostId, viewer }: { postId: str
     }
   }
 
-  async function openContact(checkId: string | null, questions?: string[]) {
+  function openContact(checkId: string | null, questions?: string[]) {
     setContactCheckId(checkId);
-    if (!checkId || !post || openingContact.current) return;
-    const request = contactRequest.current?.checkId === checkId ? contactRequest.current
-      : { checkId, key: crypto.randomUUID(), questions: questions ?? [] };
-    contactRequest.current = request;
-    openingContact.current = true; setSending(true); setError("");
-    const generation = draftGeneration.current;
-    try {
-      const created = await api.createClaim({ postId: post.id, contactCheckId: checkId, requestKey: request.key, sourceFoundPostId });
-      if (generation !== draftGeneration.current) return;
-      navigate(`/claims/${created.id}`, { replace: true, state: { claimId: created.id, contactQuestions: request.questions, initialDraft: currentDraft.current } });
-    } catch (reason) {
-      if (generation === draftGeneration.current) setError(reason instanceof Error ? reason.message : "Không thể mở cuộc trò chuyện");
-    } finally {
-      openingContact.current = false;
-      if (generation === draftGeneration.current) setSending(false);
-    }
+    setContactQuestions(checkId ? questions ?? [] : []);
+    setError("");
   }
 
   if (loading) return <section className="claim-workspace-state"><RefreshCw className="is-spinning" /><h2>Đang mở khung soạn tin nhắn...</h2></section>;
@@ -260,7 +249,7 @@ function DirectMessageDraft({ postId, sourceFoundPostId, viewer }: { postId: str
       <div className="claim-chat-scroll">
         {post.type === "LOST" && <LostContactPhotoGate key={post.id} postId={post.id} disabled={sending} onReady={(id, questions) => void openContact(id, questions)} />}
         {error && <p className="field-error contact-draft-error" role="alert">{error}</p>}
-        {post.type === "LOST" ? <div className="claim-private-banner"><MessageCircle /><div><strong>{sending ? "Đang mở cuộc trò chuyện..." : "Đối chiếu ảnh để mở cuộc trò chuyện"}</strong>{error && contactCheckId && <button type="button" disabled={sending} onClick={() => void openContact(contactCheckId)}>Thử mở lại</button>}</div></div>
+        {post.type === "LOST" ? <div className="claim-private-banner"><MessageCircle /><div><strong>{sending ? "Đang gửi tin nhắn đầu tiên..." : "Cuộc trò chuyện chưa được lưu"}</strong><span>{contactCheckId ? "Ảnh đã đạt yêu cầu. Cuộc trò chuyện chỉ được tạo khi tin nhắn đầu tiên gửi thành công." : "Đối chiếu ảnh để bật gửi tin nhắn. Cuộc trò chuyện chỉ được tạo khi tin nhắn đầu tiên gửi thành công."}</span></div></div>
           : <div className="claim-private-banner"><MessageCircle /><div><strong>Cuộc trò chuyện chưa được lưu</strong><span>Chỉ khi bạn gửi tin nhắn đầu tiên, cuộc trò chuyện mới xuất hiện trong danh sách.</span></div></div>}
         <div className="claim-messages">{optimisticMessage ? <MessageBubble message={optimisticMessage} own user={viewer} /> : <div className="claim-messages__empty"><MessageCircle /><span>Chưa có tin nhắn.</span></div>}</div>
       </div>
@@ -323,6 +312,7 @@ export function ClaimsPage() {
   const pendingQuestion = useRef<{ question: string; key: string } | null>(null);
   const sendInFlight = useRef(false);
   const roomRequest = useRef<{ generation: number; controller: AbortController | null }>({ generation: 0, controller: null });
+  const claimListRequest = useRef(0);
   const verificationRequest = useRef<{ controller: AbortController | null; blocked: boolean }>({ controller: null, blocked: false });
   const selectedClaimId = useRef<string | undefined>(claimId);
   const messageCursorRef = useRef<MessageCursor | null>(null);
@@ -332,6 +322,19 @@ export function ClaimsPage() {
   const pendingWithdrawal = useRef<string | null>(null);
   const roomSyncInFlight = useRef(false);
   const syncAgain = useRef(false);
+
+  function keepNewConversationVisible(newClaim: ClaimRecord, firstMessage: ClaimMessage) {
+    const visibleClaim: ClaimRecord = {
+      ...newClaim,
+      conversation: {
+        lastMessage: firstMessage.content,
+        lastMessageAt: firstMessage.createdAt,
+        unreadCount: 0,
+        custodyEscalated: newClaim.conversation?.custodyEscalated ?? false
+      }
+    };
+    setClaims(current => [visibleClaim, ...current.filter(item => item.id !== visibleClaim.id)]);
+  }
 
   function isCurrentRoom(id: string, generation: number) {
     return selectedClaimId.current === id && roomRequest.current.generation === generation;
@@ -352,10 +355,11 @@ export function ClaimsPage() {
 
   useEffect(() => {
     let active = true;
+    const requestId = ++claimListRequest.current;
     setLoading(true);
     setError("");
     api.listClaims({ page: 1, pageSize: 50 }).then((result) => {
-      if (!active) return;
+      if (!active || requestId !== claimListRequest.current) return;
       const sortedClaims = result.items.sort((left, right) => 
         (right.conversation?.lastMessageAt ?? "").localeCompare(left.conversation?.lastMessageAt ?? "") || 
         right.id.localeCompare(left.id)
@@ -364,7 +368,9 @@ export function ClaimsPage() {
       setClaimPage(result.page);
       setClaimHasMore(result.hasMore);
       if (!claimId && !composePostId && sortedClaims[0]) navigate(`/claims/${sortedClaims[0].id}`, { replace: true });
-    }).catch((failure: Error) => { if (active) setError(failure.message); }).finally(() => { if (active) setLoading(false); });
+    }).catch((failure: Error) => { if (active && requestId === claimListRequest.current) setError(failure.message); }).finally(() => {
+      if (active && requestId === claimListRequest.current) setLoading(false);
+    });
     return () => { active = false; };
   }, [claimId, composePostId, navigate]);
 
@@ -472,6 +478,8 @@ export function ClaimsPage() {
       if (!silent) void loadVerification(id);
     } catch (failure) {
       if (!isCurrent() || (failure instanceof Error && failure.name === "AbortError")) return;
+      // The first-message response already seeded the room; keep it visible if this background refresh fails.
+      if (silent) return;
       setClaim(null);
       setMessages([]);
       setEvidence([]);
@@ -513,21 +521,59 @@ export function ClaimsPage() {
   }
 
   useEffect(() => {
+    let active = true;
+    const reloadAfterReconnect = () => {
+      if (!navigator.onLine) return;
+      const requestId = ++claimListRequest.current;
+      setLoading(true);
+      setError("");
+      void api.listClaims({ page: 1, pageSize: 50 }).then((result) => {
+        if (!active || requestId !== claimListRequest.current) return;
+        const sortedClaims = result.items.sort((left, right) =>
+          (right.conversation?.lastMessageAt ?? "").localeCompare(left.conversation?.lastMessageAt ?? "") ||
+          right.id.localeCompare(left.id)
+        );
+        setClaims(sortedClaims);
+        setClaimPage(result.page);
+        setClaimHasMore(result.hasMore);
+        if (!claimId && !composePostId && sortedClaims[0]) navigate(`/claims/${sortedClaims[0].id}`, { replace: true });
+      }).catch((failure: Error) => {
+        if (active && requestId === claimListRequest.current) setError(failure.message);
+      }).finally(() => {
+        if (active && requestId === claimListRequest.current) setLoading(false);
+      });
+
+      if (claimId) void loadClaimRoom(claimId);
+    };
+    window.addEventListener("online", reloadAfterReconnect);
+    return () => {
+      active = false;
+      window.removeEventListener("online", reloadAfterReconnect);
+    };
+  }, [claimId, composePostId, navigate]);
+
+  useEffect(() => {
+    const hasClaimHandoff = Boolean(claimId && location.state?.claimId === claimId);
+    const handoffClaim = hasClaimHandoff && location.state?.initialClaim?.id === claimId
+      ? location.state.initialClaim as ClaimRecord : null;
+    const handoffMessage = handoffClaim && location.state?.initialMessage?.id
+      ? location.state.initialMessage as ClaimMessage : null;
     selectedClaimId.current = claimId;
     roomRequest.current.generation += 1;
     roomRequest.current.controller?.abort();
     roomRequest.current.controller = null;
     verificationRequest.current.controller?.abort();
     verificationRequest.current = { controller: null, blocked: false };
-    setClaim(null);
-    setMessages([]);
+    setRoomLoading(false);
+    setClaim(handoffClaim);
+    setMessages(handoffMessage ? [handoffMessage] : []);
     setEvidence([]);
     setVerification(null);
     setVerificationLoading(false);
     setVerificationError("");
     setVerificationTemplates(null);
     updateMessageCursor(null);
-    setMessageDraft(location.state?.claimId === claimId ? location.state?.initialDraft ?? "" : "");
+    setMessageDraft(claimId && location.state?.claimId === claimId ? location.state?.initialDraft ?? "" : "");
     setChatFile(null); setEvidenceUploadRequest(0);
     setCheckedQuestions(null);
     setQuestionsExpanded(true);
@@ -546,14 +592,26 @@ export function ClaimsPage() {
     pendingWithdrawal.current = null;
     roomSyncInFlight.current = false;
     syncAgain.current = false;
-    if (claimId) void loadClaimRoom(claimId);
+    if (claimId) void loadClaimRoom(claimId, Boolean(handoffClaim && handoffMessage));
     return () => {
       roomRequest.current.generation += 1;
       selectedClaimId.current = undefined;
       roomRequest.current.controller?.abort();
       verificationRequest.current.controller?.abort();
     };
-  }, [claimId, user?.id]);
+  }, [claimId, location.state, user?.id]);
+
+  useLayoutEffect(() => {
+    const hasClaimHandoff = Boolean(claimId && location.state?.claimId === claimId);
+    const initialClaim = hasClaimHandoff && location.state?.initialClaim?.id === claimId
+      ? location.state.initialClaim as ClaimRecord : null;
+    const initialMessage = initialClaim && location.state?.initialMessage?.id
+      ? location.state.initialMessage as ClaimMessage : null;
+    if (!claimId || !initialClaim || !initialMessage) return;
+    setClaim(initialClaim);
+    setMessages([initialMessage]);
+    setRoomLoading(false);
+  }, [claimId, location.state]);
 
   useEffect(() => {
     const roomId = claim?.room?.id;
@@ -824,14 +882,14 @@ export function ClaimsPage() {
         <ClaimList claims={visibleClaims} userId={user?.id} onSelect={(id) => navigate(`/claims/${id}`)} />
         {claimHasMore && <button className="claim-load-older claim-load-claims" type="button" disabled={loadingMoreClaims} onClick={() => void loadMoreClaims()}><RefreshCw className={loadingMoreClaims ? "is-spinning" : ""} /> {loadingMoreClaims ? "Đang tải..." : "Xem thêm"}</button>}
       </aside>
-      <DirectMessageDraft key={`${composePostId}:${searchParams.get("sourceFoundPostId") ?? ""}`} postId={composePostId} sourceFoundPostId={searchParams.get("sourceFoundPostId") ?? undefined} viewer={user ?? undefined} />
+      <DirectMessageDraft key={`${composePostId}:${searchParams.get("sourceFoundPostId") ?? ""}`} postId={composePostId} sourceFoundPostId={searchParams.get("sourceFoundPostId") ?? undefined} viewer={user ?? undefined} onClaimCreated={keepNewConversationVisible} />
     </section>
   </main>;
 
   return <main className={pageClass}>
     {mobileConversationToggle}
     {error && <div className="claim-alert"><AlertTriangle /> {error}</div>}
-    {loading ? <div className="claim-loading"><RefreshCw /><span>Đang tải conversations...</span></div> : <section className="claims-layout">
+    {loading && !claimId ? <div className="claim-loading"><RefreshCw /><span>Đang tải conversations...</span></div> : <section className="claims-layout">
       <aside className="claims-sidebar">
         <header><span>CONVERSATION</span><strong>{claims.length}</strong></header>
         <label className="conversation-search"><Search /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Tìm kiếm cuộc trò chuyện..." /></label>

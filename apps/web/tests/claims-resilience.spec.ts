@@ -764,3 +764,28 @@ test("finishing the previous room's send cannot unlock a pending send in the cur
   await expect(page.locator(".claim-messages")).not.toContainText("PENDING_A");
   await expect(page.locator(".claim-messages .claim-message-pending")).toHaveCount(0);
 });
+
+test("claim conversation reloads after reconnect when opened from an offline notification", async ({ page, context }) => {
+  await setupDirectLostRoom(page);
+  let unavailable = false;
+  await page.route("**/api/claims**", route => unavailable ? route.abort() : route.fallback());
+  await page.route("**/api/realtime**", route => route.fulfill({ status: 403, body: "" }));
+  await page.route(/\/api\/notifications(?:\?.*)?$/, route => fulfillJson(route, { items: [{
+    id: "offline-claim-notification", type: "CLAIM_REQUEST_RECEIVED", title: "Claim update", body: "Open conversation",
+    entityType: "CLAIM", entityId: directLostClaim.id, isRead: false, readAt: null, createdAt: "2026-10-07T08:00:00.000Z"
+  }], unreadTotal: 1 }));
+
+  await page.goto("/notifications");
+  await expect(page.locator(".notifications-page__item")).toBeVisible();
+  unavailable = true;
+  await context.setOffline(true);
+  await page.locator(".notification-trigger").click();
+  await page.locator(".notification-item").click();
+  await expect(page).toHaveURL(new RegExp(`/claims/${directLostClaim.id}$`));
+  await expect(page.locator(".claim-workspace-state")).toBeVisible();
+
+  unavailable = false;
+  await context.setOffline(false);
+  await expect(page.locator(".claim-chat-header")).toBeVisible({ timeout: 10_000 });
+  await expect(page.locator(".claim-messages__empty")).toBeVisible();
+});

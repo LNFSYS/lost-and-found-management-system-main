@@ -1,6 +1,5 @@
-const CACHE_VERSION = "lnfs-pwa-v2";
+const CACHE_VERSION = "lnfs-pwa-v3";
 const SHELL_CACHE = `${CACHE_VERSION}-shell`;
-const PUBLIC_API_CACHE = `${CACHE_VERSION}-public-api`;
 const SHELL_ASSETS = ["/", "/home", "/posts", "/my-posts", "/manifest.webmanifest", "/icons/lnfs-icon.svg"];
 
 function isSameOrigin(url) {
@@ -24,12 +23,6 @@ function hasAuthorization(request) {
   return request.headers.has("authorization");
 }
 
-function isPublicBoardApi(url) {
-  return url.pathname === "/api/posts" ||
-    url.pathname === "/api/posts/catalog" ||
-    /^\/api\/posts\/[^/]+$/.test(url.pathname);
-}
-
 async function cacheFirst(request) {
   const cached = await caches.match(request);
   if (cached) return cached;
@@ -39,21 +32,6 @@ async function cacheFirst(request) {
     await cache.put(request, response.clone());
   }
   return response;
-}
-
-async function networkFirstPublicApi(request) {
-  const cache = await caches.open(PUBLIC_API_CACHE);
-  try {
-    const response = await fetch(request);
-    if (response.ok) await cache.put(request, response.clone());
-    return response;
-  } catch {
-    const cached = await cache.match(request);
-    if (!cached) throw new Error("offline");
-    const headers = new Headers(cached.headers);
-    headers.set("x-lnfs-cache", "stale");
-    return new Response(cached.body, { status: cached.status, statusText: cached.statusText, headers });
-  }
 }
 
 self.addEventListener("install", (event) => {
@@ -102,11 +80,9 @@ self.addEventListener("fetch", (event) => {
   const { request } = event;
   const url = new URL(request.url);
   if (!isSameOrigin(url) || isMutation(request) || isPrivateApi(url)) return;
-  if (isPublicBoardApi(url)) {
-    if (hasAuthorization(request)) return;
-    event.respondWith(networkFirstPublicApi(request));
-    return;
-  }
+  // Cache the application shell and static assets only. All API responses,
+  // including private conversation data, must always come from the network.
+  if (url.pathname.startsWith("/api/") || hasAuthorization(request)) return;
   if (request.mode === "navigate") {
     event.respondWith(fetch(request).catch(() => caches.match("/home").then((cached) => cached || caches.match("/"))));
     return;

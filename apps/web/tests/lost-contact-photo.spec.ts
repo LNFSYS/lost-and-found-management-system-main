@@ -48,7 +48,7 @@ async function openPhotoCheckedRoom(page: Page) {
   await expect(page.getByRole("group", { name: "Câu hỏi từ ảnh" }).getByRole("button")).toHaveCount(3);
 }
 
-for (const width of [1440,390]) test(`LOST photo checks preserve drafts and immediately open a room at 50 percent at ${width}px`, async ({ page },testInfo) => {
+for (const width of [1440,390]) test(`LOST photo checks keep the conversation unsaved until the first message at ${width}px`, async ({ page },testInfo) => {
   await page.setViewportSize({ width, height: 900 });
   let checks = 0, sent: Record<string,unknown> | null = null;
   const errors: string[] = []; page.on("pageerror",error => errors.push(error.message));
@@ -62,6 +62,13 @@ for (const width of [1440,390]) test(`LOST photo checks preserve drafts and imme
   await page.route("**/api/claims", route => {
     sent = route.request().postDataJSON();
     return route.fulfill({ status: 201, json: { ...claim(), idempotent: false } });
+  });
+  await page.route("**/api/claims/direct-messages", route => {
+    sent = route.request().postDataJSON();
+    return route.fulfill({ status: 201, json: { claim: claim(), message: {
+      id: "first-message", roomId: "room", sender: session.user, clientMessageId: route.request().headers()["idempotency-key"],
+      content: String(sent?.content ?? ""), messageType: "TEXT", isRead: false, readAt: null, createdAt: new Date().toISOString()
+    } } });
   });
   await page.goto(`/claims?composePostId=${postId}`);
   await page.getByLabel("Tin nhắn riêng").fill("Tôi đang giữ một ví tương tự");
@@ -82,8 +89,13 @@ for (const width of [1440,390]) test(`LOST photo checks preserve drafts and imme
   await expect(preview).toBeVisible();
   await expect(send).toBeDisabled();
   await page.getByRole("button",{ name: "Kiểm tra ảnh", exact: true }).click();
+  await expect(page).toHaveURL(new RegExp(`/claims\\?composePostId=${postId}$`));
+  await expect(send).toBeEnabled();
+  await expect(page.locator(".claims-sidebar header strong")).toHaveText("0");
+  expect(sent).toBeNull();
+  await send.click();
   await expect(page).toHaveURL(new RegExp(`/claims/${claimId}$`));
-  await expect(page.getByLabel("Tin nhắn riêng")).toHaveValue("Tôi đang giữ một ví tương tự");
+  await expect(page.getByLabel("Tin nhắn riêng")).toHaveValue("");
   await expect(page.getByRole("button", { name: "Đề xuất gặp mặt", exact: true })).toBeEnabled();
   await expect(page.getByRole("group", { name: "Câu hỏi từ ảnh" }).getByRole("button")).toHaveCount(3);
   await expect(page.locator(".claims-sidebar header strong")).toHaveText("1");
@@ -92,6 +104,7 @@ for (const width of [1440,390]) test(`LOST photo checks preserve drafts and imme
   await page.screenshot({ path: testInfo.outputPath(`contact-photo-${width}.png`), fullPage: true });
   expect(await page.evaluate(() => document.documentElement.scrollWidth-document.documentElement.clientWidth)).toBeLessThanOrEqual(1);
   expect(sent!.contactCheckId).toBe(checkId);
+  expect(sent!.content).toBe("Tôi đang giữ một ví tương tự");
   await expect(page.getByText("Ví có chất liệu và kiểu khóa như thế nào?",{ exact: true })).toBeVisible();
   expect(errors).toEqual([]);
 });
