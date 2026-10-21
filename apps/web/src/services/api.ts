@@ -1049,7 +1049,7 @@ async function raw<T>(path: string, init: RequestInit = {}, retry = true): Promi
     response = await fetch(`${API_URL}${path}`, { ...init, headers, credentials: "include" });
   } catch (error) {
     if (error instanceof Error && error.name === "AbortError") throw error;
-    throw new Error("Khong co ket noi mang. Thao tac chua duoc ghi nhan, hay thu lai khi online.");
+    throw new Error("Không có kết nối mạng. Thao tác chưa được ghi nhận. Vui lòng thử lại khi có mạng.");
   }
   if (typeof window !== "undefined" && response.headers.get("x-lnfs-cache") === "stale") {
     window.dispatchEvent(new CustomEvent("lnfs:stale-data", { detail: { path } }));
@@ -1143,7 +1143,7 @@ async function findConversationByPost(postId: string) {
   return null;
 }
 
-async function mediaBlob(path: string, retry = true, errorMessage = "Khong the tai anh"): Promise<Blob> {
+async function mediaBlob(path: string, retry = true, errorMessage = "Không thể tải ảnh"): Promise<Blob> {
   const generation = sessionGeneration;
   const headers = new Headers();
   if (accessToken) headers.set("authorization", `Bearer ${accessToken}`);
@@ -1200,7 +1200,7 @@ export const api = {
     form.append("file", file);
     return raw<{ user: CurrentUser }>("/auth/profile/avatar", { method: "PATCH", body: form }).then((result) => normalizeUser(result.user));
   },
-  getProfileAvatar: () => mediaBlob("/auth/profile/avatar", true, "Khong the tai anh dai dien"),
+  getProfileAvatar: () => mediaBlob("/auth/profile/avatar", true, "Không thể tải ảnh đại diện"),
   getActivitySummary: () => raw<ProfileActivitySummary>("/auth/activity"),
   getPostCatalog: () => raw<PostCatalog>("/posts/catalog"),
   listPosts: (filters: PostListFilters = {}) => raw<PostListResponse>(`/posts${queryString(filters)}`),

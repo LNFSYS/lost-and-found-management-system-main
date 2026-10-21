@@ -44,7 +44,7 @@ export const updateAdminUserSchema = z.object({
   accessRole: adminAccessRoleSchema.optional(),
   status: adminUserStatusSchema.optional(),
   reason
-}).refine(atLeastOne, "Can it nhat mot truong de cap nhat");
+}).refine(atLeastOne, "Cần ít nhất một trường để cập nhật");
 
 export const updateAdminUserRoleSchema = z.object({
   accessRole: adminAccessRoleSchema,

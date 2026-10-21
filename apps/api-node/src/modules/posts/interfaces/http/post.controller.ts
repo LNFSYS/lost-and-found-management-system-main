@@ -89,7 +89,7 @@ export function createPostController({ postService, geminiImageService }: {
 
     async uploadMedia(request: Request, response: Response) {
       const file = request.file;
-      if (!file) throw new HttpError(400, "Can gui file anh voi field name la file");
+      if (!file) throw new HttpError(400, "Vui lòng gửi tệp ảnh với tên trường là file");
       response.status(201).json(await postService.uploadMedia(
         routeId(request),
         request.auth!.sub,

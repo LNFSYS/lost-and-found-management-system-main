@@ -120,36 +120,36 @@ export function createPostUseCases(options: PostDependencies) {
     visibilityMode?: VisibilityMode;
   }) {
     if (!input.categoryId || !await postRepository.findActiveCategory(input.categoryId)) {
-      throw new AppError("invalid_input", "Vui long chon danh muc cu the thuoc mot nhom chinh dang hoat dong");
+      throw new AppError("invalid_input", "Vui lòng chọn danh mục cụ thể thuộc một nhóm chính đang hoạt động");
     }
 
     if (input.areaId && !await postRepository.findActiveArea(input.areaId)) {
-      throw new AppError("invalid_input", "Khu vuc khong hop le hoac da bi tat");
+      throw new AppError("invalid_input", "Khu vực không hợp lệ hoặc đã bị tắt");
     }
 
     if (input.buildingId) {
-      if (!input.areaId) throw new AppError("invalid_input", "Dia diem cu the phai thuoc mot khu vuc");
+      if (!input.areaId) throw new AppError("invalid_input", "Địa điểm cụ thể phải thuộc một khu vực");
       const building = await postRepository.findActiveBuilding(input.buildingId);
-      if (!building) throw new AppError("invalid_input", "Dia diem khong hop le hoac da bi tat");
-      if (building.areaId !== input.areaId) throw new AppError("invalid_input", "Dia diem khong thuoc khu vuc da chon");
+      if (!building) throw new AppError("invalid_input", "Địa điểm không hợp lệ hoặc đã bị tắt");
+      if (building.areaId !== input.areaId) throw new AppError("invalid_input", "Địa điểm không thuộc khu vực đã chọn");
     }
 
     if (input.handoverPointId && !await postRepository.findActiveHandoverPoint(input.handoverPointId)) {
-      throw new AppError("invalid_input", "Diem ban giao khong hop le hoac da bi tat");
+      throw new AppError("invalid_input", "Điểm bàn giao không hợp lệ hoặc đã bị tắt");
     }
 
     const hasLocation = Boolean(input.areaId || input.customLocation || input.handoverPointId);
-    if (!hasLocation) throw new AppError("invalid_input", "Can co khu vuc, vi tri tuy chinh hoac diem ban giao");
-    if (input.type === "LOST" && input.handoverPointId) throw new AppError("invalid_input", "LOST post khong dung diem ban giao");
+    if (!hasLocation) throw new AppError("invalid_input", "Cần có khu vực, vị trí tùy chỉnh hoặc điểm bàn giao");
+    if (input.type === "LOST" && input.handoverPointId) throw new AppError("invalid_input", "Bài đăng báo mất không sử dụng điểm bàn giao");
     if (input.type === "LOST" && input.visibilityMode === "PRIVATE_DETAILS") throw new AppError("invalid_input", "PRIVATE_DETAILS chi ap dung cho FOUND post");
     if (input.type === "FOUND" && !input.handoverPointId && !input.areaId && !input.customLocation) {
-      throw new AppError("invalid_input", "FOUND can diem ban giao hoac noi luu giu hop le");
+      throw new AppError("invalid_input", "Bài đăng nhặt được cần có điểm bàn giao hoặc nơi lưu giữ hợp lệ");
     }
   }
 
   async function requireOwnedPost(postId: string, ownerId: string) {
     const post = await postRepository.findOwnedById(postId, ownerId);
-    if (!post) throw new AppError("not_found", "Khong tim thay bai dang cua ban");
+    if (!post) throw new AppError("not_found", "Không tìm thấy bài đăng của bạn");
     return post;
   }
 
@@ -239,7 +239,7 @@ export function createPostUseCases(options: PostDependencies) {
 
     async getPost(postId: string, viewer?: AccessTokenPayload) {
       const post = await postRepository.findVisibleById(postId);
-      if (!post) throw new AppError("not_found", "Khong tim thay bai dang");
+      if (!post) throw new AppError("not_found", "Không tìm thấy bài đăng");
       return serializePost(post, viewer);
     },
 
@@ -280,7 +280,7 @@ export function createPostUseCases(options: PostDependencies) {
     async updatePost(postId: string, ownerId: string, input: UpdatePostInput, viewer: AccessTokenPayload) {
       const updated = await withTransaction(async (connection) => {
         const current = await postRepository.findOwnedByIdForUpdate(postId, ownerId, connection);
-        if (!current) throw new AppError("not_found", "Khong tim thay bai dang cua ban");
+        if (!current) throw new AppError("not_found", "Không tìm thấy bài đăng của bạn");
         assertPostUpdateAllowed(current, input);
         await ensureBusinessRefs(mergeForValidation(current, input));
         await postRepository.updatePost(postId, {
@@ -301,7 +301,7 @@ export function createPostUseCases(options: PostDependencies) {
           resolvedAt: input.status === "RESOLVED" ? new Date() : input.status ? null : undefined
         }, connection);
         const refreshed = await postRepository.findOwnedById(postId, ownerId, connection);
-        if (!refreshed) throw new AppError("internal", "Khong the cap nhat bai dang");
+        if (!refreshed) throw new AppError("internal", "Không thể cập nhật bài đăng");
         return refreshed;
       });
       if (updated.status === "OPEN" || updated.status === "MATCHED") {
@@ -403,10 +403,10 @@ export function createPostUseCases(options: PostDependencies) {
 
     async getMediaFile(postId: string, mediaId: string, viewer?: AccessTokenPayload) {
       const media = await postRepository.findMedia(postId, mediaId);
-      if (!media || media.postDeletedAt || media.postStatus === "HIDDEN") throw new AppError("not_found", "Khong tim thay media");
+      if (!media || media.postDeletedAt || media.postStatus === "HIDDEN") throw new AppError("not_found", "Không tìm thấy ảnh");
       const privateMedia = media.mediaKind === "EVIDENCE" || media.postVisibilityMode === "PRIVATE_DETAILS";
-      if (privateMedia && !viewer) throw new AppError("unauthenticated", "Can dang nhap de xem media nay");
-      if (privateMedia && !canSeePrivateMedia(viewer, media)) throw new AppError("forbidden", "Ban khong co quyen xem media nay");
+      if (privateMedia && !viewer) throw new AppError("unauthenticated", "Cần đăng nhập để xem ảnh này");
+      if (privateMedia && !canSeePrivateMedia(viewer, media)) throw new AppError("forbidden", "Bạn không có quyền xem ảnh này");
 
       const resolved = await mediaStorage.resolve(media.secureUrl, media.format ?? "jpg");
       return {

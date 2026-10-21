@@ -25,7 +25,7 @@ export function createAuthRoutes({ authController, auth }: {
     avatarUpload.single("file")(request, response, (error: unknown) => {
       if (error instanceof multer.MulterError) {
         const status = error.code === "LIMIT_FILE_SIZE" ? 413 : 400;
-        return next(new HttpError(status, error.code === "LIMIT_FILE_SIZE" ? "Anh dai dien vuot qua gioi han 1MB" : "Anh dai dien khong hop le"));
+        return next(new HttpError(status, error.code === "LIMIT_FILE_SIZE" ? "Ảnh đại diện vượt quá giới hạn 1 MB" : "Ảnh đại diện không hợp lệ"));
       }
       next(error);
     });

@@ -58,13 +58,13 @@ function formatDateOnly(date: Date) {
 
 function parseDateOnly(value: string, label: string) {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
-  if (!match) throw new AppError("invalid_input", `${label} phai co dinh dang YYYY-MM-DD`);
+  if (!match) throw new AppError("invalid_input", `${label} phải có định dạng YYYY-MM-DD`);
   const year = Number(match[1]);
   const month = Number(match[2]);
   const day = Number(match[3]);
   const date = new Date(Date.UTC(year, month - 1, day));
   if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) {
-    throw new AppError("invalid_input", `${label} khong hop le`);
+    throw new AppError("invalid_input", `${label} không hợp lệ`);
   }
   return date;
 }
@@ -76,8 +76,8 @@ function normalizeWindow(input: DashboardKpiQuery, now: Date): ReportingWindow {
   const endExclusive = addDays(toDate, 1);
   const days = Math.ceil((endExclusive.getTime() - fromDate.getTime()) / 86_400_000);
 
-  if (days <= 0) throw new AppError("invalid_input", "Khoang thoi gian khong hop le");
-  if (days > maxRangeDays) throw new AppError("invalid_input", `Khoang thoi gian toi da ${maxRangeDays} ngay`);
+  if (days <= 0) throw new AppError("invalid_input", "Khoảng thời gian không hợp lệ");
+  if (days > maxRangeDays) throw new AppError("invalid_input", `Khoảng thời gian tối đa là ${maxRangeDays} ngày`);
 
   return {
     from: formatDateOnly(fromDate),
@@ -172,7 +172,7 @@ function assertActionMatchesReport(actionType: ModerationActionType, report: Loc
   if (actionType === "DISMISS_REPORT" || actionType === "RESOLVE_REPORT") return;
   if (report.entityType === "POST" && (actionType === "HIDE_POST" || actionType === "DELETE_POST" || actionType === "WARN_USER" || actionType === "BAN_USER" || actionType === "UNBAN_USER")) return;
   if (report.entityType === "USER" && (actionType === "WARN_USER" || actionType === "BAN_USER" || actionType === "UNBAN_USER")) return;
-  throw new AppError("invalid_input", "Hanh dong moderation khong phu hop voi doi tuong report");
+  throw new AppError("invalid_input", "Hành động kiểm duyệt không phù hợp với đối tượng báo cáo");
 }
 
 export interface AdminReportingDependencies {
@@ -220,14 +220,14 @@ export function createAdminReportingUseCases(options: AdminReportingDependencies
 
   async function applyAction(actionType: ModerationActionType, targetId: string, connection: TransactionContext) {
     if (actionType === "DISMISS_REPORT" || actionType === "RESOLVE_REPORT" || actionType === "WARN_USER") return;
-    if (actionType === "HIDE_POST" && !await repository.hidePost(targetId, connection)) throw new AppError("not_found", "Khong tim thay bai dang can an");
-    if (actionType === "DELETE_POST" && !await repository.deletePost(targetId, connection)) throw new AppError("not_found", "Khong tim thay bai dang can xoa");
+    if (actionType === "HIDE_POST" && !await repository.hidePost(targetId, connection)) throw new AppError("not_found", "Không tìm thấy bài đăng cần ẩn");
+    if (actionType === "DELETE_POST" && !await repository.deletePost(targetId, connection)) throw new AppError("not_found", "Không tìm thấy bài đăng cần xóa");
     if (actionType === "BAN_USER") {
-      if (!await repository.setUserStatus(targetId, "DISABLED", connection)) throw new AppError("not_found", "Khong tim thay nguoi dung can khoa");
+      if (!await repository.setUserStatus(targetId, "DISABLED", connection)) throw new AppError("not_found", "Không tìm thấy người dùng cần khóa");
       await repository.revokeRefreshTokens(targetId, connection);
     }
     if (actionType === "UNBAN_USER") {
-      if (!await repository.setUserStatus(targetId, "ACTIVE", connection)) throw new AppError("not_found", "Khong tim thay nguoi dung can mo khoa");
+      if (!await repository.setUserStatus(targetId, "ACTIVE", connection)) throw new AppError("not_found", "Không tìm thấy người dùng cần mở khóa");
     }
   }
 
@@ -280,8 +280,8 @@ export function createAdminReportingUseCases(options: AdminReportingDependencies
     async reviewReport(actorId: string, reportId: string, input: ReviewModerationReportInput) {
       return transaction(async (connection) => {
         const report = await repository.lockReport(reportId, connection);
-        if (!report) throw new AppError("not_found", "Khong tim thay report");
-        if (report.status !== "PENDING") throw new AppError("conflict", "Report da duoc xu ly");
+        if (!report) throw new AppError("not_found", "Không tìm thấy báo cáo");
+        if (report.status !== "PENDING") throw new AppError("conflict", "Báo cáo đã được xử lý");
 
         assertActionMatchesReport(input.actionType, report);
         const targetType = actionTargetType(input.actionType);
@@ -292,17 +292,17 @@ export function createAdminReportingUseCases(options: AdminReportingDependencies
             : report.entityType === targetType
               ? report.entityId
               : null;
-        if (!targetId) throw new AppError("invalid_input", "Khong the suy ra doi tuong moderation tu report");
+        if (!targetId) throw new AppError("invalid_input", "Không thể xác định đối tượng kiểm duyệt từ báo cáo");
 
         const activeAdminCount = input.actionType === "BAN_USER" ? await repository.lockActiveAdmins(connection) : null;
 
         const beforeTarget = await loadTargetForAction(input.actionType, targetId, connection, true);
-        if (targetType !== "REPORT" && !beforeTarget) throw new AppError("not_found", "Khong tim thay doi tuong moderation");
+        if (targetType !== "REPORT" && !beforeTarget) throw new AppError("not_found", "Không tìm thấy đối tượng kiểm duyệt");
 
         if (input.actionType === "BAN_USER") {
-          if (targetId === actorId) throw new AppError("conflict", "Admin khong duoc tu khoa chinh minh");
+          if (targetId === actorId) throw new AppError("conflict", "Admin không được tự khóa chính mình");
           if (beforeTarget?.isAdmin && beforeTarget.status === "ACTIVE" && (activeAdminCount ?? 0) <= 1) {
-            throw new AppError("conflict", "Khong the khoa Admin active cuoi cung");
+            throw new AppError("conflict", "Không thể khóa Admin cuối cùng còn hoạt động");
           }
         }
 
@@ -334,7 +334,7 @@ export function createAdminReportingUseCases(options: AdminReportingDependencies
         }, connection);
 
         const updated = await repository.findReportById(reportId, connection);
-        if (!updated) throw new AppError("not_found", "Khong tim thay report");
+        if (!updated) throw new AppError("not_found", "Không tìm thấy báo cáo");
         return updated;
       });
     },

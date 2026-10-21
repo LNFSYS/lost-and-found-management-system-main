@@ -184,26 +184,26 @@ export function createUserRepository(pool: SqlExecutor) {
         pool.execute<ActivityEventRow[]>(
           `SELECT event_type, label, occurred_at, points_delta
          FROM (
-           SELECT 'POST_CREATED' AS event_type, CONCAT('Da tao bai ', p.type) AS label, p.created_at AS occurred_at, NULL AS points_delta
+           SELECT 'POST_CREATED' AS event_type, CONCAT('Đã tạo bài ', p.type) AS label, p.created_at AS occurred_at, NULL AS points_delta
            FROM posts p
            WHERE p.user_id = ? AND p.deleted_at IS NULL
            UNION ALL
-           SELECT 'CLAIM_CREATED' AS event_type, 'Da gui yeu cau claim' AS label, c.created_at AS occurred_at, NULL AS points_delta
+           SELECT 'CLAIM_CREATED' AS event_type, 'Đã gửi yêu cầu xác minh quyền sở hữu' AS label, c.created_at AS occurred_at, NULL AS points_delta
            FROM claims c
            WHERE c.claimant_id = ?
            UNION ALL
-           SELECT 'RETURN_COMPLETED' AS event_type, 'Da hoan tat tra nhan vat pham' AS label, COALESCE(ra.completed_at, ra.updated_at) AS occurred_at, NULL AS points_delta
+           SELECT 'RETURN_COMPLETED' AS event_type, 'Đã hoàn tất trả vật phẩm' AS label, COALESCE(ra.completed_at, ra.updated_at) AS occurred_at, NULL AS points_delta
            FROM return_appointments ra
            INNER JOIN claims c ON c.id = ra.claim_id
            INNER JOIN posts p ON p.id = ra.post_id
            WHERE ra.status = 'COMPLETED'
              AND (c.claimant_id = ? OR p.user_id = ? OR ra.proposer_id = ?)
            UNION ALL
-           SELECT 'FEEDBACK_RECEIVED' AS event_type, CONCAT('Nhan feedback ', rf.rating, '/5 sau hoan tra') AS label, rf.created_at AS occurred_at, NULL AS points_delta
+           SELECT 'FEEDBACK_RECEIVED' AS event_type, CONCAT('Nhận đánh giá ', rf.rating, '/5 sau khi hoàn trả') AS label, rf.created_at AS occurred_at, NULL AS points_delta
            FROM return_feedback rf
            WHERE rf.target_user_id = ?
            UNION ALL
-           SELECT 'REPUTATION_CHANGED' AS event_type, 'Diem uy tin thay doi' AS label, rl.created_at AS occurred_at, rl.delta AS points_delta
+           SELECT 'REPUTATION_CHANGED' AS event_type, 'Điểm uy tín thay đổi' AS label, rl.created_at AS occurred_at, rl.delta AS points_delta
            FROM reputation_logs rl
            WHERE rl.user_id = ?
          ) activity_events

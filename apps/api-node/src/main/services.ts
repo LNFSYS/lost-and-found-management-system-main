@@ -45,8 +45,8 @@ export function createServices(persistence: Persistence, config: typeof env = en
   const postLocalMediaStorage = createPrivateMediaStorage({
     uploadDir: config.uploadDir,
     namespace: "post-media",
-    invalidPathMessage: "Duong dan media khong hop le",
-    notFoundMessage: "Media khong hop le"
+    invalidPathMessage: "Đường dẫn ảnh không hợp lệ",
+    notFoundMessage: "Ảnh không hợp lệ"
   });
   const claimLocalMediaStorage = createPrivateMediaStorage({
     uploadDir: config.uploadDir,

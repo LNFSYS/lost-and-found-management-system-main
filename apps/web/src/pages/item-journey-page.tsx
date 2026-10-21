@@ -1,12 +1,12 @@
 import {
-  Activity, ArrowLeft, CalendarDays, FileText, History, MessageCircle, PackageCheck, RotateCw,
-  Search, ShieldCheck, Sparkles, Star, Undo2, Warehouse, type LucideIcon
+  Activity, ArrowDown, ArrowLeft, ArrowRight, CalendarDays, FileText, History, MessageCircle,
+  PackageCheck, RotateCw, Search, ShieldCheck, Sparkles, Star, Undo2, Warehouse, type LucideIcon
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api } from "../services/api";
 import { JourneyImages } from "../components/journey-images";
-import { displayTime, eventLabel, sourceLabel, stateLabel, type Journey } from "../services/workflow-types";
+import { displayTime, eventLabel, sourceLabel, stateLabel, type Journey, type JourneyEvent } from "../services/workflow-types";
 import "./workflow-pages.css";
 
 const custodianLabel = {
@@ -45,6 +45,15 @@ function durationLabel(hours: number) {
   return `${wholeHours} giờ ${remainingMinutes} phút`;
 }
 
+function journeyEventTitle(event: JourneyEvent) {
+  if (eventLabel[event.action]) return eventLabel[event.action];
+  const from = event.fromStatus && (stateLabel[event.fromStatus] ?? event.fromStatus);
+  const to = event.toStatus && (stateLabel[event.toStatus] ?? event.toStatus);
+  if (from && to && from !== to) return `Trạng thái: ${from} → ${to}`;
+  if (from || to) return `Trạng thái: ${to || from}`;
+  return "Cập nhật hành trình";
+}
+
 export function ItemJourneyPage() {
   const { postId } = useParams();
   return <ItemJourney key={postId} postId={postId} />;
@@ -56,6 +65,16 @@ function ItemJourney({ postId }: { postId: string | undefined }) {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [reload, setReload] = useState(0);
+  const [timelineColumns, setTimelineColumns] = useState(4);
+
+  useEffect(() => {
+    const updateColumns = () => setTimelineColumns(
+      window.innerWidth < 700 ? 1 : window.innerWidth < 1000 ? 2 : window.innerWidth < 1400 ? 3 : 4
+    );
+    updateColumns();
+    window.addEventListener("resize", updateColumns);
+    return () => window.removeEventListener("resize", updateColumns);
+  }, []);
 
   useEffect(() => {
     setPage(1);
@@ -121,10 +140,23 @@ function ItemJourney({ postId }: { postId: string | undefined }) {
             const presentation = sourcePresentation[event.source] ?? { icon: Sparkles, tone: "other" };
             const EventIcon = presentation.icon;
             const latest = !journey.hasMore && index === journey.results.length - 1;
-            return <li className={`item-journey-timeline__item item-journey-event--${presentation.tone}${latest ? " item-journey-timeline__item--latest" : ""}`} key={event.id}>
+            const row = Math.floor(index / timelineColumns);
+            const offset = index % timelineColumns;
+            const reverseRow = row % 2 === 1;
+            const column = reverseRow ? timelineColumns - offset : offset + 1;
+            const connector = offset === timelineColumns - 1 ? ArrowDown : reverseRow ? ArrowLeft : ArrowRight;
+            const hasConnector = timelineColumns > 1 && index < journey.results.length - 1;
+            const ConnectorIcon = connector;
+            const title = journeyEventTitle(event);
+            return <li
+              className={`item-journey-timeline__item item-journey-event--${presentation.tone}${latest ? " item-journey-timeline__item--latest" : ""}`}
+              key={event.id}
+              style={{ gridColumn: column, gridRow: row + 1 }}
+            >
               <article className={`item-journey-event${latest ? " item-journey-event--latest" : ""}`}>
                 <div className="item-journey-event__meta">
                   <div className="item-journey-event__source">
+                    <span className="item-journey-event__step" aria-hidden="true">{String(index + 1).padStart(2, "0")}</span>
                     <span className="item-journey-event__icon"><EventIcon size={15} /></span>
                     <span className="workflow-source">{sourceLabel[event.source] ?? "Cập nhật"}</span>
                   </div>
@@ -133,14 +165,43 @@ function ItemJourney({ postId }: { postId: string | undefined }) {
                     <time dateTime={event.createdAt}>{displayTime(event.createdAt)}</time>
                   </div>
                 </div>
-                <h3>{eventLabel[event.action] ?? "Cập nhật trạng thái vật phẩm"}</h3>
-                {(event.fromStatus || event.toStatus) && <p className="item-journey-event__change">
-                  {event.fromStatus && <span>{stateLabel[event.fromStatus] ?? event.fromStatus}</span>}
-                  {event.fromStatus && event.toStatus && <span aria-hidden="true">→</span>}
-                  {event.toStatus && <strong>{stateLabel[event.toStatus] ?? event.toStatus}</strong>}
-                </p>}
-                {Boolean(event.images?.length) && <JourneyImages images={event.images!} />}
+                <h3 title={title}>{title}</h3>
+                <div className="item-journey-event__body">
+                  {(event.fromStatus || event.toStatus) && <div className="item-journey-event__change">
+                    {event.source === "CLAIM" && <span className="item-journey-event__change-label">Trạng thái xác minh:</span>}
+                    <div className={`item-journey-event__change-flow${event.fromStatus && event.toStatus ? "" : " item-journey-event__change-flow--single"}`}>
+                      {event.fromStatus && <span className="item-journey-event__change-state">
+                        <small>Từ trạng thái</small>
+                        <strong>{stateLabel[event.fromStatus] ?? event.fromStatus}</strong>
+                      </span>}
+                      {event.fromStatus && event.toStatus && <ArrowRight size={15} aria-hidden="true" />}
+                      {event.toStatus && <span className="item-journey-event__change-state">
+                        <small>{event.fromStatus ? "Đến trạng thái" : "Trạng thái hiện tại"}</small>
+                        <strong>{stateLabel[event.toStatus] ?? event.toStatus}</strong>
+                      </span>}
+                    </div>
+                  </div>}
+                  {event.action === "CLAIM_CREATED" && !event.toStatus && <p className="item-journey-event__context">Yêu cầu đối chiếu đã được gửi.</p>}
+                  {event.source === "CHAT" && event.action === "CONVERSATION_OPENED" && event.conversationWith && <p className="item-journey-event__context item-journey-event__person">
+                    <strong>Trao đổi với:</strong><span>{event.conversationWith}</span>
+                  </p>}
+                  {event.appointment && <p className="item-journey-event__context item-journey-event__appointment">
+                    <strong>Ngày giờ hẹn</strong>
+                    <time dateTime={event.appointment.proposedAt}>{displayTime(event.appointment.proposedAt)}</time>
+                  </p>}
+                  {event.source === "MATCHING" && event.matchingSuggestions && <section className="item-journey-matches" aria-label="Bài đăng có điểm matching cao">
+                    <div className="item-journey-matches__heading"><strong>Gợi ý phù hợp</strong><span>{event.matchingSuggestions.length ? `Top ${event.matchingSuggestions.length}` : "Chưa có bài"}</span></div>
+                    {event.matchingSuggestions.length ? <ul>{event.matchingSuggestions.map(suggestion => <li key={suggestion.postId}>
+                      <Link to={`/posts/${suggestion.postId}`} className="item-journey-match">
+                        <span className="item-journey-match__copy"><strong>{suggestion.title}</strong><small>{suggestion.type === "LOST" ? "Báo mất" : "Tin nhặt được"} · {stateLabel[suggestion.status] ?? suggestion.status}</small></span>
+                        <span className="item-journey-match__score">{Math.round(suggestion.score * 100)}%</span>
+                      </Link>
+                    </li>)}</ul> : <p className="item-journey-matches__empty">Chưa có bài đăng đang mở đạt ngưỡng gợi ý.</p>}
+                  </section>}
+                  {Boolean(event.images?.length) && <JourneyImages images={event.images!} />}
+                </div>
               </article>
+              {hasConnector && <span className={`item-journey-connector item-journey-connector--${offset === timelineColumns - 1 ? "down" : reverseRow ? "left" : "right"}`} aria-hidden="true"><ConnectorIcon size={15} /></span>}
             </li>;
           })}
         </ol>}

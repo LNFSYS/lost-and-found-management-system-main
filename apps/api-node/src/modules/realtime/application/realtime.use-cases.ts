@@ -111,7 +111,7 @@ export function createRealtimeUseCases({ claimRepository, notifications, id, val
     const roomIds = [...new Set(requestedRoomIds)];
     for (const roomId of roomIds) {
       const room = await claimRepository.findRoomForParticipant(roomId, userId);
-      if (!room) throw new AppError("not_found", "Realtime room khong ton tai");
+      if (!room) throw new AppError("not_found", "Phòng trao đổi không tồn tại");
     }
     return roomIds;
   }

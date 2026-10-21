@@ -89,10 +89,10 @@ export const listMessagesQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(50)
 }).superRefine((value, context) => {
   if (value.before && !value.beforeId) {
-    context.addIssue({ code: z.ZodIssueCode.custom, path: ["beforeId"], message: "Cursor phan trang can beforeId" });
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ["beforeId"], message: "Con trỏ phân trang cần có beforeId" });
   }
   if (value.beforeId && !value.before) {
-    context.addIssue({ code: z.ZodIssueCode.custom, path: ["before"], message: "Cursor phan trang can before" });
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ["before"], message: "Con trỏ phân trang cần có before" });
   }
 });
 

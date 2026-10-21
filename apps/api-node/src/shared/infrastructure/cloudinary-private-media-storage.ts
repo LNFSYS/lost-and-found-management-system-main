@@ -16,8 +16,8 @@ function deliveryFailure(error: unknown): AppError {
   const timedOut = (error instanceof Error && ["TimeoutError", "AbortError"].includes(error.name))
     || code === "ETIMEDOUT" || code === "UND_ERR_CONNECT_TIMEOUT";
   return new AppError(timedOut ? "upstream_timeout" : "upstream_failure", timedOut
-    ? "Dich vu anh phan hoi qua cham, vui long thu lai"
-    : "Dich vu anh tam thoi khong kha dung, vui long thu lai");
+    ? "Dịch vụ ảnh phản hồi quá chậm, vui lòng thử lại"
+    : "Dịch vụ ảnh tạm thời không khả dụng, vui lòng thử lại");
 }
 
 function deliveryCauseCode(error: unknown): string | undefined {
@@ -33,7 +33,7 @@ function isConfigured(config: CloudinaryConfig): config is ConfiguredCloudinary 
 
 function configuredClient(client: CloudinaryClient, config: CloudinaryConfig) {
   if (!isConfigured(config)) {
-    throw new AppError("unavailable", "Dich vu luu anh chua duoc cau hinh");
+    throw new AppError("unavailable", "Dịch vụ lưu ảnh chưa được cấu hình");
   }
   client.config({ cloud_name: config.cloudName, api_key: config.apiKey, api_secret: config.apiSecret, secure: true });
   return client;
@@ -43,7 +43,7 @@ function uploadBuffer(client: CloudinaryClient, buffer: Buffer, options: UploadA
   return new Promise<UploadApiResponse>((resolve, reject) => {
     const stream = client.uploader.upload_stream(options, (error, result) => {
       if (error) return reject(error);
-      if (!result) return reject(new Error("Cloudinary khong tra ve ket qua upload"));
+      if (!result) return reject(new Error("Cloudinary không trả về kết quả tải ảnh lên"));
       resolve(result);
     });
     stream.end(buffer);
@@ -71,10 +71,10 @@ export function createCloudinaryPrivateMediaStorage(options: {
   function parseReference(secureUrl: string) {
     if (!secureUrl.startsWith(prefix)) return null;
     const parts = secureUrl.slice(prefix.length).split("/");
-    if (parts.length !== 2) throw new AppError("not_found", "Media khong hop le");
+    if (parts.length !== 2) throw new AppError("not_found", "Ảnh không hợp lệ");
     const [ownerId, filename] = parts;
     const match = filename.match(/^([0-9a-f-]{36})\.(jpg|png|webp)$/i);
-    if (!/^[0-9a-f-]{36}$/i.test(ownerId) || !match) throw new AppError("not_found", "Media khong hop le");
+    if (!/^[0-9a-f-]{36}$/i.test(ownerId) || !match) throw new AppError("not_found", "Ảnh không hợp lệ");
     return {
       publicId: `${folder}/${ownerId}/${match[1]}`,
       format: imageFormat(match[2])
@@ -85,7 +85,7 @@ export function createCloudinaryPrivateMediaStorage(options: {
     const reference = parseReference(secureUrl);
     if (!reference) {
       if (options.fallback) return options.fallback.resolve(secureUrl, format);
-      throw new AppError("not_found", "Media khong hop le");
+      throw new AppError("not_found", "Ảnh không hợp lệ");
     }
     const image = imageFormat(format ?? reference.format);
     const deliveryUrl = configuredClient(client, options.config).url(reference.publicId, {
@@ -105,7 +105,7 @@ export function createCloudinaryPrivateMediaStorage(options: {
     if (!response.ok) {
       console.warn("media_delivery_failed", { namespace: options.namespace, stage: "response", status: response.status });
       throw new AppError(response.status === 404 ? "not_found" : "upstream_failure", response.status === 404
-        ? "Khong the tai anh media" : "Dich vu anh tam thoi khong kha dung, vui long thu lai");
+        ? "Không thể tải ảnh" : "Dịch vụ ảnh tạm thời không khả dụng, vui lòng thử lại");
     }
     try {
       return { body: Buffer.from(await response.arrayBuffer()), contentType: mediaContentType(image) };
@@ -134,12 +134,12 @@ export function createCloudinaryPrivateMediaStorage(options: {
           unique_filename: false
         });
       } catch {
-        throw new AppError("upstream_failure", "Dich vu luu anh tam thoi khong kha dung");
+        throw new AppError("upstream_failure", "Dịch vụ lưu ảnh tạm thời không khả dụng");
       }
       const expectedId = `${folder}/${ownerId}/${mediaId}`;
-      if (result.public_id && result.public_id !== expectedId) throw new AppError("upstream_failure", "Dich vu luu anh tra ve reference khong hop le");
+      if (result.public_id && result.public_id !== expectedId) throw new AppError("upstream_failure", "Dịch vụ lưu ảnh trả về mã tham chiếu không hợp lệ");
       if (result.existing) await download(`${prefix}${ownerId}/${mediaId}.${image}`, image);
-      else if (!result.public_id) throw new AppError("upstream_failure", "Dich vu luu anh khong xac nhan asset");
+      else if (!result.public_id) throw new AppError("upstream_failure", "Dịch vụ lưu ảnh không xác nhận được tệp");
       return {
         secureUrl: `${prefix}${ownerId}/${mediaId}.${image}`,
         publicId: expectedId
@@ -154,7 +154,7 @@ export function createCloudinaryPrivateMediaStorage(options: {
       const reference = parseReference(secureUrl);
       if (!reference) {
         if (options.fallback) return options.fallback.remove(secureUrl);
-        throw new AppError("not_found", "Media khong hop le");
+        throw new AppError("not_found", "Ảnh không hợp lệ");
       }
       await configuredClient(client, options.config).uploader.destroy(reference.publicId, {
         resource_type: "image",

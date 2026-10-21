@@ -203,7 +203,7 @@ export function createAuthUseCases(options: AuthDependencies) {
               resourceType: uploaded.resourceType,
               size: uploaded.bytes
             }, connection);
-            if (!updated) throw new AppError("not_found", "Khong tim thay tai khoan");
+            if (!updated) throw new AppError("not_found", "Không tìm thấy tài khoản");
           })
         });
         if (!updated) updated = await userRepository.findById(userId);
@@ -221,7 +221,7 @@ export function createAuthUseCases(options: AuthDependencies) {
 
     async getAvatarFile(userId: string): Promise<AvatarFile> {
       const avatar = await avatarRepository.findAvatarById(userId);
-      if (!avatar) throw new AppError("not_found", "Chua co anh dai dien");
+      if (!avatar) throw new AppError("not_found", "Chưa có ảnh đại diện");
       const downloaded = await avatarStorage.download({ publicId: avatar.publicId, version: avatar.version, format: avatar.format });
       return { body: downloaded.body, contentType: downloaded.contentType, updatedAt: avatar.updatedAt };
     },

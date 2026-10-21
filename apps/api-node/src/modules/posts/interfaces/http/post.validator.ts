@@ -20,18 +20,18 @@ function nullableText(max: number) {
 
 const incidentTime = z.coerce.date().refine(
   (value) => value.getTime() <= Date.now(),
-  "Thoi diem khong duoc nam trong tuong lai"
+  "Thời điểm không được nằm trong tương lai"
 );
 
 const basePostFields = {
-  title: z.string().trim().min(5, "Tieu de toi thieu 5 ky tu").max(255, "Tieu de toi da 255 ky tu"),
-  description: z.string().trim().min(10, "Mo ta toi thieu 10 ky tu").max(5000, "Mo ta toi da 5000 ky tu"),
+  title: z.string().trim().min(5, "Tiêu đề phải có ít nhất 5 ký tự").max(255, "Tiêu đề không được vượt quá 255 ký tự"),
+  description: z.string().trim().min(10, "Mô tả phải có ít nhất 10 ký tự").max(5000, "Mô tả không được vượt quá 5.000 ký tự"),
   categoryId: uuid,
   areaId: uuid.nullable().optional(),
   buildingId: uuid.nullable().optional(),
   roomText: nullableText(100),
   customLocation: nullableText(255),
-  contactInfo: z.string().trim().min(3, "Thong tin lien he toi thieu 3 ky tu").max(255, "Thong tin lien he toi da 255 ky tu"),
+  contactInfo: z.string().trim().min(3, "Thông tin liên hệ phải có ít nhất 3 ký tự").max(255, "Thông tin liên hệ không được vượt quá 255 ký tự"),
   lostFoundAt: incidentTime,
   handoverPointId: uuid.nullable().optional(),
   visibilityMode: visibilityMode.optional()
@@ -47,19 +47,19 @@ function validatePostShape(value: {
 }, context: z.RefinementCtx) {
   const hasLocation = Boolean(value.areaId || value.customLocation || value.handoverPointId);
   if (!hasLocation) {
-    context.addIssue({ code: z.ZodIssueCode.custom, path: ["areaId"], message: "Can co khu vuc, vi tri tuy chinh hoac diem ban giao" });
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ["areaId"], message: "Cần có khu vực, vị trí tùy chỉnh hoặc điểm bàn giao" });
   }
   if (value.buildingId && !value.areaId) {
-    context.addIssue({ code: z.ZodIssueCode.custom, path: ["buildingId"], message: "Dia diem cu the phai thuoc mot khu vuc" });
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ["buildingId"], message: "Địa điểm cụ thể phải thuộc một khu vực" });
   }
   if (value.type === "LOST" && value.handoverPointId) {
-    context.addIssue({ code: z.ZodIssueCode.custom, path: ["handoverPointId"], message: "LOST post khong dung diem ban giao" });
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ["handoverPointId"], message: "Bài đăng báo mất không sử dụng điểm bàn giao" });
   }
   if (value.type === "LOST" && value.visibilityMode === "PRIVATE_DETAILS") {
     context.addIssue({ code: z.ZodIssueCode.custom, path: ["visibilityMode"], message: "PRIVATE_DETAILS chi ap dung cho FOUND post" });
   }
   if (value.type === "FOUND" && !value.handoverPointId && !value.areaId && !value.customLocation) {
-    context.addIssue({ code: z.ZodIssueCode.custom, path: ["handoverPointId"], message: "FOUND can diem ban giao hoac noi luu giu hop le" });
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ["handoverPointId"], message: "Bài đăng nhặt được cần có điểm bàn giao hoặc nơi lưu giữ hợp lệ" });
   }
 }
 
@@ -104,7 +104,7 @@ export const updatePostSchema = z.object({
   handoverPointId: uuid.nullable().optional(),
   visibilityMode: visibilityMode.optional(),
   status: writableStatus.optional()
-}).refine(atLeastOne, "Can it nhat mot truong de cap nhat");
+}).refine(atLeastOne, "Cần ít nhất một trường để cập nhật");
 
 export const listPostsQuerySchema = z.object({
   q: z.string().trim().max(120).optional(),

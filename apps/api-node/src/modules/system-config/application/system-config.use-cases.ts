@@ -33,33 +33,33 @@ function isSensitiveConfigKey(configKey: string) {
 
 function validateWritableKey(configKey: string) {
   if (isSensitiveConfigKey(configKey)) {
-    throw new AppError("invalid_input", "Config nhay cam phai duoc quan ly bang bien moi truong");
+    throw new AppError("invalid_input", "Cấu hình nhạy cảm phải được quản lý bằng biến môi trường");
   }
 }
 
 function parseConfigValue(value: string, valueType: ConfigValueType): PublicConfigValue {
   const normalizedValue = value.trim();
   if (valueType === "INTEGER") {
-    if (!/^-?\d+$/.test(normalizedValue)) throw new AppError("invalid_input", "Gia tri INTEGER khong hop le");
+    if (!/^-?\d+$/.test(normalizedValue)) throw new AppError("invalid_input", "Giá trị INTEGER không hợp lệ");
     const parsed = Number(normalizedValue);
-    if (!Number.isSafeInteger(parsed)) throw new AppError("invalid_input", "Gia tri INTEGER vuot qua gioi han an toan");
+    if (!Number.isSafeInteger(parsed)) throw new AppError("invalid_input", "Giá trị INTEGER vượt quá giới hạn an toàn");
     return parsed;
   }
   if (valueType === "FLOAT") {
     const parsed = Number(normalizedValue);
-    if (!Number.isFinite(parsed)) throw new AppError("invalid_input", "Gia tri FLOAT khong hop le");
+    if (!Number.isFinite(parsed)) throw new AppError("invalid_input", "Giá trị FLOAT không hợp lệ");
     return parsed;
   }
   if (valueType === "BOOLEAN") {
     if (["true", "1"].includes(normalizedValue.toLowerCase())) return true;
     if (["false", "0"].includes(normalizedValue.toLowerCase())) return false;
-    throw new AppError("invalid_input", "Gia tri BOOLEAN khong hop le");
+    throw new AppError("invalid_input", "Giá trị BOOLEAN không hợp lệ");
   }
   if (valueType === "JSON") {
     try {
       return JSON.parse(normalizedValue) as PublicConfigValue;
     } catch {
-      throw new AppError("invalid_input", "Gia tri JSON khong hop le");
+      throw new AppError("invalid_input", "Giá trị JSON không hợp lệ");
     }
   }
   return normalizedValue;
@@ -74,7 +74,7 @@ function canonicalConfigValue(value: string, valueType: ConfigValueType) {
 
 function validatePublicExposure(configKey: string, isPublic: boolean) {
   if (isPublic && !isPublicKeyAllowed(configKey)) {
-    throw new AppError("invalid_input", "Config nay khong duoc phep cong khai");
+    throw new AppError("invalid_input", "Cấu hình này không được phép công khai");
   }
 }
 
@@ -171,13 +171,13 @@ export function createSystemConfigUseCases(options: SystemConfigDependencies) {
 
     async getConfig(configId: string) {
       const config = await repository.findById(configId);
-      if (!config) throw new AppError("not_found", "Khong tim thay config");
+      if (!config) throw new AppError("not_found", "Không tìm thấy cấu hình");
       return safeConfigRecord(config);
     },
 
     async listHistory(configId: string, query: ConfigHistoryQuery) {
       const config = await repository.findById(configId);
-      if (!config) throw new AppError("not_found", "Khong tim thay config");
+      if (!config) throw new AppError("not_found", "Không tìm thấy cấu hình");
       const items = await repository.listHistory(config.id, config.configKey, query.limit);
       return { items: items.map(safeHistoryEntry) };
     },
@@ -188,7 +188,7 @@ export function createSystemConfigUseCases(options: SystemConfigDependencies) {
       const configValue = canonicalConfigValue(input.configValue, input.valueType);
       validatePublicExposure(configKey, input.isPublic);
       return transaction(async (connection) => {
-        if (await repository.findByKey(configKey, undefined, connection)) throw new AppError("conflict", "Config key da ton tai");
+        if (await repository.findByKey(configKey, undefined, connection)) throw new AppError("conflict", "Khóa cấu hình đã tồn tại");
         const configId = idFactory();
         await repository.createConfig({
           id: configId,
@@ -200,7 +200,7 @@ export function createSystemConfigUseCases(options: SystemConfigDependencies) {
           actorId
         }, connection);
         const created = await repository.findById(configId, connection);
-        if (!created) throw new AppError("internal", "Khong the tao config");
+        if (!created) throw new AppError("internal", "Không thể tạo cấu hình");
         await repository.recordHistory({
           id: idFactory(),
           configId,
@@ -232,7 +232,7 @@ export function createSystemConfigUseCases(options: SystemConfigDependencies) {
     async updateConfig(actorId: string, configId: string, input: UpdateConfigInput) {
       return transaction(async (connection) => {
         const current = await repository.findById(configId, connection, true);
-        if (!current) throw new AppError("not_found", "Khong tim thay config");
+        if (!current) throw new AppError("not_found", "Không tìm thấy cấu hình");
         const nextKey = input.configKey?.trim() ?? current.configKey;
         const nextType = input.valueType ?? current.valueType;
         const nextValue = input.configValue !== undefined || input.valueType !== undefined
@@ -242,7 +242,7 @@ export function createSystemConfigUseCases(options: SystemConfigDependencies) {
         validateWritableKey(nextKey);
         validatePublicExposure(nextKey, nextIsPublic);
         if (nextKey !== current.configKey && await repository.findByKey(nextKey, configId, connection)) {
-          throw new AppError("conflict", "Config key da ton tai");
+          throw new AppError("conflict", "Khóa cấu hình đã tồn tại");
         }
         await repository.updateConfig(configId, {
           configKey: input.configKey !== undefined ? nextKey : undefined,
@@ -253,7 +253,7 @@ export function createSystemConfigUseCases(options: SystemConfigDependencies) {
           actorId
         }, connection);
         const updated = await repository.findById(configId, connection);
-        if (!updated) throw new AppError("not_found", "Khong tim thay config");
+        if (!updated) throw new AppError("not_found", "Không tìm thấy cấu hình");
         await repository.recordHistory({
           id: idFactory(),
           configId,
@@ -285,8 +285,8 @@ export function createSystemConfigUseCases(options: SystemConfigDependencies) {
     async deleteConfig(actorId: string, configId: string, reason?: string | null) {
       await transaction(async (connection) => {
         const current = await repository.findById(configId, connection, true);
-        if (!current) throw new AppError("not_found", "Khong tim thay config");
-        if (!await repository.deleteConfig(configId, connection)) throw new AppError("not_found", "Khong tim thay config");
+        if (!current) throw new AppError("not_found", "Không tìm thấy cấu hình");
+        if (!await repository.deleteConfig(configId, connection)) throw new AppError("not_found", "Không tìm thấy cấu hình");
         await repository.recordHistory({
           id: idFactory(),
           configId,

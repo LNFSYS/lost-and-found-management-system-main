@@ -15,15 +15,15 @@ export function assertPostUpdateAllowed(current: Pick<PostRecord, "status">, inp
   const changesContent = contentFields.some((field) => input[field] !== undefined);
   const nextStatus = input.status ?? current.status;
   if (changesContent && ["RESOLVED", "CLOSED", "EXPIRED", "HIDDEN"].includes(current.status)) {
-    throw new AppError("conflict", "Bai dang da ket thuc, khong the cap nhat noi dung");
+    throw new AppError("conflict", "Bài đăng đã kết thúc, không thể cập nhật nội dung");
   }
   if (!postTransitions[current.status].includes(nextStatus)) {
-    throw new AppError("conflict", "Chuyen trang thai bai dang khong hop le");
+    throw new AppError("conflict", "Chuyển trạng thái bài đăng không hợp lệ");
   }
 }
 
 export function ensureWritableStatus(post: Pick<PostRecord, "status">) {
   if (post.status === "RESOLVED" || post.status === "CLOSED" || post.status === "EXPIRED") {
-    throw new AppError("conflict", "Bai dang da ket thuc, khong the cap nhat noi dung");
+    throw new AppError("conflict", "Bài đăng đã kết thúc, không thể cập nhật nội dung");
   }
 }
