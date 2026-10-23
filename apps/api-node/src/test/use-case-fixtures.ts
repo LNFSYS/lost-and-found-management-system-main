@@ -91,6 +91,7 @@ export const geminiImageService = createImageAnalysisUseCases({ postRepository, 
 export function createTestCustodyRequestUseCases(overrides: Partial<import("../modules/warehouse/application/custody-request.use-cases.js").CustodyRequestDependencies> = {}) { return import("../modules/warehouse/application/custody-request.use-cases.js").then(m => m.createCustodyRequestUseCases({ custodyRequestRepository: {} as any, warehouseRepository: {} as any, id: randomUUID, withTransaction: fakeTransaction, ...overrides })); }
 export const custodyRequestService = {} as any; // Fake it for now since we just need it to compile
 export const testServices = {
+  illustrations: unexpectedPort<import("../main/services.js").ApplicationServices["illustrations"]>("illustrations"),
   appointmentService: unexpectedPort<import("../main/services.js").ApplicationServices["appointmentService"]>("appointmentService"),
   activityService: unexpectedPort<import("../main/services.js").ApplicationServices["activityService"]>("activityService"),
   notificationService,

@@ -107,6 +107,11 @@ export const env = {
     model: process.env.GEMINI_MODEL?.trim() || "gemini-3.5-flash-lite",
     timeoutMs: number("GEMINI_TIMEOUT_MS", 30_000)
   },
+  lostIllustration: {
+    enabled: bool("LOST_ILLUSTRATION_ENABLED", false),
+    imageModel: process.env.GEMINI_IMAGE_MODEL?.trim() || "gemini-3.1-flash-image",
+    imageTimeoutMs: boundedNumber("GEMINI_IMAGE_TIMEOUT_MS", 90_000, 10_000, 120_000)
+  },
   cloudinary: {
     cloudName: process.env.CLOUDINARY_CLOUD_NAME?.trim() || null,
     apiKey: process.env.CLOUDINARY_API_KEY?.trim() || null,

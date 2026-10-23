@@ -17,6 +17,8 @@ import { createNotificationPushWorker } from "../modules/notifications/applicati
 import { createSmtpNotificationEmailDelivery } from "../modules/notifications/infrastructure/notification-email.smtp.js";
 import { createWebPushDelivery } from "../modules/notifications/infrastructure/web-push.delivery.js";
 import { createImageAnalysisUseCases } from "../modules/posts/application/image-analysis.use-cases.js";
+import { createIllustrationUseCases } from "../modules/posts/application/illustration.use-cases.js";
+import { createGeminiIllustrationModel } from "../modules/posts/infrastructure/gemini-illustration-model.js";
 import { createPostUseCases } from "../modules/posts/application/post.use-cases.js";
 import { createGeminiImageAnalyzer } from "../modules/posts/infrastructure/gemini-image-analyzer.js";
 import { createRealtimeUseCases } from "../modules/realtime/application/realtime.use-cases.js";
@@ -126,9 +128,12 @@ export function createServices(persistence: Persistence, config: typeof env = en
   });
   const matchingService = createMatchingUseCases({ matchingRepository, postRepository, idFactory: id,
     delivery: { transaction, notifications: notificationRepository, emails: notificationEmailQueue } });
+  const illustrations = createIllustrationUseCases({ repository: persistence.illustrationRepository, posts: postRepository,
+    model: createGeminiIllustrationModel({ ...config.gemini, ...config.lostIllustration }), storage: postMediaStorage,
+    transaction, id, hash: security.hashToken });
   const postService = createPostUseCases({
     postRepository, matchingRepository, matchingService,
-    withTransaction: transaction, id, mediaStorage: postMediaStorage, logger: console, uploads: mediaUploads
+    withTransaction: transaction, id, mediaStorage: postMediaStorage, logger: console, uploads: mediaUploads, illustrations
   });
   const claimService = createClaimUseCases({
     contactPhotos: createContactPhotoUseCases({ repository: persistence.contactPhotoRepository, claims: claimRepository, matching: matchingRepository,
@@ -146,7 +151,7 @@ export function createServices(persistence: Persistence, config: typeof env = en
     appointmentService, activityService,
     notificationService, notificationEmailWorker, notificationPushWorker, systemConfigService, adminUserService, adminReportingService,
     adminCatalogService, warehouseService, custodyRequestService, returnFeedbackService, matchingService,
-    postService, claimService, realtimeService, chatSocketService, reportService, authService, geminiImageService
+    postService, claimService, realtimeService, chatSocketService, reportService, authService, geminiImageService, illustrations
   };
 }
 export type ApplicationServices = ReturnType<typeof createServices>;
