@@ -11,6 +11,7 @@ const joins = `FROM return_appointments a JOIN claims c ON c.id=a.claim_id
 const select = `SELECT a.*, identity_post.title, ${claimantIdSql} owner_id, ${finderIdSql} finder_id,
   identity_post.id item_post_id,
   (SELECT pm.id FROM post_media pm WHERE pm.post_id=identity_post.id AND pm.media_kind='ITEM' AND pm.resource_type='image'
+    AND pm.is_ai_generated=FALSE
     AND identity_post.visibility_mode='PUBLIC' AND identity_post.status<>'HIDDEN' AND identity_post.deleted_at IS NULL
     ORDER BY pm.sort_order,pm.created_at,pm.id LIMIT 1) item_media_id,
   hp.name location, COALESCE(w.version,0) version, COALESCE(w.finder_response,'PENDING') finder_response,
