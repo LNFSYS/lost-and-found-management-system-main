@@ -23,7 +23,7 @@ function initials(name: string) {
 }
 
 export function PostImage({ post, detail = false }: { post: PostSummary; detail?: boolean }) {
-  const media = post.media.find((item) => item.mediaKind === "ITEM");
+  const media = post.media.find(item => item.mediaKind === "ITEM" && !item.isAiGenerated) ?? post.media.find(item => item.mediaKind === "ITEM");
   const [source, setSource] = useState<string | null>(null);
 
   useEffect(() => {
@@ -44,6 +44,7 @@ export function PostImage({ post, detail = false }: { post: PostSummary; detail?
     {source ? <img src={source} alt={`Ảnh ${post.title}`} /> : <div className="post-card__placeholder"><ImageOff /><span>{source === "" ? "Không tải được ảnh" : media ? "Đang tải ảnh" : "Chưa có ảnh"}</span></div>}
     <span className={`post-type post-type--${post.type.toLowerCase()}`}>{post.type}</span>
     {post.visibilityMode === "PRIVATE_DETAILS" && <span className="post-private" title="Chi tiết được bảo vệ"><LockKeyhole /></span>}
+    {media?.isAiGenerated && <span className="post-ai-illustration">Ảnh minh họa do AI tạo</span>}
   </div>;
 }
 
