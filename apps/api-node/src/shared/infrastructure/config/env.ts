@@ -108,6 +108,10 @@ export const env = {
     timeoutMs: number("GEMINI_TIMEOUT_MS", 30_000)
   },
   lostIllustration: {
+    provider: process.env.LOST_ILLUSTRATION_PROVIDER?.trim() || "gemini",
+    cfToken: process.env.CLOUDFLARE_API_TOKEN?.trim() || null,
+    cfAccountId: process.env.CLOUDFLARE_ACCOUNT_ID?.trim() || null,
+    cfSteps: boundedNumber("CLOUDFLARE_IMAGE_STEPS", 4, 1, 8),
     enabled: bool("LOST_ILLUSTRATION_ENABLED", false),
     imageModel: process.env.GEMINI_IMAGE_MODEL?.trim() || "gemini-3.1-flash-image",
     imageTimeoutMs: boundedNumber("GEMINI_IMAGE_TIMEOUT_MS", 90_000, 10_000, 120_000)

@@ -113,3 +113,20 @@ MySQL integration cần `LNFS_DB_INTEGRATION=1`, `LNFS_TEST_DB_HOST=127.0.0.1`, 
 - Preflight sau migration không còn pending. Có cảnh báo lịch sử migration custody 053/055 từ baseline, không tự sửa ledger.
 - Đọc board qua PostRepository thật sau migration thành công (5 bài); metadata media trả cờ AI dạng boolean. Không ghi/thay đổi post để smoke test.
 - Sau khi user cấu hình key, probe tạo ảnh thật bằng mô tả giả lập nhận `429 RESOURCE_EXHAUSTED`, các quota Free Tier của `gemini-3.1-flash-image` và RetryInfo `76775s`; không có ảnh đầu ra. Không gửi contact/chat/evidence, không ghi thêm lượt hoặc thay dữ liệu bản nháp khi probe. Key/model-list 200 trước đó không thay cho generation acceptance. Cloudinary thật và isolated MySQL runtime vẫn chưa được xác minh; chưa thể coi là Done.
+# Cloudflare provider
+
+Set `LOST_ILLUSTRATION_PROVIDER=cloudflare`, server-only `CLOUDFLARE_API_TOKEN`,
+`CLOUDFLARE_ACCOUNT_ID` and optional `CLOUDFLARE_IMAGE_STEPS=4` (1-8).
+Image generation uses Workers AI REST with `@cf/black-forest-labs/flux-1-schnell`; Gemini remains responsible
+for description validation and image relevance review, so its credentials are still required.
+The existing draft quota, private storage and publication checks apply unchanged.
+Provider retries are disabled; timeout and provider failures pause new work for one minute.
+HTTP 401/403 indicates account/token access failure; 429 indicates quota/rate limiting.
+
+The former Hugging Face adapter and SDK have been removed. Existing HF environment
+variables are unused. No provider automatically retries image generation.
+
+Verified on 24/10/2026 with a synthetic wallet: Cloudflare returned a valid JPEG
+(252649 bytes), Gemini description validation allowed it, and image relevance review
+returned true. The probe did not write a draft, publish a post or upload to Cloudinary.
+23 focused provider/use-case tests passed and the API TypeScript build passed.

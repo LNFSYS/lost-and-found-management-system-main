@@ -19,6 +19,7 @@ import { createWebPushDelivery } from "../modules/notifications/infrastructure/w
 import { createImageAnalysisUseCases } from "../modules/posts/application/image-analysis.use-cases.js";
 import { createIllustrationUseCases } from "../modules/posts/application/illustration.use-cases.js";
 import { createGeminiIllustrationModel } from "../modules/posts/infrastructure/gemini-illustration-model.js";
+import { createCloudflareIllustrationModel } from "../modules/posts/infrastructure/cloudflare-illustration-model.js";
 import { createPostUseCases } from "../modules/posts/application/post.use-cases.js";
 import { createGeminiImageAnalyzer } from "../modules/posts/infrastructure/gemini-image-analyzer.js";
 import { createRealtimeUseCases } from "../modules/realtime/application/realtime.use-cases.js";
@@ -128,8 +129,13 @@ export function createServices(persistence: Persistence, config: typeof env = en
   });
   const matchingService = createMatchingUseCases({ matchingRepository, postRepository, idFactory: id,
     delivery: { transaction, notifications: notificationRepository, emails: notificationEmailQueue } });
+  const illustrationGuard = createGeminiIllustrationModel({ ...config.gemini, ...config.lostIllustration });
+  const illustrationModel = config.lostIllustration.provider === "cloudflare"
+    ? createCloudflareIllustrationModel({ token: config.lostIllustration.cfToken, accountId: config.lostIllustration.cfAccountId,
+      steps: config.lostIllustration.cfSteps, timeoutMs: config.lostIllustration.imageTimeoutMs, guard: illustrationGuard })
+    : illustrationGuard;
   const illustrations = createIllustrationUseCases({ repository: persistence.illustrationRepository, posts: postRepository,
-    model: createGeminiIllustrationModel({ ...config.gemini, ...config.lostIllustration }), storage: postMediaStorage,
+    model: illustrationModel, storage: postMediaStorage,
     transaction, id, hash: security.hashToken });
   const postService = createPostUseCases({
     postRepository, matchingRepository, matchingService,
