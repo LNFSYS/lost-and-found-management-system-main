@@ -1,18 +1,22 @@
 import type { Request, Response } from "express";
 import { z } from "zod";
 import { HttpError } from "../../../../shared/interfaces/http/http-error.js";
+import { validateImageUpload } from "../../../../shared/domain/media.js";
 import type { WarehouseUseCases } from "../../application/warehouse.use-cases.js";
+import type { WarehouseConversationExtraction, WarehouseConversationExtractionInput } from "../../application/warehouse.dto.js";
 import {
   createWarehouseItemSchema,
   listWarehouseItemsQuerySchema,
   updateWarehouseItemSchema,
   warehouseItemIdParamSchema,
   returnWarehouseItemSchema,
-  verifyCustodyClaimSchema
+  verifyCustodyClaimSchema,
+  warehouseConversationExtractionSchema
 } from "./warehouse.validator.js";
 
-export function createWarehouseController({ warehouseService }: {
+export function createWarehouseController({ warehouseService, warehouseConversationService }: {
   warehouseService: WarehouseUseCases;
+  warehouseConversationService?: { extract(input: WarehouseConversationExtractionInput, actorId: string): Promise<WarehouseConversationExtraction> };
 }) {
   function routeId(request: Request) {
     return warehouseItemIdParamSchema.parse(request.params).id;
@@ -89,6 +93,26 @@ export function createWarehouseController({ warehouseService }: {
     },
     async verifyCustodyClaim(request: Request, response: Response) {
       response.json(await warehouseService.verifyCustodyClaim(routeId(request), verifyCustodyClaimSchema.parse(request.body), actorId(request)));
+    },
+    async extractConversation(request: Request, response: Response) {
+      if (!warehouseConversationService) throw new HttpError(503, "Trợ lý AI kho hiện chưa khả dụng. Vui lòng nhập thông tin thủ công.");
+      let body: unknown = request.body;
+      if (typeof request.body?.payload === "string") {
+        try { body = JSON.parse(request.body.payload); }
+        catch { throw new HttpError(400, "Dữ liệu hội thoại gửi lên không hợp lệ."); }
+      }
+      const input = warehouseConversationExtractionSchema.parse(body);
+      const files = Array.isArray(request.files) ? request.files : [];
+      if (files.length && (input.mode !== "INTAKE" || input.intakeKind !== "WALK_IN")) {
+        throw new HttpError(400, "Chỉ chat tiếp nhận Walk-in tại quầy mới hỗ trợ đính kèm ảnh.");
+      }
+      const images = files.map(file => {
+        const image = { buffer: file.buffer, size: file.size, mimetype: file.mimetype };
+        validateImageUpload(image);
+        if (image.size > 5 * 1024 * 1024) throw new HttpError(413, "Mỗi ảnh chat không được vượt quá 5 MB.");
+        return image;
+      });
+      response.json(await warehouseConversationService.extract({ ...input, ...(images.length ? { images } : {}) }, actorId(request)));
     },
     async releaseReservation(request: Request, response: Response) {
       const { reason } = z.object({ reason: z.string().trim().min(3).max(1000) }).parse(request.body);

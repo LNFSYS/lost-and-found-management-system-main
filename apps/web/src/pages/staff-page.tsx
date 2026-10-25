@@ -40,7 +40,8 @@ import {
   type WarehouseItem,
   type WarehouseStatus,
   type WarehouseStorageLog,
-  type WarehouseImage
+  type WarehouseImage,
+  type WarehouseConversationExtraction
 } from "../services/api";
 
 import { WarehouseIntakeDialog } from "../components/warehouse-intake-dialog";
@@ -49,6 +50,7 @@ import { useModalFocus } from "../hooks/use-modal-focus";
 import { WarehouseImageGallery, WarehouseImageView } from "../components/warehouse-images";
 
 import { WarehouseDisposition } from "../components/warehouse-disposition";
+import { WarehouseConversationChat } from "../components/warehouse-conversation-chat";
 
 type StaffTab = "custody" | "warehouse" | "dashboard" | "logs";
 type PendingAction = "" | "load" | "create" | "update" | "logs" | "custody" | "custody-action";
@@ -599,11 +601,37 @@ function WarehouseInventoryTab({
   const [returnErrors, setReturnErrors] = useState<Record<string, string>>({});
   const [returnError, setReturnError] = useState("");
   const [returnVerified, setReturnVerified] = useState(false);
+  const manuallyEditedReturnFields = useRef(new Set<string>());
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
 
   function changeReturnText(field: ReturnTextField, value: string) {
+    manuallyEditedReturnFields.current.add(field);
     setReturnForm(prev => ({ ...prev, [field]: value }));
     setReturnErrors(prev => ({ ...prev, [field]: prev[field] ? returnTextError(field, value) : "" }));
+    setReturnVerified(false);
+  }
+
+  function applyReturnConversationExtraction(result: WarehouseConversationExtraction) {
+    if (result.mode !== "RETURN") return;
+    const patch: Partial<typeof returnForm> = {};
+    const fields = result.fields;
+    for (const field of ["receiverName", "receiverPhone", "receiverIdentity", "note"] as const) {
+      const value = fields[field];
+      if (value !== null && !manuallyEditedReturnFields.current.has(field)) patch[field] = value;
+    }
+    const matchedClaim = fields.matchedClaim;
+    let claimWasSuggested = false;
+    if (matchedClaim && !manuallyEditedReturnFields.current.has("claimId") && !manuallyEditedReturnFields.current.has("recipientId")) {
+      patch.claimId = matchedClaim.claimId;
+      patch.recipientId = matchedClaim.recipientId;
+      if (!manuallyEditedReturnFields.current.has("receiverName") && !fields.receiverName) patch.receiverName = matchedClaim.fullName;
+      claimWasSuggested = true;
+    }
+    if (!Object.keys(patch).length) return;
+    setReturnForm(previous => ({ ...previous, ...patch }));
+    setReturnErrors(previous => Object.fromEntries(Object.entries(previous).map(([field, message]) => [field, Object.keys(patch).includes(field) || (claimWasSuggested && ["claimId", "recipientId"].includes(field)) ? "" : message])));
+    if (claimWasSuggested) { setClaimReviewReason(""); setClaimReviewConfirmed(false); }
+    setReturnVerified(false);
   }
 
   function returnFieldError(field: string) {
@@ -711,7 +739,20 @@ function WarehouseInventoryTab({
     setClaimReviewReason("");
     setClaimReviewConfirmed(false);
     setReturnTargetItem(item);
+    manuallyEditedReturnFields.current.clear();
     setReturnForm({ claimId: "", recipientId: "", receiverName: "", receiverIdentity: "", receiverPhone: "", proofImages: [], note: "" });
+  }
+
+  function changeReturnClaim(claimId: string) {
+    manuallyEditedReturnFields.current.add("claimId");
+    manuallyEditedReturnFields.current.add("recipientId");
+    const recipient = returnRecipients.find(value => value.claimId === claimId);
+    setClaimReviewReason("");
+    setClaimReviewConfirmed(false);
+    setReturnErrors(previous => ({ ...previous, claimId: previous.claimId === "Cần xác minh claim tại quầy trước khi trả đồ." ? (recipient && !recipient.verified ? previous.claimId : "") : previous.claimId, claimReviewReason: "", claimReviewConfirmed: "" }));
+    setReturnForm(prev => ({ ...prev, claimId: recipient?.claimId ?? "", recipientId: recipient?.recipientId ?? "", receiverName: recipient?.fullName ?? prev.receiverName }));
+    if (recipient) manuallyEditedReturnFields.current.add("receiverName");
+    setReturnVerified(false);
   }
 
   function closeReturnModal() {
@@ -1105,6 +1146,8 @@ function WarehouseInventoryTab({
                 <button type="button" className="secondary-button" disabled={claimReviewsLoading} onClick={() => { setClaimReviewsLoading(true); setClaimReviewsReady(false); setClaimReviewsError(""); setClaimReviewReload(previous => previous + 1); }}><RefreshCw size={17} />Thử lại kiểm tra claim</button>
               </div>}
 
+              <WarehouseConversationChat mode="RETURN" warehouseItemId={returnTargetItem.id} onExtraction={applyReturnConversationExtraction} disabled={claimReviewsLoading} />
+
               <div className="warehouse-return-grid">
                 <label className="input-field" style={{ margin: 0 }}>
                   <span>Họ và tên người nhận <strong className="required-star">*</strong></span>
@@ -1125,13 +1168,7 @@ function WarehouseInventoryTab({
               {returnRecipients.length > 0 && (
                 <label className="input-field" style={{ margin: 0 }}>
                   <span>Liên kết claim trực tuyến (không bắt buộc)</span>
-                  <select value={returnForm.claimId} disabled={claimReviewBusy} onChange={(event) => {
-                    const recipient = returnRecipients.find(value => value.claimId === event.target.value);
-                    setClaimReviewReason("");
-                    setClaimReviewConfirmed(false);
-                    setReturnErrors(previous => ({ ...previous, claimId: previous.claimId === "Cần xác minh claim tại quầy trước khi trả đồ." ? (recipient && !recipient.verified ? previous.claimId : "") : previous.claimId, claimReviewReason: "", claimReviewConfirmed: "" }));
-                    setReturnForm(prev => ({ ...prev, claimId: recipient?.claimId ?? "", recipientId: recipient?.recipientId ?? "", receiverName: recipient?.fullName ?? prev.receiverName }));
-                  }}>
+                  <select value={returnForm.claimId} disabled={claimReviewBusy} onChange={(event) => changeReturnClaim(event.target.value)}>
                     <option value="">Trả trực tiếp, không có claim</option>
                     {returnRecipients.map(recipient => <option key={recipient.claimId} value={recipient.claimId}>{recipient.fullName} · {recipient.verified ? "Đã xác minh" : "Chưa xác minh"} · {recipient.claimId.slice(0, 8)}</option>)}
                   </select>
@@ -1219,6 +1256,7 @@ function WarehouseInventoryTab({
                             const res = await api.uploadWarehouseProof(file, itemId);
                             if (sequence !== returnSequence.current || returnItemId.current !== itemId) return;
                             setReturnForm((prev) => ({ ...prev, proofImages: prev.proofImages.includes(res.id) ? prev.proofImages : [...prev.proofImages, res.id] }));
+                            setReturnVerified(false);
                           }
                         } catch (error) {
                           if (sequence === returnSequence.current && returnItemId.current === itemId) setReturnErrors(prev => ({ ...prev, proofImage: messageOf(error, "Không thể tải lên ảnh bằng chứng") }));
@@ -1276,6 +1314,7 @@ function WarehouseInventoryTab({
                             onClick={(e) => {
                               e.stopPropagation();
                               setReturnForm((prev) => ({ ...prev, proofImages: prev.proofImages.filter((_, i) => i !== index) }));
+                              setReturnVerified(false);
                               setReturnErrors(prev => ({ ...prev, proofImage: returnForm.proofImages.length <= 1 ? "Vui lòng tải lên từ 1 đến 5 ảnh bằng chứng." : "" }));
                             }}
                             style={{

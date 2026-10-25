@@ -250,6 +250,19 @@ export interface WarehouseCatalog {
   buildings: Array<{ id: string; areaId: string; name: string }>;
   handoverPoints: Array<{ id: string; name: string; address: string; openingHours: string | null }>;
 }
+export type WarehouseConversationMode = "INTAKE" | "RETURN";
+export interface WarehouseConversationMessage { role: "user" | "assistant"; content: string }
+export type WarehouseIntakeConversationFields = {
+  itemName: string | null; description: string | null; categoryId: string | null; areaId: string | null; buildingId: string | null;
+  roomText: string | null; finderName: string | null; finderContact: string | null; conditionNotes: string | null; accessories: string | null; receivedQuantity: number | null;
+};
+export type WarehouseReturnConversationFields = {
+  receiverName: string | null; receiverPhone: string | null; receiverIdentity: string | null; note: string | null;
+  matchedClaim: { claimId: string; recipientId: string; fullName: string; verified: boolean } | null;
+};
+export type WarehouseConversationExtraction =
+  | { mode: "INTAKE"; fields: WarehouseIntakeConversationFields; assistantMessage: string; warnings: string[] }
+  | { mode: "RETURN"; fields: WarehouseReturnConversationFields; assistantMessage: string; warnings: string[] };
 export interface WarehouseItem {
   id: string;
   postId: string | null;
@@ -1348,6 +1361,15 @@ export const api = {
   deleteSystemConfig: (id: string) => raw<void>(`/admin/configs/${id}`, { method: "DELETE" }),
   getPublicConfig: () => raw<PublicConfigResponse>("/config/public"),
   getWarehouseCatalog: () => raw<WarehouseCatalog>("/staff/warehouse-items/catalog"),
+    extractWarehouseConversation: (payload: { mode: WarehouseConversationMode; intakeKind?: "WALK_IN" | "CUSTODY_REQUEST"; warehouseItemId?: string; messages: WarehouseConversationMessage[] }, images: File[] = []) => {
+      if (images.length) {
+        const form = new FormData();
+        form.append("payload", JSON.stringify(payload));
+        images.forEach(image => form.append("images", image));
+        return raw<WarehouseConversationExtraction>("/staff/warehouse-conversations/extract", { method: "POST", body: form });
+      }
+      return raw<WarehouseConversationExtraction>("/staff/warehouse-conversations/extract", { method: "POST", body: JSON.stringify(payload) });
+    },
   getDispositionContext: (id: string) => raw<{
     status: WarehouseStatus; eligible: boolean; reasons: string[]; legalHold: boolean; retentionDeadline: string | null;
     orders: Array<{ id: string; requesterId: string; requesterName: string; approverName: string | null; target: "DISPOSED" | "DONATED" | "TRANSFERRED"; reason: string; status: string; createdAt: string; approvedAt: string | null; executedAt: string | null }>;
