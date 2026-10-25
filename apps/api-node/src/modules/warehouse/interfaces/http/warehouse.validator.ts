@@ -84,4 +84,27 @@ export const verifyCustodyClaimSchema = z.object({
   reason: z.string().trim().min(10, "Nội dung đối chiếu phải có từ 10 đến 1000 ký tự.").max(1000, "Nội dung đối chiếu phải có từ 10 đến 1000 ký tự.")
 });
 
+export const warehouseConversationExtractionSchema = z.object({
+  mode: z.enum(["INTAKE", "RETURN"]),
+  intakeKind: z.enum(["WALK_IN", "CUSTODY_REQUEST"]).optional(),
+  warehouseItemId: uuid.optional(),
+  messages: z.array(z.object({
+    role: z.enum(["user", "assistant"]),
+    content: z.string().trim().min(1).max(2000)
+  }).strict()).min(1).max(20)
+}).strict().superRefine((value, context) => {
+  if (value.mode === "RETURN" && !value.warehouseItemId) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ["warehouseItemId"], message: "Cần chọn vật phẩm kho để trích xuất thông tin trả hàng." });
+  }
+  if (value.mode === "RETURN" && value.intakeKind) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ["intakeKind"], message: "Chế độ trả hàng không nhận loại tiếp nhận." });
+  }
+  if (value.messages.at(-1)?.role !== "user") {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ["messages"], message: "Lượt gửi mới nhất phải là tin nhắn của người dùng." });
+  }
+  if (value.messages.reduce((total, message) => total + message.content.length, 0) > 12000) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ["messages"], message: "Hội thoại vượt quá giới hạn trích xuất. Hãy bắt đầu cuộc trò chuyện mới." });
+  }
+});
+
 export type { CreateWarehouseItemInput, ListWarehouseItemsQuery, UpdateWarehouseItemInput, ReturnWarehouseItemInput, WarehouseStatus } from "../../application/warehouse.dto.js";

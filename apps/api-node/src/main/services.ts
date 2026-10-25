@@ -25,6 +25,8 @@ import { createReturnFeedbackUseCases } from "../modules/returns/application/ret
 import { createReportUseCases } from "../modules/reports/application/report.use-cases.js";
 import { createSystemConfigUseCases } from "../modules/system-config/application/system-config.use-cases.js";
 import { createWarehouseUseCases } from "../modules/warehouse/application/warehouse.use-cases.js";
+import { createWarehouseConversationUseCases } from "../modules/warehouse/application/warehouse-conversation.use-cases.js";
+import { createGeminiWarehouseConversationAnalyzer } from "../modules/warehouse/infrastructure/gemini-warehouse-conversation-analyzer.js";
 import { createCustodyRequestUseCases } from "../modules/warehouse/application/custody-request.use-cases.js";
 import { env } from "../shared/infrastructure/config/env.js";
 import { createCloudinaryPrivateMediaStorage } from "../shared/infrastructure/cloudinary-private-media-storage.js";
@@ -115,6 +117,7 @@ export function createServices(persistence: Persistence, config: typeof env = en
   const activityService = createActivityUseCases({ repository:persistence.activityRepository,audit:adminAuditRepository,transaction,id,
     media: { post:postMediaStorage,claim:claimMediaStorage,warehouse:proofStorage } });
   const warehouseService = createWarehouseUseCases({ warehouseRepository, custodyRequestRepository, proofStorage, sourceMediaStorage: postMediaStorage, contactMediaStorage: claimMediaStorage, ...custodyDelivery, withTransaction: transaction, id, uploads: mediaUploads, logger: console });
+  const warehouseConversationService = createWarehouseConversationUseCases({ warehouseRepository, analyzer: createGeminiWarehouseConversationAnalyzer(config.gemini) });
   const custodyRequestService = createCustodyRequestUseCases({ custodyRequestRepository, warehouseRepository, ...custodyDelivery, withTransaction: transaction, id, scheduleRepository: systemConfigRepository });
   const returnFeedbackService = createReturnFeedbackUseCases({
     repository: returnFeedbackRepository, adminAuditRepository, runInTransaction: transaction, id,
@@ -145,8 +148,11 @@ export function createServices(persistence: Persistence, config: typeof env = en
   return {
     appointmentService, activityService,
     notificationService, notificationEmailWorker, notificationPushWorker, systemConfigService, adminUserService, adminReportingService,
-    adminCatalogService, warehouseService, custodyRequestService, returnFeedbackService, matchingService,
+    adminCatalogService, warehouseService, warehouseConversationService, custodyRequestService, returnFeedbackService, matchingService,
     postService, claimService, realtimeService, chatSocketService, reportService, authService, geminiImageService
   };
 }
-export type ApplicationServices = ReturnType<typeof createServices>;
+type CreatedApplicationServices = ReturnType<typeof createServices>;
+export type ApplicationServices = Omit<CreatedApplicationServices, "warehouseConversationService"> & {
+  warehouseConversationService?: CreatedApplicationServices["warehouseConversationService"];
+};

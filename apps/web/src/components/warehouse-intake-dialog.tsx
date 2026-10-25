@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { CheckCircle2, ImagePlus, LoaderCircle, ScanLine, Trash2, X } from "lucide-react";
-import { api, ApiError, type CustodyIntakeContext, type CustodyRequest, type WarehouseCatalog, type WarehouseItem } from "../services/api";
+import { api, ApiError, type CustodyIntakeContext, type CustodyRequest, type WarehouseCatalog, type WarehouseConversationExtraction, type WarehouseItem } from "../services/api";
 import { WarehouseImageGallery, WarehouseImageView } from "./warehouse-images";
+import { WarehouseConversationChat } from "./warehouse-conversation-chat";
 import { useModalFocus } from "../hooks/use-modal-focus";
 
 const empty = { handoverPointId: "", itemName: "", description: "", categoryId: "", areaId: "", buildingId: "", roomText: "", finderName: "", finderContact: "", conditionNotes: "", accessories: "", receivedQuantity: "1", receivedAt: "" };
@@ -22,6 +23,7 @@ export function WarehouseIntakeDialog({ request, catalog, onClose, onReceived }:
   const [error, setError] = useState("");
   const [analysis, setAnalysis] = useState<Analysis | null>(null);
   const [confirmed, setConfirmed] = useState(false);
+  const manuallyEditedFields = useRef(new Set<string>());
   const fileInput = useRef<HTMLInputElement>(null);
   const modal = useRef<HTMLDivElement>(null);
   useModalFocus(modal, true, onClose, Boolean(busy));
@@ -38,9 +40,36 @@ export function WarehouseIntakeDialog({ request, catalog, onClose, onReceived }:
     return () => { active = false; };
   }, [request?.id]);
   function change(field: keyof typeof empty, value: string) {
+    manuallyEditedFields.current.add(field);
     setForm(prev => ({ ...prev, [field]: value, ...(field === "areaId" ? { buildingId: "" } : {}) }));
     setConfirmed(false);
     setErrors(prev => ({ ...prev, [field]: "" }));
+  }
+  function applyConversationExtraction(result: WarehouseConversationExtraction) {
+    if (result.mode !== "INTAKE") return;
+    const fields = result.fields;
+    const patch: Partial<typeof empty> = {};
+    const applyText = (field: keyof typeof empty, value: string | null) => {
+      if (value !== null && !manuallyEditedFields.current.has(field)) patch[field] = value;
+    };
+    applyText("itemName", fields.itemName);
+    applyText("description", fields.description);
+    applyText("categoryId", fields.categoryId);
+    const locationTouched = manuallyEditedFields.current.has("areaId") || manuallyEditedFields.current.has("buildingId");
+    if (!locationTouched) {
+      applyText("areaId", fields.areaId);
+      applyText("buildingId", fields.buildingId);
+    }
+    applyText("roomText", fields.roomText);
+    applyText("finderName", fields.finderName);
+    applyText("finderContact", fields.finderContact);
+    applyText("conditionNotes", fields.conditionNotes);
+    applyText("accessories", fields.accessories);
+    if (fields.receivedQuantity !== null && !manuallyEditedFields.current.has("receivedQuantity")) patch.receivedQuantity = String(fields.receivedQuantity);
+    if (!Object.keys(patch).length) return;
+    setForm(previous => ({ ...previous, ...patch }));
+    setErrors(previous => Object.fromEntries(Object.entries(previous).map(([field, message]) => [field, Object.keys(patch).includes(field) ? "" : message])));
+    setConfirmed(false);
   }
   const fieldError = (field: string) => errors[field] ? <small className="field-error" role="alert">{errors[field]}</small> : null;
   async function upload(files: File[]) {
@@ -109,6 +138,7 @@ export function WarehouseIntakeDialog({ request, catalog, onClose, onReceived }:
           <dt>Điểm bàn giao</dt><dd>{request?.handoverPoint?.name}</dd></dl></section>}
       <form className="admin-form modal-form" onSubmit={submit} noValidate>
         <h4>Đối chiếu tại quầy</h4>
+        <WarehouseConversationChat mode="INTAKE" onExtraction={applyConversationExtraction} disabled={Boolean(busy) || loading} allowImages={!request} />
         {!request && <label className="input-field"><span>Điểm bàn giao *</span><select value={form.handoverPointId} onChange={event => change("handoverPointId", event.target.value)}><option value="">Chọn điểm bàn giao</option>{catalog?.handoverPoints.map(item => <option key={item.id} value={item.id}>{item.name} - {item.address}</option>)}</select>{fieldError("handoverPointId")}</label>}
         <label className="input-field"><span>Tên vật phẩm *</span><input value={form.itemName} onChange={event => change("itemName", event.target.value)} />{fieldError("itemName")}</label>
         <label className="input-field"><span>Danh mục</span><select value={form.categoryId} onChange={event => change("categoryId", event.target.value)}><option value="">Chọn danh mục</option>{catalog?.categories.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select>{fieldError("categoryId")}</label>
