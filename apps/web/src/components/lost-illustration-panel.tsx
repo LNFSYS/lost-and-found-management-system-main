@@ -106,7 +106,6 @@ export function LostIllustrationPanel({ title, description, categoryId, online, 
       if (result.attempt.status === "READY") { setViewedId(result.attempt.id); retry.current = null; }
       if (["REJECTED", "FAILED"].includes(result.attempt.status)) {
         retry.current = null;
-        setError(result.attempt.status === "REJECTED" ? "Ảnh tạo ra chưa phù hợp mô tả nên không được sử dụng. Bạn có thể sửa mô tả hoặc tạo lại nếu còn lượt." : "Lượt tạo ảnh chưa thành công. Bạn có thể tạo lại nếu còn lượt.");
       }
     } catch (reason) {
       if (scope !== epoch.current) return;
@@ -124,7 +123,11 @@ export function LostIllustrationPanel({ title, description, categoryId, online, 
 
   const selected = viewed && selectedId === viewed.id && matchesInput(viewed) && canSelect;
   const latest = draft?.attempts[draft.attempts.length - 1];
-  const errorMessage = waiting && draft?.cooldown?.message ? draft.cooldown.message : error;
+  const exhausted = draft?.remaining === 0;
+  const attemptMessage = latest?.status === "REJECTED"
+    ? `Lượt ${latest.number}: ảnh chưa phù hợp mô tả nên chưa được duyệt.${exhausted ? "" : " Bạn có thể sửa mô tả và tạo lại."}`
+    : latest?.status === "FAILED" ? `Lượt ${latest.number}: dịch vụ tạo hoặc kiểm tra ảnh chưa hoàn tất.${exhausted ? "" : " Bạn có thể thử lại khi dịch vụ sẵn sàng."}` : "";
+  const errorMessage = waiting && draft?.cooldown?.message ? draft.cooldown.message : error || (!generating && !pending ? attemptMessage : "");
   return <section className="lost-illustration story-field--wide" aria-label="Ảnh minh họa vật bị mất">
     <div className="lost-illustration__heading"><Sparkles size={20} aria-hidden="true" /><h4>Ảnh minh họa từ mô tả</h4>
       {draft?.available && <span>{draft.used}/{draft.maxAttempts} lượt</span>}
@@ -139,7 +142,9 @@ export function LostIllustrationPanel({ title, description, categoryId, online, 
       <p>1 lần tạo và tối đa 3 lần tạo lại. Chọn danh mục và mô tả rõ vật phẩm, màu sắc, chất liệu hoặc dấu hiệu riêng (20–2.000 ký tự).</p>
       {draft?.available && <p>Lượt đã bắt đầu tạo vẫn được tính khi dịch vụ gặp lỗi hoặc ảnh bị từ chối.</p>}
       {waiting > 0 && <p role="status">Tạm dừng thử lại: còn khoảng {waiting >= 3600 ? `${Math.ceil(waiting / 3600)} giờ` : waiting >= 60 ? `${Math.ceil(waiting / 60)} phút` : `${waiting} giây`}. Bạn vẫn có thể đăng bài không dùng ảnh AI.</p>}
-      {draft?.remaining === 0 && <p role="status">Đã hết lượt tạo lại cho bản nháp này. Bạn vẫn có thể chọn ảnh đã tạo hoặc tải ảnh thật.</p>}
+      {exhausted && <p role="status">{ready.length
+        ? "Đã dùng hết 4 lượt. Bạn có thể chọn ảnh đã được duyệt hoặc tải ảnh thật."
+        : "Đã dùng hết 4 lượt và chưa có ảnh được duyệt. Bạn vẫn có thể đăng bài không dùng ảnh AI hoặc tải ảnh thật."}</p>}
       {latest?.status === "PENDING" && !online && <p role="status">Mất kết nối. Lượt tạo được lưu trên máy chủ; trạng thái sẽ cập nhật khi có mạng.</p>}
       {viewed && <>
         <figure className="lost-illustration__preview">
@@ -147,6 +152,7 @@ export function LostIllustrationPanel({ title, description, categoryId, online, 
             {imageFailed && <button className="lost-illustration__refresh" type="button" title="Tải lại ảnh minh họa" aria-label="Tải lại ảnh minh họa" onClick={() => setImageRetry(value => value + 1)}><RefreshCw size={18} aria-hidden="true" /></button>}
           </div>}
           <figcaption>Ảnh minh họa do AI tạo · Không phải ảnh thật hoặc bằng chứng sở hữu</figcaption>
+          <p>Chữ/logo và chi tiết nhỏ có thể khác thực tế.</p>
         </figure>
         <div className="lost-illustration__choices" aria-label="Chọn phiên bản ảnh minh họa">{ready.map(attempt => <label key={attempt.id}>
           <input type="radio" name="illustration-version" checked={attempt.id === viewed.id} onChange={() => setViewedId(attempt.id)} /> Ảnh {attempt.number}

@@ -21,7 +21,7 @@ LOST_ILLUSTRATION_ENABLED=true
 CLOUDFLARE_API_TOKEN=...
 CLOUDFLARE_ACCOUNT_ID=...
 CLOUDFLARE_IMAGE_STEPS=4
-CLOUDFLARE_ILLUSTRATION_TEXT_MODEL=@cf/meta/llama-3.2-3b-instruct
+CLOUDFLARE_ILLUSTRATION_TEXT_MODEL=@cf/meta/llama-3.1-8b-instruct
 CLOUDFLARE_ILLUSTRATION_VISION_MODEL=@cf/moondream/moondream3.1-9B-A2B
 CLOUDFLARE_ILLUSTRATION_TIMEOUT_MS=90000
 ```
@@ -48,3 +48,20 @@ npm run build --workspace @lnfs/api-node
 ```
 
 Test provider dung mock; can mot smoke test rieng voi Cloudflare account de xac nhan token/quota/model va upload storage thuc te.
+
+## Provider verification - 28/10/2026
+
+- Live probe reproduced a successful HTTP envelope with an empty Moondream `result` when streaming was not explicitly disabled. The old parser incorrectly classified this as an irrelevant image.
+- Set `stream: false` and `reasoning: false`. REST returns the completed answer at `result.result.answer`; the adapter also accepts the direct answer shape.
+- A concise visual question avoids echoing the specification JSON. Only complete YES/NO answers produce a content decision. Empty, uncertain, contradictory or truncated output raises a provider error and records FAILED, not REJECTED; no unverified image is selectable.
+- Live description extraction and FLUX generation produced a synthetic black fabric wallet (209522-byte JPEG). The corrected adapter accepted the matching wallet description and rejected a red metal water bottle description for the same image.
+- These probes did not access the application database, consume draft attempts, publish posts or upload to Cloudinary. Live storage/publication and browser end-to-end flow were not tested by these probes.
+
+### Follow-up: exhausted wallet draft
+
+- Read-only inspection confirmed four REJECTED attempts and no saved assets for the affected draft. The latest attempt was made after the parser fix, so reloading/restarting alone cannot restore its quota or prove that every generated image will pass review.
+- Generation now uses only extracted attributes and the selected category, not generic reference examples that can introduce undescribed accessories. Review checks item type, main color/material/shape and unsafe content; it does not require exact small logo lettering or photographic lighting. The UI identifies the image as an approximation and warns about small details.
+- Two live samples using the affected draft's exact title/description/category were accepted (134392 and 254283 bytes). Wrong-item and wrong-main-color controls were rejected. These diagnostic calls did not spend draft attempts or write application data.
+- The UI restores the latest attempt outcome after refresh/reload, distinguishes provider failures from content rejection, and does not suggest another generation or a selectable image when all four attempts are exhausted with none READY.
+- Focused backend/HTTP tests: 18 passed. Playwright illustration flow: 12 passed, including mobile/desktop publication, quota restoration and exhausted/failed attempts. API/web builds passed; Vite retains its existing large-bundle warning. Browser tests use mocked API/provider responses, separate from the live provider probes.
+- Recovery of the exhausted shared-database draft requires explicit operator approval. Preserve its attempt history; do not raise the four-attempt limit or add an unrestricted user reset endpoint.

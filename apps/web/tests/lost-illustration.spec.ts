@@ -8,8 +8,8 @@ const catalog = { categories: [{ id: parentId, name: "Đồ dùng", parentId: nu
 const image = readFileSync(new URL("./fixtures/appointment-item.png", import.meta.url));
 const title = "Bình nước màu đỏ";
 const description = "Bình nước màu đỏ hình trụ với nắp màu đen";
-type Attempt = { id: string; number: number; status: "READY" | "REJECTED" | "PENDING"; title: string; description: string; categoryId: string; url: string | null };
-async function prepare(page: Page, options: { reject?: boolean; used?: number; pending?: boolean } = {}) {
+type Attempt = { id: string; number: number; status: "READY" | "REJECTED" | "PENDING" | "FAILED"; title: string; description: string; categoryId: string; url: string | null };
+async function prepare(page: Page, options: { reject?: boolean; used?: number; pending?: boolean; verificationFailure?: boolean } = {}) {
   const attempts: Attempt[] = [];
   let calls = 0;
   let used = options.used ?? 0;
@@ -27,7 +27,11 @@ async function prepare(page: Page, options: { reject?: boolean; used?: number; p
   await page.route(/\/api\/posts\/illustrations$/, async route => {
     calls++;
     const payload = route.request().postDataJSON();
-    const attempt = add(options.reject ? "REJECTED" : "READY", { title: payload.title, description: payload.description, categoryId: payload.categoryId });
+    const attempt = add(options.verificationFailure ? "FAILED" : options.reject ? "REJECTED" : "READY", { title: payload.title, description: payload.description, categoryId: payload.categoryId });
+    if (options.verificationFailure) {
+      await route.fulfill({ status: 502, json: { message: "Chưa nhận được kết quả kiểm tra ảnh rõ ràng từ dịch vụ AI." } });
+      return;
+    }
     await route.fulfill({ json: { attempt, draft: state() } });
   });
   await page.route(/\/api\/posts(?:\?.*)?$/, route => {
@@ -109,6 +113,43 @@ test("rejected generation has no selectable image and shows remaining quota", as
   await expect(panel.getByRole("img", { name: "Ảnh minh họa vật bị mất do AI tạo", exact: true })).toHaveCount(0);
   await expect(panel.getByLabel("Dùng ảnh này cho bài đăng")).toHaveCount(0);
   await expect(panel.getByText("1/4 lượt")).toBeVisible();
+});
+
+test("fourth rejected attempt remains visible after refresh without suggesting another generation", async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 440, height: 956 });
+  const qa = await prepare(page, { used: 3, reject: true });
+  await fill(page);
+  const panel = page.getByRole("region", { name: "Ảnh minh họa vật bị mất" });
+  await panel.getByRole("button", { name: "Tạo lại ảnh", exact: true }).click();
+  await expect(panel.getByRole("status")).toContainText("Đã dùng hết 4 lượt và chưa có ảnh được duyệt");
+  await expect(panel.getByRole("alert")).toContainText("Lượt 4: ảnh chưa phù hợp mô tả");
+  await expect(panel.getByRole("alert")).not.toContainText("tạo lại");
+  await panel.getByRole("button", { name: "Kiểm tra trạng thái ảnh minh họa" }).click();
+  await expect(panel.getByRole("alert")).toContainText("Lượt 4:");
+  await page.reload();
+  const form = await fill(page);
+  await expect(panel.getByText("4/4 lượt")).toBeVisible();
+  await expect(panel.getByRole("alert")).toContainText("Lượt 4:");
+  await expect(panel.getByRole("button", { name: "Tạo lại ảnh", exact: true })).toBeDisabled();
+  await expect(panel.getByLabel("Dùng ảnh này cho bài đăng")).toHaveCount(0);
+  await expect(form.getByRole("button", { name: "Đăng bài LOST" })).toBeEnabled();
+  await panel.screenshot({ path: testInfo.outputPath("exhausted-draft-mobile.png") });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  expect(qa.calls()).toBe(1);
+});
+
+test("verification service error is not presented as an unrelated image on reload", async ({ page }) => {
+  const qa = await prepare(page, { used: 3, verificationFailure: true });
+  await fill(page);
+  const panel = page.getByRole("region", { name: "Ảnh minh họa vật bị mất" });
+  await panel.getByRole("button", { name: "Tạo lại ảnh", exact: true }).click();
+  await expect(panel.getByRole("alert")).toContainText("Chưa nhận được kết quả kiểm tra ảnh");
+  await page.reload();
+  await expect(panel.getByRole("alert")).toContainText("Lượt 4: dịch vụ tạo hoặc kiểm tra ảnh chưa hoàn tất");
+  await expect(panel.getByRole("alert")).not.toContainText("chưa phù hợp mô tả");
+  await expect(panel.getByRole("alert")).not.toContainText("thử lại");
+  await expect(panel.getByRole("button", { name: "Tạo lại ảnh", exact: true })).toBeDisabled();
+  expect(qa.calls()).toBe(1);
 });
 
 test("a restored pending attempt resyncs without another generation or premature post submission", async ({ page }) => {
