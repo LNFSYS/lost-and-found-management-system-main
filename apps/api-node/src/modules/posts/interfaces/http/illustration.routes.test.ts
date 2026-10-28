@@ -47,10 +47,10 @@ test("illustration HTTP endpoints enforce authentication, disabled sessions, LOS
     const image = await fetch(`${base}/${imageId}/image`, { headers: headers() });
     assert.equal(image.status, 200); assert.equal(image.headers.get("cache-control"), "private, no-store");
     assert.match(image.headers.get("content-type")!, /^image\/jpeg/);
-    services.illustrations.generate = async () => { throw new AppError("rate_limited", "Gemini quota unavailable; check Billing", 120); };
+    services.illustrations.generate = async () => { throw new AppError("rate_limited", "Cloudflare Workers AI quota unavailable", 120); };
     const limited = await fetch(base, { method: "POST", headers: { ...headers(), origin: "http://localhost:5173" }, body: JSON.stringify(input) });
     assert.equal(limited.status, 429); assert.equal(limited.headers.get("retry-after"), "120");
     assert.match(limited.headers.get("access-control-expose-headers")!, /Retry-After/i);
-    assert.deepEqual(await limited.json(), { message: "Gemini quota unavailable; check Billing" });
+    assert.deepEqual(await limited.json(), { message: "Cloudflare Workers AI quota unavailable" });
   } finally { server.close(); server.closeAllConnections(); await once(server, "close"); }
 });
