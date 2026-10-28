@@ -112,7 +112,7 @@ export const env = {
     cfAccountId: process.env.CLOUDFLARE_ACCOUNT_ID?.trim() || null,
     cfSteps: boundedNumber("CLOUDFLARE_IMAGE_STEPS", 4, 1, 8),
     enabled: bool("LOST_ILLUSTRATION_ENABLED", false),
-    textModel: process.env.CLOUDFLARE_ILLUSTRATION_TEXT_MODEL?.trim() || "@cf/meta/llama-3.2-3b-instruct",
+    textModel: process.env.CLOUDFLARE_ILLUSTRATION_TEXT_MODEL?.trim() || "@cf/meta/llama-3.1-8b-instruct",
     visionModel: process.env.CLOUDFLARE_ILLUSTRATION_VISION_MODEL?.trim() || "@cf/moondream/moondream3.1-9B-A2B",
     timeoutMs: boundedNumber("CLOUDFLARE_ILLUSTRATION_TIMEOUT_MS", 90_000, 10_000, 120_000)
   },

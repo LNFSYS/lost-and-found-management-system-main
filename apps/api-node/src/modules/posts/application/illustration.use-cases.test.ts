@@ -100,6 +100,18 @@ test("provider failure counts once; retry with the same request does not call th
   assert.equal(f.reservations(), 1);
 });
 
+test("verification protocol failure marks FAILED, not REJECTED, and replay cannot spend another attempt", async () => {
+  const f = fixture({ verify: async () => { throw new AppError("upstream_failure", "Invalid verification response"); } });
+  await assert.rejects(f.service.generate("owner", input), { code: "upstream_failure" });
+  const replay = await f.service.generate("owner", input);
+  assert.equal(replay.attempt.status, "FAILED");
+  assert.equal(replay.attempt.url, null);
+  assert.equal(replay.draft.used, 1);
+  assert.equal(f.calls(), 1);
+  assert.equal(f.reservations(), 1);
+  assert.equal((await f.repository.findAttempt("owner", replay.attempt.id))?.storageRef, null);
+});
+
 test("a provider cooldown is visible to restored drafts and rejects new work before spending quota", async () => {
   const cooldown = { until: Date.now() + 60_000, message: "Gemini quota unavailable" };
   const f = fixture({ cooldown, describe: async () => { throw new AppError("rate_limited", cooldown.message, 60); } });

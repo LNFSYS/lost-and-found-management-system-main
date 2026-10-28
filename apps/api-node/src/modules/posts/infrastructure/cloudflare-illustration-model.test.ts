@@ -21,10 +21,11 @@ test("Cloudflare text, image and vision models complete illustration without Gem
     const target = String(url);
     calls.push(target);
     assert.equal(new Headers(init?.headers).get("authorization"), "Bearer test-token");
-    if (target.endsWith("@cf/meta/llama-3.2-3b-instruct")) {
+    if (target.endsWith("@cf/meta/llama-3.1-8b-instruct")) {
       const body = JSON.parse(String(init?.body));
       assert.equal(body.messages[1].content.includes("Black wallet"), true);
-      return textResponse(JSON.stringify({ allowed: true, ...spec }));
+      assert.equal(body.response_format.type, "json_schema");
+      return Response.json({ success: true, result: { response: { allowed: true, ...spec } } });
     }
     if (target.endsWith("@cf/black-forest-labs/flux-1-schnell")) {
       assert.equal(JSON.parse(String(init?.body)).steps, 4);
@@ -33,8 +34,10 @@ test("Cloudflare text, image and vision models complete illustration without Gem
     assert.match(target, /@cf\/moondream\/moondream3\.1-9B-A2B$/);
     const body = JSON.parse(String(init?.body));
     assert.equal(body.task, "query");
+    assert.equal(body.stream, false);
+    assert.equal(body.reasoning, false);
     assert.match(body.image, /^data:image\/jpeg;base64,/);
-    return Response.json({ success: true, result: { answer: '{"relevant":true}' } });
+    return Response.json({ success: true, result: { result: { answer: "YES", finish_reason: "stop" }, usage: { total_tokens: 758 } } });
   });
   assert.equal(f.model.available, true);
   const described = await f.model.describe(input, context);
@@ -47,11 +50,32 @@ test("Cloudflare text, image and vision models complete illustration without Gem
 });
 
 test("unrelated descriptions are rejected and malformed vision answers fail closed", async () => {
-  const f = fixture(async url => String(url).endsWith("llama-3.2-3b-instruct")
+  const f = fixture(async url => String(url).endsWith("llama-3.1-8b-instruct")
     ? textResponse(JSON.stringify({ allowed: false, ...spec }))
     : Response.json({ success: true, result: { answer: "uncertain" } }));
   assert.equal(await f.model.describe(input, context), null);
-  assert.equal(await f.model.verify({ buffer: Buffer.from("x"), size: 1, mimetype: "image/jpeg" }, spec, context), false);
+  await assert.rejects(f.model.verify({ buffer: Buffer.from("x"), size: 1, mimetype: "image/jpeg" }, spec, context), { code: "upstream_failure" });
+});
+
+test("vision verification supports direct and nested complete decisions", async () => {
+  const image = { buffer: Buffer.from("image"), size: 5, mimetype: "image/jpeg" };
+  for (const nested of [false, true]) {
+    for (const answer of ["YES", " yes. ", "NO", "No!"]) {
+      const payload = { answer, finish_reason: "stop" };
+      const f = fixture(async () => Response.json({ success: true, result: nested ? { result: payload } : payload }));
+      assert.equal(await f.model.verify(image, spec, context), answer.trim().toUpperCase().startsWith("YES"));
+    }
+  }
+});
+
+test("empty streaming results, uncertain, contradictory and truncated answers are errors, not content rejection", async () => {
+  const image = { buffer: Buffer.from("image"), size: 5, mimetype: "image/jpeg" };
+  for (const result of [{}, { result: {} }, { result: { answer: null } }, { answer: "UNKNOWN" },
+    { answer: "Yes, but the object does not match." }, { answer: "relevant: false" },
+    { result: { answer: "YES", finish_reason: "length" } }]) {
+    const f = fixture(async () => Response.json({ success: true, result }));
+    await assert.rejects(f.model.verify(image, spec, context), { code: "upstream_failure" });
+  }
 });
 
 test("provider errors are sanitized and cooldown blocks subsequent model calls", async () => {
