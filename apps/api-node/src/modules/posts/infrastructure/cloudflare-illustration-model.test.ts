@@ -21,7 +21,7 @@ test("Cloudflare text, image and vision models complete illustration without Gem
     const target = String(url);
     calls.push(target);
     assert.equal(new Headers(init?.headers).get("authorization"), "Bearer test-token");
-    if (target.endsWith("@cf/meta/llama-3.1-8b-instruct")) {
+    if (target.endsWith("@cf/meta/llama-3.3-70b-instruct-fp8-fast")) {
       const body = JSON.parse(String(init?.body));
       assert.equal(body.messages[1].content.includes("Black wallet"), true);
       assert.equal(body.response_format.type, "json_schema");
@@ -50,11 +50,53 @@ test("Cloudflare text, image and vision models complete illustration without Gem
 });
 
 test("unrelated descriptions are rejected and malformed vision answers fail closed", async () => {
-  const f = fixture(async url => String(url).endsWith("llama-3.1-8b-instruct")
+  const f = fixture(async url => String(url).endsWith("llama-3.3-70b-instruct-fp8-fast")
     ? textResponse(JSON.stringify({ allowed: false, ...spec }))
     : Response.json({ success: true, result: { answer: "uncertain" } }));
   assert.equal(await f.model.describe(input, context), null);
   await assert.rejects(f.model.verify({ buffer: Buffer.from("x"), size: 1, mimetype: "image/jpeg" }, spec, context), { code: "upstream_failure" });
+});
+
+test("Vietnamese input is translated once by Llama; only English attributes reach FLUX and vision", async () => {
+  const vietnameseInput = { ...input, title: "Ví Camelia màu đen", description: "Ví vải màu đen, nhỏ gọn, logo Camelia màu trắng ở góc phải." };
+  const vietnameseContext = { ...context, category: "Ví / bóp", reference: "Vật phẩm: ví. Đặc điểm: màu, chất liệu, hình dáng." };
+  const translated = { item: "wallet", color: "black", material: "fabric", shape: "small and compact",
+    details: ["white Camelia logo in the right corner"] };
+  for (const serialized of [false, true]) {
+    let textCalls = 0;
+    const original = JSON.stringify(vietnameseInput);
+    const f = fixture(async (url, init) => {
+      const body = JSON.parse(String(init?.body));
+      if (String(url).includes("llama")) {
+        textCalls++;
+        assert.match(body.messages[0].content, /Translate all accepted visible attributes into concise English/);
+        assert.equal(body.stream, false);
+        assert.match(body.response_format.json_schema.properties.details.description, /English/);
+        const data = JSON.parse(body.messages[1].content);
+        assert.equal(data.description, vietnameseInput.description);
+        assert.deepEqual(data.reference, { id: vietnameseContext.id, category: vietnameseContext.category });
+        assert.ok(!body.messages[1].content.includes(vietnameseContext.reference));
+        const response = { allowed: true, ...translated };
+        return Response.json({ success: true, result: { response: serialized ? JSON.stringify(response) : response } });
+      }
+      if (String(url).includes("flux")) {
+        assert.ok(body.prompt.includes(JSON.stringify({ object: translated })));
+        assert.ok(!body.prompt.includes(vietnameseContext.category));
+        assert.ok(!body.prompt.includes(vietnameseContext.reference));
+        assert.ok(!body.prompt.includes(vietnameseInput.description));
+        return Response.json({ success: true, result: { image: generated } });
+      }
+      assert.match(body.question, /small and compact black fabric wallet/);
+      assert.ok(!body.question.includes(vietnameseContext.category));
+      return Response.json({ success: true, result: { result: { answer: "YES", finish_reason: "stop" } } });
+    });
+    const described = await f.model.describe(vietnameseInput, vietnameseContext);
+    assert.deepEqual(described, translated);
+    const image = await f.model.generate(described!, vietnameseContext);
+    assert.equal(await f.model.verify(image, described!, vietnameseContext), true);
+    assert.equal(textCalls, 1);
+    assert.equal(JSON.stringify(vietnameseInput), original);
+  }
 });
 
 test("vision verification supports direct and nested complete decisions", async () => {
