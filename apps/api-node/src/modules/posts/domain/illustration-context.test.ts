@@ -13,3 +13,16 @@ test("retrieval rejects unrelated creative prompts and mismatched categories", (
   assert.equal(retrieveIllustrationContext("Ví / bóp", "Điện thoại màu đen bị mất"), null);
   assert.equal(retrieveIllustrationContext("Unknown category", "Ví da màu đen"), null);
 });
+
+test("the explicit other-items category retrieves a supported item from its description", () => {
+  const description = "BÌnh nước thương hiệu LocknLock, màu trắng kem, có nắp màu đen, 500ml, dài cỡ 20cm";
+  for (const category of ["Vật dụng khác", "vat dung khac"]) {
+    assert.equal(retrieveIllustrationContext(category, description)?.id, "bottle");
+    assert.equal(retrieveIllustrationContext(category, "Ví vải đen nhỏ gọn")?.id, "wallet");
+    assert.equal(retrieveIllustrationContext(category, "Vẽ lâu đài trên trời"), null);
+    assert.equal(retrieveIllustrationContext(category, "Màu trắng kem, nắp đen, 500ml"), null);
+  }
+  assert.equal(retrieveIllustrationContext("Bình nước", description)?.id, "bottle");
+  assert.equal(retrieveIllustrationContext("Ví / bóp", description), null);
+  assert.equal(retrieveIllustrationContext("Danh mục khác chưa hỗ trợ", description), null);
+});

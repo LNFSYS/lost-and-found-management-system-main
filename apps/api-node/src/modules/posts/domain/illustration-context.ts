@@ -19,16 +19,34 @@ const references = [
 
 export interface IllustrationContext { id: string; category: string; reference: string; }
 
+// Complete item names avoid matching fragments such as "trang" in "trang suc".
+const itemNames: Record<string, string[]> = {
+  phone: ["điện thoại", "smartphone", "iphone", "samsung", "oppo", "xiaomi"],
+  computer: ["laptop", "máy tính", "macbook", "bàn phím", "chuột", "mouse"],
+  wallet: ["ví", "bóp", "wallet"],
+  bag: ["balo", "ba lô", "túi", "cặp", "bag", "backpack"],
+  keys: ["chìa khóa", "chùm chìa", "key", "móc khóa"],
+  audio: ["tai nghe", "airpods", "headphone", "earphone", "loa"],
+  card: ["thẻ", "giấy tờ", "căn cước", "bằng lái", "chứng minh", "card"],
+  accessory: ["đồng hồ", "vòng", "nhẫn", "dây chuyền", "trang sức", "kính", "watch", "glasses"],
+  bottle: ["bình nước", "bình giữ nhiệt", "cốc", "ly", "bottle"],
+  clothes: ["áo", "quần", "mũ", "nón", "giày", "dép", "jacket", "shoe", "hat"],
+  stationery: ["sách", "vở", "bút", "tài liệu", "sổ", "notebook", "pen", "book"],
+  device: ["sạc", "cáp", "usb", "pin", "máy ảnh", "camera", "ổ cứng"],
+  umbrella: ["ô", "dù", "umbrella"]
+};
+
 export function retrieveIllustrationContext(category: string, description: string): IllustrationContext | null {
   const searchable = (value: string) => ` ${normalizeVietnameseText(value).replace(/[^a-z0-9]+/g, " ").trim()} `;
   const text = searchable(description);
   const categoryText = searchable(category);
-  const words = (value: string) => normalizeVietnameseText(value).split(/\s+/).filter(word => word.length > 1);
+  // Only the catalog's catch-all leaf may retrieve by description alone.
+  const otherItems = categoryText.trim() === "vat dung khac";
   const ranked = references.map(doc => {
-    const terms = words(doc.names);
-    return { doc, categoryHits: terms.filter(term => categoryText.includes(` ${term} `)).length,
-      descriptionHits: terms.filter(term => text.includes(` ${term} `)).length };
-  }).filter(item => item.categoryHits > 0 && item.descriptionHits > 0)
+    const terms = (itemNames[doc.id] ?? []).map(searchable);
+    return { doc, categoryHits: terms.filter(term => categoryText.includes(term)).length,
+      descriptionHits: terms.filter(term => text.includes(term)).length };
+  }).filter(item => (otherItems || item.categoryHits > 0) && item.descriptionHits > 0)
     .sort((a, b) => b.categoryHits - a.categoryHits || b.descriptionHits - a.descriptionHits);
   const selected = ranked[0]?.doc;
   return selected ? { id: selected.id, category, reference: `Vật phẩm: ${selected.names}. Đặc điểm quan sát được: ${selected.features}. Chỉ minh họa một vật thể, nền trung tính, không người hoặc khung cảnh.` } : null;

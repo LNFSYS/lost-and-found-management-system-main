@@ -9,7 +9,7 @@ import type { PostRecord, PostRepository } from "./post.repository.port.js";
 import { AppError } from "../../../shared/domain/app-error.js";
 
 const input: IllustrationInput = { title: "Ví da màu đen", description: "Ví da màu đen hình chữ nhật với khóa kéo bạc", categoryId: "category", requestId: "request-1" };
-function fixture(modelOverrides: Partial<IllustrationModel> = {}) {
+function fixture(modelOverrides: Partial<IllustrationModel> = {}, categoryName = "Ví / bóp") {
   let draft: IllustrationDraft | null = null;
   let calls = 0, reservations = 0;
   let chain: Promise<unknown> = Promise.resolve();
@@ -48,7 +48,7 @@ function fixture(modelOverrides: Partial<IllustrationModel> = {}) {
     closeDraft: async (_user, id) => { assert.equal(draft?.id, id); draft = null; }
   };
   const media: Array<Parameters<PostRepository["createMedia"]>[0]> = [];
-  const posts = { getFormCatalog: async () => ({ categories: [{ id: "parent", name: "Túi ví", parentId: null }, { id: "category", name: "Ví / bóp", parentId: "parent" }], areas: [], buildings: [], handoverPoints: [] }),
+  const posts = { getFormCatalog: async () => ({ categories: [{ id: "parent", name: "Túi ví", parentId: null }, { id: "category", name: categoryName, parentId: "parent" }], areas: [], buildings: [], handoverPoints: [] }),
     createMedia: async (row: Parameters<PostRepository["createMedia"]>[0]) => { media.push(row); } };
   const storage = { save: async (_owner: string, id: string) => ({ secureUrl: `private://${id}`, publicId: id }),
     resolve: async () => ({ body: Buffer.from("private bytes"), contentType: "image/jpeg" }), remove: async () => { throw new Error("No compensating deletion permitted"); } };
@@ -86,6 +86,29 @@ test("unrelated descriptions, unsupported categories and semantic rejection neve
   await assert.rejects(f.service.generate("owner", input), { code: "invalid_input" });
   assert.equal(f.calls(), 0); assert.equal(f.reservations(), 0);
 });
+test("other-items bottle requests retain semantic validation, replay protection and the original description", async () => {
+  const bottleInput = { ...input, title: "Bình nước LocknLock",
+    description: "BÌnh nước thương hiệu LocknLock, màu trắng kem, có nắp màu đen, 500ml, dài cỡ 20cm" };
+  const f = fixture({ describe: async (value, context) => {
+    assert.equal(value.description, bottleInput.description);
+    assert.equal(context.id, "bottle");
+    assert.equal(context.category, "Vật dụng khác");
+    return { item: "water bottle", color: "cream white", material: "", shape: "",
+      details: ["LocknLock", "black lid", "500 ml", "about 20 cm tall"] };
+  } }, "Vật dụng khác");
+  const first = await f.service.generate("owner", bottleInput);
+  assert.equal(first.attempt.status, "READY");
+  assert.equal(first.attempt.description, bottleInput.description);
+  assert.equal((await f.service.generate("owner", bottleInput)).attempt.id, first.attempt.id);
+  assert.equal(f.calls(), 1);
+  assert.equal(f.reservations(), 1);
+  f.model.describe = async () => null;
+  await assert.rejects(f.service.generate("owner", { ...bottleInput, requestId: "semantic-rejection" }), { code: "invalid_input" });
+  await assert.rejects(f.service.generate("owner", { ...bottleInput, requestId: "scene", description: "Vẽ lâu đài trên trời" }), { code: "invalid_input" });
+  assert.equal(f.calls(), 1);
+  assert.equal(f.reservations(), 1);
+});
+
 test("an irrelevant generated image is rejected, not stored or selectable, and consumes its provider attempt", async () => {
   const f = fixture(); f.model.verify = async () => false;
   const result = await f.service.generate("owner", input);
