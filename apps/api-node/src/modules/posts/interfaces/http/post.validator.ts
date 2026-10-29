@@ -83,13 +83,26 @@ export const dismissMatchSchema = z.object({
 
 export const createPostSchema = z.object({
   type: postType,
+  illustrationId: uuid.optional(),
+  illustrationDraftId: uuid.optional(),
   ...basePostFields,
   analysisSignals: z.object({
     visualAttributes: z.array(z.string().trim().min(1).max(100)).max(12).default([]),
     visibleText: z.array(z.string().trim().min(1).max(100)).max(12).default([]),
     confidence: z.coerce.number().min(0).max(1)
   }).optional()
-}).superRefine(validatePostShape);
+}).superRefine((value, context) => {
+  validatePostShape(value, context);
+  if ((value.illustrationId || value.illustrationDraftId) && value.type !== "LOST") context.addIssue({ code: z.ZodIssueCode.custom, path: ["illustrationId"], message: "Ảnh minh họa AI chỉ dành cho bài LOST." });
+});
+
+export const illustrationSchema = z.object({
+  type: z.literal("LOST"),
+  title: z.string().trim().min(5).max(255),
+  description: z.string().trim().min(20).max(2000),
+  categoryId: uuid,
+  requestId: uuid
+}).strict();
 
 export const updatePostSchema = z.object({
   title: basePostFields.title.optional(),

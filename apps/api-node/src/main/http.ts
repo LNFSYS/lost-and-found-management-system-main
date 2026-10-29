@@ -40,7 +40,7 @@ export function createHttpRoutes(services: ApplicationServices) {
   const authController = createAuthController({ authService: services.authService, refreshCookieOptions: (expiresAt) => refreshCookieOptions(env.cookieSecure, expiresAt), accessTokenExpiresIn: env.jwtAccessExpiresIn });
   const claimController = createClaimController({ claimService: services.claimService });
   const notificationController = createNotificationController({ notificationService: services.notificationService });
-  const postController = createPostController({ postService: services.postService, geminiImageService: services.geminiImageService });
+  const postController = createPostController({ postService: services.postService, geminiImageService: services.geminiImageService, illustrations: services.illustrations });
   const realtimeController = createRealtimeController({ realtimeService: services.realtimeService });
   const returnFeedbackController = createReturnFeedbackController({ returnFeedbackService: services.returnFeedbackService });
   const reportController = createReportController({ reportService: services.reportService });

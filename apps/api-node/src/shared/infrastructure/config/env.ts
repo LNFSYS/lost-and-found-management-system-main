@@ -107,6 +107,15 @@ export const env = {
     model: process.env.GEMINI_MODEL?.trim() || "gemini-3.5-flash-lite",
     timeoutMs: number("GEMINI_TIMEOUT_MS", 30_000)
   },
+  lostIllustration: {
+    cfToken: process.env.CLOUDFLARE_API_TOKEN?.trim() || null,
+    cfAccountId: process.env.CLOUDFLARE_ACCOUNT_ID?.trim() || null,
+    cfSteps: boundedNumber("CLOUDFLARE_IMAGE_STEPS", 4, 1, 8),
+    enabled: bool("LOST_ILLUSTRATION_ENABLED", false),
+    textModel: process.env.CLOUDFLARE_ILLUSTRATION_TEXT_MODEL?.trim() || "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+    visionModel: process.env.CLOUDFLARE_ILLUSTRATION_VISION_MODEL?.trim() || "@cf/moondream/moondream3.1-9B-A2B",
+    timeoutMs: boundedNumber("CLOUDFLARE_ILLUSTRATION_TIMEOUT_MS", 90_000, 10_000, 120_000)
+  },
   cloudinary: {
     cloudName: process.env.CLOUDINARY_CLOUD_NAME?.trim() || null,
     apiKey: process.env.CLOUDINARY_API_KEY?.trim() || null,

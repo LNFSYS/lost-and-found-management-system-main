@@ -44,6 +44,7 @@ Requirements target bao phủ Web Application, PWA và Native Mobile. Status bê
 | --- | --- | --- | --- | --- |
 | FR-AI-01 | User gửi tối đa 5 ảnh hợp lệ để Gemini tạo title, description, category suggestion, visual attributes và safe visible text. | UC-017 | P1 | Implemented |
 | FR-AI-02 | Phân tích ảnh chỉ tạo draft có thể sửa; không tự đăng bài hoặc xác minh ownership. | UC-017 | P0 | Implemented |
+| FR-AI-03 | Với LOST, user có thể tạo ảnh minh họa từ mô tả và danh mục hợp lệ. Context được retrieval từ corpus vật phẩm; đầu vào/ảnh đầu ra phải qua kiểm tra phù hợp. Quota server lưu 1 lần tạo + tối đa 3 lần tạo lại, chống replay/reload; ảnh được gắn nhãn AI và không dùng như ảnh thật để chấm image/OCR matching hoặc bằng chứng sở hữu. | Mở rộng UC-018 | P1 | Local API/Web + tests; migration 066 đã áp dụng và kiểm tra schema Aiven ngày 22/10/2026; cấu hình/provider thật và isolated SQL runtime còn chờ theo [workflow](../workflows/lost-description-illustrations.md) |
 | FR-MATCH-01 | Create/update post chạy bounded best-effort matching với bài đối nghịch đang hoạt động. | UC-029 | P0 | Implemented |
 | FR-MATCH-02 | Matching dùng text normalization tiếng Việt, category, location, time, image tags và safe OCR tags với weight/threshold. | UC-030 | P0 | Implemented |
 | FR-MATCH-03 | Kết quả lưu score thành phần, tier, matcher version và explanation; owner có thể xem/re-run theo quyền và rate limit. | UC-026–UC-028, UC-031 | P0 | Implemented |

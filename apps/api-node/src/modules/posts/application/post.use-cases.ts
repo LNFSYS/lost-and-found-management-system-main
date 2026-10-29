@@ -19,6 +19,7 @@ import type {
   UploadMediaInput
 } from "./post.dto.js";
 import type { MediaKind, PostRecord, PostRepository, PostStatus, StoredMediaRecord, VisibilityMode } from "./post.repository.port.js";
+import type { IllustrationUseCases } from "./illustration.use-cases.js";
 
 function canManagePost(viewer: AccessTokenPayload | undefined, post: PostRecord | StoredMediaRecord) {
   return Boolean(viewer && viewer.sub === ("userId" in post ? post.userId : post.ownerId));
@@ -77,6 +78,7 @@ function serializePost(post: PostRecord, viewer?: AccessTokenPayload) {
       bytes: media.bytes,
       sortOrder: media.sortOrder,
       createdAt: media.createdAt,
+      isAiGenerated: media.isAiGenerated === true,
       url: mediaUrl(post.id, media.id)
     })),
     canEdit: canManagePost(viewer, post),
@@ -98,6 +100,7 @@ function mergeForValidation(current: PostRecord, input: UpdatePostInput) {
 }
 
 export interface PostDependencies {
+  illustrations?: Pick<IllustrationUseCases, "attach" | "publishedPost" | "closeDraft">;
   uploads?: MediaUploads;
   postRepository: PostRepository;
   matchingRepository: MatchingRepository;
@@ -244,6 +247,16 @@ export function createPostUseCases(options: PostDependencies) {
     },
 
     async createPost(ownerId: string, input: CreatePostInput, viewer: AccessTokenPayload) {
+      if ((input.illustrationId || input.illustrationDraftId) && input.type !== "LOST") throw new AppError("invalid_input", "Ảnh minh họa AI chỉ dành cho bài LOST.");
+      if (input.illustrationId) {
+        if (!options.illustrations) throw new AppError("unavailable", "Chức năng ảnh minh họa chưa sẵn sàng.");
+        const existingId = await options.illustrations.publishedPost(ownerId, input.illustrationId, input);
+        if (existingId) {
+          const existing = await postRepository.findOwnedById(existingId, ownerId);
+          if (!existing) throw new AppError("not_found", "Bài LOST đã tạo không còn khả dụng.");
+          return serializePost(existing, viewer);
+        }
+      }
       await ensureBusinessRefs(input);
       const postId = id();
       const post = await withTransaction(async (connection) => {
@@ -266,7 +279,13 @@ export function createPostUseCases(options: PostDependencies) {
           handoverPointId: input.handoverPointId ?? null,
           expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
         }, connection);
-        if (input.analysisSignals) {
+        if (input.illustrationId) {
+          await options.illustrations!.attach(ownerId, input.illustrationId, postId, input, connection);
+        } else if (input.illustrationDraftId) {
+          if (!options.illustrations) throw new AppError("unavailable", "Chức năng ảnh minh họa chưa sẵn sàng.");
+          await options.illustrations.closeDraft(ownerId, input.illustrationDraftId, postId, connection);
+        }
+        if (input.analysisSignals && !input.illustrationId) {
           await matchingRepository.replaceAnalysisTags(postId, input.analysisSignals, connection);
         }
         const created = await postRepository.findOwnedById(postId, ownerId, connection);

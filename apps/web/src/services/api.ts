@@ -459,6 +459,8 @@ export interface CreatePostPayload {
   title: string;
   description: string;
   categoryId: string;
+  illustrationId?: string;
+  illustrationDraftId?: string;
   areaId?: string | null;
   buildingId?: string | null;
   roomText?: string | null;
@@ -474,6 +476,20 @@ export interface CreatePostPayload {
   };
 }
 export interface CreatedPost { id: string; type: "LOST" | "FOUND"; title: string; status: string; createdAt: string; }
+export interface LostIllustration {
+  id: string; number: number; status: "PENDING" | "READY" | "REJECTED" | "FAILED";
+  title: string; description: string; categoryId: string; url: string | null;
+}
+export interface LostIllustrationDraft {
+  available: boolean; id: string | null; used: number; maxAttempts: number; remaining: number; attempts: LostIllustration[];
+  cooldown?: { until: number; message: string } | null;
+}
+function illustrationDraft(value: LostIllustrationDraft): LostIllustrationDraft {
+  if (!value || typeof value.available !== "boolean" || !Array.isArray(value.attempts)) {
+    throw new Error("Không đọc được trạng thái ảnh minh họa. Vui lòng thử tải lại.");
+  }
+  return value;
+}
 export interface ImageAnalysisResult {
   title: string;
   description: string;
@@ -503,7 +519,7 @@ export interface PostSummary {
   handoverPoint: { id: string; name: string | null; address: string | null } | null;
   lostFoundAt: string | null;
   owner: { id: string; fullName: string };
-  media: Array<{ id: string; url: string; mediaKind: "ITEM" | "EVIDENCE" }>;
+  media: Array<{ id: string; url: string; mediaKind: "ITEM" | "EVIDENCE"; isAiGenerated?: boolean }>;
   canEdit: boolean;
   createdAt: string;
   matchSummary?: {
@@ -1216,6 +1232,11 @@ export const api = {
   getProfileAvatar: () => mediaBlob("/auth/profile/avatar", true, "Không thể tải ảnh đại diện"),
   getActivitySummary: () => raw<ProfileActivitySummary>("/auth/activity"),
   getPostCatalog: () => raw<PostCatalog>("/posts/catalog"),
+  getLostIllustrationDraft: (signal?: AbortSignal) => raw<LostIllustrationDraft>("/posts/illustrations/draft", { cache: "no-store", signal }).then(illustrationDraft),
+  clearLostIllustrationDraft: () => raw<void>("/posts/illustrations/draft", { method: "DELETE" }),
+  generateLostIllustration: (payload: { type: "LOST"; title: string; description: string; categoryId: string; requestId: string }) =>
+    raw<{ attempt: LostIllustration; draft: LostIllustrationDraft }>("/posts/illustrations", { method: "POST", cache: "no-store", body: JSON.stringify(payload) })
+      .then(result => ({ ...result, draft: illustrationDraft(result.draft) })),
   listPosts: (filters: PostListFilters = {}) => raw<PostListResponse>(`/posts${queryString(filters)}`),
   listMyPosts: (filters: PostListFilters = {}) => raw<PostListResponse>(`/posts/mine${queryString(filters)}`),
   getPost: (postId: string) => raw<PostSummary>(`/posts/${postId}`),

@@ -17,6 +17,8 @@ import { createNotificationPushWorker } from "../modules/notifications/applicati
 import { createSmtpNotificationEmailDelivery } from "../modules/notifications/infrastructure/notification-email.smtp.js";
 import { createWebPushDelivery } from "../modules/notifications/infrastructure/web-push.delivery.js";
 import { createImageAnalysisUseCases } from "../modules/posts/application/image-analysis.use-cases.js";
+import { createIllustrationUseCases } from "../modules/posts/application/illustration.use-cases.js";
+import { createCloudflareIllustrationModel } from "../modules/posts/infrastructure/cloudflare-illustration-model.js";
 import { createPostUseCases } from "../modules/posts/application/post.use-cases.js";
 import { createGeminiImageAnalyzer } from "../modules/posts/infrastructure/gemini-image-analyzer.js";
 import { createRealtimeUseCases } from "../modules/realtime/application/realtime.use-cases.js";
@@ -129,9 +131,17 @@ export function createServices(persistence: Persistence, config: typeof env = en
   });
   const matchingService = createMatchingUseCases({ matchingRepository, postRepository, idFactory: id,
     delivery: { transaction, notifications: notificationRepository, emails: notificationEmailQueue } });
+  const illustrationModel = createCloudflareIllustrationModel({ token: config.lostIllustration.cfToken,
+    accountId: config.lostIllustration.cfAccountId, steps: config.lostIllustration.cfSteps,
+    enabled: config.lostIllustration.enabled,
+    timeoutMs: config.lostIllustration.timeoutMs, textModel: config.lostIllustration.textModel,
+    visionModel: config.lostIllustration.visionModel });
+  const illustrations = createIllustrationUseCases({ repository: persistence.illustrationRepository, posts: postRepository,
+    model: illustrationModel, storage: postMediaStorage,
+    transaction, id, hash: security.hashToken });
   const postService = createPostUseCases({
     postRepository, matchingRepository, matchingService,
-    withTransaction: transaction, id, mediaStorage: postMediaStorage, logger: console, uploads: mediaUploads
+    withTransaction: transaction, id, mediaStorage: postMediaStorage, logger: console, uploads: mediaUploads, illustrations
   });
   const claimService = createClaimUseCases({
     contactPhotos: createContactPhotoUseCases({ repository: persistence.contactPhotoRepository, claims: claimRepository, matching: matchingRepository,
@@ -149,7 +159,7 @@ export function createServices(persistence: Persistence, config: typeof env = en
     appointmentService, activityService,
     notificationService, notificationEmailWorker, notificationPushWorker, systemConfigService, adminUserService, adminReportingService,
     adminCatalogService, warehouseService, warehouseConversationService, custodyRequestService, returnFeedbackService, matchingService,
-    postService, claimService, realtimeService, chatSocketService, reportService, authService, geminiImageService
+    postService, claimService, realtimeService, chatSocketService, reportService, authService, geminiImageService, illustrations
   };
 }
 type CreatedApplicationServices = ReturnType<typeof createServices>;

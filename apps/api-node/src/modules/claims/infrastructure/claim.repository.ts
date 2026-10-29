@@ -474,7 +474,7 @@ export function createClaimRepository(pool: SqlExecutor) {
           found.visibility_mode, area.name AS area_name, building.name AS building_name,
           found.room_text, found.custom_location, handover.name AS handover_point_name,
           (SELECT media.id FROM post_media media
-           WHERE media.post_id = found.id AND media.media_kind = 'ITEM'
+           WHERE media.post_id = found.id AND media.media_kind = 'ITEM' AND media.is_ai_generated = FALSE
            ORDER BY media.sort_order ASC, media.created_at ASC, media.id ASC LIMIT 1) AS media_id
          FROM claims c
          INNER JOIN posts found ON found.id = COALESCE(c.source_found_post_id,c.post_id) AND found.type IN ('FOUND', 'LOST') AND found.deleted_at IS NULL

@@ -24,6 +24,7 @@ export function createApp({ services = defaultServices, checkReadiness = async (
   app.use(cors({
     origin: (origin, callback) => callback(null, isOriginAllowed(origin, allowedOrigins, env.nodeEnv)),
     credentials: true,
+    exposedHeaders: ["Retry-After"],
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE"]
   }));
   app.use(express.json({ limit: "100kb" }));

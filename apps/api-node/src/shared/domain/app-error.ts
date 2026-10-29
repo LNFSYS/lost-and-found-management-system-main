@@ -4,7 +4,7 @@ export type AppErrorCode =
   | "internal" | "upstream_failure" | "unavailable" | "upstream_timeout";
 
 export class AppError extends Error {
-  constructor(public readonly code: AppErrorCode, message: string) {
+  constructor(public readonly code: AppErrorCode, message: string, public readonly retryAfterSeconds?: number) {
     super(message);
     this.name = "AppError";
   }

@@ -2,6 +2,7 @@ import type { Request, Response } from "express";
 import { HttpError } from "../../../../shared/interfaces/http/http-error.js";
 import type { ImageAnalysisUseCases } from "../../application/image-analysis.use-cases.js";
 import type { PostUseCases } from "../../application/post.use-cases.js";
+import type { IllustrationUseCases } from "../../application/illustration.use-cases.js";
 import {
   analyzePostImageSchema,
   createPostSchema,
@@ -14,12 +15,14 @@ import {
   matchFeedbackSchema,
   matchParamSchema,
   updatePostSchema,
-  uploadMediaSchema
+  uploadMediaSchema,
+  illustrationSchema
 } from "./post.validator.js";
 
-export function createPostController({ postService, geminiImageService }: {
+export function createPostController({ postService, geminiImageService, illustrations }: {
   postService: PostUseCases;
   geminiImageService: ImageAnalysisUseCases;
+  illustrations: IllustrationUseCases;
 }) {
   function routeId(request: Request) {
     return idParamSchema.parse(request.params).id;
@@ -31,6 +34,25 @@ export function createPostController({ postService, geminiImageService }: {
     return [...(request.files.files ?? []), ...(request.files.file ?? [])];
   }
   const postController = {
+    async illustrationState(request: Request, response: Response) {
+      response.setHeader("Cache-Control", "private, no-store");
+      response.json(await illustrations.state(request.auth!.sub));
+    },
+    async clearIllustrationDraft(request: Request, response: Response) {
+      await illustrations.clearDraft(request.auth!.sub);
+      response.status(204).send();
+    },
+    async generateIllustration(request: Request, response: Response) {
+      response.setHeader("Cache-Control", "private, no-store");
+      const result = await illustrations.generate(request.auth!.sub, illustrationSchema.parse(request.body));
+      response.status(result.attempt.status === "PENDING" ? 202 : 200).json(result);
+    },
+    async illustrationImage(request: Request, response: Response) {
+      const image = await illustrations.image(request.auth!.sub, routeId(request));
+      response.setHeader("Cache-Control", "private, no-store");
+      response.setHeader("X-Content-Type-Options", "nosniff");
+      response.type(image.contentType).send(image.body);
+    },
     async analyzeImage(request: Request, response: Response) {
       const files = uploadedAnalysisFiles(request);
       if (!files.length) throw new HttpError(400, "Cần gửi ít nhất một ảnh vật phẩm với field name là files.");
