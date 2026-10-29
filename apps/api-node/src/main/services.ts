@@ -23,6 +23,7 @@ import { createPostUseCases } from "../modules/posts/application/post.use-cases.
 import { createGeminiImageAnalyzer } from "../modules/posts/infrastructure/gemini-image-analyzer.js";
 import { createRealtimeUseCases } from "../modules/realtime/application/realtime.use-cases.js";
 import { createChatSocketUseCases } from "../modules/realtime/application/chat-socket.use-cases.js";
+import { createCallSocketUseCases } from "../modules/realtime/application/call-socket.use-cases.js";
 import { createReturnFeedbackUseCases } from "../modules/returns/application/return-feedback.use-cases.js";
 import { createReportUseCases } from "../modules/reports/application/report.use-cases.js";
 import { createSystemConfigUseCases } from "../modules/system-config/application/system-config.use-cases.js";
@@ -104,6 +105,7 @@ export function createServices(persistence: Persistence, config: typeof env = en
   const realtimeService = createRealtimeUseCases({ claimRepository, notifications: notificationRepository, id,
     validateSession: session => authService.validateAccessSession(session) });
   const chatSocketService = createChatSocketUseCases();
+  const callSocketService = createCallSocketUseCases();
   const appointmentService = createAppointmentUseCases({ repository:persistence.appointmentRepository,transaction,id,
     hash:security.hashToken,notifications:notificationRepository,emails:notificationEmailQueue,
     realtimeNotifier: realtimeService, reminderLeadMinutes:config.appointmentReminderMinutes });
@@ -159,10 +161,11 @@ export function createServices(persistence: Persistence, config: typeof env = en
     appointmentService, activityService,
     notificationService, notificationEmailWorker, notificationPushWorker, systemConfigService, adminUserService, adminReportingService,
     adminCatalogService, warehouseService, warehouseConversationService, custodyRequestService, returnFeedbackService, matchingService,
-    postService, claimService, realtimeService, chatSocketService, reportService, authService, geminiImageService, illustrations
+    postService, claimService, realtimeService, chatSocketService, callSocketService, reportService, authService, geminiImageService, illustrations
   };
 }
 type CreatedApplicationServices = ReturnType<typeof createServices>;
-export type ApplicationServices = Omit<CreatedApplicationServices, "warehouseConversationService"> & {
+export type ApplicationServices = Omit<CreatedApplicationServices, "warehouseConversationService" | "callSocketService"> & {
   warehouseConversationService?: CreatedApplicationServices["warehouseConversationService"];
+  callSocketService?: CreatedApplicationServices["callSocketService"];
 };

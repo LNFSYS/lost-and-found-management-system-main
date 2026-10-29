@@ -805,6 +805,7 @@ export interface ClaimChatSocketHandlers {
   onConnected?: () => void;
   onReconnected?: () => void;
   onMessage?: (message: ClaimMessage) => void;
+  onSocket?: (socket: Socket | null) => void;
 }
 
 function subscribeRealtime(handlers: RealtimeHandlers) {
@@ -883,7 +884,7 @@ function subscribeRealtime(handlers: RealtimeHandlers) {
           if (!await refreshSession()) return;
           continue;
         }
-        if (response.status === 403) return;
+        if (response.status === 403 || response.status === 404) return;
         if (!response.ok) throw new Error(`Realtime request failed (${response.status})`);
         retryDelay = 500;
         await consume(response);
@@ -946,6 +947,7 @@ function subscribeClaimChatSocket(handlers: ClaimChatSocketHandlers) {
         window.clearTimeout(readyTimeout);
         if (cancelConnection === cancel) cancelConnection = null;
         if (activeSocket === socket) activeSocket = null;
+        handlers.onSocket?.(null);
         socket.removeAllListeners();
         socket.disconnect();
         resolve({ code, connected });
@@ -962,6 +964,7 @@ function subscribeClaimChatSocket(handlers: ClaimChatSocketHandlers) {
         ready = true;
         window.clearTimeout(readyTimeout);
         retryDelay = 500;
+        handlers.onSocket?.(socket);
         if (wasConnected) handlers.onReconnected?.();
         else handlers.onConnected?.();
         wasConnected = true;
@@ -1013,6 +1016,7 @@ function subscribeClaimChatSocket(handlers: ClaimChatSocketHandlers) {
 
   return () => {
     stopped = true;
+    handlers.onSocket?.(null);
     if (retryTimer !== null) window.clearTimeout(retryTimer);
     retryTimer = null;
     finishWait?.();

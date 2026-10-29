@@ -8387,32 +8387,262 @@ textarea {
 .conversation-unread { position: absolute; right: 12px; bottom: 13px; min-width: 19px; height: 19px; padding: 0 5px; display: grid; place-items: center; border-radius: 10px; color: #fff; background: var(--fpt-blue); font-size: .58rem; font-weight: 900; }
 
 .claim-chat { min-width: 0; min-height: 0; display: grid; grid-template-rows: auto 1fr auto; overflow: hidden; background: #fff; }
-.claim-chat-header { min-height: 86px; padding: 14px 20px; display: grid; grid-template-columns: minmax(0, 1fr) 34px; align-items: center; gap: 10px; border-bottom: 1px solid #dfe7ec; }
-.claim-chat-header > button { width: 34px; height: 34px; display: grid; place-items: center; border: 1px solid #d4e0e7; border-radius: 5px; color: #506a7c; background: #fff; cursor: pointer; }
-.claim-chat-header > button svg { width: 16px; }
-.claim-chat-header > div { min-width: 0; display: grid; gap: 3px; }
-.claim-chat-header strong { font-size: .9rem; }
-.claim-chat-header > div:first-child > span { display: flex; align-items: center; gap: 5px; color: #4f7b61; font-size: .64rem; font-weight: 800; }
-.claim-chat-header span i { width: 7px; height: 7px; border-radius: 50%; background: #35a369; }
-.claim-chat-header small { overflow: hidden; color: #738694; font-size: .65rem; text-overflow: ellipsis; white-space: nowrap; }
-.claim-chat-header .claim-close-button { color: #a33d34; border-color: #e0b7b2; }
-.claim-chat-header > .claim-chat-context { grid-column: 1 / -1; align-items: start; gap: 10px; }
-.claim-chat-header > .claim-chat-context--with-safety { grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 12px 16px; }
-.claim-chat-review { min-width: 0; display: grid; gap: 3px; }
-.claim-lost-safety-note { min-width: 0; padding: 10px 12px; display: flex; align-items: flex-start; gap: 8px; border-left: 3px solid #b53e36; color: #82342d; background: #fff3f1; }
-.claim-lost-safety-note > svg { width: 18px; height: 18px; flex-shrink: 0; }
+.claim-chat-header {
+  padding: 12px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border-bottom: 1px solid #dfe7ec;
+  background: #ffffff;
+}
+
+.claim-chat-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  width: 100%;
+}
+
+.claim-chat-identity {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.claim-chat-avatar {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #2563eb, #1d4ed8);
+  color: #ffffff;
+  font-weight: 700;
+  font-size: 1.15rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  flex-shrink: 0;
+  box-shadow: 0 2px 6px rgba(37, 99, 235, 0.25);
+  user-select: none;
+}
+
+.claim-chat-online-dot {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: #16a34a;
+  border: 2px solid #ffffff;
+}
+
+.claim-chat-info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.claim-chat-name-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.claim-chat-name {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #0f172a;
+  letter-spacing: -0.01em;
+}
+
+.claim-chat-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 9999px;
+}
+
+.claim-chat-status.is-active {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.claim-chat-status.is-inactive {
+  background: #f1f5f9;
+  color: #64748b;
+}
+
+.claim-chat-status i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.claim-chat-item-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  padding: 2px 8px;
+  max-width: 420px;
+  width: fit-content;
+}
+
+.claim-item-tag-icon {
+  font-size: 11px;
+  flex-shrink: 0;
+}
+
+.claim-chat-item-tag small {
+  font-size: 0.75rem;
+  color: #475569;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.claim-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.claim-header-actions .claim-action-icon-btn {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border: 1px solid #d4e0e7;
+  border-radius: 8px;
+  color: #506a7c;
+  background: #fff;
+  cursor: pointer;
+  text-decoration: none;
+  transition: all .15s ease;
+}
+
+.claim-header-actions .claim-action-icon-btn:hover {
+  background: #f1f5f9;
+  color: #0f172a;
+  border-color: #cbd5e1;
+}
+
+.claim-header-actions .claim-close-button {
+  color: #dc2626;
+  border-color: #fecaca;
+  background: #fff5f5;
+}
+
+.claim-header-actions .claim-close-button:hover {
+  background: #fee2e2;
+  border-color: #fca5a5;
+  color: #b91c1c;
+}
+
+.claim-toggle-context-btn {
+  height: 34px;
+  padding: 0 10px;
+  border-radius: 8px;
+  border: 1px solid #cbd5e1;
+  background: #f8fafc;
+  color: #334155;
+  font-size: 12px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+  transition: all .15s ease;
+}
+
+.claim-toggle-context-btn:hover {
+  background: #f1f5f9;
+  border-color: #94a3b8;
+  color: #0f172a;
+}
+
+.claim-toggle-context-btn.is-collapsed {
+  background: #eff6ff;
+  border-color: #bfdbfe;
+  color: #1d4ed8;
+}
+
+.claim-chat-header > .claim-chat-context {
+  width: 100%;
+  display: grid;
+  align-items: start;
+  gap: 10px;
+  padding: 10px 12px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+}
+
+.claim-chat-header > .claim-chat-context--with-safety {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
+  gap: 12px 16px;
+}
+
+.claim-chat-review {
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.claim-lost-safety-note {
+  min-width: 0;
+  padding: 10px 12px;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  border-radius: 8px;
+  border: 1px solid #fecaca;
+  border-left: 4px solid #dc2626;
+  color: #7f1d1d;
+  background: #fef2f2;
+}
+
+.claim-lost-safety-note > svg {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  color: #dc2626;
+}
+
 .claim-lost-safety-note > div { min-width: 0; }
-.claim-lost-safety-note strong { display: block; color: #82342d; font-size: 13px; line-height: 1.45; }
-.claim-lost-safety-note p { margin: 4px 0 0; font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
+.claim-lost-safety-note strong { display: block; color: #991b1b; font-size: 13px; line-height: 1.45; font-weight: 700; }
+.claim-lost-safety-note p { margin: 4px 0 0; font-size: 12px; line-height: 1.5; color: #7f1d1d; overflow-wrap: anywhere; }
+
 .claim-private-banner { margin: 12px 20px 0; padding: 10px 12px; display: flex; align-items: center; gap: 10px; border: 1px solid #d4e3ec; border-left: 3px solid var(--fpt-blue); background: #f6fafc; }
 .claim-private-banner > svg { width: 18px; color: var(--fpt-blue); }
 .claim-private-banner > div { display: grid; gap: 2px; }
 .claim-private-banner strong { color: var(--ink-soft); font-size: .72rem; }
 .claim-private-banner span { color: #758896; font-size: .64rem; }
+
 .claim-chat-scroll { min-height: 0; overflow-y: auto; display: flex; flex-direction: column; overflow-x: hidden; }
-.claim-chat-review > .claim-history-link { min-height: 34px; padding: 6px 0; display: inline-flex; align-items: center; gap: 6px; color: var(--fpt-blue); font-size: 13px; line-height: 1.4; font-weight: 600; text-decoration: none; }
+
+.claim-chat-review > .claim-history-link { min-height: 30px; padding: 4px 0; display: inline-flex; align-items: center; gap: 6px; color: var(--fpt-blue); font-size: 12px; line-height: 1.4; font-weight: 600; text-decoration: none; }
 .claim-chat-review > .claim-history-link:hover { text-decoration: underline; }
-.claim-chat-review .review-panel { padding: 10px 0 0 10px; border-top: 1px solid #dfe7ec; gap: 8px; }
+
+.claim-chat-review .review-panel { padding: 8px 10px; border: 1px solid #e2e8f0; border-radius: 8px; background: #ffffff; gap: 8px; }
+.claim-chat-review .review-panel--error { background: #fff5f5; border-color: #fecaca; }
+.claim-chat-review .review-panel--error header { display: flex; align-items: center; justify-content: space-between; color: #991b1b; }
+.claim-chat-review .review-load-error { font-size: 12px; color: #b91c1c; margin: 4px 0 6px; line-height: 1.45; }
+.claim-chat-review .review-retry { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 6px; background: #ef4444; color: #ffffff; font-size: 12px; font-weight: 600; border: none; cursor: pointer; width: fit-content; }
+.claim-chat-review .review-retry:hover { background: #dc2626; }
 .claim-chat-review .review-panel > header { margin: 0; color: #405764; font-size: 13px; font-weight: 700; }
 .claim-chat-review .review-progress { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 12px; margin: 0; padding: 0; border: 0; background: transparent; }
 .claim-chat-review .review-progress strong, .claim-chat-review .review-progress span { font-size: 13px; line-height: 1.45; font-weight: 600; }
@@ -8428,7 +8658,7 @@ textarea {
 .review-tools svg { width: 16px; height: 16px; flex-shrink: 0; }
 .claim-chat-review .review-tools > .review-appointment-link { color: var(--fpt-blue); border-color: #bfd5e8; }
 .claim-chat-review .review-tools > button:hover, .claim-chat-review .review-tools > a:hover { background: #f2f7fb; border-color: #8aafc9; }
-.claim-chat-context--with-safety .review-panel { padding-top: 0; border-top: 0; gap: 6px; }
+.claim-chat-context--with-safety .review-panel { padding-top: 8px; border-top: 1px solid #e2e8f0; gap: 6px; }
 .claim-chat-context--with-safety .review-progress { gap: 2px 10px; }
 .review-details-modal > header h3 { margin: 0; font-size: 18px; }
 .review-details-modal > p { font-size: 14px; line-height: 1.6; overflow-wrap: anywhere; }
@@ -8481,6 +8711,60 @@ textarea {
 .claim-message--system time { margin-top: 3px; text-align: center; }
 .claim-message p { font-size: .75rem; }
 .claim-message time { text-align: right; }
+
+.claim-message--call {
+  padding: 8px 12px;
+  border-radius: 12px;
+  background: #ffffff;
+  border: 1px solid #dce7ee;
+  box-shadow: 0 2px 6px rgba(11, 99, 182, 0.05);
+}
+.claim-message--call.own {
+  background: #f0f7fc;
+  border-color: #badcf1;
+}
+.claim-call-bubble {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.claim-call-icon-wrap {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.claim-message--call.call-success .claim-call-icon-wrap {
+  background: #e8f8f0;
+  color: #10b981;
+}
+.claim-message--call.call-missed .claim-call-icon-wrap {
+  background: #fef2f2;
+  color: #ef4444;
+}
+.claim-call-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.claim-call-title {
+  font-size: 0.76rem;
+  font-weight: 750;
+  color: var(--ink);
+}
+.claim-message--call.call-missed .claim-call-title {
+  color: #dc2626;
+}
+.claim-call-info time {
+  margin: 0;
+  text-align: left;
+  font-size: 0.62rem;
+  color: #8aa0b1;
+}
 
 .verification-modal-backdrop { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; padding: 20px; background: rgba(28, 55, 74, .4); }
 .verification-modal { width: 100%; max-width: 480px; max-height: 80vh; display: grid; grid-template-rows: auto 1fr auto auto; gap: 16px; padding: 20px; border-radius: 8px; background: #fff; box-shadow: 0 20px 40px rgba(28, 55, 74, .2); overflow-y: auto; }

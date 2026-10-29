@@ -1,5 +1,8 @@
 import { createServer } from "node:http";
+import dns from "node:dns";
 import jwt from "jsonwebtoken";
+
+dns.setDefaultResultOrder("ipv4first");
 import { env } from "../shared/infrastructure/config/env.js";
 import { isOriginAllowed, parseAllowedOrigins } from "../shared/infrastructure/config/cors.js";
 import type { AccessTokenPayload } from "../shared/domain/auth.js";
@@ -21,6 +24,7 @@ const allowedOrigins = parseAllowedOrigins(env.frontendUrl);
 const chatSocketServer = createChatSocketServer({
   server,
   chatSocketService: services.chatSocketService,
+  callSocketService: services.callSocketService,
   isOriginAllowed: origin => isOriginAllowed(origin, allowedOrigins, env.nodeEnv),
   verifyAccessToken: token => jwt.verify(token, env.jwtAccessSecret) as AccessTokenPayload,
   validateAccessSession: session => services.authService.validateAccessSession(session),
@@ -83,6 +87,7 @@ if (env.matchingRefresh.enabled) void matchingRefreshTask.tick();
 
 let appointmentSchemaWarning = false;
 const appointmentReminderTask = createBackgroundTask(async () => {
+  if (!services.appointmentService) return;
   if (!await services.appointmentService.queueReminders().catch(error => {
     if (error?.code !== "unavailable") throw error;
     if (!appointmentSchemaWarning) console.warn("appointment_reminders_paused", { migration:"063_appointment_workflow.sql" });
@@ -102,7 +107,8 @@ const shutdown = createShutdownHandler(async () => {
   if (matchingRefreshTimer) clearInterval(matchingRefreshTimer);
   const httpClosed = new Promise<void>((resolve, reject) => {
     chatSocketServer.stop();
-    services.chatSocketService.stop();
+    services.chatSocketService?.stop();
+    services.callSocketService?.stop();
     server.close(error => error ? reject(error) : resolve());
   });
   services.realtimeService.stop();
