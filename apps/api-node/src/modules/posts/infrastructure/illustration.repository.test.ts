@@ -4,11 +4,11 @@ import type { PoolConnection } from "mysql2/promise";
 import { createIllustrationRepository } from "./illustration.repository.js";
 import { createTransactionRunner } from "../../../shared/infrastructure/transaction-context.js";
 
-test("SQL reservations serialize on owner before quota check and never accept a fifth attempt", async () => {
+test("SQL reservations serialize on owner before quota check and never accept a sixth attempt", async () => {
   const queries: string[] = [];
   const connection = { execute: async (sql: string) => {
     queries.push(sql.replace(/\s+/g, " "));
-    if (sql.startsWith("SELECT id, attempts_used")) return [[{ id: "draft", attempts_used: 4 }], []];
+    if (sql.startsWith("SELECT id, attempts_used")) return [[{ id: "draft", attempts_used: 5 }], []];
     return [[], []];
   } } as unknown as PoolConnection;
   const repository = createIllustrationRepository(connection);

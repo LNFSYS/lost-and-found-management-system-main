@@ -38,6 +38,10 @@ export function createPostController({ postService, geminiImageService, illustra
       response.setHeader("Cache-Control", "private, no-store");
       response.json(await illustrations.state(request.auth!.sub));
     },
+    async clearIllustrationDraft(request: Request, response: Response) {
+      await illustrations.clearDraft(request.auth!.sub);
+      response.status(204).send();
+    },
     async generateIllustration(request: Request, response: Response) {
       response.setHeader("Cache-Control", "private, no-store");
       const result = await illustrations.generate(request.auth!.sub, illustrationSchema.parse(request.body));

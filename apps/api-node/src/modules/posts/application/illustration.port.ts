@@ -26,4 +26,5 @@ export interface IllustrationRepository {
   finish(attemptId: string, status: "READY" | "REJECTED" | "FAILED", asset?: { storageRef: string; publicId: string; format: string; bytes: number }): Promise<boolean>;
   consume(userId: string, attemptId: string, postId: string, inputHash: string, db: TransactionContext): Promise<IllustrationAttempt>;
   closeDraft(userId: string, draftId: string, postId: string, db: TransactionContext): Promise<void>;
+  clearDraft(userId: string): Promise<void>;
 }

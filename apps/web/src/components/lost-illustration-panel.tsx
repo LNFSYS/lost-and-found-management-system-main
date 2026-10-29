@@ -139,12 +139,12 @@ export function LostIllustrationPanel({ title, description, categoryId, online, 
         </button>
         <button className="lost-illustration__refresh" type="button" title="Kiểm tra trạng thái và lượt còn lại" aria-label="Kiểm tra trạng thái ảnh minh họa" disabled={!online || generating} onClick={() => void refresh()}><RefreshCw size={18} aria-hidden="true" /></button>
       </div>
-      <p>1 lần tạo và tối đa 3 lần tạo lại. Chọn danh mục và mô tả rõ vật phẩm, màu sắc, chất liệu hoặc dấu hiệu riêng (20–2.000 ký tự).</p>
+      <p>1 lần tạo và tối đa 4 lần tạo lại (tổng 5 lượt/ngày). Chọn danh mục và mô tả rõ vật phẩm, màu sắc, chất liệu hoặc dấu hiệu riêng (20–2.000 ký tự).</p>
       {draft?.available && <p>Lượt đã bắt đầu tạo vẫn được tính khi dịch vụ gặp lỗi hoặc ảnh bị từ chối.</p>}
       {waiting > 0 && <p role="status">Tạm dừng thử lại: còn khoảng {waiting >= 3600 ? `${Math.ceil(waiting / 3600)} giờ` : waiting >= 60 ? `${Math.ceil(waiting / 60)} phút` : `${waiting} giây`}. Bạn vẫn có thể đăng bài không dùng ảnh AI.</p>}
       {exhausted && <p role="status">{ready.length
-        ? "Đã dùng hết 4 lượt. Bạn có thể chọn ảnh đã được duyệt hoặc tải ảnh thật."
-        : "Đã dùng hết 4 lượt và chưa có ảnh được duyệt. Bạn vẫn có thể đăng bài không dùng ảnh AI hoặc tải ảnh thật."}</p>}
+        ? "Đã dùng hết 5 lượt của ngày hôm nay. Bạn có thể chọn ảnh đã được duyệt hoặc tải ảnh thật."
+        : "Đã dùng hết 5 lượt của ngày hôm nay và chưa có ảnh được duyệt. Bạn vẫn có thể đăng bài không dùng ảnh AI hoặc tải ảnh thật."}</p>}
       {latest?.status === "PENDING" && !online && <p role="status">Mất kết nối. Lượt tạo được lưu trên máy chủ; trạng thái sẽ cập nhật khi có mạng.</p>}
       {viewed && <>
         <figure className="lost-illustration__preview">

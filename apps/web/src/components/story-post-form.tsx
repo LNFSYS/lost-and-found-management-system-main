@@ -426,13 +426,13 @@ export function StoryPostForm({
         <span>Mô tả nhận dạng</span>
         <textarea value={draft.description} onChange={(event) => updateDraft("description", event.target.value)} required minLength={10} maxLength={5000} rows={4} placeholder="Màu sắc, chất liệu, phụ kiện đi kèm và dấu hiệu dễ nhận biết..." />
       </label>
+      {type === "LOST" && <LostIllustrationPanel key={user?.id} title={draft.title} description={draft.description} categoryId={categoryId}
+        online={online} disabled={submitting || analyzing} canSelect={files.length < MAX_IMAGE_COUNT}
+        onSelect={setIllustrationId} onBusy={setGeneratingIllustration} onDraft={setIllustrationDraftId} />}
       <label className="story-field story-field--wide">
         <span>Thông tin liên hệ</span>
         <input value={draft.contactInfo} onChange={(event) => updateDraft("contactInfo", event.target.value)} required minLength={3} maxLength={255} />
       </label>
-      {type === "LOST" && <LostIllustrationPanel key={user?.id} title={draft.title} description={draft.description} categoryId={categoryId}
-        online={online} disabled={submitting || analyzing} canSelect={files.length < MAX_IMAGE_COUNT}
-        onSelect={setIllustrationId} onBusy={setGeneratingIllustration} onDraft={setIllustrationDraftId} />}
     </div>
 
     {type === "FOUND" && <label className="story-private-option">

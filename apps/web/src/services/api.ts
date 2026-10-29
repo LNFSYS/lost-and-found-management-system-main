@@ -1220,6 +1220,7 @@ export const api = {
   getActivitySummary: () => raw<ProfileActivitySummary>("/auth/activity"),
   getPostCatalog: () => raw<PostCatalog>("/posts/catalog"),
   getLostIllustrationDraft: (signal?: AbortSignal) => raw<LostIllustrationDraft>("/posts/illustrations/draft", { cache: "no-store", signal }).then(illustrationDraft),
+  clearLostIllustrationDraft: () => raw<void>("/posts/illustrations/draft", { method: "DELETE" }),
   generateLostIllustration: (payload: { type: "LOST"; title: string; description: string; categoryId: string; requestId: string }) =>
     raw<{ attempt: LostIllustration; draft: LostIllustrationDraft }>("/posts/illustrations", { method: "POST", cache: "no-store", body: JSON.stringify(payload) })
       .then(result => ({ ...result, draft: illustrationDraft(result.draft) })),

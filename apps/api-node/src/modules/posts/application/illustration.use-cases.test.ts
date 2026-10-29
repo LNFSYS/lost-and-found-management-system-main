@@ -26,7 +26,7 @@ function fixture(modelOverrides: Partial<IllustrationModel> = {}, categoryName =
     reserve: async (user, value, inputHash, ids) => {
       const existing = requests.get(`${user}:${value.requestId}`);
       if (existing) return { fresh: false, attempt: existing };
-      if ((draft?.used ?? 0) >= 4) throw new AppError("conflict", "quota");
+      if ((draft?.used ?? 0) >= 5) throw new AppError("conflict", "quota");
       if (draft?.attempts.some(a => a.status === "PENDING")) throw new AppError("conflict", "busy");
       draft ??= { id: ids.draft, used: 0, attempts: [] };
       const attempt: IllustrationAttempt = { id: ids.attempt, draftId: draft.id, number: ++draft.used, status: "PENDING", inputHash,
@@ -45,7 +45,8 @@ function fixture(modelOverrides: Partial<IllustrationModel> = {}, categoryName =
       if (!attempt || attempt.inputHash !== inputHash || attempt.postId || attempt.status !== "READY") throw new AppError("invalid_input", "invalid attachment");
       attempt.postId = postId; attempt.selectedAttemptId = attempt.id; draft = null; return attempt;
     },
-    closeDraft: async (_user, id) => { assert.equal(draft?.id, id); draft = null; }
+    closeDraft: async (_user, id) => { assert.equal(draft?.id, id); draft = null; },
+    clearDraft: async (_user) => { draft = null; }
   };
   const media: Array<Parameters<PostRepository["createMedia"]>[0]> = [];
   const posts = { getFormCatalog: async () => ({ categories: [{ id: "parent", name: "Túi ví", parentId: null }, { id: "category", name: categoryName, parentId: "parent" }], areas: [], buildings: [], handoverPoints: [] }),
@@ -60,15 +61,22 @@ function fixture(modelOverrides: Partial<IllustrationModel> = {}, categoryName =
   return { service, repository, model, media, calls: () => calls, reservations: () => reservations };
 }
 
-test("one initial image plus three regenerations survives service reads and refuses the fifth provider call", async () => {
+test("one initial image plus four regenerations survives service reads and refuses the sixth provider call", async () => {
   const f = fixture();
-  for (let i = 0; i < 4; i++) {
+  for (let i = 0; i < 5; i++) {
     const result = await f.service.generate("owner", { ...input, requestId: `request-${i}` });
-    assert.equal(result.attempt.number, i + 1); assert.equal(result.draft.remaining, 3 - i);
+    assert.equal(result.attempt.number, i + 1); assert.equal(result.draft.remaining, 4 - i);
     assert.equal((await f.service.state("owner")).used, i + 1);
   }
-  await assert.rejects(f.service.generate("owner", { ...input, requestId: "request-5" }), { code: "conflict" });
-  assert.equal(f.calls(), 4);
+  await assert.rejects(f.service.generate("owner", { ...input, requestId: "request-6" }), { code: "conflict" });
+  assert.equal(f.calls(), 5);
+});
+test("clearDraft resets active draft state", async () => {
+  const f = fixture();
+  await f.service.generate("owner", input);
+  assert.equal((await f.service.state("owner")).used, 1);
+  await f.service.clearDraft("owner");
+  assert.equal((await f.service.state("owner")).used, 0);
 });
 test("duplicate and concurrent request replay returns the same image without spending another attempt", async () => {
   const f = fixture();

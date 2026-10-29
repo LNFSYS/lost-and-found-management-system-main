@@ -20,10 +20,10 @@ export function createIllustrationUseCases(options: {
       url: attempt.status === "READY" ? `/api/posts/illustrations/${attempt.id}/image` : null };
   }
   async function state(userId: string) {
-    if (!model.available) return { available: false, id: null, used: 0, maxAttempts: 4, remaining: 4, attempts: [] };
+    if (!model.available) return { available: false, id: null, used: 0, maxAttempts: 5, remaining: 5, attempts: [] };
     const draft = await repository.draft(userId);
-    return { available: true, id: draft?.id ?? null, used: draft?.used ?? 0, maxAttempts: 4,
-      remaining: 4 - (draft?.used ?? 0), attempts: (draft?.attempts ?? []).map(publicAttempt), cooldown: model.cooldown ?? null };
+    return { available: true, id: draft?.id ?? null, used: draft?.used ?? 0, maxAttempts: 5,
+      remaining: 5 - (draft?.used ?? 0), attempts: (draft?.attempts ?? []).map(publicAttempt), cooldown: model.cooldown ?? null };
   }
   return {
     state,
@@ -41,7 +41,7 @@ export function createIllustrationUseCases(options: {
       const context = retrieveIllustrationContext(category.name, input.description);
       if (!context) throw new AppError("invalid_input", "Mô tả chưa khớp danh mục vật bị mất. Hãy nêu rõ vật phẩm, màu sắc và đặc điểm nhận dạng.");
       const draft = await repository.draft(userId);
-      if (draft && draft.used >= 4) throw new AppError("conflict", "Bạn đã dùng hết 1 lượt tạo và 3 lượt tạo lại cho bản nháp này.");
+      if (draft && draft.used >= 5) throw new AppError("conflict", "Bạn đã dùng hết 1 lượt tạo và 4 lượt tạo lại cho bản nháp này.");
       const spec = await model.describe(input, context);
       if (!spec) throw new AppError("invalid_input", "Chỉ có thể tạo ảnh một vật bị mất từ đặc điểm cụ thể. Vui lòng bỏ yêu cầu không liên quan và bổ sung mô tả.");
       const reservation = await transaction(db => repository.reserve(userId, input, inputHash, { draft: id(), attempt: id() }, db));
@@ -90,6 +90,9 @@ export function createIllustrationUseCases(options: {
     },
     closeDraft(userId: string, draftId: string, postId: string, db: TransactionContext) {
       return repository.closeDraft(userId, draftId, postId, db);
+    },
+    clearDraft(userId: string) {
+      return repository.clearDraft(userId);
     }
   };
 }

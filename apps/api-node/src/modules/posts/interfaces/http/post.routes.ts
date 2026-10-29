@@ -66,6 +66,7 @@ export function createPostRoutes({ postController, auth }: {
   postRoutes.get("/catalog", requireAuth, (req, res, next) => postController.getFormCatalog(req, res).catch(next));
   postRoutes.get("/mine", requireAuth, (req, res, next) => postController.listMine(req, res).catch(next));
   postRoutes.get("/illustrations/draft", requireAuth, (req, res, next) => postController.illustrationState(req, res).catch(next));
+  postRoutes.delete("/illustrations/draft", requireAuth, (req, res, next) => postController.clearIllustrationDraft(req, res).catch(next));
   postRoutes.post("/illustrations", requireAuth, illustrationLimit, (req, res, next) => postController.generateIllustration(req, res).catch(next));
   postRoutes.get("/illustrations/:id/image", requireAuth, (req, res, next) => postController.illustrationImage(req, res).catch(next));
   postRoutes.post("/analyze-image", requireAuth, imageAnalysisLimit, uploadAnalysisImages, (req, res, next) => postController.analyzeImage(req, res).catch(next));

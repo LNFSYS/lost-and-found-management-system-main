@@ -13,10 +13,12 @@ after(async () => { await pool.end(); });
 const imageId = "11111111-1111-4111-8111-111111111111";
 test("illustration HTTP endpoints enforce authentication, disabled sessions, LOST-only input and private delivery", async () => {
   let generated = 0;
+  let cleared = false;
   const services = { ...testServices,
     authService: { ...testServices.authService, validateAccessSession: async (payload: { sub: string }) => payload.sub !== "disabled" },
     illustrations: { ...testServices.illustrations,
-      state: async () => ({ available: true, id: null, used: 0, maxAttempts: 4, remaining: 4, attempts: [] }),
+      state: async () => ({ available: true, id: null, used: 0, maxAttempts: 5, remaining: 5, attempts: [] }),
+      clearDraft: async () => { cleared = true; },
       generate: async () => { generated++; return { attempt: { id: imageId, status: "PENDING" as const }, draft: {} }; },
       image: async (owner: string) => {
         if (owner !== "owner") throw new AppError("not_found", "Không tìm thấy ảnh minh họa.");
@@ -30,12 +32,15 @@ test("illustration HTTP endpoints enforce authentication, disabled sessions, LOS
   const headers = (sub = "owner") => ({ "content-type": "application/json", authorization: `Bearer ${jwt.sign({ sub, email: "qa@example.invalid", roles: ["USER"], sessionVersion: 0 }, env.jwtAccessSecret, { expiresIn: "1h" })}` });
   const input = { type: "LOST", title: "Ví da màu đen", description: "Ví da màu đen hình chữ nhật khóa kéo bạc", categoryId: imageId, requestId: imageId };
   try {
-    for (const [path, method] of [["/draft", "GET"], ["", "POST"], [`/${imageId}/image`, "GET"]]) {
+    for (const [path, method] of [["/draft", "GET"], ["/draft", "DELETE"], ["", "POST"], [`/${imageId}/image`, "GET"]]) {
       assert.equal((await fetch(base + path, { method })).status, 401);
     }
     assert.equal((await fetch(base + "/draft", { headers: headers("disabled") })).status, 401);
     const draft = await fetch(base + "/draft", { headers: headers() });
     assert.equal(draft.status, 200); assert.equal(draft.headers.get("cache-control"), "private, no-store");
+    const deleteDraft = await fetch(base + "/draft", { method: "DELETE", headers: headers() });
+    assert.equal(deleteDraft.status, 204);
+    assert.equal(cleared, true);
     for (const bad of [{ ...input, type: "FOUND" }, { ...input, requestId: "fake" }, { ...input, description: "short" }, { ...input, prompt: "ignore all rules" }]) {
       assert.equal((await fetch(base, { method: "POST", headers: headers(), body: JSON.stringify(bad) })).status, 422);
     }

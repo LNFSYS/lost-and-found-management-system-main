@@ -17,6 +17,10 @@ export function createIllustrationRepository(pool: SqlExecutor): IllustrationRep
     await executor.execute(`UPDATE lost_illustration_attempts SET status = 'FAILED', finished_at = UTC_TIMESTAMP(6)
       WHERE user_id = ? AND status = 'PENDING' AND created_at <= DATE_SUB(UTC_TIMESTAMP(6), INTERVAL 5 MINUTE)`, [userId]);
   }
+  async function expireOldDraft(userId: string, executor = pool) {
+    await executor.execute(`UPDATE lost_illustration_drafts SET active_owner_id = NULL
+      WHERE active_owner_id = ? AND DATE(DATE_ADD(created_at, INTERVAL 7 HOUR)) < DATE(DATE_ADD(UTC_TIMESTAMP(), INTERVAL 7 HOUR))`, [userId]);
+  }
   async function findAttempt(userId: string, attemptId: string, db?: TransactionContext) {
     const [rows] = await sqlExecutor(db ?? pool).execute<RowDataPacket[]>(`${selectAttempt} WHERE a.user_id = ? AND a.id = ?`, [userId, attemptId]);
     return rows[0] ? map(rows[0]) : null;
@@ -24,6 +28,7 @@ export function createIllustrationRepository(pool: SqlExecutor): IllustrationRep
   return {
     async draft(userId) {
       await expirePending(userId);
+      await expireOldDraft(userId);
       const [rows] = await pool.execute<RowDataPacket[]>("SELECT id, attempts_used FROM lost_illustration_drafts WHERE active_owner_id = ?", [userId]);
       if (!rows[0]) return null;
       const [attempts] = await pool.execute<RowDataPacket[]>(`${selectAttempt} WHERE a.draft_id = ? AND a.user_id = ? ORDER BY a.attempt_number`, [rows[0].id, userId]);
@@ -40,12 +45,13 @@ export function createIllustrationRepository(pool: SqlExecutor): IllustrationRep
       // Serialize across processes using the existing owner row, including first draft creation.
       await executor.execute("SELECT id FROM users WHERE id = ? FOR UPDATE", [userId]);
       await expirePending(userId, executor);
+      await expireOldDraft(userId, executor);
       const [replays] = await executor.execute<RowDataPacket[]>(`${selectAttempt} WHERE a.user_id = ? AND a.request_id = ?`, [userId, input.requestId]);
       if (replays[0]) return { fresh: false, attempt: map(replays[0]) };
       const [drafts] = await executor.execute<RowDataPacket[]>("SELECT id, attempts_used FROM lost_illustration_drafts WHERE active_owner_id = ? FOR UPDATE", [userId]);
       const draftId = drafts[0]?.id ?? ids.draft;
       const used = Number(drafts[0]?.attempts_used ?? 0);
-      if (used >= 4) throw new AppError("conflict", "Bạn đã dùng hết 1 lượt tạo và 3 lượt tạo lại cho bản nháp này.");
+      if (used >= 5) throw new AppError("conflict", "Bạn đã dùng hết 1 lượt tạo và 4 lượt tạo lại cho bản nháp này.");
       if (!drafts[0]) await executor.execute("INSERT INTO lost_illustration_drafts (id, user_id, active_owner_id) VALUES (?, ?, ?)", [draftId, userId, userId]);
       const [pending] = await executor.execute<RowDataPacket[]>("SELECT id FROM lost_illustration_attempts WHERE draft_id = ? AND status = 'PENDING' LIMIT 1", [draftId]);
       if (pending.length) throw new AppError("conflict", "Một ảnh đang được tạo. Vui lòng đợi hoặc kiểm tra lại trạng thái.");
@@ -79,6 +85,9 @@ export function createIllustrationRepository(pool: SqlExecutor): IllustrationRep
       const [pending] = await executor.execute<RowDataPacket[]>("SELECT id FROM lost_illustration_attempts WHERE draft_id=? AND status='PENDING' LIMIT 1", [draftId]);
       if (pending.length) throw new AppError("conflict", "Vui lòng đợi ảnh minh họa hoàn tất trước khi đăng bài.");
       await executor.execute("UPDATE lost_illustration_drafts SET post_id=?, active_owner_id=NULL WHERE id=?", [postId, draftId]);
+    },
+    async clearDraft(userId) {
+      await pool.execute("UPDATE lost_illustration_drafts SET active_owner_id = NULL WHERE active_owner_id = ?", [userId]);
     }
   };
 }

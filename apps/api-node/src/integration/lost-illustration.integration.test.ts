@@ -35,9 +35,9 @@ test("isolated MySQL illustrations: cross-process quota/replay, private ownershi
     } finally { release!(); }
     const firstResult = await first;
     assert.equal((await b.generate(f.ids.owner, input)).attempt.id, firstResult.attempt.id);
-    for (let i = 0; i < 3; i++) await a.generate(f.ids.owner, { ...input, requestId: randomUUID() });
+    for (let i = 0; i < 4; i++) await a.generate(f.ids.owner, { ...input, requestId: randomUUID() });
     await assert.rejects(b.generate(f.ids.owner, { ...input, requestId: randomUUID() }), { code: "conflict" });
-    assert.equal((await b.state(f.ids.owner)).used, 4); assert.equal(generated, 4);
+    assert.equal((await b.state(f.ids.owner)).used, 5); assert.equal(generated, 5);
     await assert.rejects(b.image(f.ids.outsider, firstResult.attempt.id), { code: "not_found" });
     const posts = createPostUseCases({ postRepository: f.p.postRepository, matchingRepository: f.p.matchingRepository,
       matchingService: f.services.matchingService, mediaStorage: storage, withTransaction: f.p.transaction, id: randomUUID,
