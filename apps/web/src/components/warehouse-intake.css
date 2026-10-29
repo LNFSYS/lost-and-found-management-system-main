@@ -28,9 +28,71 @@
 .intake-confirm { display: flex; align-items: flex-start; gap: 10px; font-size: 14px; }
 .intake-confirm input { width: 18px; height: 18px; flex: 0 0 18px; }
 .intake-analysis { border-left: 3px solid #1c8b59; padding: 12px; background: #f1faf5; }
+.warehouse-ai-widget { position: fixed; z-index: 1300; right: 24px; bottom: 24px; }
+.warehouse-ai-widget__launcher { width: 66px; height: 66px; position: relative; display: grid; place-items: center; border: 2px solid #fff; border-radius: 50%; background: linear-gradient(145deg, #06b6d4 0%, #2563eb 55%, #6d28d9 100%); color: #fff; box-shadow: 0 10px 28px #1d4ed866, 0 0 0 6px #2563eb1a; cursor: pointer; transition: transform .18s ease, box-shadow .18s ease; }
+.warehouse-ai-widget__launcher::before { content: "Trợ lý AI"; position: absolute; top: 50%; right: 76px; transform: translateY(-50%); padding: 8px 12px; border: 1px solid #dbeafe; border-radius: 999px; background: #fff; box-shadow: 0 5px 18px #0f172a24; color: #174ea6; font-size: 13px; font-weight: 700; white-space: nowrap; }
+.warehouse-ai-widget__launcher:hover { transform: translateY(-2px) scale(1.03); box-shadow: 0 14px 32px #1d4ed877, 0 0 0 7px #2563eb24; }
+.warehouse-ai-widget__launcher:focus-visible { outline: 3px solid #fbbf24; outline-offset: 4px; }
+.warehouse-ai-widget__launcher:disabled { cursor: not-allowed; opacity: .55; transform: none; }
+.warehouse-ai-widget__launcher span { position: absolute; right: -3px; bottom: -2px; min-width: 24px; padding: 2px 5px; border: 2px solid #fff; border-radius: 12px; background: #0f172a; color: #fff; font-size: 10px; font-weight: 800; line-height: 15px; }
+.warehouse-ai-widget--open .warehouse-ai-widget__launcher::before { display: none; }
+.warehouse-ai-chat__panel { position: absolute; right: 0; bottom: 84px; box-sizing: border-box; width: min(400px, calc(100vw - 40px)); height: min(500px, calc(100dvh - 124px)); min-height: min(360px, calc(100dvh - 124px)); max-height: calc(100dvh - 124px); display: flex; flex-direction: column; gap: 14px; padding: 18px; border: 1px solid #d7e4f4; border-radius: 18px; background: #fff; box-shadow: 0 20px 60px #10244745; }
+.warehouse-ai-chat__header, .warehouse-ai-chat__header > span { display: flex; align-items: center; gap: 7px; }
+.warehouse-ai-chat__header { justify-content: space-between; margin: -18px -18px 0; padding: 16px 18px; border-radius: 17px 17px 0 0; background: linear-gradient(110deg, #123c78, #2563eb); color: #fff; font-size: 16px; font-weight: 700; }
+.warehouse-ai-chat__header > span { gap: 10px; }
+.warehouse-ai-chat__header > span > svg { box-sizing: content-box; padding: 6px; border-radius: 10px; background: #ffffff26; }
+.warehouse-ai-chat__close { width: 32px; height: 32px; display: grid; place-items: center; border: 1px solid #ffffff40; border-radius: 9px; background: #ffffff18; color: #fff; cursor: pointer; }
+.warehouse-ai-chat__close:hover { background: #ffffff30; color: #fff; }
+.warehouse-ai-chat__messages { flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; gap: 10px; overflow-y: auto; padding: 14px; border: 1px solid #e8eef6; border-radius: 13px; background: #f7f9fc; }
+.warehouse-ai-chat__busy { margin: 0; color: #52657a; font-size: 13px; }
+.warehouse-ai-chat__busy { display: flex; align-items: center; gap: 7px; }
+.warehouse-ai-chat__message { display: flex; flex-direction: column; align-self: flex-start; gap: 5px; max-width: 88%; margin: 0; padding: 12px 14px; border: 1px solid #e2eaf5; border-radius: 14px 14px 14px 4px; background: #fff; box-shadow: 0 2px 6px #17345b0d; color: #24364b; font-size: 14px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
+.warehouse-ai-chat__message strong { color: #315a91; font-size: 11px; }
+.warehouse-ai-chat__message > span { white-space: pre-wrap; }
+.warehouse-ai-chat__message > small { color: #dbeafe; font-size: 11px; font-weight: 600; }
+.warehouse-ai-chat__message-images { display: flex; flex-wrap: wrap; gap: 7px; }
+.warehouse-ai-chat__message-images img { width: 108px; height: 82px; border: 2px solid #ffffffb0; border-radius: 10px; object-fit: cover; }
+.warehouse-ai-chat__message--user { align-self: flex-end; border-color: #2563eb; border-radius: 13px 13px 4px 13px; background: linear-gradient(135deg, #2563eb, #1d4ed8); color: #fff; }
+.warehouse-ai-chat__message--user strong { color: #dbeafe; }
+.warehouse-ai-chat__warnings { margin: 0; padding: 9px 12px 9px 30px; border: 1px solid #fde3a7; border-radius: 10px; background: #fffbeb; color: #815b12; font-size: 12px; }
+.warehouse-ai-chat__status { margin: 0; padding: 8px 10px; border: 1px solid #bbf7d0; border-radius: 9px; background: #f0fdf4; color: #166534; font-size: 12px; }
+.warehouse-ai-chat__error { margin: 0; font-size: 12px; }
+.warehouse-ai-chat__attachments { flex: 0 0 auto; max-height: 150px; overflow-y: auto; display: flex; align-items: center; flex-wrap: wrap; gap: 10px; padding: 10px; border: 1px solid #d6e5f7; border-radius: 13px; background: linear-gradient(135deg, #f8fbff, #eef5ff); }
+.warehouse-ai-chat__attachments small { flex: 1 1 100%; color: #64748b; font-size: 11px; line-height: 1.4; }
+.warehouse-ai-chat__attachment { position: relative; width: 88px; height: 72px; overflow: hidden; border: 1px solid #bfcee2; border-radius: 10px; background: #e2e8f0; box-shadow: 0 2px 7px #18365b18; }
+.warehouse-ai-chat__attachment img { width: 100%; height: 100%; display: block; object-fit: cover; }
+.warehouse-ai-chat__attachment button { position: absolute; top: 4px; right: 4px; width: 23px; height: 23px; display: grid; place-items: center; padding: 0; border: 1px solid #ffffffc9; border-radius: 50%; background: #172b45dc; color: #fff; box-shadow: 0 1px 5px #0f172a66; cursor: pointer; }
+.warehouse-ai-chat__attachment button:disabled { cursor: not-allowed; opacity: .55; }
+.warehouse-ai-chat__file-input { display: none; }
+.warehouse-ai-chat__composer { flex: 0 0 auto; display: flex; align-items: flex-end; gap: 9px; }
+.warehouse-ai-chat__attach { flex: 0 0 48px; width: 48px; min-width: 48px; min-height: 52px; display: grid; place-items: center; padding: 0; border: 1px solid #bfdbfe; border-radius: 12px; background: #eff6ff; color: #1d4ed8; cursor: pointer; }
+.warehouse-ai-chat__attach:hover:not(:disabled) { border-color: #2563eb; background: #dbeafe; }
+.warehouse-ai-chat__attach:focus-visible { outline: 3px solid #93c5fd; outline-offset: 2px; }
+.warehouse-ai-chat__attach:disabled { cursor: not-allowed; opacity: .55; }
+.warehouse-ai-chat__composer textarea { flex: 1; min-width: 0; min-height: 52px; max-height: 130px; resize: vertical; padding: 12px 14px; border: 1px solid #cbd5e1; border-radius: 11px; background: #fff; font: inherit; font-size: 14px; transition: border-color .15s ease, box-shadow .15s ease; }
+.warehouse-ai-chat__composer textarea:focus { border-color: #3b82f6; outline: 0; box-shadow: 0 0 0 3px #3b82f626; }
+.warehouse-ai-chat__composer button { flex: 0 0 auto; min-height: 52px; border-radius: 11px; }
+.warehouse-ai-chat__composer .warehouse-ai-chat__attach { flex: 0 0 48px; width: 48px; min-width: 48px; }
+.warehouse-ai-chat__composer button:not(:disabled) { border-color: #2563eb; background: #2563eb; color: #fff; }
+.warehouse-ai-chat__composer button:not(:disabled):hover { border-color: #1d4ed8; background: #1d4ed8; }
+#warehouse-ai-chat-panel .warehouse-ai-chat__composer button.warehouse-ai-chat__attach { box-sizing: border-box; flex: 0 0 52px !important; width: 52px !important; min-width: 52px !important; height: 52px; min-height: 52px; display: grid; place-items: center; padding: 0; border: 1px solid #c7dafa; border-radius: 14px; background: linear-gradient(145deg, #f4f8ff, #e7f0ff); color: #2456b3; box-shadow: 0 3px 10px #2563eb16; cursor: pointer; transition: background .15s ease, border-color .15s ease, transform .15s ease, box-shadow .15s ease; }
+#warehouse-ai-chat-panel .warehouse-ai-chat__composer button.warehouse-ai-chat__attach:hover:not(:disabled) { border-color: #8bb5f5; background: #dceaff; color: #174ea6; transform: translateY(-1px); box-shadow: 0 5px 13px #2563eb24; }
+#warehouse-ai-chat-panel .warehouse-ai-chat__composer button.warehouse-ai-chat__attach:disabled { cursor: not-allowed; opacity: .55; }
+#warehouse-ai-chat-panel .warehouse-ai-chat__composer button.warehouse-ai-chat__attach:focus-visible { outline: 3px solid #93c5fd; outline-offset: 2px; }
+.warehouse-ai-chat__attachment { width: 96px; height: 78px; border-radius: 12px; box-shadow: 0 4px 12px #18365b20; }
+.warehouse-ai-chat__attachments { gap: 12px; padding: 12px; border-color: #cbdcf2; background: linear-gradient(145deg, #f9fbff, #eef5ff); }
 @media (max-width: 600px) {
   .intake-source { padding: 16px; }
   .intake-source dl { grid-template-columns: 1fr; gap: 4px; }
   .intake-source dd { margin-bottom: 10px; }
   .intake-dialog .warehouse-form-pair { grid-template-columns: 1fr; }
+  .warehouse-ai-widget { right: 24px; bottom: 24px; }
+  .warehouse-ai-widget__launcher { width: 62px; height: 62px; }
+  .warehouse-ai-widget__launcher::before { right: 72px; padding: 7px 10px; font-size: 12px; }
+  .warehouse-ai-chat__panel { right: -4px; bottom: 78px; width: min(400px, calc(100vw - 32px)); height: min(520px, calc(100dvh - 108px)); min-height: min(260px, calc(100dvh - 108px)); max-height: min(520px, calc(100dvh - 108px)); padding: 12px; gap: 10px; }
+  .warehouse-ai-chat__header { margin: -12px -12px 0; padding: 12px; }
+  .warehouse-ai-chat__messages { min-height: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .warehouse-ai-widget__launcher, .warehouse-ai-chat__composer textarea { transition: none; }
 }

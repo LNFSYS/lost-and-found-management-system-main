@@ -45,7 +45,7 @@ export function createHttpRoutes(services: ApplicationServices) {
   const returnFeedbackController = createReturnFeedbackController({ returnFeedbackService: services.returnFeedbackService });
   const reportController = createReportController({ reportService: services.reportService });
   const systemConfigController = createSystemConfigController({ systemConfigService: services.systemConfigService });
-  const warehouseController = createWarehouseController({ warehouseService: services.warehouseService });
+  const warehouseController = createWarehouseController({ warehouseService: services.warehouseService, warehouseConversationService: services.warehouseConversationService });
   const custodyRequestController = createCustodyRequestController({ custodyRequestService: services.custodyRequestService });
   return {
     appointmentRoutes: createAppointmentRoutes(services.appointmentService,auth),
