@@ -801,7 +801,7 @@ export interface RealtimeHandlers {
 }
 
 export interface ClaimChatSocketHandlers {
-  roomId: string;
+  roomId?: string;
   onConnected?: () => void;
   onReconnected?: () => void;
   onMessage?: (message: ClaimMessage) => void;
@@ -927,7 +927,7 @@ function subscribeClaimChatSocket(handlers: ClaimChatSocketHandlers) {
       const endpoint = new URL(`${API_URL.replace(/\/+$/, "")}/realtime/chat-socket`, window.location.href);
       const socket = io(endpoint.origin, {
         path: endpoint.pathname,
-        auth: { accessToken, roomId: handlers.roomId },
+        auth: { accessToken, roomId: handlers.roomId ?? "global" },
         withCredentials: true,
         autoConnect: false,
         forceNew: true,

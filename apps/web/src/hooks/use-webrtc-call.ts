@@ -224,12 +224,20 @@ export function useWebRTCCall({ roomId, userId, calleeId, socket, onCallEnded }:
   }, [socket, endCallState]);
 
   // Start a call (caller side)
-  const startCall = useCallback(async (callType: CallType) => {
+  const startCall = useCallback(async (
+    callType: CallType,
+    targetCalleeId?: string,
+    targetRoomId?: string,
+    callerName?: string
+  ) => {
+    const activeCallee = targetCalleeId ?? calleeId;
+    const activeRoom = targetRoomId ?? roomId ?? "global";
+
     if (!socket || !socket.connected) {
       alert("Đang kết nối lại máy chủ chat. Vui lòng thử lại sau vài giây.");
       return;
     }
-    if (!roomId || !userId || !calleeId) {
+    if (!userId || !activeCallee) {
       alert("Không tìm thấy người nhận cuộc gọi hợp lệ.");
       return;
     }
@@ -253,7 +261,12 @@ export function useWebRTCCall({ roomId, userId, calleeId, socket, onCallEnded }:
         error: null
       });
 
-      socket.emit("call.initiate", { calleeId, callType });
+      socket.emit("call.initiate", {
+        calleeId: activeCallee,
+        roomId: activeRoom,
+        callerName,
+        callType
+      });
     } catch (err) {
       alert(err instanceof Error ? err.message : "Không thể truy cập camera hoặc micro.");
     }

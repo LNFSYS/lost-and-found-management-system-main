@@ -8,9 +8,8 @@ import { ClaimVerificationPanel } from "../components/claim-verification-panel";
 import { ClaimVerificationQuestionModal } from "../components/claim-verification-question-modal";
 import { LostContactPhotoGate } from "../components/lost-contact-photo-gate";
 import { ClaimChatImage } from "../components/claim-chat-image";
-import { CallOverlay } from "../components/call-overlay";
 import { useAuth } from "../context/auth-context";
-import { useWebRTCCall } from "../hooks/use-webrtc-call";
+import { useCall } from "../context/call-context";
 import {
   api, type ClaimEvidence, type ClaimMessage, type ClaimRecord, type ClaimStatus, type PostSummary, type VerificationTemplatesResponse,
   type ClaimVerificationState
@@ -334,41 +333,8 @@ export function ClaimsPage() {
   const questionToggle = useRef<HTMLButtonElement>(null);
   const [evidenceUploadRequest, setEvidenceUploadRequest] = useState(0);
   const [contextCollapsed, setContextCollapsed] = useState(true);
-  const [chatSocket, setChatSocket] = useState<Socket | null>(null);
+  const call = useCall();
   const calleeId = claim ? (claim.claimantId === user?.id ? claim.finderId : claim.claimantId) : null;
-  const handleCallEnded = useCallback(async (summary: { callType: "VOICE" | "VIDEO"; duration: number; reason: string; isCaller: boolean }) => {
-    if (!claim?.id || !summary.isCaller) return;
-    const isVideo = summary.callType === "VIDEO";
-    const prefix = isVideo ? "📹 Cuộc gọi video" : "📞 Cuộc gọi thoại";
-
-    let content = "";
-    if (summary.duration > 0) {
-      const minutes = Math.floor(summary.duration / 60);
-      const seconds = summary.duration % 60;
-      const formatted = `${minutes > 0 ? `${minutes}p ` : ""}${seconds < 10 && minutes > 0 ? `0${seconds}` : seconds}s`;
-      content = `${prefix} (${formatted})`;
-    } else if (summary.reason === "DECLINED") {
-      content = `${prefix} bị từ chối`;
-    } else if (summary.reason === "MISSED" || summary.reason === "BUSY") {
-      content = `${prefix} nhỡ`;
-    } else {
-      content = `${prefix} đã hủy`;
-    }
-
-    try {
-      await api.sendClaimMessage(claim.id, content);
-    } catch (err) {
-      console.warn("Failed to save call message log", err);
-    }
-  }, [claim?.id]);
-
-  const call = useWebRTCCall({
-    roomId: claim?.room?.id ?? null,
-    userId: user?.id ?? null,
-    calleeId,
-    socket: chatSocket,
-    onCallEnded: handleCallEnded
-  });
   const chatFileInput = useRef<HTMLInputElement>(null);
   const pendingImage = useRef<{ file: File; content: string; key: string } | null>(null);
   const pendingQuestion = useRef<{ question: string; key: string } | null>(null);
@@ -703,7 +669,6 @@ export function ClaimsPage() {
     const unsubscribe = api.subscribeClaimChatSocket({
       onConnected: () => { if (active) void synchronizeClaimRoom(claimId); },
       roomId,
-      onSocket: (sock) => { if (active) setChatSocket(sock); },
       onReconnected: () => { if (active) void synchronizeClaimRoom(claimId); },
       onMessage: (message) => {
         if (!active || !isCurrentRoom(claimId, generation) || message.roomId !== roomId) return;
@@ -724,7 +689,7 @@ export function ClaimsPage() {
         }
       }
     });
-    return () => { active = false; setChatSocket(null); unsubscribe(); };
+    return () => { active = false; unsubscribe(); };
   }, [claimId, claim?.canSend, claim?.room?.id, user?.id]);
 
   // Stop automatic retries after a failure; the panel offers an explicit retry.
@@ -994,7 +959,16 @@ export function ClaimsPage() {
                           type="button"
                           className="claim-call-btn btn-voice"
                           title="Gọi thoại"
-                          onClick={() => void call.startCall("VOICE")}
+                          onClick={() => {
+                            if (calleeId && claim) {
+                              void call.startCall("VOICE", {
+                                calleeId,
+                                roomId: claim.room?.id ?? claim.id,
+                                claimId: claim.id,
+                                peerName: counterpartName(claim, user?.id)
+                              });
+                            }
+                          }}
                         >
                           <Phone size={17} />
                         </button>
@@ -1002,7 +976,16 @@ export function ClaimsPage() {
                           type="button"
                           className="claim-call-btn btn-video"
                           title="Gọi video"
-                          onClick={() => void call.startCall("VIDEO")}
+                          onClick={() => {
+                            if (calleeId && claim) {
+                              void call.startCall("VIDEO", {
+                                calleeId,
+                                roomId: claim.room?.id ?? claim.id,
+                                claimId: claim.id,
+                                peerName: counterpartName(claim, user?.id)
+                              });
+                            }
+                          }}
                         >
                           <Video size={17} />
                         </button>
@@ -1100,16 +1083,5 @@ export function ClaimsPage() {
             </aside>
           </> : <section className="claim-workspace-state"><AlertTriangle /><h2>Không mở được conversation</h2></section>}
     </section>}
-    {call.state.status !== "IDLE" && (
-      <CallOverlay
-        state={call.state}
-        peerName={claim ? counterpartName(claim, user?.id) : "Người dùng"}
-        onAccept={call.acceptCall}
-        onDecline={call.declineCall}
-        onEnd={call.endCall}
-        onToggleMic={call.toggleMic}
-        onToggleCamera={call.toggleCamera}
-      />
-    )}
   </main>;
 }

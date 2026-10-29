@@ -145,19 +145,26 @@ export function createChatSocketServer(input: {
       const auth: unknown = socket.handshake.auth;
       if (!auth || typeof auth !== "object" || Array.isArray(auth)) throw socketAuthError("INVALID_REQUEST");
       const credentials = auth as Record<string, unknown>;
-      if (typeof credentials.accessToken !== "string" || typeof credentials.roomId !== "string") throw socketAuthError("INVALID_REQUEST");
-      const parsedRoomId = roomIdSchema.safeParse(credentials.roomId);
-      if (!parsedRoomId.success) throw socketAuthError("INVALID_REQUEST");
+      if (typeof credentials.accessToken !== "string") throw socketAuthError("INVALID_REQUEST");
 
       let session: AccessTokenPayload;
       try { session = input.verifyAccessToken(credentials.accessToken); }
       catch { throw socketAuthError("UNAUTHENTICATED"); }
       if (!session?.sub) throw socketAuthError("UNAUTHENTICATED");
-      await authorize(session, parsedRoomId.data);
+
+      let resolvedRoomId: string | null = null;
+      if (typeof credentials.roomId === "string" && credentials.roomId && credentials.roomId !== "global") {
+        const parsedRoomId = roomIdSchema.safeParse(credentials.roomId);
+        if (!parsedRoomId.success) throw socketAuthError("INVALID_REQUEST");
+        await authorize(session, parsedRoomId.data);
+        resolvedRoomId = parsedRoomId.data;
+      }
       if (stopped || socket.conn.readyState !== "open") throw socketAuthError("UNAUTHENTICATED");
 
       sessions.set(socket, session);
-      rooms.set(socket, parsedRoomId.data);
+      if (resolvedRoomId) {
+        rooms.set(socket, resolvedRoomId);
+      }
     })().then(() => next()).catch(error => {
       next(error instanceof Error && ["UNAUTHENTICATED", "FORBIDDEN", "INVALID_REQUEST"].includes(error.message)
         ? error : socketAuthError("UNAUTHENTICATED"));
@@ -166,8 +173,9 @@ export function createChatSocketServer(input: {
 
   socketServer.on("connection", socket => {
     let session = sessions.get(socket) ?? null;
-    const roomId = rooms.get(socket);
-    if (stopped || !session || !roomId) {
+    const roomFromMap = rooms.get(socket);
+    const roomId = roomFromMap ?? "global";
+    if (stopped || !session) {
       socket.disconnect(true);
       return;
     }
@@ -205,38 +213,44 @@ export function createChatSocketServer(input: {
       disconnectFromHub?.();
       disconnectFromHub = null;
       removeSocketTracker(roomId, userId, socket);
-      // End any active call when socket disconnects
+      // End active call only if user has no remaining connected sockets
       if (input.callSocketService) {
-        const activeCall = input.callSocketService.findActiveCall(roomId);
-        if (activeCall && (activeCall.callerId === userId || activeCall.calleeId === userId)) {
-          const ended = input.callSocketService.endCall(activeCall.callId, "DISCONNECTED");
-          if (ended) {
-            const peerId = activeCall.callerId === userId ? activeCall.calleeId : activeCall.callerId;
-            emitToPeer(roomId, peerId, "call.ended", { callId: activeCall.callId, roomId, reason: "DISCONNECTED" });
+        const remaining = socketsByUser.get(userId);
+        if (!remaining || remaining.size === 0) {
+          const activeCall = input.callSocketService.findActiveCall(roomId);
+          if (activeCall && (activeCall.callerId === userId || activeCall.calleeId === userId)) {
+            const ended = input.callSocketService.endCall(activeCall.callId, "DISCONNECTED");
+            if (ended) {
+              const peerId = activeCall.callerId === userId ? activeCall.calleeId : activeCall.callerId;
+              emitToPeer(roomId, peerId, "call.ended", { callId: activeCall.callId, roomId, reason: "DISCONNECTED" });
+            }
           }
         }
       }
       session = null;
     });
-    disconnectFromHub = input.chatSocketService.connect({
-      userId,
-      roomId,
-      transport: {
-        send: async message => {
-          if (!socket.connected) throw new Error("Socket is closed");
-          try {
-            if (!session) throw socketAuthError("UNAUTHENTICATED");
-            await authorize(session, roomId);
-          } catch (error) {
-            disconnectWithError(error instanceof Error && error.message === "FORBIDDEN" ? "FORBIDDEN" : "UNAUTHENTICATED");
-            throw error;
-          }
-          if (!socket.connected) throw new Error("Socket is closed");
-          socket.emit("chat.message", { roomId, message });
-        },
-        close: () => socket.disconnect(true)
-      }
-    });
+
+    if (roomFromMap) {
+      disconnectFromHub = input.chatSocketService.connect({
+        userId,
+        roomId: roomFromMap,
+        transport: {
+          send: async message => {
+            if (!socket.connected) throw new Error("Socket is closed");
+            try {
+              if (!session) throw socketAuthError("UNAUTHENTICATED");
+              await authorize(session, roomFromMap);
+            } catch (error) {
+              disconnectWithError(error instanceof Error && error.message === "FORBIDDEN" ? "FORBIDDEN" : "UNAUTHENTICATED");
+              throw error;
+            }
+            if (!socket.connected) throw new Error("Socket is closed");
+            socket.emit("chat.message", { roomId: roomFromMap, message });
+          },
+          close: () => socket.disconnect(true)
+        }
+      });
+    }
 
     // ── Call signaling events ──────────────────────────────────────────
     if (input.callSocketService) {
@@ -249,12 +263,13 @@ export function createChatSocketServer(input: {
         const callType = data.callType as CallType;
         if (callType !== "VOICE" && callType !== "VIDEO") return;
         const calleeId = typeof data.calleeId === "string" ? data.calleeId : null;
+        const targetRoomId = (typeof data.roomId === "string" && data.roomId) ? data.roomId : roomId;
         const callId = `call_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
 
         if (!calleeId || calleeId === userId) {
           socket.emit("call.ended", {
             callId,
-            roomId,
+            roomId: targetRoomId,
             reason: "ERROR",
             error: calleeId === userId
               ? "Cả hai cửa sổ đang đăng nhập cùng một tài khoản. Vui lòng mở tab Ẩn danh (Incognito) hoặc trình duyệt khác để đăng nhập tài khoản thứ 2."
@@ -265,29 +280,35 @@ export function createChatSocketServer(input: {
 
         const result = callService.initiateCall({
           callId,
-          roomId,
+          roomId: targetRoomId,
           callerId: userId,
           calleeId,
           callType,
           onTimeout: (timedOutCall) => {
-            socket.emit("call.ended", { callId: timedOutCall.callId, roomId, reason: "MISSED" });
-            emitToPeer(roomId, calleeId, "call.ended", { callId: timedOutCall.callId, roomId, reason: "MISSED" });
+            socket.emit("call.ended", { callId: timedOutCall.callId, roomId: targetRoomId, reason: "MISSED" });
+            emitToPeer(targetRoomId, calleeId, "call.ended", { callId: timedOutCall.callId, roomId: targetRoomId, reason: "MISSED" });
           }
         });
 
         if (result.error === "BUSY") {
-          socket.emit("call.ended", { callId, roomId, reason: "BUSY" });
+          socket.emit("call.ended", { callId, roomId: targetRoomId, reason: "BUSY" });
           return;
         }
 
-        socket.emit("call.initiated", { callId, roomId, callType, calleeId });
-        const sent = emitToPeer(roomId, calleeId, "call.incoming", { callId, roomId, callerId: userId, callType });
+        socket.emit("call.initiated", { callId, roomId: targetRoomId, callType, calleeId });
+        const sent = emitToPeer(targetRoomId, calleeId, "call.incoming", {
+          callId,
+          roomId: targetRoomId,
+          callerId: userId,
+          callerName: typeof data.callerName === "string" ? data.callerName : undefined,
+          callType
+        });
         if (!sent) {
           socket.emit("call.ended", {
             callId,
-            roomId,
+            roomId: targetRoomId,
             reason: "MISSED",
-            error: "Đối phương hiện chưa trực tuyến hoặc chưa mở phòng chat."
+            error: "Đối phương hiện không trực tuyến trên hệ thống."
           });
           callService.endCall(callId, "MISSED");
         }
@@ -400,13 +421,15 @@ export function createChatSocketServer(input: {
 
     scheduleExpiry();
     if (!socket.connected) return;
-    validationTimer = setInterval(() => {
-      if (!session || checkingSession) return;
-      checkingSession = true;
-      void authorize(session, roomId).catch(error => {
-        disconnectWithError(error instanceof Error && error.message === "FORBIDDEN" ? "FORBIDDEN" : "UNAUTHENTICATED");
-      }).finally(() => { checkingSession = false; });
-    }, 25_000);
+    if (roomFromMap) {
+      validationTimer = setInterval(() => {
+        if (!session || checkingSession) return;
+        checkingSession = true;
+        void authorize(session, roomFromMap).catch(error => {
+          disconnectWithError(error instanceof Error && error.message === "FORBIDDEN" ? "FORBIDDEN" : "UNAUTHENTICATED");
+        }).finally(() => { checkingSession = false; });
+      }, 25_000);
+    }
 
     socket.emit("ready", { roomId });
   });
