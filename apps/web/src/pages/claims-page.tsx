@@ -10,6 +10,7 @@ import { LostContactPhotoGate } from "../components/lost-contact-photo-gate";
 import { ClaimChatImage } from "../components/claim-chat-image";
 import { useAuth } from "../context/auth-context";
 import { useCall } from "../context/call-context";
+import "../components/call-overlay.css";
 import {
   api, type ClaimEvidence, type ClaimMessage, type ClaimRecord, type ClaimStatus, type PostSummary, type VerificationTemplatesResponse,
   type ClaimVerificationState

@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { Mic, MicOff, Phone, PhoneOff, Video, VideoOff, AlertCircle } from "lucide-react";
 import type { CallState } from "../hooks/use-webrtc-call";
 import "./call-overlay.css";
@@ -28,7 +28,7 @@ function getEndReasonText(reason: CallState["endReason"]): string {
     case "MISSED":
       return "Đối phương không trả lời";
     case "TIMEOUT":
-      return "Cuộc gọi đã hết thời gian tối đa";
+      return "Cuộc gọi đã hết thời gian";
     case "DISCONNECTED":
       return "Mất kết nối";
     case "ERROR":
@@ -52,22 +52,52 @@ export function CallOverlay({
   const remoteVideoRef = useRef<HTMLVideoElement | null>(null);
   const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
 
-  // Attach local stream to video
-  useEffect(() => {
-    if (localVideoRef.current && state.localStream) {
-      localVideoRef.current.srcObject = state.localStream;
+  // Callback ref đảm bảo video luôn gán srcObject ngay lập tức khi DOM mount (kể cả khi đổi state CALLING -> CONNECTED)
+  const setLocalVideoNode = useCallback((node: HTMLVideoElement | null) => {
+    localVideoRef.current = node;
+    if (node && state.localStream) {
+      if (node.srcObject !== state.localStream) {
+        node.srcObject = state.localStream;
+      }
+      node.play().catch(() => {});
     }
   }, [state.localStream]);
 
-  // Attach remote stream to video & audio
-  useEffect(() => {
-    if (remoteVideoRef.current && state.remoteStream) {
-      remoteVideoRef.current.srcObject = state.remoteStream;
-    }
-    if (remoteAudioRef.current && state.remoteStream) {
-      remoteAudioRef.current.srcObject = state.remoteStream;
+  const setRemoteVideoNode = useCallback((node: HTMLVideoElement | null) => {
+    remoteVideoRef.current = node;
+    if (node && state.remoteStream) {
+      if (node.srcObject !== state.remoteStream) {
+        node.srcObject = state.remoteStream;
+      }
+      node.play().catch(() => {});
     }
   }, [state.remoteStream]);
+
+  // Đồng bộ lại local stream khi đổi stream hoặc đổi camera state
+  useEffect(() => {
+    if (localVideoRef.current && state.localStream) {
+      if (localVideoRef.current.srcObject !== state.localStream) {
+        localVideoRef.current.srcObject = state.localStream;
+      }
+      localVideoRef.current.play().catch(() => {});
+    }
+  }, [state.localStream, state.status, state.isCameraOff]);
+
+  // Đồng bộ lại remote stream khi nhận được hoặc đổi trạng thái
+  useEffect(() => {
+    if (remoteVideoRef.current && state.remoteStream) {
+      if (remoteVideoRef.current.srcObject !== state.remoteStream) {
+        remoteVideoRef.current.srcObject = state.remoteStream;
+      }
+      remoteVideoRef.current.play().catch(() => {});
+    }
+    if (remoteAudioRef.current && state.remoteStream) {
+      if (remoteAudioRef.current.srcObject !== state.remoteStream) {
+        remoteAudioRef.current.srcObject = state.remoteStream;
+      }
+      remoteAudioRef.current.play().catch(() => {});
+    }
+  }, [state.remoteStream, state.status, state.isRemoteCameraOff]);
 
   // Ringtone synthesizer using Web Audio API for ringing/calling states
   useEffect(() => {
@@ -85,9 +115,8 @@ export function CallOverlay({
         const osc = audioCtx.createOscillator();
         const gain = audioCtx.createGain();
         osc.type = "sine";
-        // 440Hz / 480Hz US ring tone or 425Hz European tone
         osc.frequency.setValueAtTime(state.status === "RINGING" ? 440 : 425, audioCtx.currentTime);
-        gain.gain.setValueAtTime(0.08, audioCtx.currentTime);
+        gain.gain.setValueAtTime(0.06, audioCtx.currentTime);
         gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 1.2);
         osc.connect(gain);
         gain.connect(audioCtx.destination);
@@ -112,24 +141,27 @@ export function CallOverlay({
   if (state.status === "IDLE") return null;
 
   const isVideo = state.callType === "VIDEO";
+  const isVideoMode = isVideo && (state.status === "CALLING" || state.status === "CONNECTED");
 
   return (
     <div className={`call-overlay-backdrop call-overlay--${state.status.toLowerCase()}`}>
       {/* Hidden remote audio element ensuring sound playback */}
       <audio ref={remoteAudioRef} autoPlay playsInline />
 
-      <div className="call-overlay-modal">
-        {/* Header / Info bar */}
+      <div className={`call-overlay-modal ${isVideoMode ? "call-overlay-modal--video" : "call-overlay-modal--voice"}`}>
+        {/* Floating Header */}
         <div className="call-header">
           <div className="call-header-badge">
-            <span className="call-pulse-dot" />
-            {state.status === "CONNECTED"
-              ? isVideo ? "Cuộc gọi video" : "Cuộc gọi thoại"
-              : state.status === "CALLING"
-                ? "Đang gọi đi..."
-                : state.status === "RINGING"
-                  ? "Cuộc gọi đến..."
-                  : "Kết thúc"}
+            <span className={`call-pulse-dot ${state.status === "CONNECTED" ? "active" : ""}`} />
+            <span>
+              {state.status === "CONNECTED"
+                ? isVideo ? "Cuộc gọi video" : "Đang trò chuyện"
+                : state.status === "CALLING"
+                  ? "Đang đổ chuông..."
+                  : state.status === "RINGING"
+                    ? "Cuộc gọi đến..."
+                    : "Đã kết thúc"}
+            </span>
           </div>
           {state.status === "CONNECTED" && (
             <div className="call-duration-badge">
@@ -141,7 +173,7 @@ export function CallOverlay({
         {/* Error notification if any */}
         {state.error && (
           <div className="call-error-banner">
-            <AlertCircle size={16} />
+            <AlertCircle size={15} />
             <span>{state.error}</span>
           </div>
         )}
@@ -153,23 +185,25 @@ export function CallOverlay({
             isVideo ? (
               <div className="call-preview-stage">
                 <video
-                  ref={localVideoRef}
+                  ref={setLocalVideoNode}
                   className="call-preview-video"
                   autoPlay
                   playsInline
                   muted
                 />
-                <div className="call-preview-badge">
-                  <span className="call-pulse-dot" />
-                  <span>Đang kết nối camera...</span>
-                </div>
-                <div className="call-preview-peer-card">
-                  <div className="call-avatar mini">
-                    {peerName.charAt(0).toUpperCase()}
+                <div className="call-preview-overlay">
+                  <div className="call-preview-top-badge">
+                    <span className="call-pulse-dot" />
+                    <span>Camera của bạn</span>
                   </div>
-                  <div>
-                    <h4 className="call-peer-name">{peerName}</h4>
-                    <p className="call-preview-ring-text">Đang đổ chuông...</p>
+                  <div className="call-preview-peer-glass">
+                    <div className="call-avatar mini">
+                      {peerName.charAt(0).toUpperCase()}
+                    </div>
+                    <div className="call-preview-peer-info">
+                      <h4 className="call-peer-name">{peerName}</h4>
+                      <p className="call-preview-ring-text">Đang đổ chuông đến đối phương...</p>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -178,12 +212,13 @@ export function CallOverlay({
                 <div className="call-avatar-container">
                   <div className="call-pulse-ring" />
                   <div className="call-pulse-ring delay-1" />
+                  <div className="call-pulse-ring delay-2" />
                   <div className="call-avatar">
                     {peerName.charAt(0).toUpperCase()}
                   </div>
                 </div>
                 <h3 className="call-peer-name">{peerName}</h3>
-                <p className="call-status-text">Đang đổ chuông...</p>
+                <p className="call-status-text">Đang gọi đi, vui lòng chờ máy...</p>
               </div>
             )
           )}
@@ -194,6 +229,7 @@ export function CallOverlay({
               <div className="call-avatar-container ringing">
                 <div className="call-pulse-ring pulse-green" />
                 <div className="call-pulse-ring pulse-green delay-1" />
+                <div className="call-pulse-ring pulse-green delay-2" />
                 <div className="call-avatar ring-avatar">
                   {peerName.charAt(0).toUpperCase()}
                 </div>
@@ -216,11 +252,11 @@ export function CallOverlay({
                       <div className="call-avatar large">
                         {peerName.charAt(0).toUpperCase()}
                       </div>
-                      <p className="call-placeholder-text">Camera của đối phương đang tắt</p>
+                      <p className="call-placeholder-text">Camera của {peerName} đang tắt</p>
                     </div>
                   ) : (
                     <video
-                      ref={remoteVideoRef}
+                      ref={setRemoteVideoNode}
                       className="call-remote-video"
                       autoPlay
                       playsInline
@@ -231,11 +267,12 @@ export function CallOverlay({
                   <div className={`call-local-pip ${state.isCameraOff ? "camera-off" : ""}`}>
                     {state.isCameraOff ? (
                       <div className="call-pip-placeholder">
-                        <VideoOff size={16} />
+                        <VideoOff size={18} />
+                        <span>Camera tắt</span>
                       </div>
                     ) : (
                       <video
-                        ref={localVideoRef}
+                        ref={setLocalVideoNode}
                         className="call-local-video"
                         autoPlay
                         playsInline
@@ -248,8 +285,8 @@ export function CallOverlay({
                   {/* Remote mic status badge */}
                   {state.isRemoteMicMuted && (
                     <div className="call-remote-muted-badge">
-                      <MicOff size={14} />
-                      <span>Đối phương tắt mic</span>
+                      <MicOff size={13} />
+                      <span>{peerName} đã tắt micro</span>
                     </div>
                   )}
                 </div>
@@ -257,7 +294,8 @@ export function CallOverlay({
                 /* Voice call layout */
                 <div className="call-voice-stage">
                   <div className="call-voice-avatar-wrap">
-                    <div className="call-voice-wave" />
+                    <div className="call-voice-wave wave-1" />
+                    <div className="call-voice-wave wave-2" />
                     <div className="call-avatar large voice-avatar">
                       {peerName.charAt(0).toUpperCase()}
                     </div>
@@ -270,10 +308,11 @@ export function CallOverlay({
                       </span>
                     ) : (
                       <span className="call-voice-active-indicator">
-                        <span className="call-voice-bar" />
+                        <span className="call-voice-bar b1" />
                         <span className="call-voice-bar b2" />
                         <span className="call-voice-bar b3" />
-                        Đang kết nối thoại
+                        <span className="call-voice-bar b4" />
+                        Đang đàm thoại
                       </span>
                     )}
                   </div>
@@ -303,26 +342,30 @@ export function CallOverlay({
           )}
         </div>
 
-        {/* Controls action footer */}
+        {/* Controls action footer - Floating Dock */}
         <div className="call-footer">
           {state.status === "RINGING" ? (
             <div className="call-incoming-actions">
               <button
                 type="button"
-                className="call-action-btn call-action-decline"
+                className="call-dock-btn btn-decline"
                 onClick={onDecline}
                 title="Từ chối cuộc gọi"
               >
-                <PhoneOff size={24} />
+                <div className="btn-icon-wrap">
+                  <PhoneOff size={22} />
+                </div>
                 <span>Từ chối</span>
               </button>
               <button
                 type="button"
-                className="call-action-btn call-action-accept"
+                className="call-dock-btn btn-accept"
                 onClick={onAccept}
-                title="Trả lời"
+                title="Trả lời cuộc gọi"
               >
-                <Phone size={24} />
+                <div className="btn-icon-wrap">
+                  <Phone size={22} />
+                </div>
                 <span>Trả lời</span>
               </button>
             </div>
@@ -330,46 +373,54 @@ export function CallOverlay({
             <div className="call-single-action">
               <button
                 type="button"
-                className="call-action-btn call-action-end"
+                className="call-dock-btn btn-decline"
                 onClick={onEnd}
                 title="Hủy cuộc gọi"
               >
-                <PhoneOff size={24} />
-                <span>Hủy cuộc gọi</span>
+                <div className="btn-icon-wrap">
+                  <PhoneOff size={22} />
+                </div>
+                <span>Hủy gọi</span>
               </button>
             </div>
           ) : state.status === "CONNECTED" ? (
-            <div className="call-connected-actions">
+            <div className="call-connected-dock">
               {/* Mic toggle */}
               <button
                 type="button"
-                className={`call-action-btn call-action-control ${state.isMicMuted ? "active-off" : ""}`}
+                className={`call-dock-btn btn-control ${state.isMicMuted ? "is-off" : ""}`}
                 onClick={onToggleMic}
                 title={state.isMicMuted ? "Bật micro" : "Tắt micro"}
               >
-                {state.isMicMuted ? <MicOff size={20} /> : <Mic size={20} />}
+                <div className="btn-icon-wrap">
+                  {state.isMicMuted ? <MicOff size={20} /> : <Mic size={20} />}
+                </div>
                 <span>{state.isMicMuted ? "Bật mic" : "Tắt mic"}</span>
               </button>
 
               {/* End call button */}
               <button
                 type="button"
-                className="call-action-btn call-action-end"
+                className="call-dock-btn btn-end"
                 onClick={onEnd}
                 title="Kết thúc cuộc gọi"
               >
-                <PhoneOff size={24} />
+                <div className="btn-icon-wrap">
+                  <PhoneOff size={24} />
+                </div>
                 <span>Kết thúc</span>
               </button>
 
               {/* Camera / Video toggle */}
               <button
                 type="button"
-                className={`call-action-btn call-action-control ${state.isCameraOff ? "active-off" : ""}`}
+                className={`call-dock-btn btn-control ${state.isCameraOff ? "is-off" : ""}`}
                 onClick={onToggleCamera}
                 title={state.isCameraOff ? "Bật video" : "Tắt video"}
               >
-                {state.isCameraOff ? <VideoOff size={20} /> : <Video size={20} />}
+                <div className="btn-icon-wrap">
+                  {state.isCameraOff ? <VideoOff size={20} /> : <Video size={20} />}
+                </div>
                 <span>{state.isCameraOff ? "Bật video" : "Tắt video"}</span>
               </button>
             </div>
