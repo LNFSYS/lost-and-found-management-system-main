@@ -15,7 +15,16 @@ export function isOriginAllowed(origin: string | undefined, configuredOrigins: S
 
   try {
     const url = new URL(normalizedOrigin);
-    return ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname) && ["http:", "https:"].includes(url.protocol);
+    const host = url.hostname;
+    const isLocalOrTunnel =
+      ["localhost", "127.0.0.1", "[::1]"].includes(host) ||
+      host.endsWith(".loca.lt") ||
+      host.endsWith(".ngrok-free.app") ||
+      host.endsWith(".trycloudflare.com") ||
+      /^192\.168\./.test(host) ||
+      /^10\./.test(host) ||
+      /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(host);
+    return isLocalOrTunnel && ["http:", "https:"].includes(url.protocol);
   } catch {
     return false;
   }

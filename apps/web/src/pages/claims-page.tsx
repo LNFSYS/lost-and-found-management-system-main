@@ -1,6 +1,7 @@
-import { AlertTriangle, ChevronDown, ChevronUp, Clock3, FileCheck2, FileWarning, Image, LockKeyhole, MessageCircle, Plus, RefreshCw, Search, Send, ShieldCheck, X } from "lucide-react";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { AlertTriangle, ChevronDown, ChevronUp, Clock3, FileCheck2, FileWarning, Image, LockKeyhole, MessageCircle, Phone, PhoneOff, Plus, RefreshCw, Search, Send, ShieldCheck, Video, VideoOff, X } from "lucide-react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import type { Socket } from "socket.io-client";
 import { ClaimEvidencePanel } from "../components/claim-evidence-panel";
 import { ClaimItemPanel } from "../components/claim-item-panel";
 import { ClaimVerificationPanel } from "../components/claim-verification-panel";
@@ -8,6 +9,8 @@ import { ClaimVerificationQuestionModal } from "../components/claim-verification
 import { LostContactPhotoGate } from "../components/lost-contact-photo-gate";
 import { ClaimChatImage } from "../components/claim-chat-image";
 import { useAuth } from "../context/auth-context";
+import { useCall } from "../context/call-context";
+import "../components/call-overlay.css";
 import {
   api, type ClaimEvidence, type ClaimMessage, type ClaimRecord, type ClaimStatus, type PostSummary, type VerificationTemplatesResponse,
   type ClaimVerificationState
@@ -82,10 +85,33 @@ function ClaimList({ claims, selectedId, userId, onSelect }: { claims: ClaimReco
 function MessageBubble({ message, own, user, onReplyQuestion }: { message: ClaimMessage; own: boolean; user?: { id: string }; onReplyQuestion?: (question: string) => void }) {
   const isDecisionNotification = message.content?.startsWith("⚖️ ");
   const isVerificationQuestion = message.content?.startsWith("🔍 Câu hỏi xác minh:") && !message.content?.includes("✏️ Câu trả lời:");
+  const isCallMessage = message.content?.startsWith("📞 ") || message.content?.startsWith("📹 ");
   const shouldShowReply = isVerificationQuestion && !own && user && message.sender.id !== user.id;
 
   if (isDecisionNotification) return <div className="claim-message claim-message--system" role="status"><p>{message.content}</p><time dateTime={message.createdAt}>{formatTime(message.createdAt)}</time></div>;
   
+  if (isCallMessage) {
+    const isVideo = message.content?.startsWith("📹");
+    const isMissedOrDeclined = message.content?.includes("nhỡ") || message.content?.includes("từ chối") || message.content?.includes("đã hủy");
+    return (
+      <div className={`claim-message claim-message--call ${own ? "own" : ""} ${isMissedOrDeclined ? "call-missed" : "call-success"}`} role="status">
+        <div className="claim-call-bubble">
+          <div className="claim-call-icon-wrap">
+            {isVideo ? (
+              isMissedOrDeclined ? <VideoOff size={16} /> : <Video size={16} />
+            ) : (
+              isMissedOrDeclined ? <PhoneOff size={16} /> : <Phone size={16} />
+            )}
+          </div>
+          <div className="claim-call-info">
+            <span className="claim-call-title">{message.content}</span>
+            <time dateTime={message.createdAt}>{formatTime(message.createdAt)}</time>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return <div className={`claim-message ${own ? "own" : ""}`}>
     {!own && <small>{message.sender.fullName}</small>}
     {message.messageType === "IMAGE" && message.previewUrl && <img className="claim-message-image-preview" src={message.previewUrl} alt="Ảnh đang gửi" />}
@@ -307,6 +333,9 @@ export function ClaimsPage() {
   const [questionsExpanded, setQuestionsExpanded] = useState(true);
   const questionToggle = useRef<HTMLButtonElement>(null);
   const [evidenceUploadRequest, setEvidenceUploadRequest] = useState(0);
+  const [contextCollapsed, setContextCollapsed] = useState(true);
+  const call = useCall();
+  const calleeId = claim ? (claim.claimantId === user?.id ? claim.finderId : claim.claimantId) : null;
   const chatFileInput = useRef<HTMLInputElement>(null);
   const pendingImage = useRef<{ file: File; content: string; key: string } | null>(null);
   const pendingQuestion = useRef<{ question: string; key: string } | null>(null);
@@ -553,6 +582,7 @@ export function ClaimsPage() {
   }, [claimId, composePostId, navigate]);
 
   useEffect(() => {
+    setContextCollapsed(true);
     const hasClaimHandoff = Boolean(claimId && location.state?.claimId === claimId);
     const handoffClaim = hasClaimHandoff && location.state?.initialClaim?.id === claimId
       ? location.state.initialClaim as ClaimRecord : null;
@@ -903,21 +933,99 @@ export function ClaimsPage() {
           : claim ? <>
             <section className="claim-chat">
               <header className="claim-chat-header">
-                <div><strong>{counterpartName(claim, user?.id)}</strong><span><i /> {claim.canSend ? "Đang hoạt động" : statusLabels[claim.status]}</span><small>{claimTitle(claim)}</small></div>
-                <div className="claim-header-actions"><Link to={`/reports?targetType=CLAIM&targetId=${claim.id}`} title="Báo cáo claim"><FileWarning /></Link>{claim.claimantId === user?.id && ["PENDING", "CONVERSATION_OPEN", "NEED_MORE_INFO"].includes(claim.status) && <button type="button" className="claim-close-button" disabled={withdrawing} onClick={() => void withdraw()} title="Đóng claim"><X /></button>}</div>
-                <div className={`claim-chat-context${showLostOwnerSafetyNote ? " claim-chat-context--with-safety" : ""}`}>
-                  {showLostOwnerSafetyNote && <aside className="claim-lost-safety-note" aria-label="Lưu ý tránh lừa đảo">
-                    <AlertTriangle aria-hidden="true" />
-                    <div>
-                      <strong>Hãy xin ảnh vật phẩm trước khi hẹn nhận đồ</strong>
-                      <p>Yêu cầu người liên hệ gửi ảnh hiện tại và đối chiếu đặc điểm riêng của món đồ. Không chuyển tiền hoặc cung cấp thông tin nhạy cảm; ảnh tương đồng chưa chứng minh họ đang giữ đồ.</p>
+                <div className="claim-chat-topbar">
+                  <div className="claim-chat-identity">
+                    <div className="claim-chat-avatar">
+                      {counterpartName(claim, user?.id).charAt(0).toUpperCase()}
+                      {claim.canSend && <span className="claim-chat-online-dot" />}
                     </div>
-                  </aside>}
-                  <div className="claim-chat-review">
-                    <ClaimVerificationPanel key={`review:${claim.id}`} claim={claim} verification={verification} loading={verificationLoading} loadError={verificationError} onRetry={() => void loadVerification(claim.id, true)} onVerificationChange={value => { if (isCurrentRoom(claim.id, displayedGeneration)) setVerification(value); }} onClaimChange={value => { if (isCurrentRoom(claim.id, displayedGeneration)) applyClaimUpdate(value); }} onDecisionMessage={(message) => { if (isCurrentRoom(claim.id, displayedGeneration)) setMessages((current) => mergeMessages(current, [message])); }} />
-                    <Link className="claim-history-link" to={`/claims/${claim.id}/history`}><Clock3 size={16} /> Lịch sử claim và xác minh</Link>
+                    <div className="claim-chat-info">
+                      <div className="claim-chat-name-row">
+                        <strong className="claim-chat-name">{counterpartName(claim, user?.id)}</strong>
+                        <span className={`claim-chat-status ${claim.canSend ? "is-active" : "is-inactive"}`}>
+                          <i /> {claim.canSend ? "Đang hoạt động" : statusLabels[claim.status]}
+                        </span>
+                      </div>
+                      <div className="claim-chat-item-tag" title={claimTitle(claim)}>
+                        <span className="claim-item-tag-icon">📦</span>
+                        <small>{claimTitle(claim)}</small>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="claim-header-actions">
+                    {claim.canSend && (
+                      <div className="claim-call-actions">
+                        <button
+                          type="button"
+                          className="claim-call-btn btn-voice"
+                          title="Gọi thoại"
+                          onClick={() => {
+                            if (calleeId && claim) {
+                              void call.startCall("VOICE", {
+                                calleeId,
+                                roomId: claim.room?.id ?? claim.id,
+                                claimId: claim.id,
+                                peerName: counterpartName(claim, user?.id)
+                              });
+                            }
+                          }}
+                        >
+                          <Phone size={17} />
+                        </button>
+                        <button
+                          type="button"
+                          className="claim-call-btn btn-video"
+                          title="Gọi video"
+                          onClick={() => {
+                            if (calleeId && claim) {
+                              void call.startCall("VIDEO", {
+                                calleeId,
+                                roomId: claim.room?.id ?? claim.id,
+                                claimId: claim.id,
+                                peerName: counterpartName(claim, user?.id)
+                              });
+                            }
+                          }}
+                        >
+                          <Video size={17} />
+                        </button>
+                      </div>
+                    )}
+                    {(showLostOwnerSafetyNote || Boolean(verification) || Boolean(verificationError)) && (
+                      <button
+                        type="button"
+                        className={`claim-toggle-context-btn ${contextCollapsed ? "is-collapsed" : ""}`}
+                        onClick={() => setContextCollapsed(v => !v)}
+                        title={contextCollapsed ? "Mở thông tin xác minh & an toàn" : "Thu gọn thông tin xác minh & an toàn"}
+                      >
+                        <ShieldCheck size={15} />
+                        <span>{contextCollapsed ? "Xem xác minh" : "Thu gọn"}</span>
+                        {contextCollapsed ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
+                      </button>
+                    )}
+                    <Link className="claim-action-icon-btn" to={`/reports?targetType=CLAIM&targetId=${claim.id}`} title="Báo cáo claim"><FileWarning size={16} /></Link>
+                    {claim.claimantId === user?.id && ["PENDING", "CONVERSATION_OPEN", "NEED_MORE_INFO"].includes(claim.status) && (
+                      <button type="button" className="claim-action-icon-btn claim-close-button" disabled={withdrawing} onClick={() => void withdraw()} title="Đóng claim"><X size={16} /></button>
+                    )}
                   </div>
                 </div>
+
+                {!contextCollapsed && (
+                  <div className={`claim-chat-context${showLostOwnerSafetyNote ? " claim-chat-context--with-safety" : ""}`}>
+                    {showLostOwnerSafetyNote && <aside className="claim-lost-safety-note" aria-label="Lưu ý tránh lừa đảo">
+                      <AlertTriangle aria-hidden="true" />
+                      <div>
+                        <strong>Hãy xin ảnh vật phẩm trước khi hẹn nhận đồ</strong>
+                        <p>Yêu cầu người liên hệ gửi ảnh hiện tại và đối chiếu đặc điểm riêng của món đồ. Không chuyển tiền hoặc cung cấp thông tin nhạy cảm; ảnh tương đồng chưa chứng minh họ đang giữ đồ.</p>
+                      </div>
+                    </aside>}
+                    <div className="claim-chat-review">
+                      <ClaimVerificationPanel key={`review:${claim.id}`} claim={claim} verification={verification} loading={verificationLoading} loadError={verificationError} onRetry={() => void loadVerification(claim.id, true)} onVerificationChange={value => { if (isCurrentRoom(claim.id, displayedGeneration)) setVerification(value); }} onClaimChange={value => { if (isCurrentRoom(claim.id, displayedGeneration)) applyClaimUpdate(value); }} onDecisionMessage={(message) => { if (isCurrentRoom(claim.id, displayedGeneration)) setMessages((current) => mergeMessages(current, [message])); }} />
+                      <Link className="claim-history-link" to={`/claims/${claim.id}/history`}><Clock3 size={15} /> Lịch sử claim và xác minh</Link>
+                    </div>
+                  </div>
+                )}
                 {claim.canSend && claim.finderId === user?.id && suggestedQuestions.length > 0 && <section className="claim-question-suggestions" aria-label="Câu hỏi đối chiếu vật phẩm">
                   <button ref={questionToggle} type="button" className="claim-question-toggle" aria-expanded={questionsExpanded} aria-controls="claim-question-options" title={questionsExpanded ? "Thu gọn câu hỏi" : "Mở câu hỏi gợi ý"} onClick={() => setQuestionsExpanded(value => !value)}><MessageCircle aria-hidden="true" /><span>Câu hỏi gợi ý ({Math.min(3, suggestedQuestions.length)})</span>{questionsExpanded ? <ChevronUp aria-hidden="true" /> : <ChevronDown aria-hidden="true" />}</button>
                   <div id="claim-question-options" className="claim-question-options" role="group" aria-label="Câu hỏi từ ảnh" hidden={!questionsExpanded}>
