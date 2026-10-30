@@ -780,7 +780,10 @@ export type AdminHandoverPointPayload = {
 };
 interface SessionResponse { user: CurrentUser; accessToken: string; accessTokenExpiresIn: string; }
 
-const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3001/api";
+const defaultApiUrl = typeof window !== "undefined" && window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1"
+  ? `${window.location.origin}/api`
+  : "http://localhost:3001/api";
+const API_URL = import.meta.env.VITE_API_URL ?? defaultApiUrl;
 let accessToken: string | null = null;
 let refreshInFlight: Promise<SessionResponse | null> | null = null;
 let sessionGeneration = 0;
