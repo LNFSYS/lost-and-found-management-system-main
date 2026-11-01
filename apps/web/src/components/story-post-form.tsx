@@ -13,6 +13,7 @@ import {
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useAuth } from "../context/auth-context";
 import { useNetworkStatus } from "../hooks/use-network-status";
+import { LostIllustrationPanel } from "./lost-illustration-panel";
 import {
   api,
   type CreatedPost,
@@ -89,6 +90,9 @@ export function StoryPostForm({
   const [catalogError, setCatalogError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
+  const [generatingIllustration, setGeneratingIllustration] = useState(false);
+  const [illustrationId, setIllustrationId] = useState<string | null>(null);
+  const [illustrationDraftId, setIllustrationDraftId] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [created, setCreated] = useState<{ id: string; title: string; mediaWarning?: string } | null>(null);
   const [analysis, setAnalysis] = useState<ImageAnalysisResult | null>(null);
@@ -120,6 +124,8 @@ export function StoryPostForm({
     setAnalysis(null);
     setError("");
     setFiles([]);
+    setIllustrationId(null);
+    setIllustrationDraftId(null);
     setAreaId("");
     setMainCategoryId("");
     setCategoryId("");
@@ -148,6 +154,8 @@ export function StoryPostForm({
     setAnalysis(null);
     setError("");
     setFiles([]);
+    setIllustrationId(null);
+    setIllustrationDraftId(null);
     setAreaId("");
     setMainCategoryId("");
     setCategoryId("");
@@ -224,6 +232,7 @@ export function StoryPostForm({
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (submitting || generatingIllustration) return;
     setError("");
     if (!online) {
       setError("Bạn đang offline. Bài đăng và ảnh chưa được gửi; hãy kết nối mạng rồi thử lại.");
@@ -245,6 +254,8 @@ export function StoryPostForm({
         title: draft.title,
         description: draft.description,
         categoryId,
+        illustrationId: type === "LOST" ? illustrationId ?? undefined : undefined,
+        illustrationDraftId: type === "LOST" ? illustrationDraftId ?? undefined : undefined,
         areaId: areaId || null,
         buildingId: draft.buildingId || null,
         roomText: draft.roomText || null,
@@ -253,7 +264,7 @@ export function StoryPostForm({
         lostFoundAt: new Date(draft.lostFoundAt).toISOString(),
         handoverPointId: type === "FOUND" ? draft.handoverPointId || null : null,
         visibilityMode: type === "FOUND" && draft.privateDetails ? "PRIVATE_DETAILS" : "PUBLIC",
-        analysisSignals: analysis ? {
+        analysisSignals: analysis && !illustrationId ? {
           visualAttributes: analysis.visualAttributes,
           visibleText: analysis.visibleText,
           confidence: analysis.confidence
@@ -415,6 +426,9 @@ export function StoryPostForm({
         <span>Mô tả nhận dạng</span>
         <textarea value={draft.description} onChange={(event) => updateDraft("description", event.target.value)} required minLength={10} maxLength={5000} rows={4} placeholder="Màu sắc, chất liệu, phụ kiện đi kèm và dấu hiệu dễ nhận biết..." />
       </label>
+      {type === "LOST" && <LostIllustrationPanel key={user?.id} title={draft.title} description={draft.description} categoryId={categoryId}
+        online={online} disabled={submitting || analyzing} canSelect={files.length < MAX_IMAGE_COUNT}
+        onSelect={setIllustrationId} onBusy={setGeneratingIllustration} onDraft={setIllustrationDraftId} />}
       <label className="story-field story-field--wide">
         <span>Thông tin liên hệ</span>
         <input value={draft.contactInfo} onChange={(event) => updateDraft("contactInfo", event.target.value)} required minLength={3} maxLength={255} />
@@ -428,7 +442,7 @@ export function StoryPostForm({
     {error && <div className="story-form-message is-error">{error}</div>}
     <div className="story-post-form__footer">
       <span><Camera /> Ảnh và nội dung chỉ được đăng sau khi bạn xác nhận</span>
-      <button type="submit" disabled={!online || submitting || analyzing || !catalog}>
+      <button type="submit" disabled={!online || submitting || analyzing || generatingIllustration || !catalog}>
         {submitting ? <><LoaderCircle className="is-spinning" /> Đang đăng...</> : <>Đăng bài {type} <ChevronRight /></>}
       </button>
     </div>

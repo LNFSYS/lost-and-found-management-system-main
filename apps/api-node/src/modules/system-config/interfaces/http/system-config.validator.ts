@@ -45,7 +45,7 @@ export const updateConfigSchema = z.object({
   description,
   isPublic: z.boolean().optional(),
   reason
-}).refine((value) => Object.keys(value).some((key) => key !== "reason"), "Can it nhat mot truong de cap nhat");
+}).refine((value) => Object.keys(value).some((key) => key !== "reason"), "Cần ít nhất một trường để cập nhật");
 
 export const configHistoryQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(20)

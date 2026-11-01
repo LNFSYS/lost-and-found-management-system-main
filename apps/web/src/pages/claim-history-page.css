@@ -1,0 +1,19 @@
+.claim-history-page { max-width: 980px; margin: 0 auto; padding: 28px 20px 56px; }
+.claim-history-heading { display: flex; align-items: center; gap: 16px; padding-bottom: 22px; border-bottom: 1px solid #dce5ed; }
+.claim-history-heading > svg { width: 34px; height: 34px; color: #176c55; flex: 0 0 auto; }
+.claim-history-heading > div { flex: 1; min-width: 0; }
+.claim-history-heading h1 { margin: 2px 0 6px; font-size: clamp(22px, 4vw, 30px); }
+.claim-history-heading p { margin: 0; color: #5c6c7b; overflow-wrap: anywhere; }
+.claim-history-scope { padding: 14px 16px; margin: 20px 0; border-radius: 8px; background: #f2f7fb; color: #42576a; }
+.claim-history-error { padding: 14px; color: #8b1f24; background: #fff1f1; border-radius: 8px; }
+.claim-history-empty { padding: 32px; text-align: center; color: #64758a; }
+.claim-history-timeline { list-style: none; margin: 0; padding: 0 0 0 12px; }
+.claim-history-timeline > li { position: relative; display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: 14px; padding: 0 0 20px; }
+.claim-history-timeline > li:not(:last-child)::before { content: ""; position: absolute; left: 13px; top: 28px; bottom: -2px; width: 1px; background: #cbd9e5; }
+.claim-history-dot { z-index: 1; display: grid; place-items: center; width: 28px; height: 28px; border: 1px solid #b9d9ce; border-radius: 50%; background: #f4fbf8; color: #176c55; }
+.claim-history-timeline article { min-width: 0; padding: 14px 16px; border: 1px solid #dce5ed; border-radius: 8px; background: #fff; }
+.claim-history-timeline article header { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }
+.claim-history-timeline article time { flex: 0 0 auto; color: #64758a; font-size: 12px; }
+.claim-history-timeline article p { margin: 8px 0 0; color: #526477; overflow-wrap: anywhere; }
+.claim-history-timeline .claim-history-status { font-size: 13px; }
+@media (max-width: 620px) { .claim-history-heading { align-items: flex-start; flex-wrap: wrap; } .claim-history-heading > div { flex-basis: calc(100% - 60px); } .claim-history-heading > a { margin-left: 48px; } .claim-history-timeline article header { flex-direction: column; gap: 4px; } }

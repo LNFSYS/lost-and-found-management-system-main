@@ -23,6 +23,7 @@ function atLeastOne(value: Record<string, unknown>) {
 export const warehouseItemIdParamSchema = z.object({ id: uuid });
 
 export const listWarehouseItemsQuerySchema = z.object({
+  overdue: z.enum(["true", "false"]).transform(value => value === "true").optional(),
   q: z.string().trim().max(120).optional(),
   status: warehouseStatusSchema.optional(),
   handoverPointId: uuid.optional(),
@@ -31,7 +32,7 @@ export const listWarehouseItemsQuerySchema = z.object({
 });
 
 export const intakeEvidenceFields = {
-  physicalReviewConfirmed: z.literal(true, { errorMap: () => ({ message: "Cần xác nhận đã đối chiếu vật phẩm thực tế tại quầy" }) }),
+  physicalReviewConfirmed: z.literal(true, { error: "Cần xác nhận đã đối chiếu vật phẩm thực tế tại quầy" }),
   intakeKey: uuid,
   intakeImageIds: z.array(uuid).min(1, "Cần ít nhất 1 ảnh tình trạng tiếp nhận").max(5, "Chỉ được tải tối đa 5 ảnh tiếp nhận").refine(ids => new Set(ids).size === ids.length, "Ảnh tiếp nhận không được trùng nhau"),
   receivedQuantity: z.number().int().min(1).max(999),
@@ -79,8 +80,31 @@ export const returnWarehouseItemSchema = z.object({
 export const verifyCustodyClaimSchema = z.object({
   claimId: uuid,
   recipientId: uuid,
-  verified: z.literal(true, { errorMap: () => ({ message: "Cần xác nhận đã đối chiếu quyền sở hữu tại quầy." }) }),
+  verified: z.literal(true, { error: "Cần xác nhận đã đối chiếu quyền sở hữu tại quầy." }),
   reason: z.string().trim().min(10, "Nội dung đối chiếu phải có từ 10 đến 1000 ký tự.").max(1000, "Nội dung đối chiếu phải có từ 10 đến 1000 ký tự.")
+});
+
+export const warehouseConversationExtractionSchema = z.object({
+  mode: z.enum(["INTAKE", "RETURN"]),
+  intakeKind: z.enum(["WALK_IN", "CUSTODY_REQUEST"]).optional(),
+  warehouseItemId: uuid.optional(),
+  messages: z.array(z.object({
+    role: z.enum(["user", "assistant"]),
+    content: z.string().trim().min(1).max(2000)
+  }).strict()).min(1).max(20)
+}).strict().superRefine((value, context) => {
+  if (value.mode === "RETURN" && !value.warehouseItemId) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ["warehouseItemId"], message: "Cần chọn vật phẩm kho để trích xuất thông tin trả hàng." });
+  }
+  if (value.mode === "RETURN" && value.intakeKind) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ["intakeKind"], message: "Chế độ trả hàng không nhận loại tiếp nhận." });
+  }
+  if (value.messages.at(-1)?.role !== "user") {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ["messages"], message: "Lượt gửi mới nhất phải là tin nhắn của người dùng." });
+  }
+  if (value.messages.reduce((total, message) => total + message.content.length, 0) > 12000) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ["messages"], message: "Hội thoại vượt quá giới hạn trích xuất. Hãy bắt đầu cuộc trò chuyện mới." });
+  }
 });
 
 export type { CreateWarehouseItemInput, ListWarehouseItemsQuery, UpdateWarehouseItemInput, ReturnWarehouseItemInput, WarehouseStatus } from "../../application/warehouse.dto.js";

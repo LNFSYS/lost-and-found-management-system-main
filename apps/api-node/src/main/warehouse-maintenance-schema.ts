@@ -2,7 +2,7 @@ import type { RowDataPacket } from "mysql2";
 import type { SqlExecutor } from "../shared/infrastructure/transaction-context.js";
 
 export const warehouseMaintenanceColumns = {
-  custody_requests: ["id", "post_id", "claim_id", "requester_id", "status", "warehouse_item_id", "request_payload"],
+  custody_requests: ["id", "post_id", "claim_id", "requester_id", "status", "warehouse_item_id", "request_payload", "requested_intake_at"],
   warehouse_items: ["id", "status", "deleted_at", "retention_deadline", "legal_hold", "reserved_claim_id"],
   warehouse_private_proofs: ["id", "storage_ref", "attached_at", "created_at"],
   warehouse_intake_sessions: ["id", "actor_id", "warehouse_item_id", "created_at"],
@@ -13,8 +13,10 @@ export const warehouseMaintenanceColumns = {
   users: ["id", "status"],
   user_roles: ["user_id", "role_code"],
   notifications: ["id", "user_id", "type", "title", "body", "entity_type", "entity_id", "dedupe_key", "is_read", "read_at", "created_at"],
-  notification_email_preferences: ["user_id", "chat_mode", "claim_mode", "quiet_hours_start", "quiet_hours_end", "timezone", "updated_at"],
-  notification_email_outbox: ["id", "notification_id", "recipient_user_id", "event_type", "entity_type", "entity_id", "room_id", "delivery_mode", "idempotency_key", "due_at"]
+  notification_email_preferences: ["user_id", "chat_mode", "claim_mode", "channel_preferences", "quiet_hours_start", "quiet_hours_end", "timezone", "updated_at"],
+  notification_email_outbox: ["id", "notification_id", "recipient_user_id", "event_type", "entity_type", "entity_id", "room_id", "delivery_mode", "idempotency_key", "due_at"],
+  notification_push_subscriptions: ["id", "user_id", "endpoint_hash", "endpoint", "p256dh_key", "auth_key"],
+  notification_push_outbox: ["id", "notification_id", "recipient_user_id", "subscription_id", "room_id", "status", "due_at", "lease_token", "lease_expires_at"]
 } as const;
 
 export interface WarehouseMaintenanceSchema {

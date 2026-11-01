@@ -15,6 +15,12 @@ test("inventory uses newest physical receipt first with a stable tie-breaker bef
   const repository = createWarehouseRepository(pool);
   await repository.listItems({ page: 1, pageSize: 12 });
   await repository.listItems({ page: 2, pageSize: 12, status: "STORED", handoverPointId: "desk", q: "keys" });
+  await repository.listItems({ page: 1, pageSize: 12, overdue: true });
+  for (const query of queries.slice(4)) {
+    assert.match(query.sql, /wi\.retention_deadline <= UTC_TIMESTAMP\(\)/);
+    assert.match(query.sql, /wi\.legal_hold = FALSE/);
+    assert.match(query.sql, /wi\.status IN \('RECEIVED','STORED','CLAIMED','EXPIRED'\)/);
+  }
   assert.match(queries[0].sql, /ORDER BY wi\.received_at DESC, wi\.id DESC LIMIT 12 OFFSET 0$/);
   assert.match(queries[2].sql, /ORDER BY wi\.received_at DESC, wi\.id DESC LIMIT 12 OFFSET 12$/);
   for (const query of [queries[0], queries[2]]) {

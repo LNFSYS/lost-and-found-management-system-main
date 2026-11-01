@@ -45,6 +45,15 @@ function boundedNumber(name: string, fallback: number, minimum: number, maximum:
   return value;
 }
 
+const vapid = {
+  publicKey: process.env.VAPID_PUBLIC_KEY?.trim() || null,
+  privateKey: process.env.VAPID_PRIVATE_KEY?.trim() || null,
+  subject: process.env.VAPID_SUBJECT?.trim() || null
+};
+if (Object.values(vapid).some(Boolean) && Object.values(vapid).some((value) => !value)) {
+  throw new Error("Set VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, and VAPID_SUBJECT together to enable browser push notifications");
+}
+
 export const env = {
   nodeEnv: process.env.NODE_ENV ?? "development",
   port: number("API_PORT", 3001),
@@ -82,6 +91,9 @@ export const env = {
     workerPollSeconds: boundedNumber("NOTIFICATION_EMAIL_WORKER_POLL_SECONDS", 30, 5, 300),
     workerEnabled: bool("NOTIFICATION_EMAIL_WORKER_ENABLED", true)
   },
+  notificationPush: {
+    ...vapid
+  },
   appointmentReminderMinutes: boundedNumber("APPOINTMENT_REMINDER_MINUTES",30,1,1440),
   matchingRefresh: {
     enabled: bool("MATCHING_REFRESH_ENABLED", true),
@@ -94,6 +106,15 @@ export const env = {
     apiKey: process.env.GEMINI_API_KEY?.trim() || null,
     model: process.env.GEMINI_MODEL?.trim() || "gemini-3.5-flash-lite",
     timeoutMs: number("GEMINI_TIMEOUT_MS", 30_000)
+  },
+  lostIllustration: {
+    cfToken: process.env.CLOUDFLARE_API_TOKEN?.trim() || null,
+    cfAccountId: process.env.CLOUDFLARE_ACCOUNT_ID?.trim() || null,
+    cfSteps: boundedNumber("CLOUDFLARE_IMAGE_STEPS", 4, 1, 8),
+    enabled: bool("LOST_ILLUSTRATION_ENABLED", false),
+    textModel: process.env.CLOUDFLARE_ILLUSTRATION_TEXT_MODEL?.trim() || "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+    visionModel: process.env.CLOUDFLARE_ILLUSTRATION_VISION_MODEL?.trim() || "@cf/moondream/moondream3.1-9B-A2B",
+    timeoutMs: boundedNumber("CLOUDFLARE_ILLUSTRATION_TIMEOUT_MS", 90_000, 10_000, 120_000)
   },
   cloudinary: {
     cloudName: process.env.CLOUDINARY_CLOUD_NAME?.trim() || null,

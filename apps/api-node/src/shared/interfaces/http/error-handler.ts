@@ -20,7 +20,12 @@ export function errorHandler(error: unknown, _request: Request, response: Respon
   }
   if (error instanceof ZodError) return response.status(422).json({ message: "Dữ liệu nhập chưa hợp lệ", errors: error.flatten().fieldErrors });
   if (error instanceof HttpError) return response.status(error.status).json({ message: error.message });
-  if (error instanceof AppError) return response.status(applicationErrorStatus[error.code]).json({ message: error.message });
+  if (error instanceof AppError) {
+    if (error.code === "rate_limited" && Number.isFinite(error.retryAfterSeconds) && error.retryAfterSeconds! > 0) {
+      response.setHeader("Retry-After", Math.min(86_400, Math.ceil(error.retryAfterSeconds!)));
+    }
+    return response.status(applicationErrorStatus[error.code]).json({ message: error.message });
+  }
   const code = typeof error === "object" && error !== null && "code" in error
     ? String((error as { code?: unknown; }).code ?? "")
     : "";

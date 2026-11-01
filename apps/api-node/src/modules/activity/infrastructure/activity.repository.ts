@@ -40,7 +40,7 @@ export function createActivityRepository(pool: SqlExecutor): ActivityRepository 
         JOIN posts identity_post ON identity_post.id=c.post_id
         WHERE (c.post_id=? OR c.lost_post_id=? OR c.source_found_post_id=?) AND (${claimantIdSql}=? OR ${finderIdSql}=?)`;
       const args = [postId,postId,postId,userId,userId];
-      const [post] = await pool.execute<RowDataPacket[]>(`SELECT p.title,p.status,p.type FROM posts p WHERE p.id=? AND
+      const [post] = await pool.execute<RowDataPacket[]>(`SELECT p.title,p.status,p.type,p.user_id AS owner_id FROM posts p WHERE p.id=? AND
         (p.user_id=? OR EXISTS(${allowed}))`,[postId,userId,...args]);
       if (!post[0]) return null;
       const cte = `WITH allowed_claims AS (${allowed}), physical_posts AS
@@ -73,6 +73,44 @@ export function createActivityRepository(pool: SqlExecutor): ActivityRepository 
       const [images] = eventIds.length ? await pool.execute<RowDataPacket[]>(`${journeyMediaCte}
         SELECT event_id,id,kind,uploaded_at FROM image_media WHERE event_id IN (${eventIds.map(()=>"?").join(",")})
         ORDER BY uploaded_at,id`,[postId,userId,new Date(asOf),...eventIds]) : [[]];
+      const chatClaimIds=[...new Set(rows.filter(row=>row.source==="CHAT").map(row=>String(row.target_id)))];
+      const [chatParties]=chatClaimIds.length ? await pool.execute<RowDataPacket[]>(`${cte}
+        SELECT c.id AS claim_id,
+          CASE WHEN ?=${claimantIdSql} THEN finder_user.full_name ELSE claimant_user.full_name END AS counterpart_name
+        FROM chat_rooms room JOIN allowed_claims ac ON ac.id=room.claim_id
+        JOIN claims c ON c.id=room.claim_id JOIN posts identity_post ON identity_post.id=c.post_id
+        JOIN users claimant_user ON claimant_user.id=${claimantIdSql}
+        JOIN users finder_user ON finder_user.id=${finderIdSql}
+        WHERE c.id IN (${chatClaimIds.map(()=>"?").join(",")}) AND room.created_at<=?`,
+        [...contextValues,userId,...chatClaimIds,new Date(asOf)]) : [[]];
+      const chatPartyByClaim=new Map(chatParties.map(row=>[String(row.claim_id),String(row.counterpart_name)]));
+      const appointmentIds=[...new Set(rows.filter(row=>row.source==="APPOINTMENT").map(row=>String(row.target_id)))];
+      const [appointments]=appointmentIds.length ? await pool.execute<RowDataPacket[]>(`${cte}
+        SELECT a.id,a.proposed_at FROM return_appointments a JOIN allowed_claims ac ON ac.id=a.claim_id
+        WHERE a.id IN (${appointmentIds.map(()=>"?").join(",")})`,[...contextValues,...appointmentIds]) : [[]];
+      const appointmentById=new Map(appointments.map(row=>[String(row.id),{proposedAt:new Date(row.proposed_at).toISOString()}]));
+      const matchingSuggestions = userId === post[0].owner_id ? await pool.execute<RowDataPacket[]>(
+        `SELECT candidate.id AS post_id,candidate.title,candidate.type,candidate.status,mr.total_score
+         FROM match_results mr
+         JOIN posts lost_post ON lost_post.id=mr.lost_post_id
+         JOIN posts found_post ON found_post.id=mr.found_post_id
+         JOIN posts candidate ON candidate.id=CASE WHEN mr.lost_post_id=? THEN mr.found_post_id ELSE mr.lost_post_id END
+         WHERE (mr.lost_post_id=? OR mr.found_post_id=?)
+           AND mr.total_score>=COALESCE((SELECT CAST(config_value AS DECIMAL(6,5)) FROM config_entries
+             WHERE config_key='matching.suggestion_threshold' LIMIT 1),0.60)
+           AND lost_post.deleted_at IS NULL AND found_post.deleted_at IS NULL
+           AND lost_post.status IN ('OPEN','MATCHED') AND found_post.status IN ('OPEN','MATCHED')
+           AND lost_post.user_id<>found_post.user_id
+           AND candidate.status IN ('OPEN','MATCHED') AND candidate.deleted_at IS NULL
+           AND NOT EXISTS (SELECT 1 FROM match_suggestion_dismissals d
+             WHERE d.match_id=mr.id AND d.user_id=? AND d.source_post_id=?)
+         ORDER BY mr.total_score DESC,mr.updated_at DESC,mr.id ASC LIMIT 3`,
+        [postId,postId,postId,userId,postId]
+      ) : [[]];
+      const suggestions = matchingSuggestions[0].map(row=>({
+        postId:String(row.post_id),title:String(row.title),type:row.type as "LOST"|"FOUND",
+        status:row.status as "OPEN"|"MATCHED",score:Number(row.total_score)
+      }));
       const [stock] = await pool.execute<RowDataPacket[]>(`${cte} SELECT wi.status,wi.received_at,wi.returned_at FROM warehouse_items wi
         WHERE wi.deleted_at IS NULL AND (wi.id IN (SELECT warehouse_item_id FROM relevant_custody) OR wi.post_id IN (SELECT id FROM physical_posts))
         ORDER BY wi.received_at DESC,wi.id DESC LIMIT 2`,contextValues);
@@ -96,7 +134,9 @@ export function createActivityRepository(pool: SqlExecutor): ActivityRepository 
       return { title:post[0].title,status:post[0].status,results:rows.map(row=>({...map(row),images:images.filter(i=>i.event_id===row.id).map(i=>({
         id:String(i.id),kind:i.kind,createdAt:new Date(i.uploaded_at).toISOString(),
         url:`/api/posts/${postId}/journey/images/${i.kind}/${i.id}?asOf=${encodeURIComponent(asOf)}`
-      }))})),total:Number(count[0].total),summary };
+      })),...(row.source==="CHAT"?{conversationWith:chatPartyByClaim.get(String(row.target_id))??null}:{}),
+        ...(row.source==="APPOINTMENT"&&appointmentById.has(String(row.target_id))?{appointment:appointmentById.get(String(row.target_id))}:{}),
+        ...(row.source==="MATCHING"&&userId===post[0].owner_id?{matchingSuggestions:suggestions}:{})})),total:Number(count[0].total),summary };
     },
     async journeyImage(postId,userId,kind,imageId,asOf) {
       const [rows] = await pool.execute<RowDataPacket[]>(`${journeyMediaCte}

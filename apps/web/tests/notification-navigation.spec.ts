@@ -28,11 +28,20 @@ function notification(entityType: string | null, entityId: string | null) {
 async function prepare(page: Page, item = notification("POST_MATCH", "post-1")) {
   const reads: string[] = [];
   const errors: string[] = [];
+  let realtimeNotification: ReturnType<typeof notification> | null = null;
+  let realtimeRequests = 0;
   page.on("pageerror", error => errors.push(error.message));
   // Block all unconfigured API requests, including destinations no longer accessible.
   await page.route("**/api/**", route => route.fulfill({ status: 404, contentType: "application/json",
     body: JSON.stringify({ error: "not_found", message: "Test destination unavailable" }) }));
   await page.route("**/api/auth/refresh", route => route.fulfill({ json: session }));
+  await page.route("**/api/realtime*", route => {
+    realtimeRequests++;
+    const body = realtimeNotification
+      ? `event: workflow.notification\ndata: ${JSON.stringify({ eventId: realtimeNotification.id, workflow: "CLAIM", roomId: null, notification: realtimeNotification })}\n\n`
+      : "event: realtime.connected\ndata: {}\n\n";
+    return route.fulfill({ status: 200, contentType: "text/event-stream", body });
+  });
   await page.route(/\/api\/notifications(?:\?.*)?$/, route => route.fulfill({ json: { items: [item], unreadTotal: 1 } }));
   await page.route("**/api/notifications/notification-1/read", route => {
     reads.push(route.request().url());
@@ -51,7 +60,14 @@ async function prepare(page: Page, item = notification("POST_MATCH", "post-1")) 
   } }));
   await page.goto("/notifications");
   await expect(page.locator(".notifications-page__item")).toBeVisible();
-  return { reads, errors };
+  return {
+    reads,
+    errors,
+    emitNotification: async (value: ReturnType<typeof notification>) => {
+      realtimeNotification = value;
+      await expect.poll(() => realtimeRequests).toBeGreaterThan(1);
+    }
+  };
 }
 
 for (const surface of ["bell", "page"] as const) {
@@ -98,9 +114,8 @@ for (const width of [320, 390, 768]) {
 }
 
 test("matching toast opens the same destination without waiting for read acknowledgement", async ({ page }) => {
-  const { errors } = await prepare(page);
+  const { errors, emitNotification } = await prepare(page);
   const item = { ...notification("POST_MATCH", "post-1"), id: "notification-2" };
-  await page.route(/\/api\/notifications(?:\?.*)?$/, route => route.fulfill({ json: { items: [item], unreadTotal: 2 } }));
   let finishRead: (() => void) | undefined;
   const readPending = new Promise<void>(resolve => { finishRead = resolve; });
   let readStarted = false;
@@ -111,6 +126,7 @@ test("matching toast opens the same destination without waiting for read acknowl
   });
   try {
     const toast = page.locator(".notification-toast__content");
+    await emitNotification(item);
     await expect(toast).toBeVisible({ timeout: 15_000 });
     await toast.click();
     await expect(page).toHaveURL(/\/posts\/post-1\/matches$/);
@@ -134,3 +150,17 @@ for (const missingTarget of [notification("UNKNOWN", "unknown-1"), notification(
     await expect.poll(() => reads.length).toBe(1);
   });
 }
+
+test("bell keeps a notification unread when offline prevents its destination from loading", async ({ page, context }) => {
+  const { reads } = await prepare(page, notification("CLAIM", "claim-1"));
+  await context.setOffline(true);
+  await page.evaluate(() => window.dispatchEvent(new Event("offline")));
+  await page.locator(".notification-trigger").click();
+  await page.locator(".notification-item").click();
+
+  await expect(page).toHaveURL(/\/claims\/claim-1$/);
+  await expect.poll(() => reads.length).toBe(0);
+  await page.locator(".notification-trigger").click();
+  await expect(page.locator(".notification-item.unread .notification-item__dot")).toHaveCount(1);
+  await context.setOffline(false);
+});

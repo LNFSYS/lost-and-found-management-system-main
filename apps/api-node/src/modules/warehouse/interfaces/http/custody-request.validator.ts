@@ -22,6 +22,7 @@ export const createCustodyRequestSchema = z.object({
   postId: uuid,
   reason: nullableText(2000),
   handoverPointId: uuid.nullable().optional(),
+  requestedIntakeAt: z.coerce.date(),
   intakeType: z.literal("CUSTODY_TRANSFER").optional(),
   idempotencyKey: z.string().trim().min(8).max(190).regex(/^[A-Za-z0-9._:-]+$/).optional()
 });

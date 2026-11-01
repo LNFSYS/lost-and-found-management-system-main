@@ -30,7 +30,7 @@ export const journeyMediaCte = `WITH context AS (
   SELECT CONCAT('POST:',p.id) event_id,m.id,'POST' kind,m.secure_url storage_ref,COALESCE(m.format,'jpg') format,
     m.created_at uploaded_at,p.created_at event_at,p.id target_id
   FROM post_media m JOIN visible_post p ON p.id=m.post_id JOIN context ctx
-  WHERE m.media_kind='ITEM' AND m.resource_type='image' AND m.created_at<=ctx.as_of
+  WHERE m.media_kind='ITEM' AND m.resource_type='image' AND m.is_ai_generated=FALSE AND m.created_at<=ctx.as_of
     AND (p.user_id=ctx.user_id OR (p.visibility_mode='PUBLIC' AND p.status<>'HIDDEN'))
   UNION ALL
   SELECT CONCAT('CHAT_PHOTO:',e.id),e.id,'CLAIM',e.secure_url,COALESCE(e.media_format,'jpg'),e.created_at,e.created_at,c.id

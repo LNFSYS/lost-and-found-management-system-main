@@ -232,9 +232,10 @@ function mapLog(row: StorageLogRow): WarehouseStorageLog {
   };
 }
 
-function listWhere(input: { q?: string; status?: WarehouseStatus; handoverPointId?: string; }) {
+function listWhere(input: { overdue?: boolean; q?: string; status?: WarehouseStatus; handoverPointId?: string; }) {
   const where = ["wi.deleted_at IS NULL"];
   const values: Array<string> = [];
+  if (input.overdue) where.push("wi.retention_deadline <= UTC_TIMESTAMP() AND wi.legal_hold = FALSE AND wi.status IN ('RECEIVED','STORED','CLAIMED','EXPIRED')");
   if (input.status) {
     where.push("wi.status = ?");
     values.push(input.status);
@@ -254,6 +255,31 @@ function listWhere(input: { q?: string; status?: WarehouseStatus; handoverPointI
 export function createWarehouseRepository(pool: SqlExecutor) {
 
   const warehouseRepository = {
+    async listApprovals(itemId: string, db?: TransactionContext) {
+      const [rows] = await sqlExecutor(db ?? pool).execute<RowDataPacket[]>(`SELECT a.*, u.full_name AS requester_name, approver.full_name AS approver_name
+        FROM warehouse_action_approvals a JOIN users u ON u.id = a.requested_by
+        LEFT JOIN users approver ON approver.id = a.approved_by
+        WHERE a.warehouse_item_id = ? ORDER BY a.created_at DESC, a.id DESC`, [itemId]);
+      return rows.map(r => ({ id: String(r.id), itemId: String(r.warehouse_item_id), requesterId: String(r.requested_by), requesterName: String(r.requester_name), approverName: r.approver_name as string | null,
+        target: r.target_status as "DISPOSED" | "DONATED" | "TRANSFERRED", reason: String(r.reason), status: String(r.status), createdAt: iso(r.created_at)!, approvedAt: iso(r.approved_at), executedAt: iso(r.executed_at) }));
+    },
+    async listAttachedProofs(itemId) {
+      const [rows] = await pool.execute<RowDataPacket[]>("SELECT id FROM warehouse_private_proofs WHERE warehouse_item_id = ? AND attached_at IS NOT NULL ORDER BY created_at, id", [itemId]);
+      return rows.map(r => ({ id: String(r.id) }));
+    },
+    async listStaffIds(db) {
+      const [rows] = await sqlExecutor(db).execute<RowDataPacket[]>("SELECT DISTINCT u.id FROM users u JOIN user_roles ur ON ur.user_id=u.id WHERE u.status='ACTIVE' AND ur.role_code IN ('STAFF','ADMIN') ORDER BY u.id");
+      return rows.map(r => String(r.id));
+    },
+    async listRetentionAlerts(days, db) {
+      const [rows] = await sqlExecutor(db).execute<RowDataPacket[]>(`SELECT wi.id, wi.retention_deadline, wi.retention_deadline <= UTC_TIMESTAMP() AS overdue
+        FROM warehouse_items wi WHERE wi.deleted_at IS NULL AND wi.status IN ('RECEIVED','STORED','CLAIMED','EXPIRED')
+        AND wi.retention_deadline <= DATE_ADD(UTC_TIMESTAMP(), INTERVAL ? DAY)
+        AND EXISTS (SELECT 1 FROM users u JOIN user_roles ur ON ur.user_id = u.id WHERE u.status='ACTIVE' AND ur.role_code IN ('STAFF','ADMIN')
+          AND NOT EXISTS (SELECT 1 FROM notifications n WHERE n.user_id=u.id AND n.dedupe_key = CONCAT('retention:', wi.id, ':', DATE_FORMAT(wi.retention_deadline,'%Y-%m-%dT%H:%i:%s.000Z'), ':', IF(wi.retention_deadline <= UTC_TIMESTAMP(),'OVERDUE','DUE_SOON'), ':',u.id)))
+        ORDER BY wi.retention_deadline, wi.id LIMIT 100`, [Math.max(1, Math.min(30, days))]);
+      return rows.map(r => ({ id: String(r.id), deadline: iso(r.retention_deadline)!, overdue: Boolean(r.overdue) }));
+    },
     ...createWarehouseIntakeRepository(pool),
     async findItemByPostId(postId) {
       const [rows] = await pool.execute<RowDataPacket[]>("SELECT id,status FROM warehouse_items WHERE post_id = ? AND deleted_at IS NULL ORDER BY received_at DESC LIMIT 1", [postId]);
@@ -304,7 +330,10 @@ export function createWarehouseRepository(pool: SqlExecutor) {
       const [rows] = await sqlExecutor(db).execute<RowDataPacket[]>("SELECT id FROM warehouse_items WHERE post_id = ? AND deleted_at IS NULL LIMIT 1", [postId]);
       return rows.length > 0;
     },
-    async hasBlockingCases(postId, db, completingClaimId, itemId) {
+    async hasBlockingCases(postId, db, completingClaimId, itemId): Promise<boolean> {
+      return (await warehouseRepository.blockingCaseKinds(postId, db, completingClaimId, itemId)).length > 0;
+    },
+    async blockingCaseKinds(postId, db, completingClaimId, itemId): Promise<string[]> {
       if (!postId && itemId) {
         const [sources] = await sqlExecutor(db).execute<RowDataPacket[]>(`SELECT c.post_id FROM custody_requests cr
           JOIN warehouse_items wi ON wi.id = cr.warehouse_item_id AND wi.post_id IS NULL AND wi.deleted_at IS NULL
@@ -312,16 +341,16 @@ export function createWarehouseRepository(pool: SqlExecutor) {
         postId = sources[0]?.post_id ?? null;
         if (postId) await sqlExecutor(db).execute("SELECT id FROM posts WHERE id = ? FOR UPDATE", [postId]);
       }
-      if (!postId) return false;
+      if (!postId) return [];
       const [rows] = await sqlExecutor(db).execute<RowDataPacket[]>(
-        `SELECT id FROM claims WHERE COALESCE(source_found_post_id,post_id) = ? AND status IN ('PENDING','CONVERSATION_OPEN','NEED_MORE_INFO','ACCEPTED') AND (? IS NULL OR id <> ?)
-         UNION SELECT a.id FROM return_appointments a JOIN claims c ON c.id = a.claim_id
+        `SELECT 'CLAIM' AS kind FROM claims WHERE COALESCE(source_found_post_id,post_id) = ? AND status IN ('PENDING','CONVERSATION_OPEN','NEED_MORE_INFO','ACCEPTED') AND (? IS NULL OR id <> ?)
+         UNION SELECT 'APPOINTMENT' AS kind FROM return_appointments a JOIN claims c ON c.id = a.claim_id
          WHERE COALESCE(c.source_found_post_id,c.post_id) = ? AND a.status IN ('PENDING','ACCEPTED','RESCHEDULED') AND (? IS NULL OR c.id <> ?)
-         UNION SELECT r.id FROM reports r WHERE r.status = 'PENDING' AND
+         UNION SELECT 'DISPUTE' AS kind FROM reports r WHERE r.status = 'PENDING' AND
            ((r.entity_type = 'POST' AND r.entity_id = ?) OR r.source_id IN (SELECT id FROM claims WHERE COALESCE(source_found_post_id,post_id) = ?)
             OR (r.entity_type = 'HANDOVER' AND r.entity_id IN (SELECT a.id FROM return_appointments a JOIN claims c ON c.id = a.claim_id WHERE COALESCE(c.source_found_post_id,c.post_id) = ?))
-            OR (r.entity_type = 'CHAT' AND r.entity_id IN (SELECT room.id FROM chat_rooms room JOIN claims c ON c.id = room.claim_id WHERE COALESCE(c.source_found_post_id,c.post_id) = ?))) LIMIT 1`, [postId,completingClaimId ?? null,completingClaimId ?? null,postId,completingClaimId ?? null,completingClaimId ?? null,postId,postId,postId,postId]);
-      return rows.length > 0;
+            OR (r.entity_type = 'CHAT' AND r.entity_id IN (SELECT room.id FROM chat_rooms room JOIN claims c ON c.id = room.claim_id WHERE COALESCE(c.source_found_post_id,c.post_id) = ?)))`, [postId,completingClaimId ?? null,completingClaimId ?? null,postId,completingClaimId ?? null,completingClaimId ?? null,postId,postId,postId,postId]);
+      return rows.map(row => String(row.kind));
     },
     async verifiedRecipient(claimId, postId, recipientId, db, itemId) {
       const [rows] = await sqlExecutor(db).execute<RowDataPacket[]>(
@@ -460,7 +489,7 @@ export function createWarehouseRepository(pool: SqlExecutor) {
       }));
     },
 
-    async listItems(input: { q?: string; status?: WarehouseStatus; handoverPointId?: string; page: number; pageSize: number; }) {
+    async listItems(input: { overdue?: boolean; q?: string; status?: WarehouseStatus; handoverPointId?: string; page: number; pageSize: number; }) {
       const { where, values } = listWhere(input);
       const pageSize = Math.max(1, Math.min(50, Number(input.pageSize) || 12));
       const page = Math.max(1, Number(input.page) || 1);

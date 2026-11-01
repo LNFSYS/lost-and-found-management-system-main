@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 const uuid = z.string().uuid();
-const dateOnly = z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/, "Ngay phai co dinh dang YYYY-MM-DD");
+const dateOnly = z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/, "Ngày phải có định dạng YYYY-MM-DD");
 
 export const reportEntityTypeSchema = z.enum(["POST", "USER", "CLAIM", "CHAT", "HANDOVER"]);
 export const reportStatusSchema = z.enum(["PENDING", "REVIEWED", "DISMISSED", "WITHDRAWN"]);
@@ -42,6 +42,6 @@ export const statisticsExportSchema = z.object({
   to: dateOnly.optional(),
   format: statisticsExportFormatSchema.default("CSV"),
   sections: z.array(statisticsExportSectionSchema).min(1).max(3).optional()
-}).default({});
+}).prefault({});
 
 export type { DashboardKpiQuery, ListModerationReportsQuery, ModerationActionType, ReportEntityType, ReportStatus, ReviewModerationReportInput, StatisticsExportFormat, StatisticsExportInput, StatisticsExportSection } from "../../application/admin-reporting.dto.js";

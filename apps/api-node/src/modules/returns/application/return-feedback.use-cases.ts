@@ -2,6 +2,7 @@ import type { TransactionRunner } from "../../../shared/application/transaction.
 import { AppError } from "../../../shared/domain/app-error.js";
 import type { AccessTokenPayload, ActivitySummary } from "../../../shared/domain/auth.js";
 import type { AdminAuditRepository } from "../../admin/application/index.js";
+import type { NotificationEmailQueue, NotificationRecord, NotificationRepository } from "../../notifications/application/index.js";
 import type { ReturnFeedbackInput } from "./return-feedback.dto.js";
 import type { ReturnAppointmentForFeedback, ReturnFeedbackRecord, ReturnFeedbackRepository } from "./return-feedback.repository.port.js";
 
@@ -36,11 +37,11 @@ function targetUserId(appointment: ReturnAppointmentForFeedback, reviewerId: str
 }
 
 function returnEligibilityReason(appointment: ReturnAppointmentForFeedback) {
-  if (appointment.status !== "COMPLETED") return "Return chua hoan tat nen chua the gui feedback";
-  if (!appointment.completedAt) return "Return chua co thoi diem hoan tat hop le";
+  if (appointment.status !== "COMPLETED") return "Lịch hẹn chưa hoàn tất nên chưa thể gửi đánh giá";
+  if (!appointment.completedAt) return "Lịch hẹn chưa có thời điểm hoàn tất hợp lệ";
   const dualConfirmed = Boolean(appointment.finderConfirmedAt && appointment.ownerConfirmedAt);
   const custodyAuthorized = Boolean(appointment.custodyAuthorizedAt);
-  if (!dualConfirmed && !custodyAuthorized) return "Can dual confirmation tu hai ben hoac custody outcome duoc uy quyen";
+  if (!dualConfirmed && !custodyAuthorized) return "Cần có xác nhận của cả hai bên hoặc kết quả bàn giao qua kho đã được ủy quyền";
   return null;
 }
 
@@ -78,16 +79,23 @@ export interface ReturnFeedbackDependencies {
   adminAuditRepository: AdminAuditRepository;
   runInTransaction: TransactionRunner;
   id: () => string;
+  notifications?: NotificationRepository;
+  emails?: NotificationEmailQueue;
+  realtimeNotifier?: { publishNotification(input: { userId: string; notification: NotificationRecord; workflow: "RETURN" }): Promise<unknown> | unknown };
 }
 export function createReturnFeedbackUseCases(options: ReturnFeedbackDependencies) {
   const { repository, adminAuditRepository, runInTransaction, id } = options;
 
   const returnFeedbackService = {
+    async listCompleted(viewer: AccessTokenPayload, page: number) {
+      const rows = await repository.listCompletedForUser(viewer.sub, page);
+      return { items: rows.slice(0, 20), page, hasMore: rows.length > 20 };
+    },
     async getEligibility(appointmentId: string, viewer: AccessTokenPayload): Promise<ReturnFeedbackEligibility> {
       const appointment = await repository.findAppointmentForFeedback(appointmentId);
-      if (!appointment) throw new AppError("not_found", "Khong tim thay return appointment");
+      if (!appointment) throw new AppError("not_found", "Không tìm thấy lịch hẹn trả đồ");
       const participant = isParticipant(appointment, viewer.sub);
-      if (!participant && !isAdmin(viewer)) throw new AppError("forbidden", "Ban khong co quyen xem feedback cua return nay");
+      if (!participant && !isAdmin(viewer)) throw new AppError("forbidden", "Bạn không có quyền xem đánh giá của lịch hẹn này");
       if (!participant && isAdmin(viewer)) {
         await adminAuditRepository.record({
           id: id(),
@@ -109,7 +117,7 @@ export function createReturnFeedbackUseCases(options: ReturnFeedbackDependencies
       return {
         appointmentId,
         eligible: participant && !reason && !currentUserFeedback,
-        reason: currentUserFeedback ? "Ban da gui feedback cho return nay" : reason,
+        reason: currentUserFeedback ? "Bạn đã gửi đánh giá cho lần trả đồ này" : reason,
         returnStatus: appointment.status,
         completedAt: appointment.completedAt,
         dualConfirmed: Boolean(appointment.finderConfirmedAt && appointment.ownerConfirmedAt),
@@ -125,23 +133,23 @@ export function createReturnFeedbackUseCases(options: ReturnFeedbackDependencies
 
     async submitFeedback(appointmentId: string, input: ReturnFeedbackInput, viewer: AccessTokenPayload) {
       const idempotencyKey = input.idempotencyKey ?? null;
-      return runInTransaction(async (connection) => {
+      const result = await runInTransaction(async (connection) => {
         // Lock before any consistent read so a concurrent retry sees the committed feedback.
         const appointment = await repository.findAppointmentForFeedback(appointmentId, connection, true);
-        if (!appointment) throw new AppError("not_found", "Khong tim thay return appointment");
-        if (!isParticipant(appointment, viewer.sub)) throw new AppError("forbidden", "Chi participant cua return moi duoc gui feedback");
+        if (!appointment) throw new AppError("not_found", "Không tìm thấy lịch hẹn trả đồ");
+        if (!isParticipant(appointment, viewer.sub)) throw new AppError("forbidden", "Chỉ người tham gia lịch hẹn mới được gửi đánh giá");
         if (idempotencyKey) {
           const existing = await repository.findFeedbackByIdempotency(appointmentId, viewer.sub, idempotencyKey, connection);
-          if (existing) return { feedback: responseFeedback(existing), reputationEventCreated: false, idempotent: true };
+          if (existing) return { feedback: responseFeedback(existing), reputationEventCreated: false, idempotent: true, notification: null as NotificationRecord | null, recipientId: null as string | null };
         }
 
         const reason = returnEligibilityReason(appointment);
         if (reason) throw new AppError("conflict", reason);
 
         const targetId = targetUserId(appointment, viewer.sub);
-        if (!targetId || targetId === viewer.sub) throw new AppError("conflict", "Khong the tu cong diem uy tin cho chinh minh");
+        if (!targetId || targetId === viewer.sub) throw new AppError("conflict", "Không thể tự cộng điểm uy tín cho chính mình");
         const duplicate = await repository.findFeedbackByReviewer(appointmentId, viewer.sub, connection);
-        if (duplicate) throw new AppError("conflict", "Ban da gui feedback cho return nay");
+        if (duplicate) throw new AppError("conflict", "Bạn đã gửi đánh giá cho lần trả đồ này");
 
         const feedbackId = id();
         const delta = pointsForRating(input.rating);
@@ -171,9 +179,24 @@ export function createReturnFeedbackUseCases(options: ReturnFeedbackDependencies
         }, connection);
 
         const created = await repository.findFeedbackById(feedbackId, connection);
-        if (!created) throw new AppError("internal", "Khong the doc lai feedback vua tao");
-        return { feedback: responseFeedback(created), reputationEventCreated: true, idempotent: false };
+        if (!created) throw new AppError("internal", "Không thể đọc lại đánh giá vừa tạo");
+        const notification = options.notifications ? await options.notifications.create({
+          userId: targetId,
+          type: "FEEDBACK_RECEIVED",
+          title: "Bạn vừa nhận được feedback sau khi hoàn tất bàn giao",
+          body: "Mở lịch sử bàn giao để xem thông báo mới.",
+          entityType: "APPOINTMENT",
+          entityId: appointment.id,
+          dedupeKey: `return-feedback:${feedbackId}:${targetId}`
+        }, connection) : null;
+        if (notification) await options.emails?.enqueue({ notification, recipientUserId: targetId, eventType: "FEEDBACK" }, connection);
+        return { feedback: responseFeedback(created), reputationEventCreated: true, idempotent: false,
+          notification, recipientId: notification ? targetId : null };
       });
+      if (result.notification && result.recipientId) {
+        await options.realtimeNotifier?.publishNotification({ userId: result.recipientId, notification: result.notification, workflow: "RETURN" });
+      }
+      return { feedback: result.feedback, reputationEventCreated: result.reputationEventCreated, idempotent: result.idempotent };
     }
   };
   return returnFeedbackService;

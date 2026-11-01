@@ -13,15 +13,22 @@ import { createMatchingUseCases } from "../modules/matching/application/matching
 import { createNotificationUseCases } from "../modules/notifications/application/notification.use-cases.js";
 import { createNotificationEmailQueue } from "../modules/notifications/application/notification-email.queue.js";
 import { createNotificationEmailWorker } from "../modules/notifications/application/notification-email.worker.js";
+import { createNotificationPushWorker } from "../modules/notifications/application/notification-push.worker.js";
 import { createSmtpNotificationEmailDelivery } from "../modules/notifications/infrastructure/notification-email.smtp.js";
+import { createWebPushDelivery } from "../modules/notifications/infrastructure/web-push.delivery.js";
 import { createImageAnalysisUseCases } from "../modules/posts/application/image-analysis.use-cases.js";
+import { createIllustrationUseCases } from "../modules/posts/application/illustration.use-cases.js";
+import { createCloudflareIllustrationModel } from "../modules/posts/infrastructure/cloudflare-illustration-model.js";
 import { createPostUseCases } from "../modules/posts/application/post.use-cases.js";
 import { createGeminiImageAnalyzer } from "../modules/posts/infrastructure/gemini-image-analyzer.js";
 import { createRealtimeUseCases } from "../modules/realtime/application/realtime.use-cases.js";
+import { createChatSocketUseCases } from "../modules/realtime/application/chat-socket.use-cases.js";
 import { createReturnFeedbackUseCases } from "../modules/returns/application/return-feedback.use-cases.js";
 import { createReportUseCases } from "../modules/reports/application/report.use-cases.js";
 import { createSystemConfigUseCases } from "../modules/system-config/application/system-config.use-cases.js";
 import { createWarehouseUseCases } from "../modules/warehouse/application/warehouse.use-cases.js";
+import { createWarehouseConversationUseCases } from "../modules/warehouse/application/warehouse-conversation.use-cases.js";
+import { createGeminiWarehouseConversationAnalyzer } from "../modules/warehouse/infrastructure/gemini-warehouse-conversation-analyzer.js";
 import { createCustodyRequestUseCases } from "../modules/warehouse/application/custody-request.use-cases.js";
 import { env } from "../shared/infrastructure/config/env.js";
 import { createCloudinaryPrivateMediaStorage } from "../shared/infrastructure/cloudinary-private-media-storage.js";
@@ -42,8 +49,8 @@ export function createServices(persistence: Persistence, config: typeof env = en
   const postLocalMediaStorage = createPrivateMediaStorage({
     uploadDir: config.uploadDir,
     namespace: "post-media",
-    invalidPathMessage: "Duong dan media khong hop le",
-    notFoundMessage: "Media khong hop le"
+    invalidPathMessage: "Đường dẫn ảnh không hợp lệ",
+    notFoundMessage: "Ảnh không hợp lệ"
   });
   const claimLocalMediaStorage = createPrivateMediaStorage({
     uploadDir: config.uploadDir,
@@ -70,9 +77,14 @@ export function createServices(persistence: Persistence, config: typeof env = en
     emailDelivery: createSmtpNotificationEmailDelivery({ smtp: config.smtp }),
     id, frontendUrl: config.frontendUrl, logger: console
   });
-  const notificationService = createNotificationUseCases({ notificationRepository, notificationEmailRepository, notificationEmailQueue });
-  const appointmentService = createAppointmentUseCases({ repository:persistence.appointmentRepository,transaction,id,
-    hash:security.hashToken,notifications:notificationRepository,emails:notificationEmailQueue,reminderLeadMinutes:config.appointmentReminderMinutes });
+  const notificationPushConfigured = Boolean(config.notificationPush.publicKey && config.notificationPush.privateKey && config.notificationPush.subject);
+  const notificationPushWorker = notificationPushConfigured ? createNotificationPushWorker({
+    repository: notificationEmailRepository,
+    delivery: createWebPushDelivery({ publicKey: config.notificationPush.publicKey!, privateKey: config.notificationPush.privateKey!, subject: config.notificationPush.subject! }),
+    id, logger: console
+  }) : null;
+  const notificationService = createNotificationUseCases({ notificationRepository, notificationEmailRepository, notificationEmailQueue,
+    pushPublicKey: notificationPushConfigured ? config.notificationPush.publicKey : null });
   const systemConfigService = createSystemConfigUseCases({
     repository: systemConfigRepository, auditRepository: adminAuditRepository, transaction, idFactory: id
   });
@@ -89,7 +101,12 @@ export function createServices(persistence: Persistence, config: typeof env = en
     authRepository, userRepository, avatarStorage, security,
     policy: config, emailService, withTransaction: transaction, logger: console, uploads: mediaUploads
   });
-  const realtimeService = createRealtimeUseCases({ claimRepository, id, validateSession: session => authService.validateAccessSession(session) });
+  const realtimeService = createRealtimeUseCases({ claimRepository, notifications: notificationRepository, id,
+    validateSession: session => authService.validateAccessSession(session) });
+  const chatSocketService = createChatSocketUseCases();
+  const appointmentService = createAppointmentUseCases({ repository:persistence.appointmentRepository,transaction,id,
+    hash:security.hashToken,notifications:notificationRepository,emails:notificationEmailQueue,
+    realtimeNotifier: realtimeService, reminderLeadMinutes:config.appointmentReminderMinutes });
   const custodyDelivery = { notificationRepository, notificationEmailQueue,
     publishCustodyNotification: async (userId: string, notification: import("../modules/notifications/application/index.js").NotificationRecord) => {
       await realtimeService.publishNotification({ userId, notification, workflow: "CUSTODY" });
@@ -102,18 +119,29 @@ export function createServices(persistence: Persistence, config: typeof env = en
   const activityService = createActivityUseCases({ repository:persistence.activityRepository,audit:adminAuditRepository,transaction,id,
     media: { post:postMediaStorage,claim:claimMediaStorage,warehouse:proofStorage } });
   const warehouseService = createWarehouseUseCases({ warehouseRepository, custodyRequestRepository, proofStorage, sourceMediaStorage: postMediaStorage, contactMediaStorage: claimMediaStorage, ...custodyDelivery, withTransaction: transaction, id, uploads: mediaUploads, logger: console });
-  const custodyRequestService = createCustodyRequestUseCases({ custodyRequestRepository, warehouseRepository, ...custodyDelivery, withTransaction: transaction, id });
+  const warehouseConversationService = createWarehouseConversationUseCases({ warehouseRepository, analyzer: createGeminiWarehouseConversationAnalyzer(config.gemini) });
+  const custodyRequestService = createCustodyRequestUseCases({ custodyRequestRepository, warehouseRepository, ...custodyDelivery, withTransaction: transaction, id, scheduleRepository: systemConfigRepository });
   const returnFeedbackService = createReturnFeedbackUseCases({
-    repository: returnFeedbackRepository, adminAuditRepository, runInTransaction: transaction, id
+    repository: returnFeedbackRepository, adminAuditRepository, runInTransaction: transaction, id,
+    notifications: notificationRepository, emails: notificationEmailQueue,
+    realtimeNotifier: realtimeService
   });
   const reportService = createReportUseCases({
     repository: reportRepository, transaction, id, hashPayload: security.hashToken
   });
   const matchingService = createMatchingUseCases({ matchingRepository, postRepository, idFactory: id,
     delivery: { transaction, notifications: notificationRepository, emails: notificationEmailQueue } });
+  const illustrationModel = createCloudflareIllustrationModel({ token: config.lostIllustration.cfToken,
+    accountId: config.lostIllustration.cfAccountId, steps: config.lostIllustration.cfSteps,
+    enabled: config.lostIllustration.enabled,
+    timeoutMs: config.lostIllustration.timeoutMs, textModel: config.lostIllustration.textModel,
+    visionModel: config.lostIllustration.visionModel });
+  const illustrations = createIllustrationUseCases({ repository: persistence.illustrationRepository, posts: postRepository,
+    model: illustrationModel, storage: postMediaStorage,
+    transaction, id, hash: security.hashToken });
   const postService = createPostUseCases({
     postRepository, matchingRepository, matchingService,
-    withTransaction: transaction, id, mediaStorage: postMediaStorage, logger: console, uploads: mediaUploads
+    withTransaction: transaction, id, mediaStorage: postMediaStorage, logger: console, uploads: mediaUploads, illustrations
   });
   const claimService = createClaimUseCases({
     contactPhotos: createContactPhotoUseCases({ repository: persistence.contactPhotoRepository, claims: claimRepository, matching: matchingRepository,
@@ -121,15 +149,20 @@ export function createServices(persistence: Persistence, config: typeof env = en
       authorizeTarget: postId => postService.getPost(postId), mediaStorage: claimMediaStorage, transaction, id, uploads: mediaUploads, logger: console }),
     claimRepository, matchingRepository, notificationRepository, custodyRequestRepository, warehouseRepository, notificationEmailQueue,
     realtimeNotifier: realtimeService,
+    chatSocketNotifier: chatSocketService,
+    scheduleRepository: systemConfigRepository,
     withTransaction: transaction, id, mediaStorage: claimMediaStorage,
     hashIdempotencyPayload: security.hashToken, logger: console, uploads: mediaUploads
   });
   const geminiImageService = createImageAnalysisUseCases({ postRepository, analyzer: createGeminiImageAnalyzer(config.gemini) });
   return {
     appointmentService, activityService,
-    notificationService, notificationEmailWorker, systemConfigService, adminUserService, adminReportingService,
-    adminCatalogService, warehouseService, custodyRequestService, returnFeedbackService, matchingService,
-    postService, claimService, realtimeService, reportService, authService, geminiImageService
+    notificationService, notificationEmailWorker, notificationPushWorker, systemConfigService, adminUserService, adminReportingService,
+    adminCatalogService, warehouseService, warehouseConversationService, custodyRequestService, returnFeedbackService, matchingService,
+    postService, claimService, realtimeService, chatSocketService, reportService, authService, geminiImageService, illustrations
   };
 }
-export type ApplicationServices = ReturnType<typeof createServices>;
+type CreatedApplicationServices = ReturnType<typeof createServices>;
+export type ApplicationServices = Omit<CreatedApplicationServices, "warehouseConversationService"> & {
+  warehouseConversationService?: CreatedApplicationServices["warehouseConversationService"];
+};

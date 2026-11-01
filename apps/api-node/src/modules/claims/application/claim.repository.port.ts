@@ -380,6 +380,7 @@ export interface ClaimRepository {
   hasActiveAppointment(claimId: string, queryable: TransactionContext): Promise<boolean>;
   findAuditByIdempotencyKey(claimId: string, actorId: string, idempotencyKey: string, queryable: TransactionContext): Promise<ClaimAuditEventRecord | null>;
   listVerificationAuditEvents(claimId: string, queryable?: TransactionContext): Promise<ClaimAuditEventRecord[]>;
+  listClaimAuditEvents?(claimId: string, queryable?: TransactionContext): Promise<ClaimAuditEventRecord[]>;
   listRoomsForUser(userId: string): Promise<{
     id: string;
     lostPostId: string | null;

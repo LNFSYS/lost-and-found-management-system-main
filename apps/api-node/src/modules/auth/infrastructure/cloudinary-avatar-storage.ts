@@ -11,7 +11,7 @@ type CloudinaryConfig = { cloudName: string | null; apiKey: string | null; apiSe
 
 function configuredClient(client: CloudinaryClient, config: CloudinaryConfig) {
   if (!config.cloudName || !config.apiKey || !config.apiSecret) {
-    throw new AppError("unavailable", "Dich vu luu anh dai dien chua duoc cau hinh");
+    throw new AppError("unavailable", "Dịch vụ lưu ảnh đại diện chưa được cấu hình");
   }
   client.config({
     cloud_name: config.cloudName,
@@ -30,7 +30,7 @@ function uploadBuffer(client: CloudinaryClient, buffer: Buffer, options: UploadA
         return;
       }
       if (!result) {
-        reject(new Error("Cloudinary khong tra ve ket qua upload"));
+        reject(new Error("Cloudinary không trả về kết quả tải ảnh lên"));
         return;
       }
       resolve(result);
@@ -70,10 +70,10 @@ export function createCloudinaryAvatarStorage(options: {
         if (result.existing && input.publicId) {
           result = await client.api.resource(`lnfs/avatars/${input.publicId}`, { resource_type: "image", type: "authenticated" });
         }
-      } catch { throw new AppError("upstream_failure", "Dich vu luu anh dai dien tam thoi khong kha dung"); }
+      } catch { throw new AppError("upstream_failure", "Dịch vụ lưu ảnh đại diện tạm thời không khả dụng"); }
       if (!result.public_id || !Number.isFinite(result.version) || !result.format || !Number.isFinite(result.bytes)
         || (input.publicId && result.public_id !== `lnfs/avatars/${input.publicId}`)) {
-        throw new AppError("upstream_failure", "Dich vu luu anh dai dien khong xac nhan asset");
+        throw new AppError("upstream_failure", "Dịch vụ lưu ảnh đại diện không xác nhận được tệp");
       }
       return {
         publicId: result.public_id,
@@ -103,7 +103,7 @@ export function createCloudinaryAvatarStorage(options: {
         format: input.format
       });
       const response = await fetcher(deliveryUrl);
-      if (!response.ok) throw new AppError("not_found", "Khong the tai anh dai dien");
+      if (!response.ok) throw new AppError("not_found", "Không thể tải ảnh đại diện");
       return {
         body: Buffer.from(await response.arrayBuffer()),
         contentType: contentTypeFor(input.format)

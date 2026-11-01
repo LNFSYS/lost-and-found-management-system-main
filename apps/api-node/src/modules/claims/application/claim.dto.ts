@@ -33,6 +33,7 @@ export type VerificationDecisionInput = {
   decision: "VERIFY_FOR_MEETUP" | "REQUEST_MORE_INFO" | "DECLINE" | "ESCALATE_TO_CUSTODY";
   reason: string;
   handoverPointId?: string | undefined;
+  requestedIntakeAt?: Date | undefined;
   correctsEventId?: string | undefined;
   idempotencyKey: string;
 };

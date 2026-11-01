@@ -1,4 +1,5 @@
 import type { Request, Response } from "express";
+import { z } from "zod";
 import type { ReturnFeedbackUseCases } from "../../application/return-feedback.use-cases.js";
 import { appointmentIdParamSchema, returnFeedbackSchema } from "./return-feedback.validator.js";
 
@@ -13,6 +14,10 @@ export function createReturnFeedbackController({ returnFeedbackService }: {
     return header || undefined;
   }
   const returnFeedbackController = {
+    async listCompleted(request: Request, response: Response) {
+      const page = z.coerce.number().int().min(1).max(10000).default(1).parse(request.query.page);
+      response.json(await returnFeedbackService.listCompleted(request.auth!, page));
+    },
     async getEligibility(request: Request, response: Response) {
       response.json(await returnFeedbackService.getEligibility(appointmentId(request), request.auth!));
     },

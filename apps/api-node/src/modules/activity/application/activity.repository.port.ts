@@ -6,7 +6,15 @@ export type JourneyImageKind = "POST" | "CLAIM" | "INTAKE" | "RETURN";
 export interface JourneyImage {
   id: string; kind: JourneyImageKind; url: string; createdAt: string;
 }
-export interface JourneyEvent extends ActivityEvent { images: JourneyImage[] }
+export interface JourneyMatchSuggestion {
+  postId: string; title: string; type: "LOST" | "FOUND"; status: "OPEN" | "MATCHED"; score: number;
+}
+export interface JourneyEvent extends ActivityEvent {
+  images: JourneyImage[];
+  matchingSuggestions?: JourneyMatchSuggestion[];
+  conversationWith?: string | null;
+  appointment?: { proposedAt: string };
+}
 export interface JourneyImageFile { storageRef: string; format: string; kind: JourneyImageKind }
 export interface AuditFilter { query?: string; source?: string; actorId?: string; targetId?: string; from?: string; to?: string; page: number }
 export interface JourneySummary {

@@ -4,7 +4,7 @@ const idempotencyKey = z.string().trim().min(8).max(128).regex(/^[A-Za-z0-9._:-]
 const comment = z.string()
   .trim()
   .max(500)
-  .refine((value) => !/[<>]/.test(value), "Comment khong duoc chua HTML")
+  .refine((value) => !/[<>]/.test(value), "Bình luận không được chứa mã HTML")
   .optional()
   .nullable()
   .transform((value) => value?.replace(/\s+/g, " ").trim() || null);

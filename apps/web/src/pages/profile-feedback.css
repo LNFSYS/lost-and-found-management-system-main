@@ -1,0 +1,5 @@
+.return-feedback-history { display: grid; gap: 10px; margin: 16px 0; }
+.return-feedback-history button { justify-content: flex-start; text-align: left; white-space: normal; }
+.return-feedback-history span { display: grid; gap: 6px; overflow-wrap: anywhere; }
+.return-feedback-history small { font-weight: normal; }
+.return-feedback-history [aria-pressed="true"] { border-color: #0872ba; background: #edf7ff; }

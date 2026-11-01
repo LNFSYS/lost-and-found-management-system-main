@@ -1,6 +1,6 @@
 # LNFS Clean Architecture
 
-Updated: 2026-09-09. Current backend: **Node.js + TypeScript modular monolith**.
+Updated: 2026-10-20. Current backend: **Node.js + TypeScript modular monolith**.
 
 ## Ownership
 
@@ -22,6 +22,7 @@ apps/api-node/src/
     matching/                   explainable rule-based scoring
     claims/                     requests, consent, private room and evidence
     notifications/              in-app notification feed
+    realtime/                   Socket.IO chat and SSE notification delivery
     warehouse/                  custody, retention and storage logs
     returns/                    feedback, idempotency and reputation
     admin/                      users, catalog, moderation, reports, audit
@@ -55,6 +56,15 @@ main            ---> factories from all outer and inner packages
 - Shared cannot import business modules. No framework, generic repository, DI container or base entity was added.
 
 `npm run check:architecture` parses TypeScript imports, re-exports, import types and literal dynamic imports. It rejects outward dependencies, core external packages/environment/console, deep cross-module imports, unresolved source imports and dependency cycles, including type-only cycles. Checker self-tests cover allowed and forbidden graphs. `npm test` invokes it, so the existing CI verify job enforces it.
+
+### Realtime And Intake Boundaries
+
+- Claims declares its outgoing chat notification port in `ClaimDependencies`; it does not import the realtime service implementation. The chat hub reads the message contract through claims' public application entry point. `main` wires the hub into the port.
+- Custody schedule parsing and time validation stay in the warehouse domain. Reading `custody.intake.schedule` belongs to the warehouse application loader, using the public system-config repository contract. Invalid configuration or a failed read does not silently fall back to default opening hours.
+- The Socket.IO adapter receives an Origin predicate from `main`. Composition uses the same CORS policy as HTTP, keeping configuration infrastructure out of the socket interface's imports. Both polling and WebSocket handshakes enforce that policy. Room membership and the access session are checked at connection, before each private delivery and periodically; timeouts fail closed. JWT expiry disconnects the socket.
+- Chat now uses Socket.IO at `/api/realtime/chat-socket`, with `ready`, `chat.message` and `auth_error` events. Text/image writes still use the existing idempotent HTTP endpoints and publish only after commit; reconnect signals the Web client to resynchronize through HTTP. Notification delivery remains authenticated SSE. Old native-WebSocket clients are not protocol-compatible, so API and Web must be deployed together. See the [Socket.IO rollout notes](../runbooks/socketio-chat-rollout.md).
+
+These boundaries are checked without changing architecture rules, skipping tests or altering migration SQL. They do not add an actor goal or change custody eligibility.
 
 ## Transactions
 

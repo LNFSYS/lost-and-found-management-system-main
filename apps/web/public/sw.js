@@ -1,6 +1,5 @@
-const CACHE_VERSION = "lnfs-pwa-v1";
+const CACHE_VERSION = "lnfs-pwa-v3";
 const SHELL_CACHE = `${CACHE_VERSION}-shell`;
-const PUBLIC_API_CACHE = `${CACHE_VERSION}-public-api`;
 const SHELL_ASSETS = ["/", "/home", "/posts", "/my-posts", "/manifest.webmanifest", "/icons/lnfs-icon.svg"];
 
 function isSameOrigin(url) {
@@ -24,12 +23,6 @@ function hasAuthorization(request) {
   return request.headers.has("authorization");
 }
 
-function isPublicBoardApi(url) {
-  return url.pathname === "/api/posts" ||
-    url.pathname === "/api/posts/catalog" ||
-    /^\/api\/posts\/[^/]+$/.test(url.pathname);
-}
-
 async function cacheFirst(request) {
   const cached = await caches.match(request);
   if (cached) return cached;
@@ -39,21 +32,6 @@ async function cacheFirst(request) {
     await cache.put(request, response.clone());
   }
   return response;
-}
-
-async function networkFirstPublicApi(request) {
-  const cache = await caches.open(PUBLIC_API_CACHE);
-  try {
-    const response = await fetch(request);
-    if (response.ok) await cache.put(request, response.clone());
-    return response;
-  } catch {
-    const cached = await cache.match(request);
-    if (!cached) throw new Error("offline");
-    const headers = new Headers(cached.headers);
-    headers.set("x-lnfs-cache", "stale");
-    return new Response(cached.body, { status: cached.status, statusText: cached.statusText, headers });
-  }
 }
 
 self.addEventListener("install", (event) => {
@@ -66,15 +44,45 @@ self.addEventListener("activate", (event) => {
     .then(() => self.clients.claim()));
 });
 
+self.addEventListener("push", (event) => {
+  let payload = {};
+  try { payload = event.data ? event.data.json() : {}; } catch { payload = {}; }
+  const url = typeof payload.url === "string" && payload.url.startsWith("/") && !payload.url.startsWith("//")
+    ? payload.url
+    : "/notifications";
+  event.waitUntil(self.registration.showNotification(
+    typeof payload.title === "string" ? payload.title : "FPTU Lost & Found",
+    {
+      body: typeof payload.body === "string" ? payload.body : "Bạn có thông báo mới. Mở ứng dụng để xem.",
+      icon: "/icons/lnfs-icon.svg",
+      badge: "/icons/lnfs-icon.svg",
+      data: { url }
+    }
+  ));
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const target = new URL(event.notification.data?.url || "/notifications", self.location.origin);
+  const url = target.origin === self.location.origin ? `${target.pathname}${target.search}${target.hash}` : "/notifications";
+  event.waitUntil(self.clients.matchAll({ type: "window", includeUncontrolled: true }).then(async (clients) => {
+    for (const client of clients) {
+      if (client.url.startsWith(self.location.origin) && "focus" in client) {
+        if ("navigate" in client) await client.navigate(url);
+        return client.focus();
+      }
+    }
+    return self.clients.openWindow(url);
+  }));
+});
+
 self.addEventListener("fetch", (event) => {
   const { request } = event;
   const url = new URL(request.url);
   if (!isSameOrigin(url) || isMutation(request) || isPrivateApi(url)) return;
-  if (isPublicBoardApi(url)) {
-    if (hasAuthorization(request)) return;
-    event.respondWith(networkFirstPublicApi(request));
-    return;
-  }
+  // Cache the application shell and static assets only. All API responses,
+  // including private conversation data, must always come from the network.
+  if (url.pathname.startsWith("/api/") || hasAuthorization(request)) return;
   if (request.mode === "navigate") {
     event.respondWith(fetch(request).catch(() => caches.match("/home").then((cached) => cached || caches.match("/"))));
     return;

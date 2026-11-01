@@ -36,16 +36,16 @@ export function createAuthMiddleware({ authService, verifyAccessToken }: { authS
     const value = request.header("authorization");
     if (!value) return next();
     const token = value.startsWith("Bearer ") ? value.slice(7) : undefined;
-    if (!token) return next(new HttpError(401, "Phien dang nhap khong hop le"));
+    if (!token) return next(new HttpError(401, "Phiên đăng nhập không hợp lệ"));
     let payload: AccessTokenPayload;
     try {
       payload = verifyAccessToken(token) as AccessTokenPayload;
     } catch {
-      next(new HttpError(401, "Phien dang nhap da het han"));
+      next(new HttpError(401, "Phiên đăng nhập đã hết hạn"));
       return;
     }
     try {
-      if (!await authService.validateAccessSession(payload)) return next(new HttpError(401, "Phien dang nhap da het han"));
+      if (!await authService.validateAccessSession(payload)) return next(new HttpError(401, "Phiên đăng nhập đã hết hạn"));
       request.auth = payload;
       next();
     } catch (error) {

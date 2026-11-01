@@ -7,6 +7,7 @@ export type CreateCustodyRequestInput = {
   postId?: string | null | undefined;
   reason?: string | null | undefined;
   handoverPointId?: string | null | undefined;
+  requestedIntakeAt?: Date | null | undefined;
   intakeType?: "CUSTODY_TRANSFER" | "WALK_IN" | undefined;
   idempotencyKey?: string | undefined;
 };

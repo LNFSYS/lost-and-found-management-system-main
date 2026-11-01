@@ -34,6 +34,8 @@ export function createPostRoutes({ postController, auth }: {
     legacyHeaders: false,
     message: { message: "Bạn đã yêu cầu tính lại matching quá nhiều lần. Vui lòng thử lại sau." }
   });
+  const illustrationLimit = rateLimit({ windowMs: 15 * 60_000, limit: 12, standardHeaders: true, legacyHeaders: false,
+    message: { message: "Bạn đã yêu cầu tạo ảnh quá nhiều lần. Vui lòng thử lại sau." } });
   function uploadSingleImage(request: Request, response: Response, next: NextFunction) {
     mediaUpload.single("file")(request, response, (error: unknown) => {
       if (error instanceof multer.MulterError) {
@@ -63,6 +65,10 @@ export function createPostRoutes({ postController, auth }: {
   postRoutes.get("/", optionalAuth, (req, res, next) => postController.listBoard(req, res).catch(next));
   postRoutes.get("/catalog", requireAuth, (req, res, next) => postController.getFormCatalog(req, res).catch(next));
   postRoutes.get("/mine", requireAuth, (req, res, next) => postController.listMine(req, res).catch(next));
+  postRoutes.get("/illustrations/draft", requireAuth, (req, res, next) => postController.illustrationState(req, res).catch(next));
+  postRoutes.delete("/illustrations/draft", requireAuth, (req, res, next) => postController.clearIllustrationDraft(req, res).catch(next));
+  postRoutes.post("/illustrations", requireAuth, illustrationLimit, (req, res, next) => postController.generateIllustration(req, res).catch(next));
+  postRoutes.get("/illustrations/:id/image", requireAuth, (req, res, next) => postController.illustrationImage(req, res).catch(next));
   postRoutes.post("/analyze-image", requireAuth, imageAnalysisLimit, uploadAnalysisImages, (req, res, next) => postController.analyzeImage(req, res).catch(next));
   postRoutes.post("/", requireAuth, (req, res, next) => postController.createPost(req, res).catch(next));
   postRoutes.get("/:id/matches", requireAuth, (req, res, next) => postController.listMatches(req, res).catch(next));

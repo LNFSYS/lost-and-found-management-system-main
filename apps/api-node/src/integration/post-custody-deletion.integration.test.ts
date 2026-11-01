@@ -7,7 +7,7 @@ import { isolatedJourney, withActorJourney } from "../test/actor-journey-fixture
 test("publication deletion preserves active custody, claim and legal-hold workflows", isolatedJourney, async () => withActorJourney(async f => {
   const { ids, services, claims, pool } = f;
   const direct = await claims.createDirectMessage(ids.owner, { postId: ids.found, content: "These are mine" });
-  await claims.decideVerification(direct.claim.id, ids.finder, { decision: "ESCALATE_TO_CUSTODY", reason: "Staff custody", handoverPointId: f.point, idempotencyKey: randomUUID() });
+  await claims.decideVerification(direct.claim.id, ids.finder, { decision: "ESCALATE_TO_CUSTODY", reason: "Staff custody", handoverPointId: f.point, requestedIntakeAt: f.requestedIntakeAt, idempotencyKey: randomUUID() });
   await assert.rejects(services.postService.softDeletePost(ids.found, ids.finder), e => (e as { code?: string }).code === "conflict");
   const [requests] = await pool.query<RowDataPacket[]>("SELECT id FROM custody_requests WHERE claim_id = ?", [direct.claim.id]);
   const requestId = String(requests[0]!.id);

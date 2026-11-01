@@ -27,6 +27,10 @@ export function createStaffRoutes({ warehouseController, custodyRequestControlle
     storage: multer.memoryStorage(),
     limits: { fileSize: 5 * 1024 * 1024, files: 1 }
   });
+  const conversationUpload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 5 * 1024 * 1024, files: 3 }
+  }).array("images", 3);
 
   function uploadProofMiddleware(request: Request, response: Response, next: NextFunction) {
     proofUpload.single("file")(request, response, (error: unknown) => {
@@ -40,7 +44,20 @@ export function createStaffRoutes({ warehouseController, custodyRequestControlle
     });
   }
 
+  function uploadConversationImagesMiddleware(request: Request, response: Response, next: NextFunction) {
+    conversationUpload(request, response, (error: unknown) => {
+      if (error instanceof multer.MulterError) {
+        const message = error.code === "LIMIT_FILE_SIZE"
+          ? "Mỗi ảnh chat không được vượt quá 5 MB"
+          : "Mỗi lượt chat chỉ được đính kèm tối đa 3 ảnh";
+        return next(new HttpError(error.code === "LIMIT_FILE_SIZE" ? 413 : 400, message));
+      }
+      next(error);
+    });
+  }
+
   staffRoutes.get("/warehouse-items/catalog", (req, res, next) => warehouseController.getCatalog(req, res).catch(next));
+  staffRoutes.post("/warehouse-conversations/extract", uploadConversationImagesMiddleware, (req, res, next) => warehouseController.extractConversation(req, res).catch(next));
   staffRoutes.get("/warehouse-items", (req, res, next) => warehouseController.listItems(req, res).catch(next));
   staffRoutes.post("/warehouse-items", (req, res, next) => warehouseController.createItem(req, res).catch(next));
   staffRoutes.post("/warehouse-intake-images", uploadProofMiddleware, (req, res, next) => warehouseController.uploadIntakeImage(req, res).catch(next));
@@ -51,9 +68,10 @@ export function createStaffRoutes({ warehouseController, custodyRequestControlle
   staffRoutes.get("/warehouse-proofs/:id", (req, res, next) => warehouseController.getProof(req, res).catch(next));
   staffRoutes.post("/warehouse-items/:id/reserve", (req, res, next) => warehouseController.reserveItem(req, res).catch(next));
   staffRoutes.post("/warehouse-items/:id/release-reservation", (req, res, next) => warehouseController.releaseReservation(req, res).catch(next));
-  staffRoutes.post("/warehouse-items/:id/legal-hold", (req, res, next) => warehouseController.legalHold(req, res).catch(next));
-  staffRoutes.post("/warehouse-items/:id/disposition", (req, res, next) => warehouseController.requestDisposition(req, res).catch(next));
-  staffRoutes.post("/warehouse-approvals/:id/approve", (req, res, next) => warehouseController.approveDisposition(req, res).catch(next));
+  staffRoutes.post("/warehouse-items/:id/legal-hold", requireAnyRole("ADMIN"), (req, res, next) => warehouseController.legalHold(req, res).catch(next));
+  staffRoutes.get("/warehouse-items/:id/disposition", (req, res, next) => warehouseController.dispositionContext(req, res).catch(next));
+  staffRoutes.post("/warehouse-items/:id/disposition", requireAnyRole("ADMIN"), (req, res, next) => warehouseController.requestDisposition(req, res).catch(next));
+  staffRoutes.post("/warehouse-approvals/:id/approve", requireAnyRole("ADMIN"), (req, res, next) => warehouseController.approveDisposition(req, res).catch(next));
   staffRoutes.post("/warehouse-approvals/:id/execute", (req, res, next) => warehouseController.executeDisposition(req, res).catch(next));
   staffRoutes.patch("/warehouse-items/:id", (req, res, next) => warehouseController.updateItem(req, res).catch(next));
   staffRoutes.post("/warehouse-items/:id/return", (req, res, next) => warehouseController.returnItem(req, res).catch(next));

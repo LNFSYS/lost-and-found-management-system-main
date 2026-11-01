@@ -106,6 +106,19 @@ const feedbackSelect = `SELECT rf.id, rf.appointment_id, rf.claim_id, rf.post_id
 export function createReturnFeedbackRepository(pool: SqlExecutor) {
 
   const returnFeedbackRepository = {
+    async listCompletedForUser(userId: string, page: number) {
+      const [rows] = await pool.execute<RowDataPacket[]>(`SELECT ra.id, p.title, ra.completed_at, rf.rating
+        FROM return_appointments ra
+        JOIN claims c ON c.id = ra.claim_id
+        JOIN posts p ON p.id = ra.post_id
+        JOIN posts identity_post ON identity_post.id = c.post_id
+        LEFT JOIN return_feedback rf ON rf.appointment_id = ra.id AND rf.reviewer_id = ?
+        WHERE ra.status = 'COMPLETED' AND ra.completed_at IS NOT NULL
+          AND (${claimantIdSql} = ? OR ${finderIdSql} = ?)
+        ORDER BY ra.completed_at DESC, ra.id DESC LIMIT 21 OFFSET ${Math.max(0, page - 1) * 20}`,
+      [userId, userId, userId]);
+      return rows.map((row) => ({ id: String(row.id), postTitle: String(row.title), completedAt: iso(row.completed_at)!, rating: row.rating == null ? null : Number(row.rating) }));
+    },
     async findAppointmentForFeedback(appointmentId: string, connection: Queryable = pool, forUpdate = false) {
       const [rows] = await sqlExecutor(connection).execute<AppointmentRow[]>(
         `SELECT ra.id, ra.claim_id, ra.post_id, ra.status, ra.completed_at,

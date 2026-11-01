@@ -98,6 +98,7 @@ export interface PostRepository {
     format: string;
     bytes: number;
     sortOrder: number;
+    isAiGenerated?: boolean;
   }, queryable?: TransactionContext): Promise<void>;
   findMedia(postId: string, mediaId: string, queryable?: TransactionContext, forUpdate?: boolean): Promise<StoredMediaRecord | null>;
   deleteMedia(postId: string, mediaId: string, queryable?: TransactionContext): Promise<boolean>;

@@ -6,8 +6,9 @@ import { errorHandler } from "./error-handler.js";
 import { HttpError } from "./http-error.js";
 
 function responseFor(error: Error) {
-  const result: { status?: number; body?: unknown } = {};
+  const result: { status?: number; body?: unknown; headers?: Record<string, unknown> } = {};
   const response = {
+    setHeader(name: string, value: unknown) { (result.headers ??= {})[name] = value; return this; },
     status(status: number) { result.status = status; return this; },
     json(body: unknown) { result.body = body; return this; }
   };
@@ -30,6 +31,15 @@ test("semantic application errors preserve the previous HTTP status and payload"
   assert.deepEqual(responseFor(new AppError("payload_too_large", "Upload too large")).body, {
     code: "PAYLOAD_TOO_LARGE", message: "Nội dung gửi lên vượt quá giới hạn cho phép"
   });
+});
+
+test("rate-limit errors expose only bounded Retry-After metadata and retain the error payload", () => {
+  assert.deepEqual(responseFor(new AppError("rate_limited", "Safe quota message", 90.2)), {
+    status: 429, body: { message: "Safe quota message" }, headers: { "Retry-After": 91 }
+  });
+  assert.equal(responseFor(new AppError("rate_limited", "Safe quota message", 1_000_000)).headers?.["Retry-After"], 86_400);
+  for (const delay of [0, -1, NaN, Infinity]) assert.equal(responseFor(new AppError("rate_limited", "Safe quota message", delay)).headers, undefined);
+  assert.equal(responseFor(new AppError("invalid_input", "Validation", 60)).headers, undefined);
 });
 
 test("database connection failures return a retryable unavailable response", () => {

@@ -1,3 +1,5 @@
+import { io, type Socket } from "socket.io-client";
+
 export type Role = "USER" | "STUDENT" | "LECTURER" | "STAFF" | "ADMIN";
 export interface CurrentUser {
   id: string;
@@ -12,10 +14,18 @@ export interface CurrentUser {
   updatedAt: string;
 }
 export type NotificationEmailMode = "IMMEDIATE" | "DELAYED_UNREAD" | "DIGEST" | "DISABLED";
+export type NotificationCategory = "CHAT" | "CLAIM" | "MATCH" | "APPOINTMENT" | "HANDOVER" | "CUSTODY" | "OVERDUE" | "FEEDBACK";
+export interface NotificationChannelPreference {
+  inAppEnabled: boolean;
+  pushEnabled: boolean;
+  emailMode: NotificationEmailMode;
+}
+export type NotificationChannelPreferences = Record<NotificationCategory, NotificationChannelPreference>;
 export interface NotificationEmailPreferences {
   userId: string;
   chatMode: NotificationEmailMode;
   claimMode: NotificationEmailMode;
+  categories: NotificationChannelPreferences;
   quietHoursStart: string | null;
   quietHoursEnd: string | null;
   timezone: string;
@@ -240,6 +250,19 @@ export interface WarehouseCatalog {
   buildings: Array<{ id: string; areaId: string; name: string }>;
   handoverPoints: Array<{ id: string; name: string; address: string; openingHours: string | null }>;
 }
+export type WarehouseConversationMode = "INTAKE" | "RETURN";
+export interface WarehouseConversationMessage { role: "user" | "assistant"; content: string }
+export type WarehouseIntakeConversationFields = {
+  itemName: string | null; description: string | null; categoryId: string | null; areaId: string | null; buildingId: string | null;
+  roomText: string | null; finderName: string | null; finderContact: string | null; conditionNotes: string | null; accessories: string | null; receivedQuantity: number | null;
+};
+export type WarehouseReturnConversationFields = {
+  receiverName: string | null; receiverPhone: string | null; receiverIdentity: string | null; note: string | null;
+  matchedClaim: { claimId: string; recipientId: string; fullName: string; verified: boolean } | null;
+};
+export type WarehouseConversationExtraction =
+  | { mode: "INTAKE"; fields: WarehouseIntakeConversationFields; assistantMessage: string; warnings: string[] }
+  | { mode: "RETURN"; fields: WarehouseReturnConversationFields; assistantMessage: string; warnings: string[] };
 export interface WarehouseItem {
   id: string;
   postId: string | null;
@@ -313,6 +336,7 @@ export interface WarehouseDashboard {
   items: WarehouseItem[];
 }
 export interface WarehouseFilters {
+  overdue?: boolean;
   q?: string;
   status?: WarehouseStatus | "";
   handoverPointId?: string;
@@ -364,6 +388,7 @@ export interface CustodyRequest {
   rejectionReason: string | null;
   handoverPoint: { id: string; name: string | null; address: string | null } | null;
   confirmedHandoverAt: string | null;
+  requestedIntakeAt?: string | null;
   warehouseItemId: string | null;
   createdAt: string;
   updatedAt: string;
@@ -403,6 +428,7 @@ export interface CreateCustodyRequestPayload {
   postId?: string | null;
   reason?: string | null;
   handoverPointId?: string | null;
+  requestedIntakeAt: string;
   intakeType?: CustodyIntakeType;
   idempotencyKey?: string;
 }
@@ -433,6 +459,8 @@ export interface CreatePostPayload {
   title: string;
   description: string;
   categoryId: string;
+  illustrationId?: string;
+  illustrationDraftId?: string;
   areaId?: string | null;
   buildingId?: string | null;
   roomText?: string | null;
@@ -448,6 +476,20 @@ export interface CreatePostPayload {
   };
 }
 export interface CreatedPost { id: string; type: "LOST" | "FOUND"; title: string; status: string; createdAt: string; }
+export interface LostIllustration {
+  id: string; number: number; status: "PENDING" | "READY" | "REJECTED" | "FAILED";
+  title: string; description: string; categoryId: string; url: string | null;
+}
+export interface LostIllustrationDraft {
+  available: boolean; id: string | null; used: number; maxAttempts: number; remaining: number; attempts: LostIllustration[];
+  cooldown?: { until: number; message: string } | null;
+}
+function illustrationDraft(value: LostIllustrationDraft): LostIllustrationDraft {
+  if (!value || typeof value.available !== "boolean" || !Array.isArray(value.attempts)) {
+    throw new Error("Không đọc được trạng thái ảnh minh họa. Vui lòng thử tải lại.");
+  }
+  return value;
+}
 export interface ImageAnalysisResult {
   title: string;
   description: string;
@@ -477,7 +519,7 @@ export interface PostSummary {
   handoverPoint: { id: string; name: string | null; address: string | null } | null;
   lostFoundAt: string | null;
   owner: { id: string; fullName: string };
-  media: Array<{ id: string; url: string; mediaKind: "ITEM" | "EVIDENCE" }>;
+  media: Array<{ id: string; url: string; mediaKind: "ITEM" | "EVIDENCE"; isAiGenerated?: boolean }>;
   canEdit: boolean;
   createdAt: string;
   matchSummary?: {
@@ -600,6 +642,8 @@ export interface ClaimMessage {
   content: string | null;
   messageType: "TEXT" | "IMAGE" | "SYSTEM";
   mediaUrl?: string | null;
+  previewUrl?: string;
+  pending?: boolean;
   isRead: boolean;
   readAt: string | null;
   createdAt: string;
@@ -673,7 +717,30 @@ export interface ClaimVerificationState {
     createdAt: string;
   }>;
 }
-export type NotificationType = "MATCH_FOUND" | "CLAIM_REQUEST_RECEIVED" | "CLAIM_ACCEPTED" | "CLAIM_MORE_INFO_REQUESTED" | "CLAIM_REJECTED" | "CLAIM_WITHDRAWN" | "CUSTODY_REQUEST_CREATED";
+export interface ClaimHistoryResponse {
+  claimId: string;
+  accessScope: "PARTICIPANT" | "STAFF";
+  events: Array<{
+    id: string;
+    action: string;
+    fromStatus: ClaimStatus | null;
+    toStatus: ClaimStatus | null;
+    actor: "Finder" | "Claimant" | "Staff" | "System";
+    metadata: { decision?: string; reason?: string; communicationOnly?: boolean } | null;
+    createdAt: string;
+  }>;
+}
+export type NotificationType =
+  | "MATCH_FOUND"
+  | "CLAIM_REQUEST_RECEIVED" | "CLAIM_ACCEPTED" | "CLAIM_MORE_INFO_REQUESTED" | "CLAIM_REJECTED" | "CLAIM_WITHDRAWN" | "CLAIM_ESCALATED"
+  | "CHAT_MESSAGE_RECEIVED"
+  | "APPOINTMENT_PROPOSED" | "APPOINTMENT_ACCEPTED" | "APPOINTMENT_REJECTED" | "APPOINTMENT_CANCELLED"
+  | "APPOINTMENT_REMINDER" | "APPOINTMENT_NO_SHOW" | "APPOINTMENT_HANDOVER_UPDATED" | "RETURN_COMPLETED"
+  | "CUSTODY_REQUEST_CREATED" | "CUSTODY_ACCEPTED" | "CUSTODY_REJECTED" | "CUSTODY_CANCELLED" | "CUSTODY_INTAKED"
+  | "CUSTODY_RETURNED" | "CUSTODY_OVERDUE" | "CUSTODY_VERIFIED" | "CUSTODY_RESERVED"
+  | "CUSTODY_RESERVATION_RELEASED" | "CUSTODY_MOVED" | "CUSTODY_STATUS_CHANGED" | "CUSTODY_LEGAL_HOLD"
+  | "CUSTODY_DISPOSITION_REQUESTED" | "CUSTODY_DISPOSITION_APPROVED" | "CUSTODY_DISPOSITION_COMPLETED"
+  | "WAREHOUSE_OVERDUE" | "WAREHOUSE_DUE_SOON" | "APPOINTMENT_UPDATED" | "RETURN_UPDATED" | "CUSTODY_UPDATED" | "FEEDBACK_RECEIVED";
 export interface AppNotification {
   id: string;
   type: NotificationType;
@@ -719,6 +786,242 @@ let refreshInFlight: Promise<SessionResponse | null> | null = null;
 let sessionGeneration = 0;
 let refreshController: AbortController | null = null;
 let refreshFailure: ApiError | null = null;
+
+export interface WorkflowRealtimeNotification {
+  eventId: string;
+  workflow: "CLAIM" | "CHAT" | "APPOINTMENT" | "RETURN" | "CUSTODY";
+  roomId: string | null;
+  notification: AppNotification;
+}
+
+export interface RealtimeHandlers {
+  roomId?: string;
+  onConnected?: () => void;
+  onNotification?: (event: WorkflowRealtimeNotification) => void;
+}
+
+export interface ClaimChatSocketHandlers {
+  roomId: string;
+  onConnected?: () => void;
+  onReconnected?: () => void;
+  onMessage?: (message: ClaimMessage) => void;
+}
+
+function subscribeRealtime(handlers: RealtimeHandlers) {
+  const controller = new AbortController();
+  const generation = sessionGeneration;
+  const roomQuery = handlers.roomId ? `?roomId=${encodeURIComponent(handlers.roomId)}` : "";
+
+  function wait(milliseconds: number) {
+    return new Promise<void>(resolve => {
+      if (controller.signal.aborted) return resolve();
+      const timer = window.setTimeout(done, milliseconds);
+      function done() {
+        window.clearTimeout(timer);
+        controller.signal.removeEventListener("abort", done);
+        resolve();
+      }
+      controller.signal.addEventListener("abort", done, { once: true });
+    });
+  }
+
+  function dispatch(frame: string) {
+    let event = "message";
+    const data: string[] = [];
+    for (const line of frame.split(/\r?\n/)) {
+      if (line.startsWith("event:")) event = line.slice(6).trim();
+      else if (line.startsWith("data:")) data.push(line.slice(5).trimStart());
+    }
+    if (!data.length) return;
+    let value: unknown;
+    try { value = JSON.parse(data.join("\n")); } catch { return; }
+    if (event === "realtime.connected") handlers.onConnected?.();
+    if (event === "workflow.notification" && value && typeof value === "object") {
+      handlers.onNotification?.(value as WorkflowRealtimeNotification);
+    }
+  }
+
+  async function consume(response: Response) {
+    if (!response.body) throw new Error("Realtime stream body is unavailable");
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    try {
+      while (!controller.signal.aborted) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        for (;;) {
+          const boundary = /\r?\n\r?\n/.exec(buffer);
+          if (!boundary || boundary.index === undefined) break;
+          dispatch(buffer.slice(0, boundary.index));
+          buffer = buffer.slice(boundary.index + boundary[0].length);
+        }
+      }
+    } finally {
+      await reader.cancel().catch(() => undefined);
+      reader.releaseLock();
+    }
+    if (!controller.signal.aborted) throw new Error("Realtime stream ended");
+  }
+
+  void (async () => {
+    let retryDelay = 500;
+    while (!controller.signal.aborted && generation === sessionGeneration) {
+      try {
+        if (!accessToken && !await refreshSession()) return;
+        if (controller.signal.aborted || generation !== sessionGeneration) return;
+        const headers = new Headers({ Accept: "text/event-stream" });
+        if (accessToken) headers.set("authorization", `Bearer ${accessToken}`);
+        const response = await fetch(`${API_URL}/realtime${roomQuery}`, {
+          headers,
+          credentials: "include",
+          cache: "no-store",
+          signal: controller.signal
+        });
+        if (response.status === 401) {
+          if (!await refreshSession()) return;
+          continue;
+        }
+        if (response.status === 403) return;
+        if (!response.ok) throw new Error(`Realtime request failed (${response.status})`);
+        retryDelay = 500;
+        await consume(response);
+      } catch (error) {
+        if (controller.signal.aborted || generation !== sessionGeneration || (error instanceof Error && error.name === "AbortError")) return;
+        await wait(retryDelay);
+        retryDelay = Math.min(10_000, retryDelay * 2);
+      }
+    }
+  })();
+
+  return () => controller.abort();
+}
+
+function subscribeClaimChatSocket(handlers: ClaimChatSocketHandlers) {
+  const generation = sessionGeneration;
+  let stopped = false;
+  let activeSocket: Socket | null = null;
+  let retryTimer: number | null = null;
+  let finishWait: (() => void) | null = null;
+  let cancelConnection: (() => void) | null = null;
+  let retryDelay = 500;
+  let wasConnected = false;
+  type CloseCode = "UNAUTHENTICATED" | "FORBIDDEN" | "INVALID_REQUEST" | "CONNECTION_LOST";
+
+  function wait(milliseconds: number) {
+    return new Promise<void>(resolve => {
+      if (stopped) return resolve();
+      finishWait = resolve;
+      retryTimer = window.setTimeout(() => {
+        retryTimer = null;
+        finishWait = null;
+        resolve();
+      }, milliseconds);
+    });
+  }
+
+  function connectOnce() {
+    return new Promise<{ code: CloseCode; connected: boolean }>(resolve => {
+      const endpoint = new URL(`${API_URL.replace(/\/+$/, "")}/realtime/chat-socket`, window.location.href);
+      const socket = io(endpoint.origin, {
+        path: endpoint.pathname,
+        auth: { accessToken, roomId: handlers.roomId },
+        withCredentials: true,
+        autoConnect: false,
+        forceNew: true,
+        reconnection: false,
+        timeout: 15_000
+      });
+      activeSocket = socket;
+      let connected = false;
+      let ready = false;
+      let authenticationFailure: CloseCode | null = null;
+      let settled = false;
+      const current = () => !stopped && !settled && generation === sessionGeneration;
+      const readyTimeout = window.setTimeout(() => finish("CONNECTION_LOST"), 15_000);
+      const finish = (code: CloseCode) => {
+        if (settled) return;
+        settled = true;
+        window.clearTimeout(readyTimeout);
+        if (cancelConnection === cancel) cancelConnection = null;
+        if (activeSocket === socket) activeSocket = null;
+        socket.removeAllListeners();
+        socket.disconnect();
+        resolve({ code, connected });
+      };
+      const cancel = () => finish("CONNECTION_LOST");
+      cancelConnection = cancel;
+
+      socket.on("connect", () => {
+        if (!current()) { finish("CONNECTION_LOST"); return; }
+        connected = true;
+      });
+      socket.on("ready", (payload: unknown) => {
+        if (!current() || ready || !payload || typeof payload !== "object" || (payload as Record<string, unknown>).roomId !== handlers.roomId) return;
+        ready = true;
+        window.clearTimeout(readyTimeout);
+        retryDelay = 500;
+        if (wasConnected) handlers.onReconnected?.();
+        else handlers.onConnected?.();
+        wasConnected = true;
+      });
+      socket.on("auth_error", (payload: unknown) => {
+        if (!payload || typeof payload !== "object") return;
+        const code = (payload as Record<string, unknown>).code;
+        if (code === "UNAUTHENTICATED" || code === "FORBIDDEN" || code === "INVALID_REQUEST") finish(code);
+      });
+      socket.on("chat.message", (payload: unknown) => {
+        if (!current() || !ready || !payload || typeof payload !== "object") return;
+        const event = payload as Record<string, unknown>;
+        if (event.roomId === handlers.roomId && event.message && typeof event.message === "object") {
+          handlers.onMessage?.(event.message as ClaimMessage);
+        }
+      });
+      socket.on("connect_error", error => {
+        const code = (error as Error & { data?: { code?: unknown } }).data?.code;
+        if (code === "UNAUTHENTICATED" || code === "FORBIDDEN" || code === "INVALID_REQUEST") authenticationFailure = code;
+        finish(authenticationFailure ?? "CONNECTION_LOST");
+      });
+      socket.on("disconnect", () => finish(authenticationFailure ?? "CONNECTION_LOST"));
+
+      if (stopped || generation !== sessionGeneration || !accessToken) {
+        finish("UNAUTHENTICATED");
+        return;
+      }
+      socket.connect();
+    });
+  }
+
+  void (async () => {
+    while (!stopped && generation === sessionGeneration) {
+      if (!accessToken) {
+        const session = await refreshSession().catch(() => null);
+        if (!session) return;
+      }
+      const result = await connectOnce();
+      if (stopped || generation !== sessionGeneration) return;
+      if (result.code === "FORBIDDEN" || result.code === "INVALID_REQUEST") return;
+      if (result.code === "UNAUTHENTICATED") {
+        const session = await refreshSession().catch(() => null);
+        if (!session) return;
+      }
+      await wait(retryDelay);
+      retryDelay = Math.min(10_000, retryDelay * 2);
+    }
+  })();
+
+  return () => {
+    stopped = true;
+    if (retryTimer !== null) window.clearTimeout(retryTimer);
+    retryTimer = null;
+    finishWait?.();
+    finishWait = null;
+    cancelConnection?.();
+    try { activeSocket?.disconnect(); } catch { /* The socket is already closed. */ }
+    activeSocket = null;
+  };
+}
 
 function isMutation(init: RequestInit) {
   const method = (init.method ?? "GET").toUpperCase();
@@ -775,7 +1078,7 @@ async function raw<T>(path: string, init: RequestInit = {}, retry = true): Promi
     response = await fetch(`${API_URL}${path}`, { ...init, headers, credentials: "include" });
   } catch (error) {
     if (error instanceof Error && error.name === "AbortError") throw error;
-    throw new Error("Khong co ket noi mang. Thao tac chua duoc ghi nhan, hay thu lai khi online.");
+    throw new Error("Không có kết nối mạng. Thao tác chưa được ghi nhận. Vui lòng thử lại khi có mạng.");
   }
   if (typeof window !== "undefined" && response.headers.get("x-lnfs-cache") === "stale") {
     window.dispatchEvent(new CustomEvent("lnfs:stale-data", { detail: { path } }));
@@ -869,7 +1172,7 @@ async function findConversationByPost(postId: string) {
   return null;
 }
 
-async function mediaBlob(path: string, retry = true, errorMessage = "Khong the tai anh"): Promise<Blob> {
+async function mediaBlob(path: string, retry = true, errorMessage = "Không thể tải ảnh"): Promise<Blob> {
   const generation = sessionGeneration;
   const headers = new Headers();
   if (accessToken) headers.set("authorization", `Bearer ${accessToken}`);
@@ -888,6 +1191,8 @@ async function mediaBlob(path: string, retry = true, errorMessage = "Khong the t
 }
 
 export const api = {
+  subscribeRealtime: (handlers: RealtimeHandlers) => subscribeRealtime(handlers),
+  subscribeClaimChatSocket: (handlers: ClaimChatSocketHandlers) => subscribeClaimChatSocket(handlers),
   listAppointments: (filters:{claimId?:string;page?:number}={},signal?:AbortSignal) => raw<{results:import("./workflow-types").Appointment[];total:number}>(`/appointments${queryString(filters)}`,{signal}),
   getAppointment: (id:string,signal?:AbortSignal) => raw<import("./workflow-types").Appointment>(`/appointments/${id}`,{signal}),
   createAppointment: (payload:{claimId:string;proposedAt:string;handoverPointId?:string;customLocation?:string;requestKey:string}) => raw<import("./workflow-types").Appointment>("/appointments",{method:"POST",body:JSON.stringify(payload)}),
@@ -924,9 +1229,14 @@ export const api = {
     form.append("file", file);
     return raw<{ user: CurrentUser }>("/auth/profile/avatar", { method: "PATCH", body: form }).then((result) => normalizeUser(result.user));
   },
-  getProfileAvatar: () => mediaBlob("/auth/profile/avatar", true, "Khong the tai anh dai dien"),
+  getProfileAvatar: () => mediaBlob("/auth/profile/avatar", true, "Không thể tải ảnh đại diện"),
   getActivitySummary: () => raw<ProfileActivitySummary>("/auth/activity"),
   getPostCatalog: () => raw<PostCatalog>("/posts/catalog"),
+  getLostIllustrationDraft: (signal?: AbortSignal) => raw<LostIllustrationDraft>("/posts/illustrations/draft", { cache: "no-store", signal }).then(illustrationDraft),
+  clearLostIllustrationDraft: () => raw<void>("/posts/illustrations/draft", { method: "DELETE" }),
+  generateLostIllustration: (payload: { type: "LOST"; title: string; description: string; categoryId: string; requestId: string }) =>
+    raw<{ attempt: LostIllustration; draft: LostIllustrationDraft }>("/posts/illustrations", { method: "POST", cache: "no-store", body: JSON.stringify(payload) })
+      .then(result => ({ ...result, draft: illustrationDraft(result.draft) })),
   listPosts: (filters: PostListFilters = {}) => raw<PostListResponse>(`/posts${queryString(filters)}`),
   listMyPosts: (filters: PostListFilters = {}) => raw<PostListResponse>(`/posts/mine${queryString(filters)}`),
   getPost: (postId: string) => raw<PostSummary>(`/posts/${postId}`),
@@ -948,6 +1258,7 @@ export const api = {
   recalculatePostMatches: (postId: string, page = 1, pageSize = 20) => raw<PostMatchesResponse>(`/posts/${postId}/matches/recalculate${queryString({ page, pageSize })}`, { method: "POST" }),
   submitMatchFeedback: (postId: string, matchId: string, payload: { value: MatchFeedbackValue; note?: string | null; correlationKey: string }) => raw<MatchFeedbackRecord>(`/posts/${postId}/matches/${matchId}/feedback`, { method: "POST", body: JSON.stringify(payload) }),
   dismissMatch: (postId: string, matchId: string, payload: { reason?: string | null; correlationKey: string }) => raw<{ id: string; correlationKey: string; reason: string | null; createdAt: string }>(`/posts/${postId}/matches/${matchId}/dismiss`, { method: "POST", body: JSON.stringify(payload) }),
+  listCompletedReturns: (page = 1) => raw<{ items: Array<{ id: string; postTitle: string; completedAt: string; rating: number | null }>; page: number; hasMore: boolean }>(`/returns/completed?page=${page}`),
   getReturnFeedbackEligibility: (appointmentId: string) => raw<ReturnFeedbackEligibility>(`/returns/${appointmentId}/feedback/eligibility`),
   submitReturnFeedback: (appointmentId: string, payload: { rating: number; comment?: string | null; idempotencyKey: string }) => raw<SubmitReturnFeedbackResponse>(`/returns/${appointmentId}/feedback`, { method: "POST", body: JSON.stringify(payload) }),
   listClaims: (query?: { page?: number; pageSize?: number }) => {
@@ -959,6 +1270,7 @@ export const api = {
   },
   findConversationByPost,
   getClaim: (claimId: string, signal?: AbortSignal) => raw<ClaimRecord>(`/claims/${claimId}`, { signal }),
+  getClaimHistory: (claimId: string, signal?: AbortSignal) => raw<ClaimHistoryResponse>(`/claims/${claimId}/history`, { signal }),
   createClaim: (payload: ({ postId: string } | { lostPostId: string; foundPostId: string }) & { description?: string; requestKey?: string; contactCheckId?: string; sourceFoundPostId?: string }) => {
     const requestKey = payload.requestKey ?? crypto.randomUUID();
     return raw<ClaimRecord & { idempotent: boolean }>("/claims", { method: "POST", headers: { "Idempotency-Key": requestKey }, body: JSON.stringify({ ...payload, requestKey: undefined }) });
@@ -1013,6 +1325,7 @@ export const api = {
     decision: "VERIFY_FOR_MEETUP" | "REQUEST_MORE_INFO" | "DECLINE" | "ESCALATE_TO_CUSTODY";
     reason: string;
     handoverPointId?: string;
+    requestedIntakeAt?: string;
     correctsEventId?: string;
     idempotencyKey: string;
   }) => raw<{ claim: ClaimRecord; verification: ClaimVerificationState; message: ClaimMessage | null }>(`/claims/${claimId}/verification/decision`, {
@@ -1023,6 +1336,9 @@ export const api = {
   markAllNotificationsRead: () => raw<{ read: boolean; count: number }>("/notifications/read-all", { method: "POST" }),
   getNotificationEmailPreferences: () => raw<{ preferences: NotificationEmailPreferences }>("/notifications/preferences").then((result) => result.preferences),
   updateNotificationEmailPreferences: (payload: Omit<NotificationEmailPreferences, "userId" | "updatedAt">) => raw<{ preferences: NotificationEmailPreferences }>("/notifications/preferences", { method: "PUT", body: JSON.stringify(payload) }).then((result) => result.preferences),
+  getPushNotificationStatus: () => raw<{ enabled: boolean; publicKey: string | null }>("/notifications/push/status"),
+  registerPushSubscription: (payload: { endpoint: string; p256dh: string; auth: string }) => raw<{ registered: boolean }>("/notifications/push/subscriptions", { method: "POST", body: JSON.stringify(payload) }),
+  removePushSubscription: (endpoint: string) => raw<{ removed: boolean }>("/notifications/push/subscriptions", { method: "DELETE", body: JSON.stringify({ endpoint }) }),
   getAdminCatalog: () => raw<AdminCatalog>("/admin/catalog"),
   createAdminCategory: (payload: Required<Pick<AdminCategoryPayload, "name">> & AdminCategoryPayload) => raw<AdminCategory>("/admin/categories", { method: "POST", body: JSON.stringify(payload) }),
   updateAdminCategory: (id: string, payload: AdminCategoryPayload) => raw<AdminCategory>(`/admin/categories/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
@@ -1066,6 +1382,24 @@ export const api = {
   deleteSystemConfig: (id: string) => raw<void>(`/admin/configs/${id}`, { method: "DELETE" }),
   getPublicConfig: () => raw<PublicConfigResponse>("/config/public"),
   getWarehouseCatalog: () => raw<WarehouseCatalog>("/staff/warehouse-items/catalog"),
+    extractWarehouseConversation: (payload: { mode: WarehouseConversationMode; intakeKind?: "WALK_IN" | "CUSTODY_REQUEST"; warehouseItemId?: string; messages: WarehouseConversationMessage[] }, images: File[] = []) => {
+      if (images.length) {
+        const form = new FormData();
+        form.append("payload", JSON.stringify(payload));
+        images.forEach(image => form.append("images", image));
+        return raw<WarehouseConversationExtraction>("/staff/warehouse-conversations/extract", { method: "POST", body: form });
+      }
+      return raw<WarehouseConversationExtraction>("/staff/warehouse-conversations/extract", { method: "POST", body: JSON.stringify(payload) });
+    },
+  getDispositionContext: (id: string) => raw<{
+    status: WarehouseStatus; eligible: boolean; reasons: string[]; legalHold: boolean; retentionDeadline: string | null;
+    orders: Array<{ id: string; requesterId: string; requesterName: string; approverName: string | null; target: "DISPOSED" | "DONATED" | "TRANSFERRED"; reason: string; status: string; createdAt: string; approvedAt: string | null; executedAt: string | null }>;
+    proofs: Array<{ id: string }>; logs: WarehouseStorageLog[];
+  }>(`/staff/warehouse-items/${id}/disposition`),
+  setWarehouseLegalHold: (id: string, held: boolean, reason: string) => raw<void>(`/staff/warehouse-items/${id}/legal-hold`, { method: "POST", body: JSON.stringify({ held, reason }) }),
+  requestDisposition: (id: string, target: string, reason: string) => raw<{ approvalId: string }>(`/staff/warehouse-items/${id}/disposition`, { method: "POST", body: JSON.stringify({ target, reason }) }),
+  approveDisposition: (id: string) => raw<void>(`/staff/warehouse-approvals/${id}/approve`, { method: "POST" }),
+  executeDisposition: (id: string, proofIds: string[]) => raw<void>(`/staff/warehouse-approvals/${id}/execute`, { method: "POST", body: JSON.stringify({ proofIds }) }),
   listWarehouseItems: (filters: WarehouseFilters = {}) => raw<WarehouseDashboard>(`/staff/warehouse-items${queryString(filters)}`),
   createWarehouseItem: (payload: CreateWarehouseItemPayload) => raw<WarehouseItem>("/staff/warehouse-items", { method: "POST", body: JSON.stringify(payload) }),
   updateWarehouseItem: (id: string, payload: UpdateWarehouseItemPayload) => raw<WarehouseItem>(`/staff/warehouse-items/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),

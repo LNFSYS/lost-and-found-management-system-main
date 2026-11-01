@@ -34,7 +34,7 @@ function userAuditState(user: AdminUserRecord): Record<string, unknown> {
 
 function assertCanRemoveActiveAdmin(target: AdminUserRecord, activeAdminCount: number) {
   if (target.accessRole === "ADMIN" && target.status === "ACTIVE" && activeAdminCount <= 1) {
-    throw new AppError("conflict", "Khong the xoa, khoa hoac ha quyen Admin cuoi cung");
+    throw new AppError("conflict", "Không thể xóa, khóa hoặc hạ quyền Admin cuối cùng");
   }
 }
 
@@ -52,7 +52,7 @@ export function createAdminUserUseCases(options: AdminUserDependencies) {
     const user = connection
       ? await repository.findById(userId, connection, forUpdate)
       : await repository.findById(userId);
-    if (!user) throw new AppError("not_found", "Khong tim thay tai khoan");
+    if (!user) throw new AppError("not_found", "Không tìm thấy tài khoản");
     return user;
   }
 
@@ -91,10 +91,10 @@ export function createAdminUserUseCases(options: AdminUserDependencies) {
       const nextStatus = input.status ?? current.status;
 
       if (actorUserId === userId && current.accessRole === "ADMIN" && nextRole !== "ADMIN") {
-        throw new AppError("conflict", "Admin khong duoc tu ha quyen chinh minh");
+        throw new AppError("conflict", "Admin không được tự hạ quyền của chính mình");
       }
       if (actorUserId === userId && nextStatus === "DISABLED") {
-        throw new AppError("conflict", "Admin khong duoc tu khoa chinh minh");
+        throw new AppError("conflict", "Admin không được tự khóa chính mình");
       }
       if ((nextRole !== current.accessRole || nextStatus !== current.status)
         && current.accessRole === "ADMIN"
@@ -106,7 +106,7 @@ export function createAdminUserUseCases(options: AdminUserDependencies) {
       const normalizedEmail = input.email ? normalizeEmail(input.email) : undefined;
       if (normalizedEmail && normalizedEmail !== normalizeEmail(current.email)) {
         if (await repository.findByNormalizedEmail(normalizedEmail, userId, connection)) {
-          throw new AppError("conflict", "Email da duoc su dung");
+          throw new AppError("conflict", "Email đã được sử dụng");
         }
       }
 
@@ -156,7 +156,7 @@ export function createAdminUserUseCases(options: AdminUserDependencies) {
       const normalizedEmail = normalizeEmail(input.email);
       return transaction(async (connection) => {
         if (await repository.findByNormalizedEmail(normalizedEmail, undefined, connection)) {
-          throw new AppError("conflict", "Email da su dung");
+          throw new AppError("conflict", "Email đã được sử dụng");
         }
         const userId = idFactory();
         await repository.createUser({
@@ -201,10 +201,10 @@ export function createAdminUserUseCases(options: AdminUserDependencies) {
       await transaction(async (connection) => {
         const activeAdminCount = await repository.lockActiveAdmins(connection);
         const target = await loadUserOrThrow(repository, userId, connection, true);
-        if (actorUserId === userId) throw new AppError("conflict", "Admin khong duoc tu xoa chinh minh");
+        if (actorUserId === userId) throw new AppError("conflict", "Admin không được tự xóa chính mình");
         assertCanRemoveActiveAdmin(target, activeAdminCount);
         if (!await repository.softDeleteUser(userId, connection)) {
-          throw new AppError("not_found", "Khong tim thay tai khoan");
+          throw new AppError("not_found", "Không tìm thấy tài khoản");
         }
         await repository.revokeRefreshTokens(userId, connection);
         const updated = await loadUserOrThrow(repository, userId, connection);

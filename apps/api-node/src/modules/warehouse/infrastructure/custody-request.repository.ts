@@ -32,6 +32,7 @@ interface CustodyRequestRow extends RowDataPacket {
   handover_point_name: string | null;
   handover_point_address: string | null;
   confirmed_handover_at: Date | string | null;
+  requested_intake_at: Date | string | null;
   warehouse_item_id: string | null;
   created_at: Date | string;
   updated_at: Date | string;
@@ -76,7 +77,7 @@ const requestSelect = `SELECT cr.id, cr.claim_id, cr.room_id, cr.post_id,
   cr.handler_id, hu.full_name AS handler_name,
   cr.status, cr.intake_type, cr.reason, cr.request_payload, cr.rejection_reason,
   cr.handover_point_id, hp.name AS handover_point_name, hp.address AS handover_point_address,
-  cr.confirmed_handover_at, cr.warehouse_item_id,
+  cr.confirmed_handover_at, cr.requested_intake_at, cr.warehouse_item_id,
   cr.created_at, cr.updated_at,
   p.title AS post_title,
   (SELECT pm.id FROM post_media pm WHERE pm.post_id = p.id AND pm.media_kind = 'ITEM' ORDER BY pm.sort_order,pm.id LIMIT 1) AS post_thumbnail_id
@@ -103,6 +104,7 @@ function mapRequest(row: CustodyRequestRow): CustodyRequest {
       ? { id: row.handover_point_id, name: row.handover_point_name, address: row.handover_point_address }
       : null,
     confirmedHandoverAt: iso(row.confirmed_handover_at),
+    requestedIntakeAt: iso(row.requested_intake_at),
     warehouseItemId: row.warehouse_item_id,
     createdAt: iso(row.created_at) ?? "",
     updatedAt: iso(row.updated_at) ?? "",
@@ -283,8 +285,8 @@ export function createCustodyRequestRepository(pool: SqlExecutor) {
     async createRequest(input, db) {
       const key = input.idempotencyKey ? createHash("sha256").update(JSON.stringify(["custody:create", input.requesterId, input.idempotencyKey])).digest("hex") : null;
       await sqlExecutor(db ?? pool).execute(
-        `INSERT INTO custody_requests (id, claim_id, room_id, post_id, requester_id, intake_type, reason, handover_point_id, idempotency_key, request_payload)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO custody_requests (id, claim_id, room_id, post_id, requester_id, intake_type, reason, handover_point_id, requested_intake_at, idempotency_key, request_payload)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           input.id,
           input.claimId ?? null,
@@ -294,6 +296,7 @@ export function createCustodyRequestRepository(pool: SqlExecutor) {
           input.intakeType,
           input.reason ?? null,
           input.handoverPointId ?? null,
+          input.requestedIntakeAt ?? null,
           key,
           custodyFingerprint(input)
         ]

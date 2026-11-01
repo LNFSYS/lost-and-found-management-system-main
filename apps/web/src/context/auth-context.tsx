@@ -67,6 +67,9 @@ export function AuthProvider({ children }: PropsWithChildren) {
     async logout() {
       const current = ++sequence.current;
       if (retryTimer.current) clearTimeout(retryTimer.current);
+      try {
+        await api.clearLostIllustrationDraft().catch(() => undefined);
+      } catch {}
       setUser(null);
       setSessionError(null);
       setReady(true);

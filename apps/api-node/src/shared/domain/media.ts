@@ -33,10 +33,10 @@ export function detectImageFormat(buffer: Buffer): ImageFormat | null {
 }
 
 export function validateImageUpload(file: ImageUpload): ValidatedImage {
-  if (!file?.buffer?.length) throw new AppError("bad_request", "File anh khong hop le");
-  if (file.size > mediaPolicy.maxBytes) throw new AppError("payload_too_large", "Anh vuot qua gioi han 10MB");
+  if (!file?.buffer?.length) throw new AppError("bad_request", "Tệp ảnh không hợp lệ");
+  if (file.size > mediaPolicy.maxBytes) throw new AppError("payload_too_large", "Ảnh vượt quá giới hạn 10 MB");
   if (!mediaPolicy.allowedMimeTypes.includes(file.mimetype as ValidatedImage["mimeType"])) {
-    throw new AppError("unsupported_media", "Chi ho tro anh JPEG, PNG hoac WEBP");
+    throw new AppError("unsupported_media", "Chỉ hỗ trợ ảnh JPEG, PNG hoặc WEBP");
   }
 
   const format = detectImageFormat(file.buffer);
@@ -47,7 +47,7 @@ export function validateImageUpload(file: ImageUpload): ValidatedImage {
   };
 
   if (!format || format !== expectedByMime[file.mimetype as ValidatedImage["mimeType"]]) {
-    throw new AppError("unsupported_media", "Chu ky file khong khop dinh dang anh");
+    throw new AppError("unsupported_media", "Chữ ký tệp không khớp với định dạng ảnh");
   }
 
   return {
@@ -60,7 +60,7 @@ export function validateImageUpload(file: ImageUpload): ValidatedImage {
 
 export function validateAvatarUpload(file: ImageUpload): ValidatedImage {
   const image = validateImageUpload(file);
-  if (image.bytes > avatarMediaPolicy.maxBytes) throw new AppError("payload_too_large", "Anh dai dien vuot qua gioi han 1MB");
+  if (image.bytes > avatarMediaPolicy.maxBytes) throw new AppError("payload_too_large", "Ảnh đại diện vượt quá giới hạn 1 MB");
   return image;
 }
 

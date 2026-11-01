@@ -15,6 +15,7 @@ export interface PostMediaRecord {
   bytes: number | null;
   sortOrder: number;
   createdAt: string;
+  isAiGenerated?: boolean;
 }
 
 export interface StoredMediaRecord extends PostMediaRecord {

@@ -55,7 +55,7 @@ export function createAuthController({ authService, refreshCookieOptions, access
       response.json({ user: await authService.updateProfile(request.auth!.sub, updateProfileSchema.parse(request.body)) });
     },
     async updateAvatar(request: Request, response: Response) {
-      if (!request.file) throw new HttpError(400, "Can gui anh dai dien voi field name la file");
+      if (!request.file) throw new HttpError(400, "Vui lòng gửi ảnh đại diện với tên trường là file");
       response.status(201).json({ user: await authService.updateAvatar(request.auth!.sub, request.file) });
     },
     async getAvatar(request: Request, response: Response) {

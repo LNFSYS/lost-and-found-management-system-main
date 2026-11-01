@@ -23,6 +23,7 @@ export interface CustodyRequest {
   rejectionReason: string | null;
   handoverPoint: { id: string; name: string | null; address: string | null } | null;
   confirmedHandoverAt: string | null;
+  requestedIntakeAt?: string | null;
   warehouseItemId: string | null;
   createdAt: string;
   updatedAt: string;
@@ -90,6 +91,7 @@ export interface CustodyRequestRepository {
     intakeType: CustodyIntakeType;
     reason?: string | null;
     handoverPointId?: string | null;
+    requestedIntakeAt?: Date | null;
     idempotencyKey?: string | null;
   }, db?: TransactionContext): Promise<void>;
 

@@ -1,0 +1,16 @@
+.warehouse-disposition { border-top: 1px solid #d9e2e8; padding: 20px 0; min-width: 0; }
+.warehouse-disposition h3 { display: flex; gap: 8px; align-items: center; font-size: 1rem; }
+.warehouse-disposition p, .warehouse-disposition li { overflow-wrap: anywhere; line-height: 1.6; }
+.disposition-actions { display: grid; gap: 12px; margin: 14px 0; }
+.disposition-actions label { display: grid; gap: 8px; }
+.disposition-actions textarea, .disposition-actions select { width: 100%; min-height: 42px; border: 1px solid #bbcbd8; border-radius: 6px; padding: 10px; font: inherit; }
+.warehouse-disposition button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 42px; padding: 8px 14px; border: 1px solid #bccddb; border-radius: 6px; background: #f5f9fc; color: #185286; font: inherit; cursor: pointer; }
+.warehouse-disposition button:disabled { opacity: .5; cursor: not-allowed; }
+.disposition-order { padding: 16px 0; border-bottom: 1px solid #d9e2e8; }
+.disposition-proofs { display: flex; gap: 12px; flex-wrap: wrap; }
+.disposition-proofs img { width: 120px; height: 100px; object-fit: contain; border: 1px solid #ccd7df; background: white; }
+.disposition-upload input { max-width: 100%; }
+.warehouse-check, .disposition-actions .warehouse-check { display: flex; gap: 10px; align-items: flex-start; line-height: 1.5; }
+.warehouse-check input[type="checkbox"] { width: 18px; height: 18px; min-height: 18px; flex: 0 0 18px; margin: 3px 0 0; padding: 0; }
+.warehouse-overdue-filter { grid-column: 1 / -1; }
+.disposition-proofs > div { display: flex; align-items: flex-start; gap: 4px; }

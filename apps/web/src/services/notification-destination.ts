@@ -10,6 +10,7 @@ export function notificationDestination(item: Pick<AppNotification, "entityType"
     case "APPOINTMENT":
     case "APPOINTMENT_REMINDER": return `/appointments/${id}`;
     case "CUSTODY_REQUEST": return `/notifications?custodyRequestId=${id}`;
+    case "WAREHOUSE_ITEM": return "/admin/staff?tab=warehouse";
     default: return "/notifications";
   }
 }

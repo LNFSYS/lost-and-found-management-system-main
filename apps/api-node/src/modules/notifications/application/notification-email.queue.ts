@@ -3,6 +3,7 @@ import type { NotificationRecord } from "./notification.repository.port.js";
 import type {
   EmailOutboxMode, NotificationEmailEvent, NotificationEmailMode, NotificationEmailRepository
 } from "./notification-email.repository.port.js";
+import { defaultChannelPreferences } from "./notification-channels.js";
 
 export interface NotificationEmailQueue {
   enqueue(input: {
@@ -16,8 +17,8 @@ export interface NotificationEmailQueue {
   cancelForUser(userId: string): Promise<number>;
 }
 
-function modeForEvent(preferences: { chatMode: NotificationEmailMode; claimMode: NotificationEmailMode; }, eventType: NotificationEmailEvent) {
-  return eventType === "CHAT" ? preferences.chatMode : preferences.claimMode;
+function channelsFor(preferences: { chatMode: NotificationEmailMode; claimMode: NotificationEmailMode; categories?: import("./notification-email.repository.port.js").NotificationChannelPreferences; }, eventType: NotificationEmailEvent) {
+  return preferences.categories ?? defaultChannelPreferences(preferences.chatMode, preferences.claimMode);
 }
 
 export function createNotificationEmailQueue(options: {
@@ -34,23 +35,28 @@ export function createNotificationEmailQueue(options: {
   return {
     async enqueue(input, queryable) {
       const preferences = await options.repository.getPreferences(input.recipientUserId, queryable);
-      const mode = modeForEvent(preferences, input.eventType);
-      if (mode === "DISABLED") return;
-      const startedAt = now();
-      const dueAt = new Date(startedAt.getTime() + (mode === "DELAYED_UNREAD"
-        ? chatDelayMinutes
-        : mode === "DIGEST" ? digestDelayMinutes : 0) * 60_000);
-      await options.repository.enqueue({
-        id: options.id(),
-        notificationId: input.notification.id,
-        recipientUserId: input.recipientUserId,
-        eventType: input.eventType,
-        entityType: input.notification.entityType ?? "NOTIFICATION",
-        entityId: input.notification.entityId,
-        roomId: input.roomId ?? null,
-        deliveryMode: mode as EmailOutboxMode,
-        idempotencyKey: `notification-email:${input.notification.id}`,
-        dueAt
+      const preference = channelsFor(preferences, input.eventType)[input.eventType];
+      if (preference.emailMode !== "DISABLED") {
+        const mode = preference.emailMode;
+        const startedAt = now();
+        const dueAt = new Date(startedAt.getTime() + (mode === "DELAYED_UNREAD"
+          ? chatDelayMinutes
+          : mode === "DIGEST" ? digestDelayMinutes : 0) * 60_000);
+        await options.repository.enqueue({
+          id: options.id(),
+          notificationId: input.notification.id,
+          recipientUserId: input.recipientUserId,
+          eventType: input.eventType,
+          entityType: input.notification.entityType ?? "NOTIFICATION",
+          entityId: input.notification.entityId,
+          roomId: input.roomId ?? null,
+          deliveryMode: mode as EmailOutboxMode,
+          idempotencyKey: `notification-email:${input.notification.id}`,
+          dueAt
+        }, queryable);
+      }
+      if (preference.pushEnabled) await options.repository.enqueuePush?.({
+        notificationId: input.notification.id, recipientUserId: input.recipientUserId, roomId: input.roomId
       }, queryable);
     },
     cancelForNotification: (userId, notificationId) => options.repository.cancelForNotification(userId, notificationId),

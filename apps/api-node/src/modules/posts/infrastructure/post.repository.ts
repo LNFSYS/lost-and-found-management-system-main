@@ -65,6 +65,7 @@ interface MediaRow extends RowDataPacket {
   bytes: number | null;
   sort_order: number;
   created_at: Date | string;
+  is_ai_generated: number;
 }
 
 interface StoredMediaRow extends MediaRow {
@@ -135,7 +136,8 @@ function mapMedia(row: MediaRow): PostMediaRecord {
     format: row.format,
     bytes: row.bytes === null ? null : Number(row.bytes),
     sortOrder: row.sort_order,
-    createdAt: toIso(row.created_at)!
+    createdAt: toIso(row.created_at)!,
+    isAiGenerated: Boolean(row.is_ai_generated)
   };
 }
 
@@ -250,7 +252,7 @@ export function createPostRepository(pool: SqlExecutor) {
     if (!postIds.length) return new Map<string, PostMediaRecord[]>();
     const placeholders = postIds.map(() => "?").join(", ");
     const [rows] = await sqlExecutor(queryable).execute<MediaRow[]>(
-      `SELECT id, post_id, media_kind, resource_type, format, bytes, sort_order, created_at
+      `SELECT id, post_id, media_kind, resource_type, format, bytes, sort_order, created_at, is_ai_generated
      FROM post_media
      WHERE post_id IN (${placeholders})
      ORDER BY post_id, sort_order, created_at`,
@@ -488,18 +490,19 @@ export function createPostRepository(pool: SqlExecutor) {
       format: string;
       bytes: number;
       sortOrder: number;
+      isAiGenerated?: boolean;
     }, queryable: Queryable = pool) {
       await sqlExecutor(queryable).execute(
-        `INSERT INTO post_media (id, post_id, secure_url, public_id, resource_type, media_kind, format, bytes, sort_order)
-       VALUES (?, ?, ?, ?, 'image', ?, ?, ?, ?)`,
-        [input.id, input.postId, input.secureUrl, input.publicId, input.mediaKind, input.format, input.bytes, input.sortOrder]
+        `INSERT INTO post_media (id, post_id, secure_url, public_id, resource_type, media_kind, format, bytes, sort_order, is_ai_generated)
+       VALUES (?, ?, ?, ?, 'image', ?, ?, ?, ?, ?)`,
+        [input.id, input.postId, input.secureUrl, input.publicId, input.mediaKind, input.format, input.bytes, input.sortOrder, input.isAiGenerated === true]
       );
     },
 
     async findMedia(postId: string, mediaId: string, queryable: Queryable = pool, forUpdate = false): Promise<StoredMediaRecord | null> {
       const [rows] = await sqlExecutor(queryable).execute<StoredMediaRow[]>(
         `SELECT pm.id, pm.post_id, pm.secure_url, pm.public_id, pm.media_kind, pm.resource_type, pm.format, pm.bytes,
-              pm.sort_order, pm.created_at, p.user_id AS owner_id, p.status AS post_status,
+              pm.sort_order, pm.created_at, pm.is_ai_generated, p.user_id AS owner_id, p.status AS post_status,
               p.visibility_mode AS post_visibility_mode, p.deleted_at AS post_deleted_at
        FROM post_media pm
        INNER JOIN posts p ON p.id = pm.post_id

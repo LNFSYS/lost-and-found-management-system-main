@@ -48,7 +48,7 @@ async function openPhotoCheckedRoom(page: Page) {
   await expect(page.getByRole("group", { name: "Câu hỏi từ ảnh" }).getByRole("button")).toHaveCount(3);
 }
 
-for (const width of [1440,390]) test(`LOST photo checks preserve drafts and immediately open a room at 50 percent at ${width}px`, async ({ page },testInfo) => {
+for (const width of [1440,390]) test(`LOST photo checks keep the conversation unsaved until the first message at ${width}px`, async ({ page },testInfo) => {
   await page.setViewportSize({ width, height: 900 });
   let checks = 0, sent: Record<string,unknown> | null = null;
   const errors: string[] = []; page.on("pageerror",error => errors.push(error.message));
@@ -62,6 +62,13 @@ for (const width of [1440,390]) test(`LOST photo checks preserve drafts and imme
   await page.route("**/api/claims", route => {
     sent = route.request().postDataJSON();
     return route.fulfill({ status: 201, json: { ...claim(), idempotent: false } });
+  });
+  await page.route("**/api/claims/direct-messages", route => {
+    sent = route.request().postDataJSON();
+    return route.fulfill({ status: 201, json: { claim: claim(), message: {
+      id: "first-message", roomId: "room", sender: session.user, clientMessageId: route.request().headers()["idempotency-key"],
+      content: String(sent?.content ?? ""), messageType: "TEXT", isRead: false, readAt: null, createdAt: new Date().toISOString()
+    } } });
   });
   await page.goto(`/claims?composePostId=${postId}`);
   await page.getByLabel("Tin nhắn riêng").fill("Tôi đang giữ một ví tương tự");
@@ -82,8 +89,13 @@ for (const width of [1440,390]) test(`LOST photo checks preserve drafts and imme
   await expect(preview).toBeVisible();
   await expect(send).toBeDisabled();
   await page.getByRole("button",{ name: "Kiểm tra ảnh", exact: true }).click();
+  await expect(page).toHaveURL(new RegExp(`/claims\\?composePostId=${postId}$`));
+  await expect(send).toBeEnabled();
+  await expect(page.locator(".claims-sidebar header strong")).toHaveText("0");
+  expect(sent).toBeNull();
+  await send.click();
   await expect(page).toHaveURL(new RegExp(`/claims/${claimId}$`));
-  await expect(page.getByLabel("Tin nhắn riêng")).toHaveValue("Tôi đang giữ một ví tương tự");
+  await expect(page.getByLabel("Tin nhắn riêng")).toHaveValue("");
   await expect(page.getByRole("button", { name: "Đề xuất gặp mặt", exact: true })).toBeEnabled();
   await expect(page.getByRole("group", { name: "Câu hỏi từ ảnh" }).getByRole("button")).toHaveCount(3);
   await expect(page.locator(".claims-sidebar header strong")).toHaveText("1");
@@ -92,6 +104,7 @@ for (const width of [1440,390]) test(`LOST photo checks preserve drafts and imme
   await page.screenshot({ path: testInfo.outputPath(`contact-photo-${width}.png`), fullPage: true });
   expect(await page.evaluate(() => document.documentElement.scrollWidth-document.documentElement.clientWidth)).toBeLessThanOrEqual(1);
   expect(sent!.contactCheckId).toBe(checkId);
+  expect(sent!.content).toBe("Tôi đang giữ một ví tương tự");
   await expect(page.getByText("Ví có chất liệu và kiểu khóa như thế nào?",{ exact: true })).toBeVisible();
   expect(errors).toEqual([]);
 });
@@ -169,6 +182,126 @@ for (const scenario of ["LOST finder", "FOUND owner", "FOUND claimant"] as const
   await expect(page.getByRole("complementary", { name: "Lưu ý tránh lừa đảo" })).toHaveCount(0);
   await expect(page.getByRole("region", { name: "Câu hỏi đối chiếu vật phẩm" })).toHaveCount(0);
 });
+
+for (const width of [1920, 1440, 1024, 768, 390, 320]) test(`LOST owner warning and custody review preserve chat space at ${width}px`, async ({ page }, testInfo) => {
+  await page.setViewportSize({ width, height: 900 });
+  const ownerSession = { ...session, user: { ...session.user, ...post.owner, email: "owner@example.invalid" } };
+  const currentClaim = { ...claim(), contactPhoto: { ...claim().contactPhoto!, required: false } };
+  await prepare(page, () => currentClaim, true, ownerSession);
+  await page.route(`**/api/claims/${claimId}/verification`, route => route.fulfill({ json: {
+    claimId, status: "CONVERSATION_OPEN", appointmentEligible: true, participantRole: "CLAIMANT",
+    roomEscalation: { escalatedAt: post.createdAt, escalatedBy: "finder", reason: "Mang vat pham den quay Staff" },
+    policy: { templateId: "wallet-bag", templateVersion: 1, minimumAnswers: 1, answeredCount: 0, readyForDecision: true, photoContactEligible: true },
+    questions: [], history: [{ id: "custody-event", action: "CUSTODY_ESCALATED", actorId: "finder", createdAt: post.createdAt, metadata: { decision: "ESCALATE_TO_CUSTODY" } }]
+  } }));
+  await page.route(`**/api/claims/${claimId}/messages*`, route => route.fulfill({ json: {
+    room: { id: "room", claimId, status: "CONVERSATION_OPEN", participantRole: "CLAIMANT", createdAt: post.createdAt },
+    items: [{ id: "finder-message", roomId: "room", sender: currentClaim.finder, content: "Tin nhan van hien thi ro trong cuoc tro chuyen.",
+      messageType: "TEXT", isRead: true, readAt: null, createdAt: post.createdAt }], hasMore: false, nextCursor: null
+  } }));
+  await page.route("**/api/appointments?*", route => route.fulfill({ json: { results: [], total: 0 } }));
+  await page.route("**/api/handover-points", route => route.fulfill({ json: { handoverPoints: [] } }));
+  await page.goto(`/claims/${claimId}`);
+  const context = page.locator(".claim-chat-context");
+  const warning = page.getByRole("complementary", { name: "Lưu ý tránh lừa đảo" });
+  const review = page.locator(".claim-chat-review");
+  await expect(warning).toBeVisible();
+  await expect(review.getByText("Đã gửi yêu cầu chuyển sang custody", { exact: true })).toBeVisible();
+  await expect(review.getByRole("button", { name: "Chi tiết xác minh", exact: true })).toBeVisible();
+  await expect(review.getByRole("button", { name: "Lịch hẹn", exact: true })).toBeVisible();
+  await expect(review.getByRole("link", { name: "Lịch sử claim và xác minh" })).toBeVisible();
+  await expect(page.getByText("Tin nhan van hien thi ro trong cuoc tro chuyen.", { exact: true })).toBeVisible();
+  await page.evaluate(() => document.fonts.ready);
+  const left = (await warning.boundingBox())!;
+  const right = (await review.boundingBox())!;
+  const chat = (await page.locator(".claim-chat-scroll").boundingBox())!;
+  if (width >= 1024) {
+    expect(Math.abs(left.y - right.y)).toBeLessThanOrEqual(1);
+    expect(right.x).toBeGreaterThanOrEqual(left.x + left.width);
+    expect(Math.abs(left.width - right.width)).toBeLessThanOrEqual(1);
+    expect((await context.boundingBox())!.height).toBeLessThan(240);
+    expect(chat.height).toBeGreaterThan(300);
+  } else {
+    expect(right.y).toBeGreaterThanOrEqual(left.y + left.height);
+    expect(Math.abs(left.width - right.width)).toBeLessThanOrEqual(1);
+    expect(chat.height).toBeGreaterThan(220);
+  }
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(1);
+  expect(await context.evaluate(element => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(1);
+  const composer = page.getByLabel("Tin nhắn riêng");
+  await composer.fill("Ban nhap khong bi mat khi xem chi tiet");
+  await review.getByRole("button", { name: "Chi tiết xác minh", exact: true }).click();
+  await expect(page.getByRole("dialog", { name: "Chi tiết xác minh", exact: true })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(composer).toHaveValue("Ban nhap khong bi mat khi xem chi tiet");
+  await review.getByRole("button", { name: "Lịch hẹn", exact: true }).click();
+  const appointments = page.getByRole("dialog", { name: "Lịch hẹn trả đồ", exact: true });
+  await expect(appointments).toBeVisible();
+  await expect(appointments.getByRole("button", { name: "Đóng lịch hẹn", exact: true })).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(appointments).toHaveCount(0);
+  await expect(review.getByRole("button", { name: "Lịch hẹn", exact: true })).toBeFocused();
+  await expect(composer).toHaveValue("Ban nhap khong bi mat khi xem chi tiet");
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.screenshot({ path: testInfo.outputPath(`compact-chat-context-${width}.png`) });
+});
+
+for (const viewport of [{ width: 1920, height: 872 }, { width: 1440, height: 640 }, { width: 1280, height: 600 }, { width: 1440, height: 540 }]) {
+  test(`desktop chat header stays below navigation while its panes scroll at ${viewport.width}x${viewport.height}`, async ({ page }, testInfo) => {
+    await page.setViewportSize(viewport);
+    const ownerSession = { ...session, user: { ...session.user, ...post.owner, email: "owner@example.invalid" } };
+    const currentClaim = { ...claim(), contactPhoto: { ...claim().contactPhoto!, required: false },
+      item: { ...claim().item, locationLabel: "Khu vuc doi chieu vat pham tai sanh A. ".repeat(35) } };
+    await prepare(page, () => currentClaim, true, ownerSession);
+    const rooms = Array.from({ length: 50 }, (_, index) => ({ ...currentClaim,
+      id: index === 0 ? claimId : `99999999-9999-4999-8999-${String(index).padStart(12, "0")}` }));
+    await page.route("**/api/claims?page=1&pageSize=50", route => route.fulfill({ json: { items: rooms, total: rooms.length, page: 1, pageSize: 50, hasMore: false } }));
+    await page.route(`**/api/claims/${claimId}/messages*`, route => route.fulfill({ json: {
+      room: { id: "room", claimId, status: "CONVERSATION_OPEN", participantRole: "CLAIMANT", createdAt: post.createdAt },
+      items: Array.from({ length: 50 }, (_, index) => ({ id: `message-${index}`, roomId: "room", sender: currentClaim.finder,
+        content: `Tin nhan kiem tra cuon ${index + 1}`, messageType: "TEXT", isRead: true, readAt: null,
+        createdAt: new Date(Date.parse(post.createdAt) + index * 60_000).toISOString() })), hasMore: false, nextCursor: null
+    } }));
+    await page.goto(`/claims/${claimId}`);
+    const header = page.locator(".claim-chat-header");
+    const context = page.locator(".claim-chat-context");
+    const composer = page.getByLabel("Tin nhắn riêng");
+    await expect(context).toBeVisible();
+    await expect(page.locator(".claim-list-item")).toHaveCount(50);
+    await page.evaluate(() => document.fonts.ready);
+    // A taller navigation bar must also fit, without relying on a hard-coded 74px offset.
+    await page.addStyleTag({ content: ".topbar { min-height: 104px; }" });
+    await expect.poll(() => page.evaluate(() => document.documentElement.scrollHeight - window.innerHeight)).toBeLessThanOrEqual(1);
+    const position = (await header.boundingBox())!;
+    const nav = (await page.locator(".topbar").boundingBox())!;
+    expect(position.y).toBeGreaterThanOrEqual(nav.y + nav.height);
+    await composer.fill("Ban nhap van giu nguyen khi cuon");
+    const input = (await composer.boundingBox())!;
+    expect(input.y + input.height).toBeLessThanOrEqual(viewport.height);
+    for (const selector of [".claim-chat-scroll", ".claim-list", ".claim-inspector"]) {
+      const pane = page.locator(selector);
+      expect(await pane.evaluate(element => element.scrollHeight - element.clientHeight)).toBeGreaterThan(100);
+      await pane.evaluate(element => { element.scrollTop = 0; });
+      await pane.hover();
+      await page.mouse.wheel(0, 400);
+      await expect.poll(() => pane.evaluate(element => element.scrollTop)).toBeGreaterThan(0);
+      expect((await header.boundingBox())!.y).toBe(position.y);
+      expect(await page.evaluate(() => window.scrollY)).toBe(0);
+    }
+    await context.hover();
+    for (const delta of [800, -800]) {
+      await page.mouse.wheel(0, delta);
+      await page.waitForTimeout(150);
+      expect(await page.evaluate(() => window.scrollY)).toBe(0);
+      expect((await header.boundingBox())!.y).toBe(position.y);
+    }
+    await expect(composer).toHaveValue("Ban nhap van giu nguyen khi cuon");
+    await page.screenshot({ path: testInfo.outputPath(`fixed-chat-header-${viewport.width}x${viewport.height}.png`) });
+    await page.getByRole("link", { name: "Hồ sơ", exact: true }).click();
+    await expect(page).toHaveURL(/\/profile$/);
+    await expect(page.locator(".app-shell--chat")).toHaveCount(0);
+  });
+}
 
 for (const width of [1440, 390]) test(`suggestions send normal text and the two attachment actions work at ${width}px`, async ({ page }, testInfo) => {
   await page.setViewportSize({ width, height: 900 });

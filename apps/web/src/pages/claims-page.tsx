@@ -1,5 +1,5 @@
 import { AlertTriangle, ChevronDown, ChevronUp, Clock3, FileCheck2, FileWarning, Image, LockKeyhole, MessageCircle, Plus, RefreshCw, Search, Send, ShieldCheck, X } from "lucide-react";
-import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { ClaimEvidencePanel } from "../components/claim-evidence-panel";
 import { ClaimItemPanel } from "../components/claim-item-panel";
@@ -32,7 +32,16 @@ function formatTime(value: string | null) {
 
 function mergeMessages(current: ClaimMessage[], incoming: ClaimMessage[]) {
   const messages = new Map(current.map((message) => [message.id, message]));
-  incoming.forEach((message) => messages.set(message.id, message));
+  let changed = false;
+  incoming.forEach((message) => {
+    if (message.clientMessageId && messages.delete(`optimistic:${message.clientMessageId}`)) changed = true;
+    const existing = messages.get(message.id);
+    if (!existing || JSON.stringify(existing) !== JSON.stringify(message)) {
+      messages.set(message.id, message);
+      changed = true;
+    }
+  });
+  if (!changed) return current;
   return [...messages.values()].sort((left, right) => left.createdAt.localeCompare(right.createdAt) || left.id.localeCompare(right.id));
 }
 
@@ -79,28 +88,28 @@ function MessageBubble({ message, own, user, onReplyQuestion }: { message: Claim
   
   return <div className={`claim-message ${own ? "own" : ""}`}>
     {!own && <small>{message.sender.fullName}</small>}
-    {message.messageType === "IMAGE" && message.mediaUrl && <ClaimChatImage url={message.mediaUrl} />}
+    {message.messageType === "IMAGE" && message.previewUrl && <img className="claim-message-image-preview" src={message.previewUrl} alt="Ảnh đang gửi" />}
+    {message.messageType === "IMAGE" && !message.previewUrl && message.mediaUrl && <ClaimChatImage url={message.mediaUrl} />}
     <p>{message.content}</p>
     <time dateTime={message.createdAt}>{formatTime(message.createdAt)}</time>
+    {message.pending && <span className="claim-message-pending" role="status">Đang gửi…</span>}
     {shouldShowReply && onReplyQuestion && <button type="button" className="claim-reply-question" onClick={() => onReplyQuestion(message.content ?? "")}><MessageCircle /> Trả lời câu hỏi</button>}
     {!own && <Link className="claim-report-link" to={`/reports?targetType=MESSAGE&targetId=${message.id}`} title="Báo cáo tin nhắn"><FileWarning /> Báo cáo</Link>}
   </div>;
 }
 
-function DirectMessageDraft({ postId, sourceFoundPostId, viewer }: { postId: string; sourceFoundPostId?: string; viewer?: { id: string; fullName: string } }) {
+function DirectMessageDraft({ postId, sourceFoundPostId, viewer, onClaimCreated }: { postId: string; sourceFoundPostId?: string; viewer?: { id: string; fullName: string }; onClaimCreated: (claim: ClaimRecord, message: ClaimMessage) => void }) {
   const navigate = useNavigate();
   const [post, setPost] = useState<PostSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [draft, setDraft] = useState("");
+  const [optimisticMessage, setOptimisticMessage] = useState<ClaimMessage | null>(null);
   const [sending, setSending] = useState(false);
   const [contactCheckId, setContactCheckId] = useState<string | null>(null);
+  const [contactQuestions, setContactQuestions] = useState<string[]>([]);
   const [error, setError] = useState("");
   const pendingMessage = useRef<{ content: string; clientMessageId: string } | null>(null);
   const draftGeneration = useRef(0);
-  const openingContact = useRef(false);
-  const contactRequest = useRef<{ checkId: string; key: string; questions: string[] } | null>(null);
-  const currentDraft = useRef(draft);
-  currentDraft.current = draft;
   const draftClaim = useMemo<ClaimRecord | null>(() => {
     if (!post) return null;
     const currentUser = viewer ?? { id: "draft-user", fullName: "Bạn" };
@@ -151,6 +160,8 @@ function DirectMessageDraft({ postId, sourceFoundPostId, viewer }: { postId: str
     setLoading(true);
     setError("");
     setContactCheckId(null);
+    setContactQuestions([]);
+    setOptimisticMessage(null);
     pendingMessage.current = null;
     void (async () => {
       try {
@@ -183,36 +194,45 @@ function DirectMessageDraft({ postId, sourceFoundPostId, viewer }: { postId: str
       : { content, clientMessageId: crypto.randomUUID() };
     pendingMessage.current = retry;
     const generation = draftGeneration.current;
+    setOptimisticMessage({
+      id: `optimistic:${retry.clientMessageId}`,
+      roomId: `draft:${post.id}`,
+      sender: { id: viewer?.id ?? "draft-user", fullName: viewer?.fullName ?? "Bạn" },
+      clientMessageId: retry.clientMessageId,
+      content,
+      messageType: "TEXT",
+      isRead: false,
+      readAt: null,
+      createdAt: new Date().toISOString(),
+      pending: true
+    });
+    setDraft("");
     try {
       const result = await api.createDirectMessage(post.id, content, retry.clientMessageId, sourceFoundPostId, contactCheckId ?? undefined);
       if (generation !== draftGeneration.current) return;
       pendingMessage.current = null;
-      navigate(`/claims/${result.claim.id}`, { replace: true });
+      onClaimCreated(result.claim, result.message);
+      navigate(`/claims/${result.claim.id}`, { replace: true, state: {
+        claimId: result.claim.id,
+        contactQuestions: post.type === "LOST" ? contactQuestions : [],
+        initialClaim: result.claim,
+        initialMessage: result.message
+      } });
     } catch (reason) {
+      if (generation === draftGeneration.current) {
+        setOptimisticMessage(null);
+        setDraft(current => current || content);
+      }
       if (generation === draftGeneration.current) setError(reason instanceof Error ? reason.message : "Không thể gửi tin nhắn");
     } finally {
       if (generation === draftGeneration.current) setSending(false);
     }
   }
 
-  async function openContact(checkId: string | null, questions?: string[]) {
+  function openContact(checkId: string | null, questions?: string[]) {
     setContactCheckId(checkId);
-    if (!checkId || !post || openingContact.current) return;
-    const request = contactRequest.current?.checkId === checkId ? contactRequest.current
-      : { checkId, key: crypto.randomUUID(), questions: questions ?? [] };
-    contactRequest.current = request;
-    openingContact.current = true; setSending(true); setError("");
-    const generation = draftGeneration.current;
-    try {
-      const created = await api.createClaim({ postId: post.id, contactCheckId: checkId, requestKey: request.key, sourceFoundPostId });
-      if (generation !== draftGeneration.current) return;
-      navigate(`/claims/${created.id}`, { replace: true, state: { claimId: created.id, contactQuestions: request.questions, initialDraft: currentDraft.current } });
-    } catch (reason) {
-      if (generation === draftGeneration.current) setError(reason instanceof Error ? reason.message : "Không thể mở cuộc trò chuyện");
-    } finally {
-      openingContact.current = false;
-      if (generation === draftGeneration.current) setSending(false);
-    }
+    setContactQuestions(checkId ? questions ?? [] : []);
+    setError("");
   }
 
   if (loading) return <section className="claim-workspace-state"><RefreshCw className="is-spinning" /><h2>Đang mở khung soạn tin nhắn...</h2></section>;
@@ -229,9 +249,9 @@ function DirectMessageDraft({ postId, sourceFoundPostId, viewer }: { postId: str
       <div className="claim-chat-scroll">
         {post.type === "LOST" && <LostContactPhotoGate key={post.id} postId={post.id} disabled={sending} onReady={(id, questions) => void openContact(id, questions)} />}
         {error && <p className="field-error contact-draft-error" role="alert">{error}</p>}
-        {post.type === "LOST" ? <div className="claim-private-banner"><MessageCircle /><div><strong>{sending ? "Đang mở cuộc trò chuyện..." : "Đối chiếu ảnh để mở cuộc trò chuyện"}</strong>{error && contactCheckId && <button type="button" disabled={sending} onClick={() => void openContact(contactCheckId)}>Thử mở lại</button>}</div></div>
+        {post.type === "LOST" ? <div className="claim-private-banner"><MessageCircle /><div><strong>{sending ? "Đang gửi tin nhắn đầu tiên..." : "Cuộc trò chuyện chưa được lưu"}</strong><span>{contactCheckId ? "Ảnh đã đạt yêu cầu. Cuộc trò chuyện chỉ được tạo khi tin nhắn đầu tiên gửi thành công." : "Đối chiếu ảnh để bật gửi tin nhắn. Cuộc trò chuyện chỉ được tạo khi tin nhắn đầu tiên gửi thành công."}</span></div></div>
           : <div className="claim-private-banner"><MessageCircle /><div><strong>Cuộc trò chuyện chưa được lưu</strong><span>Chỉ khi bạn gửi tin nhắn đầu tiên, cuộc trò chuyện mới xuất hiện trong danh sách.</span></div></div>}
-        <div className="claim-messages"><div className="claim-messages__empty"><MessageCircle /><span>Chưa có tin nhắn.</span></div></div>
+        <div className="claim-messages">{optimisticMessage ? <MessageBubble message={optimisticMessage} own user={viewer} /> : <div className="claim-messages__empty"><MessageCircle /><span>Chưa có tin nhắn.</span></div>}</div>
       </div>
       <form className="claim-message-form claim-message-form--draft" onSubmit={submit}>
         <div className="input-row">
@@ -292,6 +312,7 @@ export function ClaimsPage() {
   const pendingQuestion = useRef<{ question: string; key: string } | null>(null);
   const sendInFlight = useRef(false);
   const roomRequest = useRef<{ generation: number; controller: AbortController | null }>({ generation: 0, controller: null });
+  const claimListRequest = useRef(0);
   const verificationRequest = useRef<{ controller: AbortController | null; blocked: boolean }>({ controller: null, blocked: false });
   const selectedClaimId = useRef<string | undefined>(claimId);
   const messageCursorRef = useRef<MessageCursor | null>(null);
@@ -299,7 +320,21 @@ export function ClaimsPage() {
   const pendingMessage = useRef<{ content: string; clientMessageId: string } | null>(null);
   const pendingOpenDecision = useRef<{ decision: "ACCEPT" | "DECLINE" | "REQUEST_MORE_INFO"; key: string } | null>(null);
   const pendingWithdrawal = useRef<string | null>(null);
-  const pollInFlight = useRef(false);
+  const roomSyncInFlight = useRef(false);
+  const syncAgain = useRef(false);
+
+  function keepNewConversationVisible(newClaim: ClaimRecord, firstMessage: ClaimMessage) {
+    const visibleClaim: ClaimRecord = {
+      ...newClaim,
+      conversation: {
+        lastMessage: firstMessage.content,
+        lastMessageAt: firstMessage.createdAt,
+        unreadCount: 0,
+        custodyEscalated: newClaim.conversation?.custodyEscalated ?? false
+      }
+    };
+    setClaims(current => [visibleClaim, ...current.filter(item => item.id !== visibleClaim.id)]);
+  }
 
   function isCurrentRoom(id: string, generation: number) {
     return selectedClaimId.current === id && roomRequest.current.generation === generation;
@@ -320,10 +355,11 @@ export function ClaimsPage() {
 
   useEffect(() => {
     let active = true;
+    const requestId = ++claimListRequest.current;
     setLoading(true);
     setError("");
     api.listClaims({ page: 1, pageSize: 50 }).then((result) => {
-      if (!active) return;
+      if (!active || requestId !== claimListRequest.current) return;
       const sortedClaims = result.items.sort((left, right) => 
         (right.conversation?.lastMessageAt ?? "").localeCompare(left.conversation?.lastMessageAt ?? "") || 
         right.id.localeCompare(left.id)
@@ -332,7 +368,9 @@ export function ClaimsPage() {
       setClaimPage(result.page);
       setClaimHasMore(result.hasMore);
       if (!claimId && !composePostId && sortedClaims[0]) navigate(`/claims/${sortedClaims[0].id}`, { replace: true });
-    }).catch((failure: Error) => { if (active) setError(failure.message); }).finally(() => { if (active) setLoading(false); });
+    }).catch((failure: Error) => { if (active && requestId === claimListRequest.current) setError(failure.message); }).finally(() => {
+      if (active && requestId === claimListRequest.current) setLoading(false);
+    });
     return () => { active = false; };
   }, [claimId, composePostId, navigate]);
 
@@ -408,7 +446,7 @@ export function ClaimsPage() {
     try {
       const current = await api.getClaim(id, controller.signal);
       if (!isCurrent()) return;
-      setClaim(current);
+      setClaim(existing => silent && existing && JSON.stringify(existing) === JSON.stringify(current) ? existing : current);
       if (!current.canSend) {
         setMessages([]);
         setEvidence([]);
@@ -423,19 +461,25 @@ export function ClaimsPage() {
       if (!isCurrent()) return;
       setMessages((existing) => silent ? mergeMessages(existing, messageResult.items) : messageResult.items);
       if (!silent || !messageCursorRef.current) updateMessageCursor(messageResult.nextCursor);
-      setEvidence(evidenceResult.items);
+      setEvidence(existing => silent && JSON.stringify(existing) === JSON.stringify(evidenceResult.items) ? existing : evidenceResult.items);
       setClaims((items) => {
-        if (!items.some(item => item.id === id)) {
+        const existing = items.find(item => item.id === id);
+        if (!existing) {
           const latest = mergeMessages([], messageResult.items).at(-1);
           return [{ ...current, conversation: { lastMessage: latest?.content ?? "", lastMessageAt: latest?.createdAt ?? current.updatedAt, unreadCount: 0 } }, ...items];
         }
-        return items.map(item => item.id === id && item.conversation ? { ...item, conversation: { ...item.conversation, unreadCount: 0 } } : item);
+        if (!existing.conversation || existing.conversation.unreadCount !== 0) {
+          return items.map(item => item.id === id && item.conversation ? { ...item, conversation: { ...item.conversation, unreadCount: 0 } } : item);
+        }
+        return items;
       });
 
       // Verification failures must not hide the chat or erase a sent message.
       if (!silent) void loadVerification(id);
     } catch (failure) {
       if (!isCurrent() || (failure instanceof Error && failure.name === "AbortError")) return;
+      // The first-message response already seeded the room; keep it visible if this background refresh fails.
+      if (silent) return;
       setClaim(null);
       setMessages([]);
       setEvidence([]);
@@ -448,25 +492,88 @@ export function ClaimsPage() {
       setError(failure instanceof Error ? failure.message : "Không thể mở conversation");
     } finally {
       if (isCurrent() && !silent) setRoomLoading(false);
+      if (isCurrent() && roomRequest.current.controller === controller) roomRequest.current.controller = null;
+      if (isCurrent() && syncAgain.current && !roomSyncInFlight.current) {
+        syncAgain.current = false;
+        void synchronizeClaimRoom(id);
+      }
+    }
+  }
+
+  async function synchronizeClaimRoom(id: string) {
+    if (roomRequest.current.controller) {
+      syncAgain.current = true;
+      return;
+    }
+    if (roomSyncInFlight.current) {
+      syncAgain.current = true;
+      return;
+    }
+    roomSyncInFlight.current = true;
+    try {
+      do {
+        syncAgain.current = false;
+        await loadClaimRoom(id, true);
+      } while (syncAgain.current && selectedClaimId.current === id);
+    } finally {
+      roomSyncInFlight.current = false;
     }
   }
 
   useEffect(() => {
+    let active = true;
+    const reloadAfterReconnect = () => {
+      if (!navigator.onLine) return;
+      const requestId = ++claimListRequest.current;
+      setLoading(true);
+      setError("");
+      void api.listClaims({ page: 1, pageSize: 50 }).then((result) => {
+        if (!active || requestId !== claimListRequest.current) return;
+        const sortedClaims = result.items.sort((left, right) =>
+          (right.conversation?.lastMessageAt ?? "").localeCompare(left.conversation?.lastMessageAt ?? "") ||
+          right.id.localeCompare(left.id)
+        );
+        setClaims(sortedClaims);
+        setClaimPage(result.page);
+        setClaimHasMore(result.hasMore);
+        if (!claimId && !composePostId && sortedClaims[0]) navigate(`/claims/${sortedClaims[0].id}`, { replace: true });
+      }).catch((failure: Error) => {
+        if (active && requestId === claimListRequest.current) setError(failure.message);
+      }).finally(() => {
+        if (active && requestId === claimListRequest.current) setLoading(false);
+      });
+
+      if (claimId) void loadClaimRoom(claimId);
+    };
+    window.addEventListener("online", reloadAfterReconnect);
+    return () => {
+      active = false;
+      window.removeEventListener("online", reloadAfterReconnect);
+    };
+  }, [claimId, composePostId, navigate]);
+
+  useEffect(() => {
+    const hasClaimHandoff = Boolean(claimId && location.state?.claimId === claimId);
+    const handoffClaim = hasClaimHandoff && location.state?.initialClaim?.id === claimId
+      ? location.state.initialClaim as ClaimRecord : null;
+    const handoffMessage = handoffClaim && location.state?.initialMessage?.id
+      ? location.state.initialMessage as ClaimMessage : null;
     selectedClaimId.current = claimId;
     roomRequest.current.generation += 1;
     roomRequest.current.controller?.abort();
     roomRequest.current.controller = null;
     verificationRequest.current.controller?.abort();
     verificationRequest.current = { controller: null, blocked: false };
-    setClaim(null);
-    setMessages([]);
+    setRoomLoading(false);
+    setClaim(handoffClaim);
+    setMessages(handoffMessage ? [handoffMessage] : []);
     setEvidence([]);
     setVerification(null);
     setVerificationLoading(false);
     setVerificationError("");
     setVerificationTemplates(null);
     updateMessageCursor(null);
-    setMessageDraft(location.state?.claimId === claimId ? location.state?.initialDraft ?? "" : "");
+    setMessageDraft(claimId && location.state?.claimId === claimId ? location.state?.initialDraft ?? "" : "");
     setChatFile(null); setEvidenceUploadRequest(0);
     setCheckedQuestions(null);
     setQuestionsExpanded(true);
@@ -483,24 +590,82 @@ export function ClaimsPage() {
     pendingMessage.current = null;
     pendingOpenDecision.current = null;
     pendingWithdrawal.current = null;
-    if (claimId) void loadClaimRoom(claimId);
+    roomSyncInFlight.current = false;
+    syncAgain.current = false;
+    if (claimId) {
+      const hasHandoff = Boolean(handoffClaim && handoffMessage);
+      void loadClaimRoom(claimId, hasHandoff);
+      if (hasHandoff && handoffClaim?.canSend) void loadVerification(claimId);
+    }
     return () => {
       roomRequest.current.generation += 1;
       selectedClaimId.current = undefined;
       roomRequest.current.controller?.abort();
       verificationRequest.current.controller?.abort();
     };
-  }, [claimId, user?.id]);
+  }, [claimId, location.state, user?.id]);
+
+  useLayoutEffect(() => {
+    const hasClaimHandoff = Boolean(claimId && location.state?.claimId === claimId);
+    const initialClaim = hasClaimHandoff && location.state?.initialClaim?.id === claimId
+      ? location.state.initialClaim as ClaimRecord : null;
+    const initialMessage = initialClaim && location.state?.initialMessage?.id
+      ? location.state.initialMessage as ClaimMessage : null;
+    if (!claimId || !initialClaim || !initialMessage) return;
+    setClaim(initialClaim);
+    setMessages([initialMessage]);
+    setRoomLoading(false);
+  }, [claimId, location.state]);
 
   useEffect(() => {
-    if (!claimId || !claim?.canSend) return;
-    const timer = window.setInterval(() => {
-      if (pollInFlight.current) return;
-      pollInFlight.current = true;
-      void loadClaimRoom(claimId, true).finally(() => { pollInFlight.current = false; });
-    }, 10_000);
-    return () => window.clearInterval(timer);
-  }, [claimId, claim?.canSend]);
+    const roomId = claim?.room?.id;
+    if (!claimId || !claim?.canSend || !roomId) return;
+    let active = true;
+    const unsubscribe = api.subscribeRealtime({
+      roomId,
+      onNotification: (event) => {
+        if (!active) return;
+        const sameClaimUpdate = event.workflow === "CLAIM" && event.notification.entityType === "CLAIM" && event.notification.entityId === claimId;
+        if (sameClaimUpdate) {
+          void api.getClaim(claimId).then(updated => {
+            if (active && isCurrentRoom(claimId, roomRequest.current.generation)) applyClaimUpdate(updated);
+          }).catch(() => undefined);
+        }
+      }
+    });
+    return () => { active = false; unsubscribe(); };
+  }, [claimId, claim?.canSend, claim?.room?.id]);
+
+  useEffect(() => {
+    const roomId = claim?.room?.id;
+    if (!claimId || !claim?.canSend || !roomId) return;
+    let active = true;
+    const generation = roomRequest.current.generation;
+    const unsubscribe = api.subscribeClaimChatSocket({
+      onConnected: () => { if (active) void synchronizeClaimRoom(claimId); },
+      roomId,
+      onReconnected: () => { if (active) void synchronizeClaimRoom(claimId); },
+      onMessage: (message) => {
+        if (!active || !isCurrentRoom(claimId, generation) || message.roomId !== roomId) return;
+        setMessages(current => mergeMessages(current, [message]));
+        setClaims(current => current.map(item => item.id === claimId ? {
+          ...item,
+          conversation: {
+            lastMessage: message.content ?? (message.messageType === "IMAGE" ? "Ảnh" : ""),
+            lastMessageAt: message.createdAt,
+            unreadCount: 0,
+            custodyEscalated: item.conversation?.custodyEscalated
+          }
+        } : item));
+        if (message.messageType === "IMAGE") {
+          void api.listClaimEvidence(claimId).then(result => {
+            if (active && isCurrentRoom(claimId, generation)) setEvidence(result.items);
+          }).catch(() => undefined);
+        }
+      }
+    });
+    return () => { active = false; unsubscribe(); };
+  }, [claimId, claim?.canSend, claim?.room?.id, user?.id]);
 
   // Stop automatic retries after a failure; the panel offers an explicit retry.
   useEffect(() => {
@@ -562,12 +727,26 @@ export function ClaimsPage() {
     pendingQuestion.current = retry; sendInFlight.current = true; setSending(true); setError("");
     setQuestionsExpanded(false);
     questionToggle.current?.focus();
+    const optimisticId = `optimistic:${retry.key}`;
+    setMessages(current => mergeMessages(current, [{
+      id: optimisticId,
+      roomId: claim?.room?.id ?? claimId,
+      sender: { id: user?.id ?? "", fullName: user?.fullName ?? "Bạn" },
+      clientMessageId: retry.key,
+      content: question,
+      messageType: "TEXT",
+      isRead: false,
+      readAt: null,
+      createdAt: new Date().toISOString(),
+      pending: true
+    }]));
     try {
       const sent = await api.sendClaimMessage(claimId, question, retry.key);
       if (!isCurrentRoom(claimId, generation)) return;
       setMessages(current => mergeMessages(current, [sent])); pendingQuestion.current = null;
     } catch (reason) {
       if (isCurrentRoom(claimId, generation)) {
+        setMessages(current => current.filter(message => message.id !== optimisticId));
         setError(reason instanceof Error ? reason.message : "Không thể gửi câu hỏi");
         setQuestionsExpanded(true);
       }
@@ -593,13 +772,31 @@ export function ClaimsPage() {
     
     const retry = pendingMessage.current?.content === finalContent ? pendingMessage.current : { content: finalContent, clientMessageId: crypto.randomUUID() };
     pendingMessage.current = retry;
+    let optimisticId = "";
     try {
       const imageRetry = chatFile ? pendingImage.current?.file === chatFile && pendingImage.current.content === content
         ? pendingImage.current : { file: chatFile, content, key: crypto.randomUUID() } : null;
       if (imageRetry) pendingImage.current = imageRetry;
+      const clientMessageId = imageRetry?.key ?? retry.clientMessageId;
+      optimisticId = `optimistic:${clientMessageId}`;
+      setMessages(current => mergeMessages(current, [{
+        id: optimisticId,
+        roomId: claim?.room?.id ?? claimId,
+        sender: { id: user?.id ?? "", fullName: user?.fullName ?? "Bạn" },
+        clientMessageId,
+        content: imageRetry ? imageRetry.content : finalContent,
+        messageType: imageRetry ? "IMAGE" : "TEXT",
+        previewUrl: imageRetry ? chatPreview : undefined,
+        isRead: false,
+        readAt: null,
+        createdAt: new Date().toISOString(),
+        pending: true
+      }]));
+      setMessageDraft(current => current === content || current.trim() === content ? "" : current);
+      setReplyingToQuestion(current => current === replyingToQuestion ? null : current);
       const sent = imageRetry ? await api.sendClaimImage(claimId, imageRetry.file, imageRetry.content, imageRetry.key)
         : await api.sendClaimMessage(claimId, finalContent, retry.clientMessageId);
-      setClaims((items) => items.map((item) => item.id === claimId ? { ...item, conversation: { lastMessage: finalContent, lastMessageAt: sent.createdAt, unreadCount: 0, custodyEscalated: item.conversation?.custodyEscalated } } : item));
+      setClaims((items) => items.map((item) => item.id === claimId ? { ...item, conversation: { lastMessage: sent.content ?? (sent.messageType === "IMAGE" ? "Ảnh" : ""), lastMessageAt: sent.createdAt, unreadCount: 0, custodyEscalated: item.conversation?.custodyEscalated } } : item));
       if (!isCurrentRoom(claimId, generation)) return;
       setMessages((current) => mergeMessages(current, [sent]));
       if (imageRetry) {
@@ -607,11 +804,14 @@ export function ClaimsPage() {
         if (pendingImage.current?.key === imageRetry.key) pendingImage.current = null;
         void api.listClaimEvidence(claimId).then(result => { if (isCurrentRoom(claimId, generation)) setEvidence(result.items); }).catch(() => {});
       }
-      setMessageDraft(current => current === content || current.trim() === content ? "" : current);
-      setReplyingToQuestion(current => current === replyingToQuestion ? null : current);
       if (pendingMessage.current?.clientMessageId === retry.clientMessageId) pendingMessage.current = null;
     } catch (failure) {
-      if (isCurrentRoom(claimId, generation)) setError(failure instanceof Error ? failure.message : "Không thể gửi tin nhắn");
+      if (isCurrentRoom(claimId, generation)) {
+        if (optimisticId) setMessages(current => current.filter(message => message.id !== optimisticId));
+        setMessageDraft(current => current || content);
+        setReplyingToQuestion(current => current ?? replyingToQuestion);
+        setError(failure instanceof Error ? failure.message : "Không thể gửi tin nhắn");
+      }
     } finally { if (isCurrentRoom(claimId, generation)) { sendInFlight.current = false; setSending(false); } }
   }
 
@@ -686,14 +886,14 @@ export function ClaimsPage() {
         <ClaimList claims={visibleClaims} userId={user?.id} onSelect={(id) => navigate(`/claims/${id}`)} />
         {claimHasMore && <button className="claim-load-older claim-load-claims" type="button" disabled={loadingMoreClaims} onClick={() => void loadMoreClaims()}><RefreshCw className={loadingMoreClaims ? "is-spinning" : ""} /> {loadingMoreClaims ? "Đang tải..." : "Xem thêm"}</button>}
       </aside>
-      <DirectMessageDraft key={`${composePostId}:${searchParams.get("sourceFoundPostId") ?? ""}`} postId={composePostId} sourceFoundPostId={searchParams.get("sourceFoundPostId") ?? undefined} viewer={user ?? undefined} />
+      <DirectMessageDraft key={`${composePostId}:${searchParams.get("sourceFoundPostId") ?? ""}`} postId={composePostId} sourceFoundPostId={searchParams.get("sourceFoundPostId") ?? undefined} viewer={user ?? undefined} onClaimCreated={keepNewConversationVisible} />
     </section>
   </main>;
 
   return <main className={pageClass}>
     {mobileConversationToggle}
     {error && <div className="claim-alert"><AlertTriangle /> {error}</div>}
-    {loading ? <div className="claim-loading"><RefreshCw /><span>Đang tải conversations...</span></div> : <section className="claims-layout">
+    {loading && !claimId ? <div className="claim-loading"><RefreshCw /><span>Đang tải conversations...</span></div> : <section className="claims-layout">
       <aside className="claims-sidebar">
         <header><span>CONVERSATION</span><strong>{claims.length}</strong></header>
         <label className="conversation-search"><Search /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Tìm kiếm cuộc trò chuyện..." /></label>
@@ -709,15 +909,18 @@ export function ClaimsPage() {
               <header className="claim-chat-header">
                 <div><strong>{counterpartName(claim, user?.id)}</strong><span><i /> {claim.canSend ? "Đang hoạt động" : statusLabels[claim.status]}</span><small>{claimTitle(claim)}</small></div>
                 <div className="claim-header-actions"><Link to={`/reports?targetType=CLAIM&targetId=${claim.id}`} title="Báo cáo claim"><FileWarning /></Link>{claim.claimantId === user?.id && ["PENDING", "CONVERSATION_OPEN", "NEED_MORE_INFO"].includes(claim.status) && <button type="button" className="claim-close-button" disabled={withdrawing} onClick={() => void withdraw()} title="Đóng claim"><X /></button>}</div>
-                {showLostOwnerSafetyNote && <aside className="claim-lost-safety-note" aria-label="Lưu ý tránh lừa đảo">
-                  <AlertTriangle aria-hidden="true" />
-                  <div>
-                    <strong>Hãy xin ảnh vật phẩm trước khi hẹn nhận đồ</strong>
-                    <p>Yêu cầu người liên hệ gửi ảnh hiện tại và đối chiếu đặc điểm riêng của món đồ. Không chuyển tiền hoặc cung cấp thông tin nhạy cảm; ảnh tương đồng chưa chứng minh họ đang giữ đồ.</p>
+                <div className={`claim-chat-context${showLostOwnerSafetyNote ? " claim-chat-context--with-safety" : ""}`}>
+                  {showLostOwnerSafetyNote && <aside className="claim-lost-safety-note" aria-label="Lưu ý tránh lừa đảo">
+                    <AlertTriangle aria-hidden="true" />
+                    <div>
+                      <strong>Hãy xin ảnh vật phẩm trước khi hẹn nhận đồ</strong>
+                      <p>Yêu cầu người liên hệ gửi ảnh hiện tại và đối chiếu đặc điểm riêng của món đồ. Không chuyển tiền hoặc cung cấp thông tin nhạy cảm; ảnh tương đồng chưa chứng minh họ đang giữ đồ.</p>
+                    </div>
+                  </aside>}
+                  <div className="claim-chat-review">
+                    <ClaimVerificationPanel key={`review:${claim.id}`} claim={claim} verification={verification} loading={verificationLoading} loadError={verificationError} onRetry={() => void loadVerification(claim.id, true)} onVerificationChange={value => { if (isCurrentRoom(claim.id, displayedGeneration)) setVerification(value); }} onClaimChange={value => { if (isCurrentRoom(claim.id, displayedGeneration)) applyClaimUpdate(value); }} onDecisionMessage={(message) => { if (isCurrentRoom(claim.id, displayedGeneration)) setMessages((current) => mergeMessages(current, [message])); }} />
+                    <Link className="claim-history-link" to={`/claims/${claim.id}/history`}><Clock3 size={16} /> Lịch sử claim và xác minh</Link>
                   </div>
-                </aside>}
-                <div className="claim-chat-review">
-                  <ClaimVerificationPanel key={`review:${claim.id}`} claim={claim} verification={verification} loading={verificationLoading} loadError={verificationError} onRetry={() => void loadVerification(claim.id, true)} onVerificationChange={value => { if (isCurrentRoom(claim.id, displayedGeneration)) setVerification(value); }} onClaimChange={value => { if (isCurrentRoom(claim.id, displayedGeneration)) applyClaimUpdate(value); }} onDecisionMessage={(message) => { if (isCurrentRoom(claim.id, displayedGeneration)) setMessages((current) => mergeMessages(current, [message])); }} />
                 </div>
                 {claim.canSend && claim.finderId === user?.id && suggestedQuestions.length > 0 && <section className="claim-question-suggestions" aria-label="Câu hỏi đối chiếu vật phẩm">
                   <button ref={questionToggle} type="button" className="claim-question-toggle" aria-expanded={questionsExpanded} aria-controls="claim-question-options" title={questionsExpanded ? "Thu gọn câu hỏi" : "Mở câu hỏi gợi ý"} onClick={() => setQuestionsExpanded(value => !value)}><MessageCircle aria-hidden="true" /><span>Câu hỏi gợi ý ({Math.min(3, suggestedQuestions.length)})</span>{questionsExpanded ? <ChevronUp aria-hidden="true" /> : <ChevronDown aria-hidden="true" />}</button>

@@ -32,16 +32,18 @@ export function NotificationsPage() {
   }, [requestId]);
 
   async function open(item: AppNotification) {
-    if (!item.isRead) {
-      setItems((current) => current.map((entry) => entry.id === item.id ? { ...entry, isRead: true } : entry));
-      void api.markNotificationRead(item.id).catch(() => undefined);
-    }
     navigate(notificationDestination(item));
+    if (!item.isRead) {
+      void api.markNotificationRead(item.id).then(() => {
+        setItems((current) => current.map((entry) => entry.id === item.id ? { ...entry, isRead: true } : entry));
+      }).catch(() => undefined);
+    }
   }
 
   function markAllRead() {
-    setItems((current) => current.map((item) => ({ ...item, isRead: true })));
-    void api.markAllNotificationsRead().catch(() => undefined);
+    void api.markAllNotificationsRead().then(() => {
+      setItems((current) => current.map((item) => ({ ...item, isRead: true })));
+    }).catch(() => undefined);
   }
 
   return <section className="notifications-page">

@@ -18,6 +18,8 @@ const session = {
 };
 
 test.beforeEach(async ({ page }) => {
+  // Fake sessions must never send unconfigured requests to a running local API.
+  await page.route("**/api/**", route => route.fulfill({ status: 404, json: { message: "Unmocked API request in auth fixture" } }));
   // These background reads are not part of session recovery and must not trigger extra 401 refreshes.
   await page.route("**/api/auth/activity", route => route.fulfill({ status: 503, json: { message: "Activity unavailable in this fixture" } }));
   await page.route(/\/api\/notifications(?:\?.*)?$/, route => route.fulfill({ status: 503, json: { message: "Notifications unavailable in this fixture" } }));

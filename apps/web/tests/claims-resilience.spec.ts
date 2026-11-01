@@ -56,6 +56,14 @@ const claimB = {
   room: { id: "room-b" }
 };
 
+function futureIntakeDateTime() {
+  const date = new Date();
+  date.setDate(date.getDate() + 1);
+  date.setHours(9, 0, 0, 0);
+  while ([0, 6].includes(date.getDay())) date.setDate(date.getDate() + 1);
+  return new Date(date.getTime() - date.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
+}
+
 async function fulfillJson(route: Parameters<Page["route"]>[0], body: unknown) {
   await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
 }
@@ -252,6 +260,7 @@ test("chat popup cancels an existing meetup before Finder changes to custody",as
   await page.getByRole("button",{name:"Điều chỉnh quyết định",exact:true}).click();
   await page.getByRole("button",{name:"Chuyển sang custody",exact:true}).click();
   const custody=page.getByRole("dialog",{name:"Yêu cầu Bàn giao cho Quầy Staff (Custody)"});
+  await custody.locator("#claim-custody-requested-at").fill(futureIntakeDateTime());
   await custody.getByLabel("Ghi chú / Lời nhắn cho Staff").fill("Không rảnh cùng giờ");
   await custody.getByRole("button",{name:"Gửi Yêu cầu Bàn giao"}).click();
   await expect(custody).toHaveCount(0);expect(transfer).toMatchObject({decision:"ESCALATE_TO_CUSTODY",correctsEventId:"accepted-event",handoverPointId:"desk-a"});
@@ -349,7 +358,7 @@ test("ignores a late claim-room response after switching to another room", async
   await page.route("**/api/claims/dddddddd-dddd-4ddd-8ddd-dddddddddddd/messages*", (route) => {
     if (route.request().method() === "POST") return fulfillJson(route, {
       id: "message-b", roomId: "room-b", sender: { id: "e2e-user", fullName: "Sinh viên Demo" },
-      clientMessageId: "11111111-1111-4111-8111-111111111111", content: "Thông tin của phòng B", messageType: "TEXT",
+      clientMessageId: route.request().headers()["idempotency-key"], content: "Thông tin của phòng B", messageType: "TEXT",
       isRead: false, readAt: null, createdAt: "2026-09-06T00:01:00.000Z"
     });
     return fulfillJson(route, { room: { id: "room-b", claimId: claimB.id, status: claimB.status, participantRole: "CLAIMANT", createdAt: claimB.createdAt }, items: [], hasMore: false, nextCursor: null });
@@ -512,8 +521,9 @@ test("Finder can request custody from chat without closing or deciding the claim
   await page.goto(`/claims/${finderClaim.id}`);
   await page.getByRole("button", { name: /custody/i }).click();
   await expect(page.getByRole("heading", { name: "Yêu cầu Bàn giao cho Quầy Staff (Custody)" })).toBeVisible();
-  await expect(page.locator(".claim-custody-hours")).toContainText("08:00/08:15–12:00");
+  await expect(page.locator(".claim-custody-hours")).toContainText("08:00–12:00");
   await page.locator("#claim-custody-handover-point").selectOption(handoverPointId);
+  await page.locator("#claim-custody-requested-at").fill(futureIntakeDateTime());
   await page.locator("#claim-custody-reason").fill(reason);
   await page.getByRole("button", { name: "Gửi Yêu cầu Bàn giao" }).click();
 
@@ -524,6 +534,43 @@ test("Finder can request custody from chat without closing or deciding the claim
   expect(decisionBody?.decision).toBe("ESCALATE_TO_CUSTODY");
   expect(decisionBody?.reason).toBe(reason);
   expect(decisionBody?.handoverPointId).toBe(handoverPointId);
+  expect(typeof decisionBody?.requestedIntakeAt).toBe("string");
+});
+
+test("custody retries preserve their key until the requested intake time changes", async ({ page }) => {
+  await setupDirectLostRoom(page);
+  await page.route(`**/api/claims/${directLostClaim.id}/verification`, route => fulfillJson(route, directLostVerification));
+  await page.route("**/api/handover-points", route => fulfillJson(route, {
+    handoverPoints: [{ id: "66666666-6666-4666-8666-666666666666", name: "Campus desk", address: "Campus", isActive: true }]
+  }));
+  const calls: Array<{ key: string | undefined; time: string }> = [];
+  await page.route(`**/api/claims/${directLostClaim.id}/verification/decision`, route => {
+    const body = route.request().postDataJSON();
+    calls.push({ key: route.request().headers()["idempotency-key"], time: body.requestedIntakeAt });
+    return route.fulfill({ status: 503, json: { message: "Synthetic scheduling failure" } });
+  });
+  await page.goto(`/claims/${directLostClaim.id}`);
+  await page.getByRole("button", { name: "Chuyển sang custody", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Yêu cầu Bàn giao cho Quầy Staff (Custody)" });
+  const input = dialog.locator("#claim-custody-requested-at");
+  const time = futureIntakeDateTime();
+  await input.fill(time);
+  await dialog.getByLabel("Ghi chú / Lời nhắn cho Staff").fill("Bring the item to Staff");
+  const submit = dialog.getByRole("button", { name: "Gửi Yêu cầu Bàn giao" });
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    await submit.click();
+    await expect.poll(() => calls.length).toBe(attempt);
+    await expect(dialog).toContainText("Synthetic scheduling failure");
+    await expect(submit).toBeEnabled();
+  }
+  await input.fill(time.replace("T09:00", "T10:00"));
+  await submit.click();
+  await expect.poll(() => calls.length).toBe(3);
+  await expect(submit).toBeEnabled();
+  expect(calls[0].key).toBeTruthy();
+  expect(calls[1]).toEqual(calls[0]);
+  expect(calls[2].key).not.toBe(calls[0].key);
+  expect(calls[2].time).not.toBe(calls[0].time);
 });
 
 function secondMutationRoom() {
@@ -695,7 +742,7 @@ test("finishing the previous room's send cannot unlock a pending send in the cur
     await page.route(`**/api/claims/${claim.id}/messages`, async route => {
       if (route.request().method() !== "POST") return route.fallback();
       await new Promise<void>(resolve => releases.set(claim.id, resolve));
-      await fulfillJson(route, { id: `message-${claim.id}`, roomId: claim.roomId, sender: { id: session.user.id, fullName: session.user.fullName }, content: route.request().postDataJSON().content, messageType: "TEXT", createdAt: "2026-10-05T01:00:00Z" });
+      await fulfillJson(route, { id: `message-${claim.id}`, roomId: claim.roomId, sender: { id: session.user.id, fullName: session.user.fullName }, clientMessageId: route.request().headers()["idempotency-key"], content: route.request().postDataJSON().content, messageType: "TEXT", createdAt: "2026-10-05T01:00:00Z" });
     });
   }
   await page.goto(`/claims/${directLostClaim.id}`);
@@ -709,8 +756,36 @@ test("finishing the previous room's send cannot unlock a pending send in the cur
   await expect.poll(() => releases.has(second.id)).toBe(true);
   await settleMutation(page, `/claims/${directLostClaim.id}/messages`, releases.get(directLostClaim.id)!);
   await expect(page.getByRole("button", { name: "Gửi tin nhắn" })).toBeDisabled();
-  await expect(page.getByLabel("Tin nhắn riêng")).toHaveValue("PENDING_B");
+  await expect(page.getByLabel("Tin nhắn riêng")).toHaveValue("");
+  await expect(page.locator(".claim-messages .claim-message-pending")).toHaveCount(1);
+  await expect(page.locator(".claim-messages")).toContainText("PENDING_B");
   await settleMutation(page, `/claims/${second.id}/messages`, releases.get(second.id)!);
   await expect(page.locator(".claim-messages")).toContainText("PENDING_B");
   await expect(page.locator(".claim-messages")).not.toContainText("PENDING_A");
+  await expect(page.locator(".claim-messages .claim-message-pending")).toHaveCount(0);
+});
+
+test("claim conversation reloads after reconnect when opened from an offline notification", async ({ page, context }) => {
+  await setupDirectLostRoom(page);
+  let unavailable = false;
+  await page.route("**/api/claims**", route => unavailable ? route.abort() : route.fallback());
+  await page.route("**/api/realtime**", route => route.fulfill({ status: 403, body: "" }));
+  await page.route(/\/api\/notifications(?:\?.*)?$/, route => fulfillJson(route, { items: [{
+    id: "offline-claim-notification", type: "CLAIM_REQUEST_RECEIVED", title: "Claim update", body: "Open conversation",
+    entityType: "CLAIM", entityId: directLostClaim.id, isRead: false, readAt: null, createdAt: "2026-10-07T08:00:00.000Z"
+  }], unreadTotal: 1 }));
+
+  await page.goto("/notifications");
+  await expect(page.locator(".notifications-page__item")).toBeVisible();
+  unavailable = true;
+  await context.setOffline(true);
+  await page.locator(".notification-trigger").click();
+  await page.locator(".notification-item").click();
+  await expect(page).toHaveURL(new RegExp(`/claims/${directLostClaim.id}$`));
+  await expect(page.locator(".claim-workspace-state")).toBeVisible();
+
+  unavailable = false;
+  await context.setOffline(false);
+  await expect(page.locator(".claim-chat-header")).toBeVisible({ timeout: 10_000 });
+  await expect(page.locator(".claim-messages__empty")).toBeVisible();
 });

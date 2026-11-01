@@ -3,11 +3,22 @@ import type { TransactionContext } from "../../../shared/application/transaction
 export type NotificationEmailMode = "IMMEDIATE" | "DELAYED_UNREAD" | "DIGEST" | "DISABLED";
 export type EmailOutboxMode = Exclude<NotificationEmailMode, "DISABLED">;
 export type NotificationEmailEvent = "CHAT" | "CLAIM" | "MATCH" | "APPOINTMENT" | "HANDOVER" | "CUSTODY" | "OVERDUE" | "FEEDBACK";
+export const notificationCategories = ["CHAT", "CLAIM", "MATCH", "APPOINTMENT", "HANDOVER", "CUSTODY", "OVERDUE", "FEEDBACK"] as const;
+export type NotificationCategory = typeof notificationCategories[number];
+
+export interface NotificationChannelPreference {
+  inAppEnabled: boolean;
+  pushEnabled: boolean;
+  emailMode: NotificationEmailMode;
+}
+
+export type NotificationChannelPreferences = Record<NotificationCategory, NotificationChannelPreference>;
 
 export interface NotificationEmailPreferences {
   userId: string;
   chatMode: NotificationEmailMode;
   claimMode: NotificationEmailMode;
+  categories?: NotificationChannelPreferences;
   quietHoursStart: string | null;
   quietHoursEnd: string | null;
   timezone: string;
@@ -50,4 +61,37 @@ export interface NotificationEmailRepository {
   cancelLease(leaseToken: string, errorCode?: string): Promise<void>;
   deferLease(leaseToken: string, dueAt: Date): Promise<void>;
   releaseLeaseForRetry(input: { leaseToken: string; dueAt: Date; errorCode: string; }): Promise<void>;
+  enqueuePush?(input: { notificationId: string; recipientUserId: string; roomId?: string | null; }, queryable: TransactionContext): Promise<void>;
+  claimPushDue?(input: { limit: number; leaseToken: string; leaseSeconds: number; }): Promise<LeasedNotificationPush[]>;
+  markPushSent?(leaseToken: string, outboxId: string): Promise<void>;
+  releasePushForRetry?(input: { leaseToken: string; outboxId: string; dueAt: Date; errorCode: string; }): Promise<void>;
+  cancelPushLease?(leaseToken: string, outboxId: string, errorCode?: string): Promise<void>;
+  cancelPendingPush?(userId: string, notificationId: string): Promise<void>;
+  getPushSubscriptions?(userId: string): Promise<NotificationPushSubscription[]>;
+  savePushSubscription?(input: NotificationPushSubscriptionInput): Promise<void>;
+  deletePushSubscription?(userId: string, endpoint: string): Promise<void>;
+}
+
+export interface NotificationPushSubscriptionInput {
+  userId: string;
+  endpoint: string;
+  p256dh: string;
+  auth: string;
+}
+
+export interface NotificationPushSubscription {
+  endpoint: string;
+  p256dh: string;
+  auth: string;
+}
+
+export interface LeasedNotificationPush {
+  id: string;
+  notificationId: string;
+  recipientUserId: string;
+  subscriptionId: string;
+  endpoint: string;
+  p256dh: string;
+  auth: string;
+  attemptCount: number;
 }
