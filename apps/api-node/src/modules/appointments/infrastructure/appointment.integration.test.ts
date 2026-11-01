@@ -50,7 +50,7 @@ for(const photoOnly of [false,true])test(`SQL: meetup cancellation -> custody ->
   const original=verified.verification.history.find(event=>event.action==="VERIFICATION_ACCEPTED")!;
   const a=await f.services.appointmentService.create(f.ids.finder,{claimId:c,proposedAt:new Date(Date.now()+20*60_000).toISOString(),customLocation:"Main library entrance",requestKey:randomUUID()});
   const accepted=await f.services.appointmentService.act(f.ids.owner,a.id,{action:"ACCEPT",version:a.version,requestKey:randomUUID()});
-  const transfer={decision:"ESCALATE_TO_CUSTODY" as const,reason:"Schedules conflict; hand over to Staff",handoverPointId:f.point,correctsEventId:original.id,idempotencyKey:randomUUID()};
+  const transfer={decision:"ESCALATE_TO_CUSTODY" as const,reason:"Schedules conflict; hand over to Staff",handoverPointId:f.point,requestedIntakeAt:f.requestedIntakeAt,correctsEventId:original.id,idempotencyKey:randomUUID()};
   await assert.rejects(f.claims.decideVerification(c,f.ids.finder,transfer),{code:"conflict"});
   await f.services.appointmentService.act(f.ids.finder,a.id,{action:"CANCEL",version:accepted.version,requestKey:randomUUID(),reason:"Schedules conflict; use custody"});
   await f.claims.decideVerification(c,f.ids.finder,transfer);await f.claims.decideVerification(c,f.ids.finder,transfer);

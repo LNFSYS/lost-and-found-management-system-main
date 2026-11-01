@@ -39,7 +39,9 @@ test("SQL: journey shows committed post/chat/intake/return photos with current p
     const beforeReturn=await services.activityService.journey(viewer(ids.owner),ids.lost);
     assert.ok(beforeReturn.results.some(e=>e.action==="PHOTO_SHARED"&&e.images.some(i=>i.id===chatPhoto.id)));
     assert.equal(beforeReturn.results.find(e=>e.action==="CONVERSATION_OPENED")?.conversationWith,"Item finder");
-    assert.deepEqual(beforeReturn.results.find(e=>e.source==="MATCHING")?.matchingSuggestions?.map(match=>({title:match.title,score:match.score})),[{title:"Keys",score:0.88}]);
+    const suggestions=beforeReturn.results.find(e=>e.source==="MATCHING")?.matchingSuggestions ?? [];
+    assert.deepEqual(suggestions.map(match=>match.title),["Keys"]);
+    assert.ok(Math.abs(suggestions[0]!.score-0.88)<1e-6);
     assert.ok(beforeReturn.results.some(e=>e.action==="RECEIVED"&&e.images.some(i=>i.id===intake.intakeImageIds[0])));
     assert.ok(!beforeReturn.results.flatMap(e=>e.images).some(i=>i.kind==="RETURN"));
     const ownerFile=await services.activityService.journeyImage(viewer(ids.owner),ids.lost,"INTAKE",intake.intakeImageIds[0]!);
@@ -55,7 +57,8 @@ test("SQL: journey shows committed post/chat/intake/return photos with current p
     const foundJourney=await services.activityService.journey(viewer(ids.finder),ids.found);
     assert.ok(foundJourney.results.find(e=>e.action==="POST_CREATED")?.images.some(i=>i.id===postPhoto.id));
     assert.equal(foundJourney.results.find(e=>e.action==="CONVERSATION_OPENED")?.conversationWith,"Lost item owner");
-    assert.equal(foundJourney.results.find(e=>e.source==="MATCHING")?.matchingSuggestions?.[0]?.score,0.88);
+    const matchingScore=foundJourney.results.find(e=>e.source==="MATCHING")?.matchingSuggestions?.[0]?.score;
+    assert.ok(matchingScore !== undefined && Math.abs(matchingScore-0.88)<1e-6);
     const claimParticipantJourney=await services.activityService.journey(viewer(ids.owner),ids.found);
     assert.equal(claimParticipantJourney.results.find(e=>e.source==="MATCHING")?.matchingSuggestions,undefined);
     for(const [kind,id] of [["CLAIM",chatPhoto.id],["INTAKE",intake.intakeImageIds[0]!],["RETURN",proof.id]] as [JourneyImageKind,string][]){
@@ -83,7 +86,7 @@ test("SQL: photo-backed LOST custody has images without a FOUND post; competing 
     await pool.execute("DELETE FROM posts WHERE id=?",[ids.found]);
     const direct=await f.claims.createDirectMessage(ids.finder,{postId:ids.lost,contactCheckId:approval.checkId!,content:"Found your keys",clientMessageId:randomUUID()});
     const claimId=direct.claim.id,photo={id:approval.checkId!};
-    await f.claims.decideVerification(claimId,ids.finder,{decision:"ESCALATE_TO_CUSTODY",reason:"Transfer to Staff",handoverPointId:f.point,idempotencyKey:randomUUID()});
+    await f.claims.decideVerification(claimId,ids.finder,{decision:"ESCALATE_TO_CUSTODY",reason:"Transfer to Staff",handoverPointId:f.point,requestedIntakeAt:f.requestedIntakeAt,idempotencyKey:randomUUID()});
     const [requests]=await pool.query<import("mysql2").RowDataPacket[]>("SELECT id FROM custody_requests WHERE claim_id=?",[claimId]);
     const requestId=String(requests[0]!.id);const intake=await f.evidence(requestId);
     const receipt=await services.custodyRequestService.confirmIntake(requestId,intake,ids.staff);const item={id:receipt!.warehouseItemId!};
