@@ -165,6 +165,7 @@ test("does not apply a pending font-layout scroll after leaving the story", asyn
   await expect.poll(() => page.evaluate(() => (window as unknown as { storyFontProbe: { requested: boolean } }).storyFontProbe.requested)).toBe(true);
   await page.getByRole("link", { name: "Bài đăng", exact: true }).click();
   await expect(page).toHaveURL(/\/posts$/);
+  await expect(page.getByRole("heading", { name: "Bài đăng", exact: true })).toBeVisible();
   const before = await page.evaluate(() => (window as unknown as { storyFontProbe: { scrolls: number } }).storyFontProbe.scrolls);
   await page.evaluate(async () => {
     (window as unknown as { storyFontProbe: { release: () => void } }).storyFontProbe.release();

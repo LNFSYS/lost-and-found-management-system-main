@@ -1,0 +1,26 @@
+services:
+  mysql:
+    image: mysql:8.0
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${LNFS_LOCAL_DB_PASSWORD:-lnfs-local-only}
+      MYSQL_DATABASE: lnfs_auth
+    ports:
+      - "127.0.0.1:${LNFS_LOCAL_DB_PORT:-3306}:3306"
+    volumes:
+      - lnfs_mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p\"$${MYSQL_ROOT_PASSWORD}\" --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  mailpit:
+    image: axllent/mailpit:v1.33.0
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${LNFS_MAILPIT_SMTP_PORT:-1025}:1025"
+      - "127.0.0.1:${LNFS_MAILPIT_UI_PORT:-8025}:8025"
+
+volumes:
+  lnfs_mysql_data:

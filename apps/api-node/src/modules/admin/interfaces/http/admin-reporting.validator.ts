@@ -42,6 +42,6 @@ export const statisticsExportSchema = z.object({
   to: dateOnly.optional(),
   format: statisticsExportFormatSchema.default("CSV"),
   sections: z.array(statisticsExportSectionSchema).min(1).max(3).optional()
-}).default({});
+}).prefault({});
 
 export type { DashboardKpiQuery, ListModerationReportsQuery, ModerationActionType, ReportEntityType, ReportStatus, ReviewModerationReportInput, StatisticsExportFormat, StatisticsExportInput, StatisticsExportSection } from "../../application/admin-reporting.dto.js";

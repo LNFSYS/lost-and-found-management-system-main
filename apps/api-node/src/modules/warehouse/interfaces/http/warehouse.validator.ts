@@ -32,7 +32,7 @@ export const listWarehouseItemsQuerySchema = z.object({
 });
 
 export const intakeEvidenceFields = {
-  physicalReviewConfirmed: z.literal(true, { errorMap: () => ({ message: "Cần xác nhận đã đối chiếu vật phẩm thực tế tại quầy" }) }),
+  physicalReviewConfirmed: z.literal(true, { error: "Cần xác nhận đã đối chiếu vật phẩm thực tế tại quầy" }),
   intakeKey: uuid,
   intakeImageIds: z.array(uuid).min(1, "Cần ít nhất 1 ảnh tình trạng tiếp nhận").max(5, "Chỉ được tải tối đa 5 ảnh tiếp nhận").refine(ids => new Set(ids).size === ids.length, "Ảnh tiếp nhận không được trùng nhau"),
   receivedQuantity: z.number().int().min(1).max(999),
@@ -80,7 +80,7 @@ export const returnWarehouseItemSchema = z.object({
 export const verifyCustodyClaimSchema = z.object({
   claimId: uuid,
   recipientId: uuid,
-  verified: z.literal(true, { errorMap: () => ({ message: "Cần xác nhận đã đối chiếu quyền sở hữu tại quầy." }) }),
+  verified: z.literal(true, { error: "Cần xác nhận đã đối chiếu quyền sở hữu tại quầy." }),
   reason: z.string().trim().min(10, "Nội dung đối chiếu phải có từ 10 đến 1000 ký tự.").max(1000, "Nội dung đối chiếu phải có từ 10 đến 1000 ký tự.")
 });
 

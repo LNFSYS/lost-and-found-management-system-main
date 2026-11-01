@@ -6,19 +6,16 @@ import { AdminLayout } from "./components/admin-layout";
 import { RouteGuard } from "./components/route-guard";
 import { AuthProvider, useAuth } from "./context/auth-context";
 import { ForgotPasswordPage, ResetPasswordPage } from "./pages/forgot-password-page";
-import { AdminPage } from "./pages/admin-page";
 import { LoginPage } from "./pages/login-page";
 import { ProfilePage } from "./pages/profile-page";
 import { NotificationPreferencesPage } from "./pages/notification-preferences-page";
 import { NotificationsPage } from "./pages/notifications-page";
 import { RegisterPage } from "./pages/register-page";
-import { StaffPage } from "./pages/staff-page";
 import { PostsPage } from "./pages/posts-page";
 import { PostDetailPage } from "./pages/post-detail-page";
 import { PostMatchesPage } from "./pages/post-matches-page";
 import { registerServiceWorker } from "./pwa";
 import { ClaimsPage } from "./pages/claims-page";
-import { ReportsPage } from "./pages/reports-page";
 import "./styles.css";
 
 registerServiceWorker();
@@ -31,10 +28,15 @@ const AppointmentsPage=lazy(async()=>({default:(await import("./pages/appointmen
 const ItemJourneyPage=lazy(async()=>({default:(await import("./pages/item-journey-page")).ItemJourneyPage}));
 const AdminAuditPage=lazy(async()=>({default:(await import("./pages/admin-audit-page")).AdminAuditPage}));
 const ClaimHistoryPage=lazy(async()=>({default:(await import("./pages/claim-history-page")).ClaimHistoryPage}));
+const AdminPage = lazy(async () => ({ default: (await import("./pages/admin-page")).AdminPage }));
+const StaffPage = lazy(async () => ({ default: (await import("./pages/staff-page")).StaffPage }));
+const ReportsPage = lazy(async () => ({ default: (await import("./pages/reports-page")).ReportsPage }));
 
 function AdminHome() {
   const { user } = useAuth();
-  return user?.roles.includes("ADMIN") ? <AdminPage /> : <Navigate to="/admin/staff" replace />;
+  return user?.roles.includes("ADMIN")
+    ? <Suspense fallback={<p role="status">Đang tải...</p>}><AdminPage /></Suspense>
+    : <Navigate to="/admin/staff" replace />;
 }
 
 function StaffRedirect() {
@@ -55,7 +57,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
             <Route element={<RouteGuard roles={["STAFF", "ADMIN"]} />}>
               <Route element={<AdminLayout />}>
                 <Route path="/admin" element={<AdminHome />} />
-                <Route path="/admin/staff" element={<StaffPage />} />
+                <Route path="/admin/staff" element={<Suspense fallback={<p role="status">Đang tải...</p>}><StaffPage /></Suspense>} />
                 <Route element={<RouteGuard roles={["ADMIN"]} />}><Route path="/admin/audit" element={<Suspense fallback={<p role="status">Đang tải nhật ký...</p>}><AdminAuditPage /></Suspense>} /></Route>
               </Route>
               <Route path="/staff" element={<StaffRedirect />} />
@@ -75,7 +77,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
               <Route path="/claims" element={<ClaimsPage />} />
               <Route path="/claims/:claimId/history" element={<Suspense fallback={<p role="status">Đang tải lịch sử claim...</p>}><ClaimHistoryPage /></Suspense>} />
               <Route path="/claims/:claimId" element={<ClaimsPage />} />
-              <Route path="/reports" element={<ReportsPage />} />
+              <Route path="/reports" element={<Suspense fallback={<p role="status">Đang tải...</p>}><ReportsPage /></Suspense>} />
             </Route>
           </Route>
           <Route path="*" element={<Navigate to="/home" replace />} />
