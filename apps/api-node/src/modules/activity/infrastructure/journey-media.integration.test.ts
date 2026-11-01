@@ -42,6 +42,11 @@ test("SQL: journey shows committed post/chat/intake/return photos with current p
     const suggestions=beforeReturn.results.find(e=>e.source==="MATCHING")?.matchingSuggestions ?? [];
     assert.deepEqual(suggestions.map(match=>match.title),["Keys"]);
     assert.ok(Math.abs(suggestions[0]!.score-0.88)<1e-6);
+    const finderJourneyBeforeReturn=await services.activityService.journey(viewer(ids.finder),ids.found);
+    assert.ok(finderJourneyBeforeReturn.results.find(e=>e.action==="POST_CREATED")?.images.some(i=>i.id===postPhoto.id));
+    assert.equal(finderJourneyBeforeReturn.results.find(e=>e.action==="CONVERSATION_OPENED")?.conversationWith,"Lost item owner");
+    const finderMatchingScore=finderJourneyBeforeReturn.results.find(e=>e.source==="MATCHING")?.matchingSuggestions?.[0]?.score;
+    assert.ok(finderMatchingScore !== undefined && Math.abs(finderMatchingScore-0.88)<1e-6);
     assert.ok(beforeReturn.results.some(e=>e.action==="RECEIVED"&&e.images.some(i=>i.id===intake.intakeImageIds[0])));
     assert.ok(!beforeReturn.results.flatMap(e=>e.images).some(i=>i.kind==="RETURN"));
     const ownerFile=await services.activityService.journeyImage(viewer(ids.owner),ids.lost,"INTAKE",intake.intakeImageIds[0]!);
@@ -52,13 +57,9 @@ test("SQL: journey shows committed post/chat/intake/return photos with current p
     const afterReturn=await services.activityService.journey(viewer(ids.owner),ids.lost);
     const returned=afterReturn.results.find(e=>e.source==="RETURN"&&e.action==="RETURN_COMPLETED");
     assert.equal(returned?.images[0]?.id,proof.id);assert.equal(returned?.images[0]?.kind,"RETURN");
+    assert.deepEqual(afterReturn.results.find(e=>e.source==="MATCHING")?.matchingSuggestions,[]);
     const text=JSON.stringify(afterReturn);
     for(const secret of ["private://","storage_ref","public_id","private-identity","private-phone","@example.invalid",unusedProof.id,postEvidence.id,document.id])assert.ok(!text.includes(secret));
-    const foundJourney=await services.activityService.journey(viewer(ids.finder),ids.found);
-    assert.ok(foundJourney.results.find(e=>e.action==="POST_CREATED")?.images.some(i=>i.id===postPhoto.id));
-    assert.equal(foundJourney.results.find(e=>e.action==="CONVERSATION_OPENED")?.conversationWith,"Lost item owner");
-    const matchingScore=foundJourney.results.find(e=>e.source==="MATCHING")?.matchingSuggestions?.[0]?.score;
-    assert.ok(matchingScore !== undefined && Math.abs(matchingScore-0.88)<1e-6);
     const claimParticipantJourney=await services.activityService.journey(viewer(ids.owner),ids.found);
     assert.equal(claimParticipantJourney.results.find(e=>e.source==="MATCHING")?.matchingSuggestions,undefined);
     for(const [kind,id] of [["CLAIM",chatPhoto.id],["INTAKE",intake.intakeImageIds[0]!],["RETURN",proof.id]] as [JourneyImageKind,string][]){
