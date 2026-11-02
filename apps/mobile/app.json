@@ -1,0 +1,62 @@
+{
+  "expo": {
+    "name": "FPTU Lost & Found",
+    "slug": "fptu-lost-found",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/icon.png",
+    "scheme": "lnfs",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "bundleIdentifier": "com.fptu.lostfound",
+      "supportsTablet": true
+    },
+    "android": {
+      "package": "com.fptu.lostfound",
+      "permissions": [
+        "CAMERA",
+        "READ_MEDIA_IMAGES",
+        "INTERNET"
+      ],
+      "adaptiveIcon": {
+        "backgroundColor": "#F5F8FB",
+        "foregroundImage": "./assets/images/android-icon-foreground.png",
+        "monochromeImage": "./assets/images/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "output": "server",
+      "favicon": "./assets/images/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Cho phép FPTU Lost & Found truy cập thư viện để chọn ảnh đại diện.",
+          "cameraPermission": "Cho phép FPTU Lost & Found chụp ảnh đại diện.",
+          "microphonePermission": false
+        }
+      ],
+      [
+        "expo-secure-store",
+        {
+          "configureAndroidBackup": true
+        }
+      ],
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#F5F8FB",
+          "image": "./assets/images/splash-icon.png",
+          "imageWidth": 160,
+          "resizeMode": "contain"
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}
