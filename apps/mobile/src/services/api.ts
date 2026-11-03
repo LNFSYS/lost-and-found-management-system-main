@@ -1,4 +1,5 @@
 import axios, { AxiosHeaders, create, isAxiosError, type AxiosError, type InternalAxiosRequestConfig } from "axios";
+import { Platform } from "react-native";
 import * as SecureStore from "expo-secure-store";
 
 const ACCESS_TOKEN_KEY = "lnfs.access-token";
@@ -26,6 +27,94 @@ export interface SessionResponse {
   user: MobileUser;
 }
 
+export type MatchTier = "WEAK" | "SUGGESTION" | "NOTIFY" | "HIGH_CONFIDENCE";
+
+export interface MatchSummary {
+  candidateCount: number;
+  suggestionCount: number;
+  topScore: number | null;
+  topTier: MatchTier | null;
+  lastCalculatedAt: string | null;
+}
+
+export interface PostSummary {
+  id: string;
+  type: "LOST" | "FOUND";
+  status: "OPEN" | "MATCHED" | "RESOLVED" | "CLOSED" | "EXPIRED" | "HIDDEN";
+  visibilityMode: "PUBLIC" | "PRIVATE_DETAILS";
+  title: string;
+  description: string | null;
+  category: { id: string; name: string | null; icon: string | null } | null;
+  location: {
+    area: { id: string; name: string | null } | null;
+    building: { id: string; name: string | null } | null;
+    roomText: string | null;
+    customLocation: string | null;
+  };
+  handoverPoint: { id: string; name: string | null; address: string | null } | null;
+  lostFoundAt: string | null;
+  owner: { id: string; fullName: string };
+  media: { id: string; url: string; mediaKind: "ITEM" | "EVIDENCE"; isAiGenerated?: boolean }[];
+  canEdit: boolean;
+  createdAt: string;
+  matchSummary?: MatchSummary;
+}
+
+export interface PostListResponse {
+  total: number;
+  page: number;
+  pageSize: number;
+  items: PostSummary[];
+}
+
+export interface PostListFilters {
+  q?: string;
+  type?: "LOST" | "FOUND";
+  status?: PostSummary["status"];
+  categoryId?: string;
+  page?: number;
+  pageSize?: number;
+  sort?: "newest" | "oldest" | "incident_newest" | "incident_oldest";
+}
+
+export interface PostCatalog {
+  categories: { id: string; name: string; parentId: string | null }[];
+  areas: { id: string; name: string }[];
+  buildings: { id: string; areaId: string; name: string }[];
+  handoverPoints: { id: string; name: string; address: string; openingHours: string | null }[];
+}
+
+export interface HandoverPoint {
+  id: string;
+  name: string;
+  address?: string | null;
+  openingHours?: string | null;
+}
+
+export interface CreateCustodyRequestPayload {
+  postId?: string | null;
+  claimId?: string | null;
+  reason?: string | null;
+  handoverPointId?: string | null;
+  requestedIntakeAt?: string;
+  intakeType?: "CUSTODY_TRANSFER" | "RETURN_HANDOVER";
+}
+
+export interface CustodyRequest {
+  id: string;
+  status: "PENDING" | "ACCEPTED" | "INTAKED" | "REJECTED" | "CANCELLED";
+  reason: string | null;
+  requestedIntakeAt?: string | null;
+}
+
+export interface UserReportPayload {
+  targetType: "POST" | "CLAIM" | "CHAT" | "HANDOVER";
+  targetId: string;
+  reason: string;
+  details?: string;
+  idempotencyKey?: string;
+}
+
 interface RetryableRequest extends InternalAxiosRequestConfig {
   _authRetry?: boolean;
 }
@@ -34,24 +123,75 @@ const authExpiredListeners = new Set<() => void>();
 let refreshInFlight: Promise<SessionResponse> | null = null;
 
 export const tokenStorage = {
-  get: () => SecureStore.getItemAsync(ACCESS_TOKEN_KEY),
-  set: (token: string) => SecureStore.setItemAsync(ACCESS_TOKEN_KEY, token),
-  clear: () => SecureStore.deleteItemAsync(ACCESS_TOKEN_KEY),
+  get: async () => {
+    if (Platform.OS === "web") {
+      try {
+        return typeof localStorage !== "undefined" ? localStorage.getItem(ACCESS_TOKEN_KEY) : null;
+      } catch {
+        return null;
+      }
+    }
+    return SecureStore.getItemAsync(ACCESS_TOKEN_KEY);
+  },
+  set: async (token: string) => {
+    if (Platform.OS === "web") {
+      try {
+        if (typeof localStorage !== "undefined") localStorage.setItem(ACCESS_TOKEN_KEY, token);
+      } catch {}
+      return;
+    }
+    return SecureStore.setItemAsync(ACCESS_TOKEN_KEY, token);
+  },
+  clear: async () => {
+    if (Platform.OS === "web") {
+      try {
+        if (typeof localStorage !== "undefined") localStorage.removeItem(ACCESS_TOKEN_KEY);
+      } catch {}
+      return;
+    }
+    return SecureStore.deleteItemAsync(ACCESS_TOKEN_KEY);
+  },
 };
 
 export const cachedUserStorage = {
   async get(): Promise<MobileUser | null> {
-    const value = await SecureStore.getItemAsync(CACHED_USER_KEY);
+    let value: string | null = null;
+    if (Platform.OS === "web") {
+      try {
+        value = typeof localStorage !== "undefined" ? localStorage.getItem(CACHED_USER_KEY) : null;
+      } catch {
+        return null;
+      }
+    } else {
+      value = await SecureStore.getItemAsync(CACHED_USER_KEY);
+    }
     if (!value) return null;
     try {
       return JSON.parse(value) as MobileUser;
     } catch {
-      await SecureStore.deleteItemAsync(CACHED_USER_KEY);
+      if (Platform.OS === "web") {
+        try { if (typeof localStorage !== "undefined") localStorage.removeItem(CACHED_USER_KEY); } catch {}
+      } else {
+        await SecureStore.deleteItemAsync(CACHED_USER_KEY);
+      }
       return null;
     }
   },
-  set: (user: MobileUser) => SecureStore.setItemAsync(CACHED_USER_KEY, JSON.stringify(user)),
-  clear: () => SecureStore.deleteItemAsync(CACHED_USER_KEY),
+  async set(user: MobileUser) {
+    const json = JSON.stringify(user);
+    if (Platform.OS === "web") {
+      try { if (typeof localStorage !== "undefined") localStorage.setItem(CACHED_USER_KEY, json); } catch {}
+      return;
+    }
+    return SecureStore.setItemAsync(CACHED_USER_KEY, json);
+  },
+  async clear() {
+    if (Platform.OS === "web") {
+      try { if (typeof localStorage !== "undefined") localStorage.removeItem(CACHED_USER_KEY); } catch {}
+      return;
+    }
+    return SecureStore.deleteItemAsync(CACHED_USER_KEY);
+  },
 };
 
 export function subscribeAuthExpired(listener: () => void) {
@@ -150,6 +290,16 @@ export async function mediaBlob(path: string): Promise<Blob> {
   return response.data;
 }
 
+export async function loadMediaDataUri(path: string): Promise<string> {
+  const blob = await mediaBlob(path);
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => (typeof reader.result === "string" ? resolve(reader.result) : reject(new Error("Không đọc được ảnh")));
+    reader.onerror = () => reject(reader.error ?? new Error("Không đọc được ảnh"));
+    reader.readAsDataURL(blob);
+  });
+}
+
 export function isNetworkError(error: unknown): error is AxiosError {
   return isAxiosError(error) && !error.response && error.code !== "ERR_CANCELED";
 }
@@ -162,3 +312,59 @@ export function getApiErrorMessage(error: unknown) {
   }
   return error instanceof Error ? error.message : "Đã có lỗi xảy ra. Vui lòng thử lại.";
 }
+
+export function buildQueryString(params: Record<string, unknown>): string {
+  const query = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== "") {
+      query.set(key, String(value));
+    }
+  });
+  const str = query.toString();
+  return str ? `?${str}` : "";
+}
+
+export const postService = {
+  listPosts: (filters: PostListFilters = {}) =>
+    api.get<PostListResponse>(`/posts${buildQueryString(filters as Record<string, unknown>)}`).then((res) => res.data),
+  listMyPosts: (filters: PostListFilters = {}) =>
+    api.get<PostListResponse>(`/posts/mine${buildQueryString(filters as Record<string, unknown>)}`).then((res) => res.data),
+  getPost: (postId: string) =>
+    api.get<PostSummary>(`/posts/${postId}`).then((res) => res.data),
+  getPostCatalog: () =>
+    api.get<PostCatalog>("/posts/catalog").then((res) => res.data),
+  listPublicHandoverPoints: () =>
+    api.get<{ handoverPoints: HandoverPoint[] }>("/handover-points").then((res) => res.data),
+  getMyCustodyRequestByPost: (postId: string) =>
+    api.get<{ request: CustodyRequest | null; warehouseItem?: { id: string; status: string } | null }>(`/staff/custody-requests/mine/post/${postId}`).then((res) => res.data),
+  createCustodyRequest: (payload: CreateCustodyRequestPayload) =>
+    api.post<{ request: CustodyRequest; idempotent: boolean }>("/staff/custody-requests", payload).then((res) => res.data),
+  submitReport: (payload: UserReportPayload) => {
+    const body = {
+      ...payload,
+      idempotencyKey: payload.idempotencyKey ?? `rep_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
+    };
+    return api.post("/reports", body).then((res) => res.data);
+  },
+  findConversationByPost: async (postId: string) => {
+    try {
+      const res = await api.get<{
+        items: {
+          id: string;
+          item?: { postId?: string };
+          posts?: { found?: { id?: string }; lost?: { id?: string } };
+          conversation?: { lastMessageAt?: string | null; lastMessage?: string | null };
+        }[];
+        hasMore?: boolean;
+      }>(`/claims?page=1&pageSize=50`);
+      const match = res.data.items?.find((claim) => {
+        const samePost = claim.item?.postId === postId || claim.posts?.found?.id === postId || claim.posts?.lost?.id === postId;
+        const hasMessage = Boolean(claim.conversation?.lastMessageAt || claim.conversation?.lastMessage);
+        return samePost && hasMessage;
+      });
+      return match ?? null;
+    } catch {
+      return null;
+    }
+  },
+};

@@ -15,3 +15,10 @@ test-results/
 certs/*.pem
 certs/*.crt
 certs/*.key
+
+# AI Agents & Local Skills
+.agents/
+.github/agents/
+.github/hooks/
+.github/prompts/
+.github/skills/

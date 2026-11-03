@@ -1,6 +1,6 @@
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaProvider } from "react-native-safe-area-context";
 import { AuthProvider } from "@/context/auth-context";
 import { NotificationCountProvider } from "@/context/notification-count-context";
 import { OfflineBanner } from "@/components/ui/offline-banner";
@@ -12,9 +12,7 @@ export default function RootLayout() {
       <AuthProvider>
         <NotificationCountProvider>
           <StatusBar style="dark" />
-          <SafeAreaView edges={["top"]} style={{ backgroundColor: colors.background }}>
-            <OfflineBanner />
-          </SafeAreaView>
+          <OfflineBanner />
           <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.background } }} />
         </NotificationCountProvider>
       </AuthProvider>
