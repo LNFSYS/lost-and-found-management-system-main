@@ -3,7 +3,11 @@
   "private": true,
   "version": "0.1.0",
   "description": "FPTU Lost & Found web application with planned Progressive Web App support.",
-  "workspaces": ["apps/api-node", "apps/web", "apps/mobile"],
+  "workspaces": [
+    "apps/api-node",
+    "apps/web",
+    "apps/mobile"
+  ],
   "scripts": {
     "start": "npm run dev",
     "dev": "concurrently -n API,WEB -c blue,green \"npm run dev:api\" \"npm run dev:web\"",

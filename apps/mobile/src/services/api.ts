@@ -44,6 +44,7 @@ export interface PostSummary {
   visibilityMode: "PUBLIC" | "PRIVATE_DETAILS";
   title: string;
   description: string | null;
+  contactInfo?: string | null;
   category: { id: string; name: string | null; icon: string | null } | null;
   location: {
     area: { id: string; name: string | null } | null;
@@ -82,6 +83,64 @@ export interface PostCatalog {
   areas: { id: string; name: string }[];
   buildings: { id: string; areaId: string; name: string }[];
   handoverPoints: { id: string; name: string; address: string; openingHours: string | null }[];
+}
+
+export interface MobileImageFile {
+  uri: string;
+  name?: string;
+  type?: string;
+  size?: number;
+  id?: string;
+}
+
+export interface CreatePostPayload {
+  type: "LOST" | "FOUND";
+  title: string;
+  description: string;
+  categoryId: string;
+  illustrationId?: string;
+  illustrationDraftId?: string;
+  areaId?: string | null;
+  buildingId?: string | null;
+  roomText?: string | null;
+  customLocation?: string | null;
+  contactInfo: string;
+  lostFoundAt: string;
+  handoverPointId?: string | null;
+  visibilityMode?: "PUBLIC" | "PRIVATE_DETAILS";
+  analysisSignals?: {
+    visualAttributes: string[];
+    visibleText: string[];
+    confidence: number;
+  };
+}
+
+export interface UpdatePostPayload {
+  title?: string;
+  description?: string;
+  categoryId?: string;
+  areaId?: string | null;
+  buildingId?: string | null;
+  roomText?: string | null;
+  customLocation?: string | null;
+  contactInfo?: string;
+  lostFoundAt?: string;
+  handoverPointId?: string | null;
+  visibilityMode?: "PUBLIC" | "PRIVATE_DETAILS";
+  status?: "OPEN" | "CLOSED" | "RESOLVED";
+}
+
+export interface ImageAnalysisResult {
+  title: string;
+  description: string;
+  suggestedCategory: { id: string; name: string; parentId: string | null } | null;
+  visualAttributes: string[];
+  visibleText: string[];
+  confidence: number;
+  warnings: string[];
+  assistedBy: string;
+  model: string;
+  imageCount: number;
 }
 
 export interface HandoverPoint {
@@ -300,6 +359,39 @@ export async function loadMediaDataUri(path: string): Promise<string> {
   });
 }
 
+export async function appendFileToFormData(
+  formData: FormData,
+  fieldName: string,
+  file: MobileImageFile
+): Promise<void> {
+  const filename = file.name || "image.jpg";
+  const mimeType = file.type || "image/jpeg";
+  if (file.uri.startsWith("/") || (file.id && !file.uri.startsWith("file:") && !file.uri.startsWith("content:"))) {
+    try {
+      const blob = await mediaBlob(file.uri);
+      formData.append(fieldName, blob, filename);
+      return;
+    } catch {
+      // Fallback to standard
+    }
+  }
+  if (Platform.OS === "web") {
+    try {
+      const response = await fetch(file.uri);
+      const blob = await response.blob();
+      formData.append(fieldName, blob, filename);
+      return;
+    } catch {
+      // Fallback to standard object append if fetch fails
+    }
+  }
+  formData.append(fieldName, {
+    uri: file.uri,
+    name: filename,
+    type: mimeType,
+  } as unknown as Blob);
+}
+
 export function isNetworkError(error: unknown): error is AxiosError {
   return isAxiosError(error) && !error.response && error.code !== "ERR_CANCELED";
 }
@@ -331,6 +423,28 @@ export const postService = {
     api.get<PostListResponse>(`/posts/mine${buildQueryString(filters as Record<string, unknown>)}`).then((res) => res.data),
   getPost: (postId: string) =>
     api.get<PostSummary>(`/posts/${postId}`).then((res) => res.data),
+  createPost: (payload: CreatePostPayload): Promise<PostSummary> =>
+    api.post<PostSummary>("/posts", payload).then((res) => res.data),
+  updatePost: (postId: string, payload: UpdatePostPayload): Promise<PostSummary> =>
+    api.patch<PostSummary>(`/posts/${postId}`, payload).then((res) => res.data),
+  deletePost: (postId: string): Promise<void> =>
+    api.delete<void>(`/posts/${postId}`).then((res) => res.data),
+  analyzePostImage: async (type: "LOST" | "FOUND", files: MobileImageFile[]): Promise<ImageAnalysisResult> => {
+    const formData = new FormData();
+    formData.append("type", type);
+    for (const file of files) {
+      await appendFileToFormData(formData, "files", file);
+    }
+    return api.post<ImageAnalysisResult>("/posts/analyze-image", formData).then((res) => res.data);
+  },
+  uploadPostMedia: async (postId: string, file: MobileImageFile, mediaKind: "ITEM" | "EVIDENCE" = "ITEM"): Promise<{ id: string; url: string }> => {
+    const formData = new FormData();
+    await appendFileToFormData(formData, "file", file);
+    formData.append("mediaKind", mediaKind);
+    return api.post<{ id: string; url: string }>(`/posts/${postId}/media`, formData).then((res) => res.data);
+  },
+  deletePostMedia: (postId: string, mediaId: string): Promise<void> =>
+    api.delete<void>(`/posts/${postId}/media/${mediaId}`).then((res) => res.data),
   getPostCatalog: () =>
     api.get<PostCatalog>("/posts/catalog").then((res) => res.data),
   listPublicHandoverPoints: () =>

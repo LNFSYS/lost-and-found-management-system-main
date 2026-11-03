@@ -10,7 +10,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useLocalSearchParams } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import { PostCard } from "@/components/post-card";
 import { countActiveFilters, PostFilterSheet } from "@/components/post-filter-sheet";
@@ -225,10 +225,26 @@ export default function PostsScreen({ defaultTab }: PostsScreenProps) {
     <SafeAreaView edges={["top", "left", "right"]} style={styles.safeArea}>
       {/* Top Header */}
       <View style={styles.header}>
-        <View style={styles.brandRow}>
-          <Text style={styles.brandText}>FPTU LOST &amp; FOUND</Text>
+        <View style={styles.headerRow}>
+          <View style={styles.headerLeft}>
+            <View style={styles.brandRow}>
+              <Text style={styles.brandText}>FPTU LOST &amp; FOUND</Text>
+            </View>
+            <Text style={styles.title}>Bảng tin Thất lạc &amp; Nhặt được</Text>
+          </View>
+          <Pressable
+            onPress={() => router.push("/posts/create")}
+            style={({ pressed }) => [
+              styles.headerCreateBtn,
+              pressed && styles.headerCreateBtnPressed,
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel="Đăng tin mới"
+          >
+            <MaterialCommunityIcons name="plus" size={18} color={colors.surface} />
+            <Text style={styles.headerCreateBtnText}>Đăng tin</Text>
+          </Pressable>
         </View>
-        <Text style={styles.title}>Bảng tin Thất lạc &amp; Nhặt được</Text>
       </View>
 
       {/* Segmented Tab Bar */}
@@ -501,6 +517,20 @@ export default function PostsScreen({ defaultTab }: PostsScreenProps) {
         onReset={handleResetFilters}
         initialCatalog={catalog}
       />
+
+      {/* Floating Action Button */}
+      <Pressable
+        onPress={() => router.push("/posts/create")}
+        style={({ pressed }) => [
+          styles.fab,
+          pressed && styles.fabPressed,
+        ]}
+        accessibilityRole="button"
+        accessibilityLabel="Đăng tin mới"
+      >
+        <MaterialCommunityIcons name="plus" size={20} color={colors.surface} />
+        <Text style={styles.fabText}>Đăng tin</Text>
+      </Pressable>
     </SafeAreaView>
   );
 }
@@ -514,6 +544,59 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.sm,
     paddingBottom: spacing.xs,
+  },
+  headerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  headerLeft: {
+    flex: 1,
+    paddingRight: spacing.sm,
+  },
+  headerCreateBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: colors.primary,
+    paddingVertical: 7,
+    paddingHorizontal: spacing.md,
+    borderRadius: radii.pill,
+    gap: 4,
+  },
+  headerCreateBtnPressed: {
+    opacity: 0.82,
+    transform: [{ scale: 0.97 }],
+  },
+  headerCreateBtnText: {
+    color: colors.surface,
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  fab: {
+    position: "absolute",
+    bottom: spacing.xl,
+    right: spacing.lg,
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: colors.primary,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: radii.pill,
+    gap: 8,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  fabPressed: {
+    opacity: 0.88,
+    transform: [{ scale: 0.96 }],
+  },
+  fabText: {
+    color: colors.surface,
+    fontSize: 15,
+    fontWeight: "700",
   },
   brandRow: {
     marginBottom: 2,

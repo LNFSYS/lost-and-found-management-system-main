@@ -220,10 +220,11 @@ export default function PostDetailScreen() {
   };
 
   const handleEditPost = () => {
-    Alert.alert(
-      "Chỉnh sửa bài viết",
-      `Bạn đang chỉnh sửa bài đăng "${post?.title}". Tính năng chỉnh sửa trực tiếp trên mobile đang đồng bộ hóa với Web Portal. Mã bài đăng: ${post?.id}`
-    );
+    if (!post?.id) return;
+    router.push({
+      pathname: "/posts/create",
+      params: { editPostId: post.id },
+    });
   };
 
   const onCarouselScroll = (
