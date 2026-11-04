@@ -62,7 +62,11 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
               </Route>
               <Route path="/staff" element={<StaffRedirect />} />
             </Route>
-            <Route element={<AppLayout />}>
+          </Route>
+          <Route element={<AppLayout />}>
+            <Route path="/posts/:postId" element={<PostDetailPage />} />
+            <Route path="/create-post" element={<Navigate to="/home#two-sides" replace />} />
+            <Route element={<RouteGuard />}>
               <Route path="/home" element={<Suspense fallback={<main className="center-state">Đang mở hành trình...</main>}><HomePage /></Suspense>} />
               <Route path="/profile" element={<ProfilePage />} />
               <Route path="/notification-preferences" element={<NotificationPreferencesPage />} />
@@ -73,7 +77,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
               <Route path="/appointments/:appointmentId" element={<Suspense fallback={<p role="status">Đang tải lịch hẹn...</p>}><AppointmentsPage /></Suspense>} />
               <Route path="/posts/:postId/journey" element={<Suspense fallback={<p role="status">Đang tải hành trình...</p>}><ItemJourneyPage /></Suspense>} />
               <Route path="/posts/:postId/matches" element={<PostMatchesPage />} />
-              <Route path="/posts/:postId" element={<PostDetailPage />} />
+
               <Route path="/claims" element={<ClaimsPage />} />
               <Route path="/claims/:claimId/history" element={<Suspense fallback={<p role="status">Đang tải lịch sử claim...</p>}><ClaimHistoryPage /></Suspense>} />
               <Route path="/claims/:claimId" element={<ClaimsPage />} />

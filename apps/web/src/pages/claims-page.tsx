@@ -255,7 +255,7 @@ function DirectMessageDraft({ postId, sourceFoundPostId, viewer, onClaimCreated 
       </div>
       <form className="claim-message-form claim-message-form--draft" onSubmit={submit}>
         <div className="input-row">
-          <textarea aria-label="Tin nhắn riêng" value={draft} onChange={(event) => setDraft(event.target.value)} maxLength={5000} placeholder="Nhập tin nhắn hoặc câu hỏi..." />
+          <textarea aria-label="Tin nhắn riêng" value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); if (!sending && draft.trim() && !(post.type === "LOST" && !contactCheckId)) { void submit(event); } } }} maxLength={5000} placeholder="Nhập tin nhắn hoặc câu hỏi..." />
           <div className="message-actions"><button type="submit" disabled={sending || !draft.trim() || (post.type === "LOST" && !contactCheckId)} title="Gửi tin nhắn"><Send /></button></div>
         </div>
       </form>
@@ -300,7 +300,26 @@ export function ClaimsPage() {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<ConversationFilter>("ALL");
   const [attachmentMenu, setAttachmentMenu] = useState(false);
+  const attachmentMenuRef = useRef<HTMLDivElement>(null);
   const [showMobileConversations, setShowMobileConversations] = useState(false);
+
+  useEffect(() => {
+    if (!attachmentMenu) return;
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") setAttachmentMenu(false);
+    }
+    function handleClickOutside(event: MouseEvent) {
+      if (attachmentMenuRef.current && !attachmentMenuRef.current.contains(event.target as Node)) {
+        setAttachmentMenu(false);
+      }
+    }
+    document.addEventListener("keydown", handleKeyDown);
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [attachmentMenu]);
   const [chatFile, setChatFile] = useState<File | null>(null);
   const [chatPreview, setChatPreview] = useState("");
   const [checkedQuestions, setCheckedQuestions] = useState<{ claimId: string; questions: string[] } | null>(null);
@@ -962,8 +981,8 @@ export function ClaimsPage() {
                   }} />
                   {replyingToQuestion && <div className="claim-reply-tag"><span>Đang trả lời: {replyingToQuestion}</span><button type="button" onClick={cancelReplyQuestion} title="Hủy trả lời"><X /></button></div>}
                   <div className="input-row">
-                    <div className="message-attachment"><button type="button" disabled={sending} aria-expanded={attachmentMenu} onClick={() => setAttachmentMenu((value) => !value)} title="Thêm"><Plus /></button>{attachmentMenu && <div className="message-attachment-menu"><button type="button" onClick={() => { setAttachmentMenu(false); chatFileInput.current?.click(); }}><Image /> Ảnh</button><button type="button" onClick={() => jumpTo("private-evidence")}><FileCheck2 /> Evidence</button></div>}</div>
-                    <textarea aria-label="Tin nhắn riêng" value={messageDraft} onChange={(event) => setMessageDraft(event.target.value)} maxLength={chatFile ? 255 : 5000} placeholder={replyingToQuestion ? "Nhập câu trả lời..." : "Nhập tin nhắn hoặc câu hỏi..."} />
+                    <div className="message-attachment" ref={attachmentMenuRef}><button type="button" disabled={sending} aria-expanded={attachmentMenu} onClick={() => setAttachmentMenu((value) => !value)} title="Thêm"><Plus /></button>{attachmentMenu && <div className="message-attachment-menu"><button type="button" onClick={() => { setAttachmentMenu(false); chatFileInput.current?.click(); }}><Image /> Ảnh</button><button type="button" onClick={() => jumpTo("private-evidence")}><FileCheck2 /> Evidence</button></div>}</div>
+                    <textarea aria-label="Tin nhắn riêng" value={messageDraft} onChange={(event) => setMessageDraft(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); if (!sending && (messageDraft.trim() || chatFile) && !(chatFile && messageDraft.trim().length > 255)) { void submitMessage(event); } } }} maxLength={chatFile ? 255 : 5000} placeholder={replyingToQuestion ? "Nhập câu trả lời..." : "Nhập tin nhắn hoặc câu hỏi..."} />
                     <div className="message-actions">
                       {verification?.participantRole === "FINDER" && claim.canSend && <button type="button" className="verification-button" onClick={() => setShowVerificationModal(true)} title="Gửi câu hỏi xác minh"><ShieldCheck /></button>}
                       <button type="submit" disabled={sending || (!messageDraft.trim() && !chatFile) || Boolean(chatFile && messageDraft.trim().length > 255)} title="Gửi tin nhắn"><Send /></button>

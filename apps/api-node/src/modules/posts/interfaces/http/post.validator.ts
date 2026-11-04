@@ -119,8 +119,17 @@ export const updatePostSchema = z.object({
   status: writableStatus.optional()
 }).refine(atLeastOne, "Cần ít nhất một trường để cập nhật");
 
-export const listPostsQuerySchema = z.object({
+function resolveQueryAlias<T extends { q?: string; query?: string; keyword?: string }>(data: T): T {
+  return {
+    ...data,
+    q: data.q || data.query || data.keyword || undefined
+  };
+}
+
+const baseListPostsObject = z.object({
   q: z.string().trim().max(120).optional(),
+  query: z.string().trim().max(120).optional(),
+  keyword: z.string().trim().max(120).optional(),
   type: postType.optional(),
   status: publicStatus.optional(),
   categoryId: uuid.optional(),
@@ -131,9 +140,11 @@ export const listPostsQuerySchema = z.object({
   sort: z.enum(["newest", "oldest", "incident_newest", "incident_oldest"]).default("newest")
 });
 
-export const listOwnPostsQuerySchema = listPostsQuerySchema.extend({
+export const listPostsQuerySchema = baseListPostsObject.transform(resolveQueryAlias);
+
+export const listOwnPostsQuerySchema = baseListPostsObject.extend({
   status: ownerStatus.optional()
-});
+}).transform(resolveQueryAlias);
 
 export const uploadMediaSchema = z.object({
   mediaKind: z.enum(["ITEM", "EVIDENCE"]).default("ITEM"),

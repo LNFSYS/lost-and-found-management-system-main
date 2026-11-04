@@ -104,6 +104,10 @@ export function createPostController({ postService, geminiImageService, illustra
       response.json(await postService.updatePost(routeId(request), request.auth!.sub, updatePostSchema.parse(request.body), request.auth!));
     },
 
+    async closePost(request: Request, response: Response) {
+      response.json(await postService.updatePost(routeId(request), request.auth!.sub, { status: "CLOSED" }, request.auth!));
+    },
+
     async softDeletePost(request: Request, response: Response) {
       await postService.softDeletePost(routeId(request), request.auth!.sub);
       response.status(204).send();

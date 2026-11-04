@@ -15,7 +15,7 @@ import { checkMatchingRefreshSchema } from "./matching-refresh-schema.js";
 import { matchingRefreshWorkerError, type MatchingRefreshPhase } from "./matching-refresh-worker-error.js";
 import { createBackgroundTask, createShutdownHandler } from "./background-task.js";
 
-const app = createApp();
+const app = createApp({ trustProxy: 1 });
 export const server = createServer(app);
 const allowedOrigins = parseAllowedOrigins(env.frontendUrl);
 const chatSocketServer = createChatSocketServer({

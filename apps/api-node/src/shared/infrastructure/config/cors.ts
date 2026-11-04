@@ -15,6 +15,9 @@ export function isOriginAllowed(origin: string | undefined, configuredOrigins: S
 
   try {
     const url = new URL(normalizedOrigin);
+    if (url.protocol === "https:" && (url.hostname.endsWith(".trycloudflare.com") || url.hostname.endsWith(".loca.lt"))) {
+      return true;
+    }
     return ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname) && ["http:", "https:"].includes(url.protocol);
   } catch {
     return false;

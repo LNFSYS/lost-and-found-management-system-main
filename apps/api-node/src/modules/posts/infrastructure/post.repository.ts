@@ -230,7 +230,8 @@ export function buildListWhere(filters: ListPostsQuery | ListOwnPostsQuery, owne
     }
   }
   if (filters.q) {
-    const q = `%${normalizePostText(filters.q)}%`;
+    const normalizedQ = normalizePostText(filters.q).replace(/[%_]/g, "\\$&");
+    const q = `%${normalizedQ}%`;
     if (ownerId || scope.allPrivate) {
       where.push("(p.title_normalized LIKE ? OR p.description_normalized LIKE ?)");
       values.push(q, q);

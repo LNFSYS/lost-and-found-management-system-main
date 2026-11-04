@@ -759,6 +759,8 @@ export interface PostListFilters {
   type?: "LOST" | "FOUND";
   status?: PostSummary["status"];
   categoryId?: string;
+  areaId?: string;
+  buildingId?: string;
   page?: number;
   pageSize?: number;
   sort?: "newest" | "oldest" | "incident_newest" | "incident_oldest";
@@ -1240,6 +1242,8 @@ export const api = {
   listPosts: (filters: PostListFilters = {}) => raw<PostListResponse>(`/posts${queryString(filters)}`),
   listMyPosts: (filters: PostListFilters = {}) => raw<PostListResponse>(`/posts/mine${queryString(filters)}`),
   getPost: (postId: string) => raw<PostSummary>(`/posts/${postId}`),
+  closePost: (postId: string) => raw<PostSummary>(`/posts/${postId}/close`, { method: "POST" }),
+  deletePost: (postId: string) => raw<void>(`/posts/${postId}`, { method: "DELETE" }),
   getPostMedia: (path: string) => mediaBlob(path),
   createPost: (payload: CreatePostPayload) => raw<CreatedPost>("/posts", { method: "POST", body: JSON.stringify(payload) }),
   analyzePostImage: (type: "LOST" | "FOUND", files: File[]) => {
