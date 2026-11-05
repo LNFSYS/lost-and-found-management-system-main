@@ -1,44 +1,77 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
-import { router, useLocalSearchParams } from "expo-router";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
+import { router, useLocalSearchParams } from "expo-router";
+import { SafeAreaView } from "react-native-safe-area-context";
 
+import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { ErrorBanner } from "@/components/ui/error-banner";
 import { Input } from "@/components/ui/input";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { colors, radii, spacing } from "@/constants/theme";
 import { useAuth } from "@/context/auth-context";
-import { getApiErrorMessage, returnService, type ReturnFeedbackEligibility } from "@/services/api";
+import { appointmentService, createRequestUuid, getApiErrorMessage, returnService, type AppointmentAction, type AppointmentRecord, type ReturnFeedbackEligibility, type ReturnFeedbackRecord } from "@/services/api";
 
+const statusLabels: Record<AppointmentRecord["status"], string> = {
+  PENDING: "Chờ phản hồi",
+  ACCEPTED: "Đã chấp nhận",
+  REJECTED: "Đã từ chối",
+  CANCELLED: "Đã hủy",
+  COMPLETED: "Đã trao trả",
+  RESCHEDULED: "Đã đổi lịch",
+};
+const responseLabels = { PENDING: "Chưa xác nhận", CONFIRMED: "Đã xác nhận", DISPUTED: "Cần đối soát" } as const;
+const responseColors = { PENDING: colors.warning, CONFIRMED: colors.success, DISPUTED: colors.danger } as const;
 const ratingLabels = ["Rất không hài lòng", "Chưa hài lòng", "Bình thường", "Hài lòng", "Rất hài lòng"];
 const reputationDeltas = [-3, -1, 1, 4, 6];
 
-function dateTime(value: string | null) {
+function dateTime(value: string | null | undefined) {
   if (!value) return "Chưa ghi nhận";
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? "Chưa ghi nhận" : new Intl.DateTimeFormat("vi-VN", { dateStyle: "medium", timeStyle: "short" }).format(date);
+  return Number.isNaN(date.getTime()) ? "Chưa ghi nhận" : new Intl.DateTimeFormat("vi-VN", { weekday: "long", day: "2-digit", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" }).format(date);
 }
 
-export default function ReturnFeedbackScreen() {
-  const { appointmentId, postTitle } = useLocalSearchParams<{ appointmentId: string; postTitle?: string }>();
+function eventLabel(action: string) {
+  const labels: Record<string, string> = {
+    PROPOSED: "Đề xuất lịch hẹn", ACCEPT: "Chấp nhận lịch hẹn", REJECT: "Từ chối lịch hẹn", CANCEL: "Hủy lịch hẹn",
+    FINDER_CONFIRM: "Finder xác nhận đã giao", OWNER_CONFIRM: "Người nhận xác nhận đã nhận", FINDER_DISPUTE: "Finder yêu cầu đối soát",
+    OWNER_DISPUTE: "Người nhận yêu cầu đối soát", NO_SHOW: "Báo bên còn lại không đến", RETURN_COMPLETED: "Hoàn tất trao trả", REMINDER_QUEUED: "Đã tạo nhắc lịch",
+  };
+  return labels[action] ?? action.toLowerCase().replaceAll("_", " ");
+}
+
+export default function AppointmentDetailScreen() {
+  const { appointmentId } = useLocalSearchParams<{ appointmentId: string }>();
   const { user } = useAuth();
+  const [appointment, setAppointment] = useState<AppointmentRecord | null>(null);
   const [eligibility, setEligibility] = useState<ReturnFeedbackEligibility | null>(null);
-  const [rating, setRating] = useState(0);
-  const [comment, setComment] = useState("");
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [checkedItem, setCheckedItem] = useState(false);
+  const [reason, setReason] = useState("");
+  const [rating, setRating] = useState(0);
+  const [comment, setComment] = useState("");
+  const [sendingFeedback, setSendingFeedback] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const actionKey = useRef<{ fingerprint: string; key: string } | null>(null);
+  const feedbackKey = useRef<string | null>(null);
 
   const load = useCallback(async (refresh = false) => {
     if (!appointmentId) return;
     setError(null);
     if (refresh) setRefreshing(true);
     try {
-      setEligibility(await returnService.getFeedbackEligibility(appointmentId));
+      const result = await appointmentService.get(appointmentId);
+      setAppointment(result);
+      if (result.status === "COMPLETED") {
+        const feedbackResult = await returnService.getFeedbackEligibility(appointmentId).catch(() => null);
+        setEligibility(feedbackResult);
+      } else {
+        setEligibility(null);
+      }
     } catch (loadError) {
       setError(getApiErrorMessage(loadError));
     } finally {
@@ -47,190 +80,158 @@ export default function ReturnFeedbackScreen() {
     }
   }, [appointmentId]);
 
-  useEffect(() => {
-    const timer = setTimeout(() => { void load(); }, 0);
-    return () => clearTimeout(timer);
-  }, [load]);
+  useEffect(() => { void load(); }, [load]);
 
-  const targetName = useMemo(() => {
-    if (!eligibility || !user) return "người tham gia còn lại";
-    return eligibility.participants.claimant.id === user.id
-      ? eligibility.participants.finder.fullName
-      : eligibility.participants.claimant.fullName;
-  }, [eligibility, user]);
-
-  const submit = async () => {
-    if (!appointmentId || !eligibility?.eligible || rating < 1 || submitting) return;
-    if (/[<>]/.test(comment)) {
-      setError("Nhận xét không được chứa ký tự < hoặc >.");
-      return;
-    }
-    setSubmitting(true);
+  const act = async (action: AppointmentAction) => {
+    if (!appointment || busy) return;
+    if (action === "CANCEL" && reason.trim().length < 3) { setError("Nhập lý do hủy lịch (ít nhất 3 ký tự)."); return; }
+    if (action === "CONFIRM" && !checkedItem) { setError("Xác nhận sau khi đã trực tiếp đối chiếu đúng vật phẩm."); return; }
+    const fingerprint = JSON.stringify([appointment.id, action, appointment.version, checkedItem, reason.trim()]);
+    if (actionKey.current?.fingerprint !== fingerprint) actionKey.current = { fingerprint, key: createRequestUuid() };
+    setBusy(true);
     setError(null);
-    setSuccess(null);
+    setNotice(null);
     try {
-      const result = await returnService.submitFeedback(appointmentId, rating, comment);
-      setEligibility((current) => current ? {
-        ...current,
-        eligible: false,
-        reason: "Bạn đã gửi đánh giá cho lần trả đồ này.",
-        currentUserFeedback: result.feedback,
-      } : current);
-      setSuccess(result.reputationEventCreated
-        ? `Đã gửi đánh giá cho ${targetName}. Điểm uy tín của họ đã được cập nhật.`
-        : `Đánh giá cho ${targetName} đã được xác nhận.`);
-      void returnService.getFeedbackEligibility(appointmentId).then(setEligibility).catch(() => undefined);
-    } catch (submitError) {
-      setError(getApiErrorMessage(submitError));
+      const updated = await appointmentService.act(appointment.id, {
+        action,
+        version: appointment.version,
+        requestKey: actionKey.current.key,
+        physicallyChecked: action === "CONFIRM" ? checkedItem : undefined,
+        reason: reason.trim() || undefined,
+      });
+      actionKey.current = null;
+      setAppointment(updated);
+      setCheckedItem(false);
+      if (updated.status === "COMPLETED") {
+        setEligibility(await returnService.getFeedbackEligibility(updated.id).catch(() => null));
+        setNotice("Cả hai bên đã xác nhận hoàn tất trao trả.");
+      } else if (action === "CONFIRM") {
+        setNotice("Đã ghi nhận xác nhận của bạn. Đang chờ bên còn lại xác nhận.");
+      } else {
+        setNotice("Trạng thái lịch hẹn đã được cập nhật.");
+      }
+    } catch (actionError) {
+      setError(getApiErrorMessage(actionError));
     } finally {
-      setSubmitting(false);
+      setBusy(false);
     }
   };
 
-  if (loading) return <SafeAreaView style={styles.safeArea}><LoadingSpinner label="Đang kiểm tra điều kiện đánh giá…" /></SafeAreaView>;
+  const submitFeedback = async () => {
+    if (!appointmentId || !eligibility?.eligible || rating < 1 || sendingFeedback) return;
+    if (/[<>]/.test(comment)) { setError("Nhận xét không được chứa ký tự < hoặc >."); return; }
+    feedbackKey.current ??= createRequestUuid();
+    setSendingFeedback(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const result = await returnService.submitFeedback(appointmentId, rating, comment);
+      feedbackKey.current = null;
+      const feedbackRecord = result.feedback as ReturnFeedbackRecord;
+      setEligibility((current) => current ? { ...current, eligible: false, currentUserFeedback: feedbackRecord } : current);
+      setNotice(result.reputationEventCreated ? "Đã gửi đánh giá và cập nhật điểm uy tín." : "Đánh giá đã được ghi nhận.");
+    } catch (feedbackError) {
+      setError(getApiErrorMessage(feedbackError));
+    } finally {
+      setSendingFeedback(false);
+    }
+  };
 
-  const existingFeedback = eligibility?.currentUserFeedback;
+  if (loading) return <SafeAreaView style={styles.safeArea}><LoadingSpinner label="Đang tải lịch bàn giao…" /></SafeAreaView>;
+  if (!appointment) return <SafeAreaView style={styles.safeArea} edges={["top", "left", "right"]}><View style={styles.missing}><ErrorBanner message={error ?? "Không tìm thấy lịch hẹn."} onRetry={() => void load()} /><Button title="Quay lại lịch hẹn" variant="secondary" onPress={() => router.replace("/appointments" as never)} /></View></SafeAreaView>;
+
+  const finder = appointment.finderId === user?.id;
+  const ownResponse = finder ? appointment.finderResponse : appointment.ownerResponse;
+  const otherResponse = finder ? appointment.ownerResponse : appointment.finderResponse;
+  const ended = ["COMPLETED", "CANCELLED", "REJECTED"].includes(appointment.status);
+  const occurred = new Date(appointment.proposedAt).getTime() <= Date.now();
+  const canCancel = (appointment.finderResponse === "PENDING" && appointment.ownerResponse === "PENDING") || (appointment.finderResponse === "DISPUTED" && appointment.ownerResponse === "DISPUTED");
+  const canNoShow = occurred && Date.now() >= new Date(appointment.proposedAt).getTime() + 15 * 60_000 && appointment.finderResponse === "PENDING" && appointment.ownerResponse === "PENDING";
+  const feedbackRecord = eligibility?.currentUserFeedback;
   const selectedDelta = rating > 0 ? reputationDeltas[rating - 1] : null;
 
   return (
     <SafeAreaView style={styles.safeArea} edges={["top", "left", "right"]}>
       <View style={styles.topBar}>
-        <Pressable accessibilityRole="button" accessibilityLabel="Quay lại" onPress={() => router.back()} hitSlop={8} style={styles.backButton}><MaterialCommunityIcons name="arrow-left" size={22} color={colors.ink} /></Pressable>
-        <Text accessibilityRole="header" style={styles.topTitle}>Đánh giá trao trả</Text>
-        <View style={styles.topBarSpacer} />
+        <Pressable accessibilityRole="button" accessibilityLabel="Quay lại lịch hẹn" onPress={() => router.back()} style={styles.backButton}><MaterialCommunityIcons name="arrow-left" size={22} color={colors.ink} /></Pressable>
+        <Text accessibilityRole="header" style={styles.topTitle}>Chi tiết lịch hẹn</Text>
+        <Pressable accessibilityRole="button" accessibilityLabel="Tải lại lịch hẹn" onPress={() => void load(true)} style={styles.refreshButton}><MaterialCommunityIcons name="refresh" size={19} color={colors.primary} /></Pressable>
       </View>
       <ScrollView contentContainerStyle={styles.content} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void load(true)} tintColor={colors.primary} />} keyboardShouldPersistTaps="handled">
         {error ? <ErrorBanner message={error} onRetry={() => void load()} /> : null}
-        {success ? <View style={styles.successBanner}><MaterialCommunityIcons name="check-circle" size={20} color={colors.success} /><Text style={styles.successText}>{success}</Text></View> : null}
+        {notice ? <View style={styles.notice}><MaterialCommunityIcons name="check-circle-outline" size={18} color={colors.success} /><Text style={styles.noticeText}>{notice}</Text></View> : null}
+        <Card style={styles.summaryCard}>
+          <View style={styles.summaryTop}><View style={styles.calendarIcon}><MaterialCommunityIcons name="calendar-check-outline" size={22} color={colors.primary} /></View><View style={styles.summaryCopy}><View style={[styles.statusPill, statusTones[appointment.status]]}><Text style={[styles.statusText, statusToneText[appointment.status]]}>{statusLabels[appointment.status]}</Text></View><Text style={styles.title}>{appointment.title}</Text></View></View>
+          <View style={styles.detailRow}><MaterialCommunityIcons name="calendar-clock-outline" size={19} color={colors.primary} /><View style={styles.detailCopy}><Text style={styles.detailLabel}>Thời gian dự kiến</Text><Text style={styles.detailValue}>{dateTime(appointment.proposedAt)}</Text></View></View>
+          <View style={styles.detailRow}><MaterialCommunityIcons name="map-marker-radius-outline" size={19} color={colors.primary} /><View style={styles.detailCopy}><Text style={styles.detailLabel}>Điểm bàn giao</Text><Text style={styles.detailValue}>{appointment.location ?? "Chưa ghi nhận địa điểm"}</Text></View></View>
+          <View style={styles.responses}>
+            <View style={styles.responseCard}><Text style={styles.responseRole}>Người nhặt · Finder</Text><Text style={[styles.responseStatus, { color: responseColors[appointment.finderResponse] }]}>{responseLabels[appointment.finderResponse]}</Text></View>
+            <View style={styles.responseCard}><Text style={styles.responseRole}>Người nhận · Claimant</Text><Text style={[styles.responseStatus, { color: responseColors[appointment.ownerResponse] }]}>{responseLabels[appointment.ownerResponse]}</Text></View>
+          </View>
+          {appointment.completedAt ? <View style={styles.infoSuccess}><MaterialCommunityIcons name="check-decagram-outline" size={19} color={colors.success} /><Text style={styles.infoSuccessText}>Hoàn tất lúc {dateTime(appointment.completedAt)}</Text></View> : null}
+          {appointment.noShowUserId ? <View style={styles.infoWarning}><MaterialCommunityIcons name="account-alert-outline" size={19} color={colors.warning} /><Text style={styles.infoWarningText}>Đã ghi nhận báo vắng mặt. Đây không tự động xác nhận trao trả hoặc xử phạt.</Text></View> : null}
+          {appointment.custodyAuthorized ? <View style={styles.infoSuccess}><MaterialCommunityIcons name="warehouse" size={19} color={colors.success} /><Text style={styles.infoSuccessText}>Lượt bàn giao này được staff quản lý tại quầy.</Text></View> : null}
+        </Card>
 
-        {eligibility ? (
-          <>
-            <Card style={styles.summaryCard}>
-              <View style={styles.eyebrowRow}><MaterialCommunityIcons name="handshake-outline" size={19} color={colors.primary} /><Text style={styles.eyebrow}>SAU KHI TRAO TRẢ</Text></View>
-              <Text style={styles.title}>{postTitle || "Xác nhận trải nghiệm trao trả"}</Text>
-              <Text style={styles.dateText}>Hoàn tất lúc {dateTime(eligibility.completedAt)}</Text>
-              <View style={styles.personRow}>
-                <View style={styles.personIcon}><MaterialCommunityIcons name="account-outline" size={20} color={colors.primary} /></View>
-                <View style={styles.personCopy}><Text style={styles.personRole}>Người nhận lại</Text><Text style={styles.personName}>{eligibility.participants.claimant.fullName}</Text></View>
-              </View>
-              <View style={styles.personRow}>
-                <View style={[styles.personIcon, styles.finderIcon]}><MaterialCommunityIcons name="account-search-outline" size={20} color={colors.success} /></View>
-                <View style={styles.personCopy}><Text style={styles.personRole}>Người nhặt được</Text><Text style={styles.personName}>{eligibility.participants.finder.fullName}</Text></View>
-              </View>
-            </Card>
+        {!ended && !appointment.custodyAuthorized ? <Card style={styles.actionsCard}>
+          <Text style={styles.sectionTitle}>Thao tác</Text>
+          {appointment.status === "PENDING" && appointment.proposerId !== user?.id ? <>
+            <Text style={styles.helperText}>Bạn nhận được đề xuất này. Hãy kiểm tra địa điểm và thời gian trước khi phản hồi.</Text>
+            <Button title="Chấp nhận lịch hẹn" onPress={() => void act("ACCEPT")} loading={busy} />
+            <Button title="Từ chối lịch" variant="secondary" onPress={() => void act("REJECT")} disabled={busy} />
+          </> : null}
+          {appointment.status === "PENDING" && appointment.proposerId === user?.id ? <View style={styles.waiting}><MaterialCommunityIcons name="clock-outline" size={18} color={colors.warning} /><Text style={styles.helperText}>Đang chờ bên còn lại phản hồi đề xuất.</Text></View> : null}
+          {appointment.status === "ACCEPTED" ? <>
+            {otherResponse === "DISPUTED" ? <View style={styles.infoWarning}><MaterialCommunityIcons name="alert-circle-outline" size={18} color={colors.danger} /><Text style={[styles.infoWarningText, { color: colors.danger }]}>Bên còn lại yêu cầu đối soát. Chưa bên nào được tính là đã trả hoặc nhận đồ.</Text></View> : null}
+            <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: checkedItem }} onPress={() => setCheckedItem((value) => !value)} style={styles.checkRow}><MaterialCommunityIcons name={checkedItem ? "checkbox-marked" : "checkbox-blank-outline"} size={22} color={checkedItem ? colors.primary : colors.muted} /><Text style={styles.checkText}>{finder ? "Tôi đã trực tiếp đối chiếu và giao đúng vật phẩm cho người nhận." : "Tôi đã trực tiếp đối chiếu và nhận đúng vật phẩm."}</Text></Pressable>
+            {ownResponse === "CONFIRMED" ? <View style={styles.infoSuccess}><MaterialCommunityIcons name="check-circle-outline" size={18} color={colors.success} /><Text style={styles.infoSuccessText}>Bạn đã xác nhận. Đang chờ bên còn lại xác nhận hoàn tất.</Text></View> : null}
+            <Button title={finder ? "Xác nhận đã giao đồ" : "Xác nhận đã nhận đồ"} onPress={() => void act("CONFIRM")} loading={busy} disabled={!occurred || !checkedItem || ownResponse === "CONFIRMED"} />
+            <Button title="Báo cần đối soát" variant="secondary" onPress={() => void act("DISPUTE")} disabled={busy || !occurred} />
+            <Button title="Báo bên còn lại không đến" variant="danger" onPress={() => void act("NO_SHOW")} disabled={busy || !canNoShow} />
+            {!occurred ? <Text style={styles.helperText}>Xác nhận hoặc báo vắng mặt chỉ khả dụng khi đến thời gian hẹn.</Text> : canNoShow ? <Text style={styles.helperText}>Báo vắng mặt chỉ ghi nhận sự việc; trạng thái trao trả không tự hoàn tất.</Text> : null}
+          </> : null}
+          {canCancel ? <>
+            <Input label="Lý do hủy hoặc ghi chú đối soát" value={reason} onChangeText={setReason} multiline maxLength={500} placeholder="Nhập lý do (ít nhất 3 ký tự)…" />
+            <Button title="Hủy lịch hẹn" variant="danger" onPress={() => void act("CANCEL")} loading={busy} disabled={reason.trim().length < 3} />
+          </> : null}
+          {ownResponse !== "PENDING" && appointment.status === "ACCEPTED" ? <Text style={styles.helperText}>Đổi thời gian bằng cách hủy lịch khi đủ điều kiện, sau đó đề xuất lịch mới trong phòng Claim.</Text> : null}
+        </Card> : null}
 
-            {existingFeedback ? (
-              <Card style={styles.resultCard}>
-                <View style={styles.resultHeading}><MaterialCommunityIcons name="star-check-outline" size={22} color={colors.success} /><Text style={styles.resultTitle}>Đánh giá đã gửi</Text></View>
-                <View style={styles.starsRow}>
-                  {Array.from({ length: 5 }, (_, index) => <MaterialCommunityIcons key={index} name={index < existingFeedback.rating ? "star" : "star-outline"} size={24} color={colors.warning} />)}
-                  <Text style={styles.ratingCaption}>{ratingLabels[existingFeedback.rating - 1]}</Text>
-                </View>
-                {existingFeedback.comment ? <Text style={styles.existingComment}>“{existingFeedback.comment}”</Text> : <Text style={styles.helperText}>Bạn không để lại nhận xét.</Text>}
-                <Text style={styles.helperText}>Đánh giá đã góp phần cập nhật điểm uy tín cho người nhận.</Text>
-              </Card>
-            ) : eligibility.eligible ? (
-              <Card style={styles.formCard}>
-                <Text style={styles.formTitle}>Bạn đánh giá thế nào về {targetName}?</Text>
-                <Text style={styles.helperText}>Đánh giá chỉ dành cho người tham gia lượt trả đồ đã hoàn tất.</Text>
-                <View style={styles.ratingControl} accessibilityRole="radiogroup" accessibilityLabel="Chọn số sao">
-                  {Array.from({ length: 5 }, (_, index) => {
-                    const value = index + 1;
-                    const selected = value <= rating;
-                    return (
-                      <Pressable
-                        key={value}
-                        accessibilityRole="radio"
-                        accessibilityLabel={`${value} sao, ${ratingLabels[index]}`}
-                        accessibilityState={{ selected }}
-                        onPress={() => { setRating(value); setError(null); }}
-                        style={({ pressed }) => [styles.starButton, pressed && styles.pressed]}
-                      >
-                        <MaterialCommunityIcons name={selected ? "star" : "star-outline"} size={36} color={selected ? colors.warning : colors.border} />
-                      </Pressable>
-                    );
-                  })}
-                </View>
-                <Text style={styles.ratingCaption}>{rating > 0 ? `${rating}/5 · ${ratingLabels[rating - 1]}` : "Chọn từ 1 đến 5 sao"}</Text>
-                {selectedDelta !== null ? (
-                  <View style={[styles.pointsHint, selectedDelta >= 0 ? styles.positivePoints : styles.negativePoints]}>
-                    <MaterialCommunityIcons name="chart-line" size={17} color={selectedDelta >= 0 ? colors.success : colors.danger} />
-                    <Text style={[styles.pointsText, selectedDelta >= 0 ? styles.positiveText : styles.negativeText]}>Điểm uy tín của người được đánh giá: {selectedDelta > 0 ? "+" : ""}{selectedDelta}</Text>
-                  </View>
-                ) : null}
-                <Input
-                  label="Nhận xét (không bắt buộc)"
-                  value={comment}
-                  onChangeText={setComment}
-                  placeholder="Chia sẻ ngắn về trải nghiệm trao trả…"
-                  multiline
-                  maxLength={500}
-                  error={/[<>]/.test(comment) ? "Không nhập ký tự < hoặc >." : undefined}
-                />
-                <Text style={styles.characterCount}>{comment.length}/500</Text>
-                <Pressable accessibilityRole="button" accessibilityState={{ disabled: rating < 1 || submitting, busy: submitting }} onPress={() => void submit()} disabled={rating < 1 || submitting} style={({ pressed }) => [styles.submitButton, (rating < 1 || submitting) && styles.submitDisabled, pressed && rating > 0 && !submitting && styles.pressed]}>
-                  {submitting ? <ActivityIndicator color={colors.surface} /> : <><MaterialCommunityIcons name="send-check-outline" size={18} color={colors.surface} /><Text style={styles.submitText}>Gửi đánh giá</Text></>}
-                </Pressable>
-                <Text style={styles.privacyNote}>Mỗi người chỉ gửi một đánh giá cho mỗi lần trao trả.</Text>
-              </Card>
-            ) : (
-              <Card style={styles.ineligibleCard}>
-                <View style={styles.ineligibleIcon}><MaterialCommunityIcons name="information-outline" size={22} color={colors.warning} /></View>
-                <Text style={styles.resultTitle}>Chưa thể gửi đánh giá</Text>
-                <Text style={styles.ineligibleText}>{eligibility.reason || "Bạn chưa đủ điều kiện đánh giá lượt trao trả này."}</Text>
-              </Card>
-            )}
-          </>
-        ) : null}
+        {appointment.status === "CANCELLED" || appointment.status === "REJECTED" ? <Card style={styles.rescheduleCard}><MaterialCommunityIcons name="calendar-refresh-outline" size={21} color={colors.primary} /><View style={styles.summaryCopy}><Text style={styles.rescheduleTitle}>Cần thời gian khác?</Text><Text style={styles.helperText}>Mở yêu cầu Claim để đề xuất lịch hẹn mới tại một điểm bàn giao an toàn.</Text></View><Button title="Đề xuất lịch khác" variant="secondary" onPress={() => router.push(`/appointments?claimId=${encodeURIComponent(appointment.claimId)}` as never)} /></Card> : null}
+
+        {appointment.status === "COMPLETED" ? <Card style={styles.feedbackCard}>
+          <View style={styles.feedbackHeading}><View style={styles.feedbackIcon}><MaterialCommunityIcons name="star-check-outline" size={21} color={colors.warning} /></View><View style={styles.summaryCopy}><Text style={styles.sectionTitle}>Đánh giá sau trao trả</Text><Text style={styles.helperText}>Chia sẻ trải nghiệm và cập nhật điểm uy tín cho bên còn lại.</Text></View></View>
+          {!eligibility ? <View style={styles.waiting}><ActivityIndicator size="small" color={colors.primary} /><Text style={styles.helperText}>Đang kiểm tra điều kiện đánh giá…</Text></View> : null}
+          {feedbackRecord ? <View style={styles.reviewedBox}><Text style={styles.responseStatus}>Đánh giá đã gửi</Text><View style={styles.starsRow}>{Array.from({ length: 5 }, (_, index) => <MaterialCommunityIcons key={index} name={index < feedbackRecord.rating ? "star" : "star-outline"} size={19} color={colors.warning} />)}<Text style={styles.ratingLabel}>{ratingLabels[feedbackRecord.rating - 1]}</Text></View>{feedbackRecord.comment ? <Text style={styles.commentText}>“{feedbackRecord.comment}”</Text> : null}</View> : eligibility?.eligible ? <>
+            <Text style={styles.feedbackQuestion}>Bạn đánh giá thế nào về {eligibility.participants.claimant.id === user?.id ? eligibility.participants.finder.fullName : eligibility.participants.claimant.fullName}?</Text>
+            <View accessibilityRole="radiogroup" accessibilityLabel="Chọn số sao" style={styles.starsRow}>{Array.from({ length: 5 }, (_, index) => { const value = index + 1; return <Pressable key={value} accessibilityRole="radio" accessibilityLabel={`${value} sao, ${ratingLabels[index]}`} accessibilityState={{ selected: rating === value }} onPress={() => setRating(value)} style={styles.starButton}><MaterialCommunityIcons name={rating >= value ? "star" : "star-outline"} size={31} color={rating >= value ? colors.warning : colors.border} /></Pressable>; })}</View>
+            {rating > 0 ? <Text style={styles.ratingLabel}>{rating}/5 · {ratingLabels[rating - 1]}</Text> : null}
+            {selectedDelta !== null ? <View style={styles.pointsHint}><MaterialCommunityIcons name="chart-line" size={17} color={selectedDelta >= 0 ? colors.success : colors.danger} /><Text style={[styles.pointsText, { color: selectedDelta >= 0 ? colors.success : colors.danger }]}>Điểm uy tín dự kiến: {selectedDelta > 0 ? "+" : ""}{selectedDelta}</Text></View> : null}
+            <Input label="Nhận xét (không bắt buộc)" value={comment} onChangeText={setComment} multiline maxLength={500} placeholder="Chia sẻ ngắn về trải nghiệm trao trả…" error={/[<>]/.test(comment) ? "Không nhập ký tự < hoặc >." : undefined} />
+            <Button title="Gửi đánh giá" onPress={() => void submitFeedback()} loading={sendingFeedback} disabled={rating < 1 || /[<>]/.test(comment)} />
+          </> : eligibility ? <View style={styles.infoWarning}><MaterialCommunityIcons name="information-outline" size={18} color={colors.warning} /><Text style={styles.infoWarningText}>{eligibility.reason ?? "Bạn chưa đủ điều kiện đánh giá lượt trao trả này."}</Text></View> : null}
+        </Card> : null}
+
+        <Card style={styles.chatLinkCard}><View style={styles.chatLinkIcon}><MaterialCommunityIcons name="message-text-outline" size={20} color={colors.primary} /></View><View style={styles.summaryCopy}><Text style={styles.chatLinkTitle}>Trao đổi về lần bàn giao</Text><Text style={styles.helperText}>Mở phòng chat và xác minh của yêu cầu này.</Text></View><Pressable accessibilityRole="button" accessibilityLabel="Mở phòng chat" onPress={() => router.push(`/claims/${appointment.claimId}` as never)} style={styles.chatLinkButton}><MaterialCommunityIcons name="chevron-right" size={22} color={colors.primary} /></Pressable></Card>
+
+        <Card style={styles.historyCard}><Text style={styles.sectionTitle}>Nhật ký lịch hẹn</Text>{appointment.events.length ? appointment.events.map((event, index) => <View key={event.id} style={styles.eventRow}><View style={styles.eventRail}><View style={[styles.eventDot, index === 0 && styles.eventDotFirst]}>{index === 0 ? <MaterialCommunityIcons name="calendar-check" size={12} color={colors.surface} /> : null}</View>{index < appointment.events.length - 1 ? <View style={styles.eventLine} /> : null}</View><View style={styles.eventCopy}><Text style={styles.eventTitle}>{eventLabel(event.action)}</Text><Text style={styles.eventTime}>{dateTime(event.createdAt)}</Text>{event.note ? <Text style={styles.eventNote}>{event.note}</Text> : null}</View></View>) : <Text style={styles.helperText}>Chưa có cập nhật.</Text>}</Card>
       </ScrollView>
     </SafeAreaView>
   );
 }
 
+const statusTones: Record<AppointmentRecord["status"], object> = {
+  PENDING: { backgroundColor: colors.warningSoft }, ACCEPTED: { backgroundColor: colors.successSoft }, REJECTED: { backgroundColor: colors.dangerSoft }, CANCELLED: { backgroundColor: colors.neutralSoft }, COMPLETED: { backgroundColor: colors.successSoft }, RESCHEDULED: { backgroundColor: colors.primarySoft },
+};
+const statusToneText: Record<AppointmentRecord["status"], object> = {
+  PENDING: { color: colors.warning }, ACCEPTED: { color: colors.success }, REJECTED: { color: colors.danger }, CANCELLED: { color: colors.neutral }, COMPLETED: { color: colors.success }, RESCHEDULED: { color: colors.primary },
+};
+
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: colors.background },
-  topBar: { minHeight: 54, flexDirection: "row", alignItems: "center", paddingHorizontal: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border, backgroundColor: colors.surface },
-  backButton: { width: 44, height: 44, alignItems: "flex-start", justifyContent: "center" },
-  topTitle: { flex: 1, color: colors.ink, fontSize: 17, fontWeight: "800" },
-  topBarSpacer: { width: 24 },
-  content: { width: "100%", maxWidth: 720, alignSelf: "center", gap: spacing.lg, padding: spacing.lg, paddingBottom: spacing.xxl },
-  summaryCard: { gap: spacing.md },
-  eyebrowRow: { flexDirection: "row", alignItems: "center", gap: spacing.xs },
-  eyebrow: { color: colors.primary, fontSize: 11, letterSpacing: 0.7, fontWeight: "900" },
-  title: { color: colors.ink, fontSize: 20, lineHeight: 27, fontWeight: "900" },
-  dateText: { color: colors.muted, fontSize: 13 },
-  personRow: { flexDirection: "row", alignItems: "center", gap: spacing.md },
-  personIcon: { width: 42, height: 42, alignItems: "center", justifyContent: "center", borderRadius: 14, backgroundColor: colors.primarySoft },
-  finderIcon: { backgroundColor: colors.successSoft },
-  personCopy: { gap: 3 },
-  personRole: { color: colors.muted, fontSize: 12 },
-  personName: { color: colors.ink, fontSize: 14, fontWeight: "800" },
-  formCard: { gap: spacing.md },
-  formTitle: { color: colors.ink, fontSize: 17, lineHeight: 23, fontWeight: "800" },
-  helperText: { color: colors.muted, fontSize: 13, lineHeight: 19 },
-  ratingControl: { flexDirection: "row", justifyContent: "center", gap: spacing.sm, paddingTop: spacing.xs },
-  starButton: { width: 48, height: 48, alignItems: "center", justifyContent: "center" },
-  ratingCaption: { color: colors.warning, fontSize: 13, fontWeight: "800", textAlign: "center" },
-  pointsHint: { minHeight: 40, flexDirection: "row", alignItems: "center", gap: spacing.xs, paddingHorizontal: spacing.md, borderRadius: radii.control },
-  positivePoints: { backgroundColor: colors.successSoft },
-  negativePoints: { backgroundColor: colors.dangerSoft },
-  pointsText: { fontSize: 12, fontWeight: "700" },
-  positiveText: { color: colors.success },
-  negativeText: { color: colors.danger },
-  characterCount: { color: colors.muted, fontSize: 11, textAlign: "right", marginTop: -spacing.sm },
-  submitButton: { minHeight: 50, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.sm, borderRadius: radii.control, backgroundColor: colors.primary },
-  submitDisabled: { opacity: 0.52 },
-  submitText: { color: colors.surface, fontSize: 14, fontWeight: "800" },
-  privacyNote: { color: colors.muted, fontSize: 11, lineHeight: 16, textAlign: "center" },
-  resultCard: { gap: spacing.md },
-  resultHeading: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
-  resultTitle: { color: colors.ink, fontSize: 16, fontWeight: "800" },
-  starsRow: { flexDirection: "row", alignItems: "center", gap: 2, flexWrap: "wrap" },
-  existingComment: { color: colors.ink, fontSize: 14, lineHeight: 21, fontStyle: "italic" },
-  ineligibleCard: { gap: spacing.sm, alignItems: "flex-start" },
-  ineligibleIcon: { width: 42, height: 42, alignItems: "center", justifyContent: "center", borderRadius: 14, backgroundColor: colors.warningSoft },
-  ineligibleText: { color: colors.muted, fontSize: 14, lineHeight: 21 },
-  successBanner: { flexDirection: "row", alignItems: "flex-start", gap: spacing.sm, padding: spacing.md, borderRadius: radii.control, backgroundColor: colors.successSoft },
-  successText: { flex: 1, color: colors.success, fontSize: 13, lineHeight: 19, fontWeight: "700" },
-  pressed: { opacity: 0.75 },
+  safeArea: { flex: 1, backgroundColor: colors.background }, topBar: { minHeight: 54, flexDirection: "row", alignItems: "center", paddingHorizontal: spacing.md, gap: spacing.sm, backgroundColor: colors.surface, borderBottomWidth: 1, borderBottomColor: colors.border }, backButton: { width: 42, height: 44, justifyContent: "center" }, topTitle: { flex: 1, color: colors.ink, fontSize: 17, fontWeight: "900" }, refreshButton: { width: 42, height: 42, alignItems: "center", justifyContent: "center" }, content: { width: "100%", maxWidth: 720, alignSelf: "center", gap: spacing.md, padding: spacing.md, paddingBottom: spacing.xxl },
+  summaryCard: { gap: spacing.md }, summaryTop: { flexDirection: "row", alignItems: "center", gap: spacing.md }, calendarIcon: { width: 46, height: 46, alignItems: "center", justifyContent: "center", borderRadius: 15, backgroundColor: colors.primarySoft }, summaryCopy: { flex: 1, gap: 3 }, statusPill: { alignSelf: "flex-start", paddingHorizontal: 9, paddingVertical: 5, borderRadius: radii.pill }, statusText: { fontSize: 10, fontWeight: "900" }, title: { color: colors.ink, fontSize: 19, lineHeight: 26, fontWeight: "900", marginTop: 3 },
+  detailRow: { flexDirection: "row", alignItems: "flex-start", gap: spacing.md }, detailCopy: { flex: 1, gap: 3 }, detailLabel: { color: colors.muted, fontSize: 12 }, detailValue: { color: colors.ink, fontSize: 14, lineHeight: 20, fontWeight: "700" }, responses: { flexDirection: "row", gap: spacing.sm }, responseCard: { flex: 1, minHeight: 68, justifyContent: "center", gap: 5, padding: spacing.sm, borderRadius: radii.control, backgroundColor: colors.surfaceMuted }, responseRole: { color: colors.muted, fontSize: 11 }, responseStatus: { fontSize: 12, fontWeight: "900" }, infoSuccess: { flexDirection: "row", alignItems: "center", gap: spacing.sm, padding: spacing.sm, borderRadius: radii.control, backgroundColor: colors.successSoft }, infoSuccessText: { flex: 1, color: colors.success, fontSize: 12, lineHeight: 17, fontWeight: "700" }, infoWarning: { flexDirection: "row", alignItems: "flex-start", gap: spacing.sm, padding: spacing.sm, borderRadius: radii.control, backgroundColor: colors.warningSoft }, infoWarningText: { flex: 1, color: colors.warning, fontSize: 12, lineHeight: 17 },
+  actionsCard: { gap: spacing.sm }, sectionTitle: { color: colors.ink, fontSize: 16, fontWeight: "900" }, helperText: { color: colors.muted, fontSize: 12, lineHeight: 18 }, waiting: { flexDirection: "row", alignItems: "center", gap: spacing.sm, padding: spacing.sm }, checkRow: { minHeight: 52, flexDirection: "row", alignItems: "center", gap: spacing.sm, padding: spacing.sm, borderRadius: radii.control, backgroundColor: colors.surfaceMuted }, checkText: { flex: 1, color: colors.ink, fontSize: 12, lineHeight: 18, fontWeight: "600" }, rescheduleCard: { gap: spacing.md }, rescheduleTitle: { color: colors.ink, fontSize: 15, fontWeight: "900" },
+  feedbackCard: { gap: spacing.md }, feedbackHeading: { flexDirection: "row", alignItems: "center", gap: spacing.md }, feedbackIcon: { width: 42, height: 42, alignItems: "center", justifyContent: "center", borderRadius: 14, backgroundColor: colors.warningSoft }, feedbackQuestion: { color: colors.ink, fontSize: 14, fontWeight: "800" }, starsRow: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 2, flexWrap: "wrap" }, starButton: { width: 42, height: 44, alignItems: "center", justifyContent: "center" }, ratingLabel: { color: colors.warning, fontSize: 12, fontWeight: "900", textAlign: "center" }, pointsHint: { minHeight: 40, flexDirection: "row", alignItems: "center", gap: spacing.xs, paddingHorizontal: spacing.md, borderRadius: radii.control, backgroundColor: colors.successSoft }, pointsText: { fontSize: 12, fontWeight: "800" }, reviewedBox: { gap: spacing.sm, padding: spacing.md, borderRadius: radii.control, backgroundColor: colors.successSoft }, commentText: { color: colors.ink, fontSize: 13, lineHeight: 19, fontStyle: "italic" },
+  chatLinkCard: { minHeight: 70, flexDirection: "row", alignItems: "center", gap: spacing.md }, chatLinkIcon: { width: 40, height: 40, alignItems: "center", justifyContent: "center", borderRadius: 13, backgroundColor: colors.primarySoft }, chatLinkTitle: { color: colors.ink, fontSize: 13, fontWeight: "800" }, chatLinkButton: { width: 42, height: 42, alignItems: "center", justifyContent: "center" }, historyCard: { gap: spacing.md }, eventRow: { minHeight: 52, flexDirection: "row", gap: spacing.sm }, eventRail: { width: 22, alignItems: "center" }, eventDot: { zIndex: 1, width: 16, height: 16, alignItems: "center", justifyContent: "center", borderRadius: radii.pill, borderWidth: 2, borderColor: colors.primary, backgroundColor: colors.surface }, eventDotFirst: { borderColor: colors.primary, backgroundColor: colors.primary }, eventLine: { position: "absolute", top: 15, bottom: -5, width: 2, backgroundColor: colors.border }, eventCopy: { flex: 1, paddingBottom: spacing.md }, eventTitle: { color: colors.ink, fontSize: 13, fontWeight: "800" }, eventTime: { color: colors.muted, fontSize: 11, marginTop: 3 }, eventNote: { color: colors.muted, fontSize: 12, marginTop: 4 }, notice: { flexDirection: "row", alignItems: "center", gap: spacing.sm, padding: spacing.md, borderRadius: radii.control, backgroundColor: colors.successSoft }, noticeText: { color: colors.success, flex: 1, fontSize: 12, fontWeight: "700" }, missing: { flex: 1, justifyContent: "center", gap: spacing.md, padding: spacing.lg },
 });

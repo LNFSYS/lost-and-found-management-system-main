@@ -153,6 +153,130 @@ export interface ReturnFeedbackEligibility {
   };
 }
 
+export type ClaimStatus = "PENDING" | "CONVERSATION_OPEN" | "NEED_MORE_INFO" | "ACCEPTED" | "REJECTED" | "CANCELLED";
+export type ClaimRole = "CLAIMANT" | "FINDER";
+export type ClaimDecision = "VERIFY_FOR_MEETUP" | "REQUEST_MORE_INFO" | "DECLINE" | "ESCALATE_TO_CUSTODY";
+
+export interface ClaimRecord {
+  id: string;
+  lostPostId: string | null;
+  foundPostId: string;
+  claimantId: string;
+  finderId: string;
+  status: ClaimStatus;
+  finderDecision: "PENDING" | "ACCEPTED" | "DECLINED";
+  conversationDecision: "PENDING" | "OPEN_CONVERSATION" | "DECLINED";
+  appointmentEligible: boolean;
+  description: string | null;
+  approximateLostAt: string | null;
+  approximateLocation: string | null;
+  rejectionReason: string | null;
+  moreInfoRequest: string | null;
+  acceptedAt: string | null;
+  rejectedAt: string | null;
+  cancelledAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  claimant: { id: string; fullName: string };
+  finder: { id: string; fullName: string };
+  posts: { lost: { id: string; title: string | null } | null; found: { id: string; title: string } };
+  roomId: string | null;
+  participants?: { claimId: string; userId: string; role: ClaimRole; consentStatus: "PENDING" | "ACCEPTED" | "DECLINED"; joinedAt: string | null; fullName: string }[];
+  room?: { id: string } | null;
+  canSend?: boolean;
+  contactPhoto?: { required: boolean; approved: boolean; postId: string; questions: string[] } | null;
+  item?: { postId: string; title: string; categoryName: string | null; locationLabel: string | null; imageUrl: string | null } | null;
+  conversation?: { lastMessage: string | null; lastMessageAt: string | null; unreadCount: number; custodyEscalated?: boolean };
+}
+
+export interface ClaimListResponse { items: ClaimRecord[]; total: number; page: number; pageSize: number; hasMore: boolean }
+export interface ClaimMessage {
+  id: string;
+  roomId: string;
+  sender: { id: string; fullName: string };
+  clientMessageId: string | null;
+  content: string | null;
+  messageType: "TEXT" | "IMAGE" | "SYSTEM";
+  mediaUrl?: string | null;
+  previewUrl?: string;
+  pending?: boolean;
+  isRead: boolean;
+  readAt: string | null;
+  createdAt: string;
+}
+export interface ClaimMessagesResponse {
+  room: { id: string; claimId: string; status: ClaimStatus; participantRole: ClaimRole; createdAt: string };
+  items: ClaimMessage[];
+  hasMore: boolean;
+  nextCursor: { before: string; beforeId: string } | null;
+}
+export interface ClaimEvidence {
+  id: string;
+  claimId: string;
+  uploadedBy: { id: string; fullName: string };
+  mediaFormat: string | null;
+  mediaBytes: number | null;
+  evidenceType: "OWNERSHIP_PROOF" | "ADDITIONAL_DOC" | "PHOTO";
+  description: string | null;
+  createdAt: string;
+  url: string;
+}
+export interface VerificationTemplatePrompt {
+  key: string;
+  prompt: string;
+  questionType: "TEXT" | "MASKED_SERIAL" | "MULTIPLE_CHOICE" | "VISUAL_DETAIL";
+  privacyLevel: "PRIVATE" | "HIGHLY_PRIVATE";
+}
+export interface VerificationTemplatesResponse {
+  category: string;
+  template: { id: string; version: number; minimumAnswers: number; prompts: VerificationTemplatePrompt[]; customFollowUpAllowed: boolean };
+}
+export interface ClaimVerificationState {
+  claimId: string;
+  status: ClaimStatus;
+  appointmentEligible: boolean;
+  participantRole: ClaimRole;
+  roomEscalation: { escalatedAt: string; escalatedBy: string | null; reason: string | null } | null;
+  policy: { templateId: string; templateVersion: number; minimumAnswers: number; answeredCount: number; matchedCount?: number; readyForDecision: boolean; photoContactEligible?: boolean };
+  questions: Array<{
+    id: string;
+    prompt: string;
+    questionType: VerificationTemplatePrompt["questionType"];
+    privacyLevel: VerificationTemplatePrompt["privacyLevel"];
+    status: "DRAFT" | "APPROVED" | "DISABLED";
+    assignedAt: string;
+    template: { templateId: string; templateVersion: number; promptKey: string } | null;
+    answer: { answered: true; attemptCount: number; answeredAt: string; isMatch?: boolean } | null;
+  }>;
+  history: Array<{ id: string; actorId: string; action: string; fromStatus: ClaimStatus | null; toStatus: ClaimStatus | null; metadata: Record<string, unknown> | null; createdAt: string }>;
+}
+
+export type AppointmentStatus = "PENDING" | "ACCEPTED" | "REJECTED" | "CANCELLED" | "COMPLETED" | "RESCHEDULED";
+export type AppointmentAction = "ACCEPT" | "REJECT" | "CANCEL" | "CONFIRM" | "DISPUTE" | "NO_SHOW";
+export interface AppointmentRecord {
+  id: string;
+  claimId: string;
+  postId: string;
+  title: string;
+  proposerId: string;
+  finderId: string;
+  ownerId: string;
+  status: AppointmentStatus;
+  proposedAt: string;
+  handoverPointId: string | null;
+  location: string | null;
+  version: number;
+  itemImageUrl?: string | null;
+  finderResponse: "PENDING" | "CONFIRMED" | "DISPUTED";
+  ownerResponse: "PENDING" | "CONFIRMED" | "DISPUTED";
+  noShowUserId: string | null;
+  custodyAuthorized: boolean;
+  completedAt: string | null;
+  events: Array<{ id: string; action: string; actorId: string | null; createdAt: string; note?: string | null }>;
+}
+export interface AppointmentListResponse { results: AppointmentRecord[]; total: number }
+export interface PublicHandoverPoint { id: string; name: string; address?: string | null; openingHours?: string | null }
+
 export interface MatchSummary {
   candidateCount: number;
   suggestionCount: number;
@@ -625,6 +749,74 @@ export const postService = {
 function createCorrelationKey(prefix: string) {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
+
+export function createRequestUuid() {
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (character) => {
+    const value = Math.floor(Math.random() * 16);
+    return (character === "x" ? value : (value & 0x3) | 0x8).toString(16);
+  });
+}
+
+export const claimService = {
+  list: (page = 1, pageSize = 50) =>
+    api.get<ClaimListResponse>(`/claims${buildQueryString({ page, pageSize })}`).then((response) => response.data),
+  get: (claimId: string) => api.get<ClaimRecord>(`/claims/${claimId}`).then((response) => response.data),
+  create: (payload: { postId: string; description: string; approximateLostAt?: string; approximateLocation?: string; sourceFoundPostId?: string; contactCheckId?: string; requestKey?: string }) => {
+    const requestKey = payload.requestKey ?? createCorrelationKey("claim");
+    return api.post<ClaimRecord>("/claims", { ...payload, requestKey }, { headers: { "Idempotency-Key": requestKey } }).then((response) => response.data);
+  },
+  createDirectMessage: (postId: string, content: string, clientMessageId = createCorrelationKey("direct"), sourceFoundPostId?: string, contactCheckId?: string) =>
+    api.post<{ claim: ClaimRecord; message: ClaimMessage }>("/claims/direct-messages", { postId, content, clientMessageId, sourceFoundPostId, contactCheckId }, { headers: { "Idempotency-Key": clientMessageId } }).then((response) => response.data),
+  getRoom: (claimId: string) =>
+    api.get<ClaimMessagesResponse["room"]>(`/claims/${claimId}/room`).then((response) => response.data),
+  listMessages: (claimId: string, cursor?: { before: string; beforeId: string }, limit = 40) =>
+    api.get<ClaimMessagesResponse>(`/claims/${claimId}/messages${buildQueryString({ ...cursor, limit })}`).then((response) => response.data),
+  sendMessage: (claimId: string, content: string, clientMessageId = createCorrelationKey("message")) =>
+    api.post<ClaimMessage>(`/claims/${claimId}/messages`, { content, clientMessageId }, { headers: { "Idempotency-Key": clientMessageId } }).then((response) => response.data),
+  sendImage: async (claimId: string, file: MobileImageFile, content: string, clientMessageId = createCorrelationKey("image")) => {
+    const formData = new FormData();
+    await appendFileToFormData(formData, "file", file);
+    formData.append("content", content);
+    formData.append("clientMessageId", clientMessageId);
+    return api.post<ClaimMessage>(`/claims/${claimId}/messages/images`, formData, { headers: { "Idempotency-Key": clientMessageId } }).then((response) => response.data);
+  },
+  listEvidence: (claimId: string) => api.get<{ items: ClaimEvidence[] }>(`/claims/${claimId}/evidence`).then((response) => response.data),
+  uploadEvidence: async (claimId: string, file: MobileImageFile, description?: string) => {
+    const formData = new FormData();
+    await appendFileToFormData(formData, "file", file);
+    if (description?.trim()) formData.append("description", description.trim());
+    return api.post<ClaimEvidence>(`/claims/${claimId}/evidence`, formData).then((response) => response.data);
+  },
+  checkLostContactPhoto: async (postId: string, file: MobileImageFile) => {
+    const formData = new FormData();
+    formData.append("postId", postId);
+    await appendFileToFormData(formData, "file", file);
+    return api.post<{ checkId: string | null; approved: boolean; score: number; expiresAt: string | null; questions?: string[] }>("/claims/contact-photo-checks", formData).then((response) => response.data);
+  },
+  getVerificationTemplates: (claimId: string) => api.get<VerificationTemplatesResponse>(`/claims/${claimId}/verification/templates`).then((response) => response.data),
+  getVerification: (claimId: string) => api.get<ClaimVerificationState>(`/claims/${claimId}/verification`).then((response) => response.data),
+  sendVerificationQuestion: (claimId: string, payload: { templateId: string; templateVersion: number; promptKey: string; prompt: string; idempotencyKey: string }) =>
+    api.post<ClaimVerificationState>(`/claims/${claimId}/verification/questions`, { ...payload, idempotencyKey: undefined }, { headers: { "Idempotency-Key": payload.idempotencyKey } }).then((response) => response.data),
+  answerVerificationQuestion: (claimId: string, questionId: string, answer: string, idempotencyKey = createCorrelationKey("answer")) =>
+    api.post<ClaimVerificationState>(`/claims/${claimId}/verification/questions/${questionId}/answer`, { answer }, { headers: { "Idempotency-Key": idempotencyKey } }).then((response) => response.data),
+  decideVerification: (claimId: string, payload: { decision: ClaimDecision; reason: string; handoverPointId?: string; requestedIntakeAt?: string; correctsEventId?: string; idempotencyKey?: string }) => {
+    const idempotencyKey = payload.idempotencyKey ?? createCorrelationKey("decision");
+    return api.post<{ claim: ClaimRecord; verification: ClaimVerificationState; message: ClaimMessage | null }>(
+      `/claims/${claimId}/verification/decision`, { ...payload, idempotencyKey: undefined }, { headers: { "Idempotency-Key": idempotencyKey } },
+    ).then((response) => response.data);
+  },
+};
+
+export const appointmentService = {
+  list: (filters: { claimId?: string; page?: number } = {}) =>
+    api.get<AppointmentListResponse>(`/appointments${buildQueryString(filters)}`).then((response) => response.data),
+  get: (appointmentId: string) => api.get<AppointmentRecord>(`/appointments/${appointmentId}`).then((response) => response.data),
+  create: (payload: { claimId: string; proposedAt: string; handoverPointId: string; requestKey?: string }) =>
+    api.post<AppointmentRecord>("/appointments", { ...payload, requestKey: payload.requestKey ?? createRequestUuid() }).then((response) => response.data),
+  act: (appointmentId: string, payload: { action: AppointmentAction; version: number; physicallyChecked?: boolean; reason?: string; requestKey?: string }) =>
+    api.post<AppointmentRecord>(`/appointments/${appointmentId}/actions`, { ...payload, requestKey: payload.requestKey ?? createRequestUuid() }).then((response) => response.data),
+  listHandoverPoints: () => postService.listPublicHandoverPoints(),
+};
 
 export const activityService = {
   getPostJourney: (postId: string, page = 1, asOf?: string) =>
