@@ -99,6 +99,7 @@ interface StorageLogRow extends RowDataPacket {
   id: string;
   warehouse_item_id: string | null;
   post_id: string | null;
+  item_name?: string | null;
   handover_point_id: string | null;
   handover_point_name: string | null;
   actor_id: string;
@@ -220,6 +221,7 @@ function mapLog(row: StorageLogRow): WarehouseStorageLog {
     id: row.id,
     warehouseItemId: row.warehouse_item_id,
     postId: row.post_id,
+    ...(row.item_name !== undefined ? { itemName: row.item_name } : {}),
     handoverPoint: row.handover_point_id ? { id: row.handover_point_id, name: row.handover_point_name } : null,
     actor: { id: row.actor_id, fullName: row.actor_name },
     action: row.action,
@@ -655,6 +657,25 @@ export function createWarehouseRepository(pool: SqlExecutor) {
         [itemId, itemId]
       );
       return rows.map(mapLog);
+    },
+
+    async listAllLogs(input: { page: number; pageSize: number }) {
+      const pageSize = Math.max(1, Math.min(50, Math.trunc(input.pageSize) || 20));
+      const page = Math.max(1, Math.trunc(input.page) || 1);
+      const offset = (page - 1) * pageSize;
+      const [rows] = await pool.execute<StorageLogRow[]>(
+        `SELECT sl.id, sl.warehouse_item_id, sl.post_id, wi.item_name, sl.handover_point_id, hp.name AS handover_point_name,
+          sl.actor_id, u.full_name AS actor_name, sl.action, sl.from_status, sl.to_status,
+          sl.condition_notes, sl.storage_code, sl.note, sl.created_at
+         FROM storage_logs sl
+         LEFT JOIN warehouse_items wi ON wi.id = sl.warehouse_item_id
+         LEFT JOIN handover_points hp ON hp.id = sl.handover_point_id
+         INNER JOIN users u ON u.id = sl.actor_id
+         ORDER BY sl.created_at DESC, sl.id DESC
+         LIMIT ${pageSize} OFFSET ${offset}`
+      );
+      const [countRows] = await pool.execute<CountRow[]>("SELECT COUNT(*) AS total FROM storage_logs");
+      return { logs: rows.map(mapLog), total: Number(countRows[0]?.total ?? 0) };
     },
 
     async generateNextStorageCode(db: DbExecutor = pool) {
