@@ -28,6 +28,130 @@ export interface SessionResponse {
 }
 
 export type MatchTier = "WEAK" | "SUGGESTION" | "NOTIFY" | "HIGH_CONFIDENCE";
+export type MatchFeedbackValue = "USEFUL" | "IRRELEVANT" | "INCORRECT";
+
+export interface MatchExplanation {
+  tier: MatchTier;
+  summary: string;
+  reasons: string[];
+  matchedTokens: string[];
+  matchedImageTags: string[];
+  matchedOcrTokens: string[];
+  locationReason: string;
+  categoryReason: string;
+  daysDiff: number | null;
+  penalties: string[];
+}
+
+export interface MatchFeedback {
+  id: string;
+  matchId: string;
+  userId: string;
+  sourcePostId: string;
+  value: MatchFeedbackValue;
+  note: string | null;
+  correlationKey: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface MatchCandidateResult {
+  matchId: string;
+  candidate: PostSummary;
+  totalScore: number;
+  scoreTier: MatchTier;
+  scores: { text: number; category: number; location: number; time: number; image: number; ocr: number };
+  explanation: MatchExplanation | null;
+  matcherVersion: string;
+  calculatedAt: string;
+  feedback: MatchFeedback | null;
+}
+
+export interface PostMatchesResponse {
+  source: PostSummary;
+  matcherVersion: string;
+  calculatedAt: string | null;
+  thresholds: Record<string, number>;
+  weights: Record<string, number>;
+  total: number;
+  page: number;
+  pageSize: number;
+  hasMore: boolean;
+  results: MatchCandidateResult[];
+}
+
+export type JourneyImageKind = "POST" | "CLAIM" | "INTAKE" | "RETURN";
+export interface JourneyImage { id: string; kind: JourneyImageKind; url: string; createdAt: string }
+export interface JourneyEvent {
+  id: string;
+  source: string;
+  action: string;
+  targetType: string;
+  targetId: string;
+  actorId: string | null;
+  createdAt: string;
+  fromStatus: string | null;
+  toStatus: string | null;
+  images: JourneyImage[];
+  matchingSuggestions?: { postId: string; title: string; type: "LOST" | "FOUND"; status: "OPEN" | "MATCHED"; score: number }[];
+  conversationWith?: string | null;
+  appointment?: { proposedAt: string };
+}
+
+export interface JourneySummary {
+  custodian: "FINDER" | "STAFF" | "OWNER" | "UNKNOWN";
+  locationClass: "FINDER_HELD" | "WAREHOUSE" | "RETURNED" | "OTHER_DISPOSITION" | "UNKNOWN";
+  receivedAt: string | null;
+  returnedAt: string | null;
+  custodyHours: number | null;
+  feedbackEligible: boolean;
+}
+
+export interface PostJourneyResponse {
+  title: string;
+  status: string;
+  results: JourneyEvent[];
+  total: number;
+  summary: JourneySummary;
+  asOf: string;
+  page: number;
+  hasMore: boolean;
+}
+
+export interface CompletedReturn {
+  id: string;
+  postTitle: string;
+  completedAt: string;
+  rating: number | null;
+}
+
+export interface ReturnFeedbackRecord {
+  id: string;
+  appointmentId: string;
+  reviewer: { id: string; fullName: string };
+  target: { id: string; fullName: string };
+  rating: number;
+  comment: string | null;
+  isNegative: boolean;
+  status: "NEW" | "REVIEWED" | "FLAGGED" | "DISMISSED";
+  createdAt: string;
+}
+
+export interface ReturnFeedbackEligibility {
+  appointmentId: string;
+  eligible: boolean;
+  reason: string | null;
+  returnStatus: "PENDING" | "ACCEPTED" | "REJECTED" | "CANCELLED" | "COMPLETED" | "RESCHEDULED";
+  completedAt: string | null;
+  dualConfirmed: boolean;
+  custodyAuthorized: boolean;
+  currentUserFeedback: ReturnFeedbackRecord | null;
+  feedbackCount: number;
+  participants: {
+    claimant: { id: string; fullName: string };
+    finder: { id: string; fullName: string };
+  };
+}
 
 export interface MatchSummary {
   candidateCount: number;
@@ -423,6 +547,21 @@ export const postService = {
     api.get<PostListResponse>(`/posts/mine${buildQueryString(filters as Record<string, unknown>)}`).then((res) => res.data),
   getPost: (postId: string) =>
     api.get<PostSummary>(`/posts/${postId}`).then((res) => res.data),
+  getMatches: (postId: string, page = 1, pageSize = 20) =>
+    api.get<PostMatchesResponse>(`/posts/${postId}/matches${buildQueryString({ page, pageSize })}`).then((res) => res.data),
+  recalculateMatches: (postId: string, page = 1, pageSize = 20) =>
+    api.post<PostMatchesResponse>(`/posts/${postId}/matches/recalculate${buildQueryString({ page, pageSize })}`).then((res) => res.data),
+  submitMatchFeedback: (postId: string, matchId: string, value: MatchFeedbackValue, note?: string | null) =>
+    api.post<MatchFeedback>(`/posts/${postId}/matches/${matchId}/feedback`, {
+      value,
+      note,
+      correlationKey: createCorrelationKey("match-feedback"),
+    }).then((res) => res.data),
+  dismissMatch: (postId: string, matchId: string, reason?: string | null) =>
+    api.post<{ id: string; correlationKey: string; reason: string | null; createdAt: string }>(`/posts/${postId}/matches/${matchId}/dismiss`, {
+      reason,
+      correlationKey: createCorrelationKey("match-dismiss"),
+    }).then((res) => res.data),
   createPost: (payload: CreatePostPayload): Promise<PostSummary> =>
     api.post<PostSummary>("/posts", payload).then((res) => res.data),
   updatePost: (postId: string, payload: UpdatePostPayload): Promise<PostSummary> =>
@@ -481,4 +620,25 @@ export const postService = {
       return null;
     }
   },
+};
+
+function createCorrelationKey(prefix: string) {
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+export const activityService = {
+  getPostJourney: (postId: string, page = 1, asOf?: string) =>
+    api.get<PostJourneyResponse>(`/posts/${postId}/journey${buildQueryString({ page, asOf })}`).then((res) => res.data),
+};
+
+export const returnService = {
+  listCompleted: (page = 1) =>
+    api.get<{ items: CompletedReturn[]; page: number; hasMore: boolean }>(`/returns/completed${buildQueryString({ page })}`).then((res) => res.data),
+  getFeedbackEligibility: (appointmentId: string) =>
+    api.get<ReturnFeedbackEligibility>(`/returns/${appointmentId}/feedback/eligibility`).then((res) => res.data),
+  submitFeedback: (appointmentId: string, rating: number, comment: string) =>
+    api.post<{ feedback: ReturnFeedbackRecord; reputationEventCreated: boolean; idempotent: boolean }>(
+      `/returns/${appointmentId}/feedback`,
+      { rating, comment: comment.trim() || null, idempotencyKey: createCorrelationKey("return-feedback") },
+    ).then((res) => res.data),
 };

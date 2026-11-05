@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Modal,
   Pressable,
   RefreshControl,
@@ -222,9 +221,9 @@ export default function PostDetailScreen() {
   const handleEditPost = () => {
     if (!post?.id) return;
     router.push({
-      pathname: "/posts/create",
+      pathname: "/posts/create" as never,
       params: { editPostId: post.id },
-    });
+    } as never);
   };
 
   const onCarouselScroll = (
@@ -842,6 +841,15 @@ export default function PostDetailScreen() {
                 </View>
               </View>
             </View>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => router.push(`/posts/${post.id}/journey` as never)}
+              style={({ pressed }) => [styles.journeyButton, pressed && { opacity: 0.78 }]}
+            >
+              <MaterialCommunityIcons name="timeline-clock-outline" size={18} color={colors.primary} />
+              <Text style={styles.journeyButtonText}>Theo dõi hành trình vật phẩm</Text>
+              <MaterialCommunityIcons name="chevron-right" size={20} color={colors.muted} />
+            </Pressable>
           </Card>
 
           {/* Related Counterpart Posts */}
@@ -986,19 +994,7 @@ export default function PostDetailScreen() {
         ) : (
           <View style={styles.ownerDockContainer}>
             <Pressable
-              onPress={() => {
-                if (matchCount > 0) {
-                  Alert.alert(
-                    "Gợi ý ghép đôi",
-                    `Hệ thống AI đã phát hiện ${matchCount} tin có khả năng đối ứng cao. Bạn hãy đối chiếu danh sách bài đối ứng cùng danh mục ở trên hoặc theo dõi mục Thông báo.`
-                  );
-                } else {
-                  Alert.alert(
-                    "Gợi ý ghép đôi",
-                    "Hiện tại chưa có gợi ý ghép đôi mới. Hệ thống AI đang tự động theo dõi và sẽ gửi thông báo ngay khi có tin đối ứng."
-                  );
-                }
-              }}
+              onPress={() => router.push(`/posts/${post.id}/matches` as never)}
               style={[
                 styles.matchDockBtn,
                 matchCount === 0 && styles.matchDockBtnMuted,
@@ -1570,6 +1566,18 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     marginTop: spacing.sm,
   },
+  journeyButton: {
+    minHeight: 48,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderRadius: radii.control,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceMuted,
+  },
+  journeyButtonText: { flex: 1, color: colors.primaryDark, fontSize: 13, fontWeight: "800" },
   relatedHeader: {
     flexDirection: "row",
     alignItems: "center",
