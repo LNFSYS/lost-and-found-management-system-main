@@ -57,6 +57,7 @@ export interface WarehouseStorageLog {
   id: string;
   warehouseItemId: string | null;
   postId: string | null;
+  itemName?: string | null;
   handoverPoint: {
     id: string;
     name: string | null;
@@ -280,4 +281,5 @@ export interface WarehouseRepository {
   } | null>;
   getConfigInt(key: string, fallback: number): Promise<number>;
   listLogs(itemId: string): Promise<WarehouseStorageLog[]>;
+  listAllLogs(input: { page: number; pageSize: number }): Promise<{ logs: WarehouseStorageLog[]; total: number }>;
 }

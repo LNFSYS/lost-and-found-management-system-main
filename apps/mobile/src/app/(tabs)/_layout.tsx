@@ -11,7 +11,7 @@ export default function TabsLayout() {
   if (isHydrating) return <LoadingSpinner label="Đang khôi phục phiên đăng nhập…" />;
   if (!user) return <Redirect href="/login" />;
   const isAdmin = user.roles.includes("ADMIN");
-  const isStaff = user.roles.includes("STAFF");
+  const isStaff = isAdmin || user.roles.includes("STAFF");
 
   return (
     <Tabs

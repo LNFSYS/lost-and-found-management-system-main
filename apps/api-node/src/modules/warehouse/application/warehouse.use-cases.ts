@@ -616,6 +616,19 @@ export function createWarehouseUseCases(options: WarehouseDependencies) {
     async listLogs(itemId: string) {
       if (!await warehouseRepository.findItemById(itemId)) throw new AppError("not_found", "Không tìm thấy vật phẩm trong kho");
       return warehouseRepository.listLogs(itemId);
+    },
+
+    async listAllLogs(query: { page: number; pageSize: number }, actorId: string) {
+      await staff(actorId);
+      const result = await warehouseRepository.listAllLogs(query);
+      return { ...result, page: query.page, pageSize: query.pageSize };
+    },
+
+    async getItem(itemId: string, actorId: string) {
+      await staff(actorId);
+      const item = await warehouseRepository.findItemById(itemId);
+      if (!item) throw new AppError("not_found", "Không tìm thấy vật phẩm trong kho");
+      return item;
     }
   };
   return warehouseService;

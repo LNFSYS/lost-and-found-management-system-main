@@ -9,6 +9,7 @@ import {
   listWarehouseItemsQuerySchema,
   updateWarehouseItemSchema,
   warehouseItemIdParamSchema,
+  listWarehouseLogsQuerySchema,
   returnWarehouseItemSchema,
   verifyCustodyClaimSchema,
   warehouseConversationExtractionSchema
@@ -33,6 +34,10 @@ export function createWarehouseController({ warehouseService, warehouseConversat
       response.json(await warehouseService.listItems(listWarehouseItemsQuerySchema.parse(request.query)));
     },
 
+    async getItem(request: Request, response: Response) {
+      response.json(await warehouseService.getItem(routeId(request), actorId(request)));
+    },
+
     async createItem(request: Request, response: Response) {
       response.status(201).json(await warehouseService.createItem(createWarehouseItemSchema.parse(request.body), actorId(request)));
     },
@@ -43,6 +48,10 @@ export function createWarehouseController({ warehouseService, warehouseConversat
 
     async listLogs(request: Request, response: Response) {
       response.json({ logs: await warehouseService.listLogs(routeId(request)) });
+    },
+
+    async listAllLogs(request: Request, response: Response) {
+      response.json(await warehouseService.listAllLogs(listWarehouseLogsQuerySchema.parse(request.query), actorId(request)));
     },
 
     async returnItem(request: Request, response: Response) {

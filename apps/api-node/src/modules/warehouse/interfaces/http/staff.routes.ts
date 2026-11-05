@@ -59,6 +59,8 @@ export function createStaffRoutes({ warehouseController, custodyRequestControlle
   staffRoutes.get("/warehouse-items/catalog", (req, res, next) => warehouseController.getCatalog(req, res).catch(next));
   staffRoutes.post("/warehouse-conversations/extract", uploadConversationImagesMiddleware, (req, res, next) => warehouseController.extractConversation(req, res).catch(next));
   staffRoutes.get("/warehouse-items", (req, res, next) => warehouseController.listItems(req, res).catch(next));
+  staffRoutes.get("/warehouse-logs", (req, res, next) => warehouseController.listAllLogs(req, res).catch(next));
+  staffRoutes.get("/warehouse-items/:id", (req, res, next) => warehouseController.getItem(req, res).catch(next));
   staffRoutes.post("/warehouse-items", (req, res, next) => warehouseController.createItem(req, res).catch(next));
   staffRoutes.post("/warehouse-intake-images", uploadProofMiddleware, (req, res, next) => warehouseController.uploadIntakeImage(req, res).catch(next));
   staffRoutes.delete("/warehouse-intake-images/:id", (req, res, next) => warehouseController.deleteIntakeImage(req, res).catch(next));

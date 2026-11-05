@@ -414,6 +414,186 @@ export interface CustodyRequest {
   requestedIntakeAt?: string | null;
 }
 
+export type WarehouseItemStatus = "PENDING_APPROVAL" | "RECEIVED" | "STORED" | "CLAIMED" | "RETURNED" | "EXPIRED" | "DISPOSED" | "DONATED" | "TRANSFERRED";
+export type WarehouseImageProvenance = "SOURCE_POST" | "CONTACT_PHOTO" | "INTAKE" | "RETURN";
+export type StaffCustodyStatus = "PENDING" | "ACCEPTED" | "REJECTED" | "CANCELLED" | "INTAKED";
+
+export interface StaffWarehouseItem {
+  id: string;
+  postId: string | null;
+  handoverPoint: { id: string; name: string | null; address: string | null } | null;
+  itemName: string;
+  description: string | null;
+  category: { id: string; name: string | null } | null;
+  location: { area: { id: string; name: string | null } | null; building: { id: string; name: string | null } | null; roomText: string | null };
+  finder: { userId: string | null; userName: string | null; name: string | null; contact: string | null };
+  status: WarehouseItemStatus;
+  conditionNotes: string | null;
+  storageCode: string | null;
+  receivedAt: string;
+  returnedAt: string | null;
+  retentionDeadline: string | null;
+  createdBy: { id: string; fullName: string | null };
+  createdAt: string;
+  updatedAt: string;
+  logCount: number;
+  receivedQuantity?: number | null;
+  accessories?: string | null;
+  thumbnail?: { id: string; provenance: WarehouseImageProvenance } | null;
+}
+
+export interface StaffWarehouseImage {
+  id: string;
+  provenance: WarehouseImageProvenance;
+  uploaderId: string;
+  uploadedAt: string;
+  capturedAt: string | null;
+  postId: string | null;
+  intakeKey: string | null;
+  returnId: string | null;
+  url: string;
+}
+
+export interface StaffWarehouseStorageLog {
+  id: string;
+  warehouseItemId: string | null;
+  postId: string | null;
+  itemName?: string | null;
+  handoverPoint: { id: string; name: string | null } | null;
+  actor: { id: string; fullName: string | null };
+  action: WarehouseItemStatus | "OVERDUE_MARKED" | "CONDITION_UPDATED";
+  fromStatus: string | null;
+  toStatus: string | null;
+  conditionNotes: string | null;
+  storageCode: string | null;
+  note: string | null;
+  createdAt: string;
+}
+
+export interface StaffWarehouseDashboard {
+  stats: { totalItems: number; activeItems: number; receivedItems: number; storedItems: number; returnedItems: number; overdueItems: number };
+  handoverCounts: { handoverPointId: string; name: string; address: string; itemCount: number; storedCount: number; overdueCount: number }[];
+  total: number;
+  page: number;
+  pageSize: number;
+  items: StaffWarehouseItem[];
+}
+
+export interface StaffCustodyRequest {
+  id: string;
+  claimId: string | null;
+  roomId: string | null;
+  postId: string | null;
+  requester: { id: string; fullName: string | null };
+  handler: { id: string; fullName: string | null } | null;
+  status: StaffCustodyStatus;
+  intakeType: "CUSTODY_TRANSFER" | "WALK_IN";
+  reason: string | null;
+  rejectionReason: string | null;
+  handoverPoint: { id: string; name: string | null; address: string | null } | null;
+  confirmedHandoverAt: string | null;
+  requestedIntakeAt: string | null;
+  warehouseItemId: string | null;
+  createdAt: string;
+  updatedAt: string;
+  post: { id: string; title: string | null; thumbnailId?: string | null } | null;
+  photoSource?: { lostPostId: string; title: string; imageId: string } | null;
+}
+
+export interface StaffCustodyAuditEntry {
+  id: string;
+  custodyRequestId: string;
+  actorId: string;
+  actorName: string | null;
+  action: string;
+  fromStatus: string | null;
+  toStatus: string;
+  metadata: Record<string, unknown> | null;
+  createdAt: string;
+}
+
+export interface StaffCustodyIntakeContext {
+  request: StaffCustodyRequest;
+  post: { title: string; description: string | null; categoryId: string | null; areaId: string | null; buildingId: string | null; roomText: string | null; finderUserId: string; finderName: string | null; finderContact: string | null };
+  images: StaffWarehouseImage[];
+}
+
+export interface StaffIntakeEvidencePayload {
+  physicalReviewConfirmed: true;
+  intakeKey: string;
+  intakeImageIds: string[];
+  receivedQuantity: number;
+  accessories: string;
+}
+
+export interface StaffCreateWarehouseItemPayload extends StaffIntakeEvidencePayload {
+  postId?: string | null;
+  handoverPointId: string;
+  itemName: string;
+  description?: string | null;
+  categoryId?: string | null;
+  areaId?: string | null;
+  buildingId?: string | null;
+  roomText?: string | null;
+  finderName?: string | null;
+  finderContact?: string | null;
+  conditionNotes: string;
+  storageCode?: string | null;
+  receivedAt?: string;
+}
+
+export interface StaffIntakeCustodyPayload extends StaffIntakeEvidencePayload {
+  conditionNotes: string;
+  storageCode?: string | null;
+  itemName?: string;
+  description?: string | null;
+  categoryId?: string | null;
+  areaId?: string | null;
+  buildingId?: string | null;
+  roomText?: string | null;
+  finderName?: string | null;
+  finderContact?: string | null;
+  confirmedHandoverAt?: string | null;
+}
+
+export interface StaffReturnWarehousePayload {
+  claimId?: string | null;
+  recipientId?: string | null;
+  receiverName: string;
+  receiverIdentity: string;
+  receiverPhone: string;
+  proofImage: string;
+  note?: string | null;
+}
+
+export type StaffCustodyFilter = StaffCustodyStatus | "AWAITING_INTAKE" | "";
+
+export interface StaffCustodyListResponse {
+  counts: Record<StaffCustodyStatus, number>;
+  total: number;
+  page: number;
+  pageSize: number;
+  items: StaffCustodyRequest[];
+}
+
+export interface StaffWarehouseFilters {
+  overdue?: boolean;
+  q?: string;
+  status?: WarehouseItemStatus | "";
+  handoverPointId?: string;
+  page?: number;
+  pageSize?: number;
+}
+
+export interface StaffClaimReview {
+  claimId: string;
+  recipientId: string;
+  fullName: string;
+  description: string | null;
+  status: string;
+  verified: boolean;
+}
+
 export interface UserReportPayload {
   targetType: "POST" | "CLAIM" | "CHAT" | "HANDOVER";
   targetId: string;
@@ -833,4 +1013,58 @@ export const returnService = {
       `/returns/${appointmentId}/feedback`,
       { rating, comment: comment.trim() || null, idempotencyKey: createCorrelationKey("return-feedback") },
     ).then((res) => res.data),
+};
+
+export const staffService = {
+  listWarehouseItems: (filters: StaffWarehouseFilters = {}) =>
+    api.get<StaffWarehouseDashboard>(`/staff/warehouse-items${buildQueryString({ ...filters })}`).then((response) => response.data),
+  getWarehouseItem: (itemId: string) =>
+    api.get<StaffWarehouseItem>(`/staff/warehouse-items/${itemId}`).then((response) => response.data),
+  listAllWarehouseLogs: (page = 1, pageSize = 20) =>
+    api.get<{ logs: StaffWarehouseStorageLog[]; total: number; page: number; pageSize: number }>(`/staff/warehouse-logs${buildQueryString({ page, pageSize })}`).then((response) => response.data),
+  getWarehouseImages: (itemId: string) =>
+    api.get<{ images: StaffWarehouseImage[] }>(`/staff/warehouse-items/${itemId}/images`).then((response) => response.data.images),
+  warehouseImagePath: (image: Pick<StaffWarehouseImage, "id" | "provenance">) =>
+    `/staff/warehouse-images/${image.id}?provenance=${encodeURIComponent(image.provenance)}`,
+  updateWarehouseItem: (itemId: string, payload: { status?: WarehouseItemStatus; conditionNotes?: string | null; storageCode?: string | null; note?: string | null }) =>
+    api.patch<StaffWarehouseItem>(`/staff/warehouse-items/${itemId}`, payload).then((response) => response.data),
+  uploadWarehouseProof: async (file: MobileImageFile, itemId: string) => {
+    const formData = new FormData();
+    await appendFileToFormData(formData, "file", file);
+    formData.append("itemId", itemId);
+    return api.post<{ id: string; url: string }>("/staff/warehouse-items/upload-proof", formData).then((response) => response.data);
+  },
+  returnWarehouseItem: (itemId: string, payload: StaffReturnWarehousePayload) =>
+    api.post<StaffWarehouseItem>(`/staff/warehouse-items/${itemId}/return`, payload).then((response) => response.data),
+  getReturnRecipients: (itemId: string) =>
+    api.get<{ recipients: { claimId: string; recipientId: string; fullName: string }[] }>(`/staff/warehouse-items/${itemId}/return-recipients`).then((response) => response.data.recipients),
+  getReturnClaimReviews: (itemId: string) =>
+    api.get<{ claims: StaffClaimReview[] }>(`/staff/warehouse-items/${itemId}/return-claim-reviews`).then((response) => response.data.claims),
+  verifyWarehouseClaim: (itemId: string, payload: { claimId: string; recipientId: string; verified: true; reason: string }) =>
+    api.post<{ claims: StaffClaimReview[] }>(`/staff/warehouse-items/${itemId}/verify-claim`, payload).then((response) => response.data.claims),
+  listWarehouseLogs: (itemId: string) =>
+    api.get<{ logs: StaffWarehouseStorageLog[] }>(`/staff/warehouse-items/${itemId}/logs`).then((response) => response.data.logs),
+  listCustodyRequests: (filters: { status?: StaffCustodyFilter; page?: number; pageSize?: number } = {}) =>
+    api.get<StaffCustodyListResponse>(`/staff/custody-requests${buildQueryString(filters)}`).then((response) => response.data),
+  getCustodyRequest: (requestId: string) =>
+    api.get<{ request: StaffCustodyRequest; audit: StaffCustodyAuditEntry[] }>(`/staff/custody-requests/${requestId}`).then((response) => response.data),
+  getCustodyIntakeContext: (requestId: string) =>
+    api.get<StaffCustodyIntakeContext>(`/staff/custody-requests/${requestId}/intake-context`).then((response) => response.data),
+  acceptCustodyRequest: (requestId: string, payload: { handoverPointId: string; confirmedHandoverAt?: string | null; reason?: string | null }) =>
+    api.patch<StaffCustodyRequest>(`/staff/custody-requests/${requestId}/accept`, payload).then((response) => response.data),
+  rejectCustodyRequest: (requestId: string, reason: string) =>
+    api.patch<StaffCustodyRequest>(`/staff/custody-requests/${requestId}/reject`, { reason }).then((response) => response.data),
+  confirmCustodyIntake: (requestId: string, payload: StaffIntakeCustodyPayload) =>
+    api.post<StaffCustodyRequest>(`/staff/custody-requests/${requestId}/intake`, payload).then((response) => response.data),
+  uploadIntakeImage: async (file: MobileImageFile, intakeKey: string, custodyRequestId?: string) => {
+    const formData = new FormData();
+    await appendFileToFormData(formData, "file", file);
+    formData.append("intakeKey", intakeKey);
+    if (custodyRequestId) formData.append("custodyRequestId", custodyRequestId);
+    return api.post<{ id: string; url: string }>("/staff/warehouse-intake-images", formData).then((response) => response.data);
+  },
+  deleteIntakeImage: (imageId: string, intakeKey: string) =>
+    api.delete<{ removed: boolean }>(`/staff/warehouse-intake-images/${imageId}`, { data: { intakeKey } }).then((response) => response.data),
+  createWalkInWarehouseItem: (payload: StaffCreateWarehouseItemPayload) =>
+    api.post<StaffWarehouseItem>("/staff/warehouse-items", payload).then((response) => response.data),
 };
