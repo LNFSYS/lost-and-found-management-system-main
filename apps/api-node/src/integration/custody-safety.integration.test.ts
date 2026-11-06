@@ -24,6 +24,7 @@ import type { AddressInfo } from "node:net";
 import { preflightMigrations } from "../migrations/migration-preflight.js";
 import { createContactPhotoUseCases } from "../modules/claims/application/contact-photo.use-cases.js";
 import { createClaimUseCases } from "../modules/claims/application/claim.use-cases.js";
+import { nextCustodyIntakeAt } from "../test/custody-intake-time.js";
 
 after(async () => { await defaultPool.end(); });
 
@@ -46,6 +47,7 @@ test("isolated MySQL custody: authorization, concurrency, lifecycle, proof and n
     }
     const [points] = await pool.query<RowDataPacket[]>("SELECT id FROM handover_points WHERE is_active = TRUE LIMIT 1");
     const point = String(points[0].id);
+    const requestedIntakeAt = nextCustodyIntakeAt().toISOString();
     const [categories] = await pool.query<RowDataPacket[]>("SELECT id FROM item_categories WHERE name LIKE '%Chìa%' LIMIT 1");
     const categoryId = categories[0]?.id ? String(categories[0].id) : randomUUID();
     if (!categories.length) await pool.execute("INSERT INTO item_categories (id,name,name_normalized) VALUES (?,'Chìa khóa','chia khoa')", [categoryId]);
@@ -352,7 +354,7 @@ test("isolated MySQL custody: authorization, concurrency, lifecycle, proof and n
           const templates = await fetch(`${base}/claims/${direct.claim.id}/verification/templates`,{ headers });
           assert.equal(templates.status,200);
           const transfer = await fetch(`${base}/claims/${direct.claim.id}/verification/decision`,{ method: "POST",
-            headers: { ...headers, "Idempotency-Key": randomUUID() }, body: JSON.stringify({ decision: "ESCALATE_TO_CUSTODY", reason: "No physical FOUND source", handoverPointId: point }) });
+            headers: { ...headers, "Idempotency-Key": randomUUID() }, body: JSON.stringify({ decision: "ESCALATE_TO_CUSTODY", reason: "No physical FOUND source", handoverPointId: point, requestedIntakeAt }) });
           assert.equal(transfer.status,200);
           const [requests] = await pool.query<RowDataPacket[]>("SELECT id,post_id,requester_id,warehouse_item_id FROM custody_requests WHERE claim_id = ?", [direct.claim.id]);
           assert.equal(requests.length,1);

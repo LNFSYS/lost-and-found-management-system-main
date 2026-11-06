@@ -14,7 +14,7 @@ async function prepare(page: Page, options: { reject?: boolean; used?: number; p
   let calls = 0;
   let used = options.used ?? 0;
   let created: Record<string, unknown> | null = null;
-  const state = () => ({ available: true, id: used ? "draft-1" : null, used, maxAttempts: 4, remaining: 4 - used, attempts });
+  const state = () => ({ available: true, id: used ? "draft-1" : null, used, maxAttempts: 5, remaining: 5 - used, attempts });
   const add = (status: Attempt["status"], values = { title, description, categoryId }) => {
     const attempt: Attempt = { id: `image-${++used}`, number: used, status, ...values, url: status === "READY" ? `/api/posts/illustrations/image-${used}/image` : null };
     attempts.push(attempt); return attempt;
@@ -60,7 +60,7 @@ for (const width of [1440, 390]) test(`LOST illustration chooses a generated ima
   const form = await fill(page);
   const panel = page.getByRole("region", { name: "Ảnh minh họa vật bị mất" });
   await panel.getByRole("button", { name: "Tạo ảnh minh họa", exact: true }).click();
-  await expect(panel.getByText("1/4 lượt")).toBeVisible();
+  await expect(panel.getByText("1/5 lượt")).toBeVisible();
   await expect(panel.getByRole("img", { name: "Ảnh minh họa vật bị mất do AI tạo", exact: true })).toBeVisible();
   await expect.poll(() => panel.locator("img").evaluate((img: HTMLImageElement) => img.naturalWidth)).toBeGreaterThan(0);
   await expect(panel.getByText(/Không phải ảnh thật hoặc bằng chứng sở hữu/)).toBeVisible();
@@ -75,20 +75,20 @@ for (const width of [1440, 390]) test(`LOST illustration chooses a generated ima
   expect(qa.created()?.analysisSignals).toBeUndefined();
 });
 
-test("initial generation plus three retries persists on reload and leaves no fifth action", async ({ page }) => {
+test("initial generation plus four retries persists on reload and leaves no sixth action", async ({ page }) => {
   const qa = await prepare(page);
   await fill(page);
   const panel = page.getByRole("region", { name: "Ảnh minh họa vật bị mất" });
   await panel.getByRole("button", { name: "Tạo ảnh minh họa", exact: true }).click();
-  for (let count = 2; count <= 4; count++) {
+  for (let count = 2; count <= 5; count++) {
     await panel.getByRole("button", { name: "Tạo lại ảnh", exact: true }).click();
-    await expect(panel.getByText(`${count}/4 lượt`)).toBeVisible();
+    await expect(panel.getByText(`${count}/5 lượt`)).toBeVisible();
   }
   await expect(panel.getByRole("button", { name: "Tạo lại ảnh", exact: true })).toBeDisabled();
   await page.reload();
-  await expect(panel.getByText("4/4 lượt")).toBeVisible();
+  await expect(panel.getByText("5/5 lượt")).toBeVisible();
   await expect(panel.getByRole("button", { name: "Tạo lại ảnh", exact: true })).toBeDisabled();
-  expect(qa.calls()).toBe(4);
+  expect(qa.calls()).toBe(5);
 });
 
 test("editing description invalidates the prior selection and does not attach it to another item", async ({ page }) => {
@@ -112,24 +112,24 @@ test("rejected generation has no selectable image and shows remaining quota", as
   await expect(panel.getByRole("alert")).toContainText("chưa phù hợp mô tả");
   await expect(panel.getByRole("img", { name: "Ảnh minh họa vật bị mất do AI tạo", exact: true })).toHaveCount(0);
   await expect(panel.getByLabel("Dùng ảnh này cho bài đăng")).toHaveCount(0);
-  await expect(panel.getByText("1/4 lượt")).toBeVisible();
+  await expect(panel.getByText("1/5 lượt")).toBeVisible();
 });
 
-test("fourth rejected attempt remains visible after refresh without suggesting another generation", async ({ page }, testInfo) => {
+test("fifth rejected attempt remains visible after refresh without suggesting another generation", async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 440, height: 956 });
-  const qa = await prepare(page, { used: 3, reject: true });
+  const qa = await prepare(page, { used: 4, reject: true });
   await fill(page);
   const panel = page.getByRole("region", { name: "Ảnh minh họa vật bị mất" });
   await panel.getByRole("button", { name: "Tạo lại ảnh", exact: true }).click();
-  await expect(panel.getByRole("status")).toContainText("Đã dùng hết 4 lượt và chưa có ảnh được duyệt");
-  await expect(panel.getByRole("alert")).toContainText("Lượt 4: ảnh chưa phù hợp mô tả");
+  await expect(panel.getByRole("status")).toContainText("Đã dùng hết 5 lượt của ngày hôm nay");
+  await expect(panel.getByRole("alert")).toContainText("Lượt 5: ảnh chưa phù hợp mô tả");
   await expect(panel.getByRole("alert")).not.toContainText("tạo lại");
   await panel.getByRole("button", { name: "Kiểm tra trạng thái ảnh minh họa" }).click();
-  await expect(panel.getByRole("alert")).toContainText("Lượt 4:");
+  await expect(panel.getByRole("alert")).toContainText("Lượt 5:");
   await page.reload();
   const form = await fill(page);
-  await expect(panel.getByText("4/4 lượt")).toBeVisible();
-  await expect(panel.getByRole("alert")).toContainText("Lượt 4:");
+  await expect(panel.getByText("5/5 lượt")).toBeVisible();
+  await expect(panel.getByRole("alert")).toContainText("Lượt 5:");
   await expect(panel.getByRole("button", { name: "Tạo lại ảnh", exact: true })).toBeDisabled();
   await expect(panel.getByLabel("Dùng ảnh này cho bài đăng")).toHaveCount(0);
   await expect(form.getByRole("button", { name: "Đăng bài LOST" })).toBeEnabled();
@@ -139,13 +139,13 @@ test("fourth rejected attempt remains visible after refresh without suggesting a
 });
 
 test("verification service error is not presented as an unrelated image on reload", async ({ page }) => {
-  const qa = await prepare(page, { used: 3, verificationFailure: true });
+  const qa = await prepare(page, { used: 4, verificationFailure: true });
   await fill(page);
   const panel = page.getByRole("region", { name: "Ảnh minh họa vật bị mất" });
   await panel.getByRole("button", { name: "Tạo lại ảnh", exact: true }).click();
   await expect(panel.getByRole("alert")).toContainText("Chưa nhận được kết quả kiểm tra ảnh");
   await page.reload();
-  await expect(panel.getByRole("alert")).toContainText("Lượt 4: dịch vụ tạo hoặc kiểm tra ảnh chưa hoàn tất");
+  await expect(panel.getByRole("alert")).toContainText("Lượt 5: dịch vụ tạo hoặc kiểm tra ảnh chưa hoàn tất");
   await expect(panel.getByRole("alert")).not.toContainText("chưa phù hợp mô tả");
   await expect(panel.getByRole("alert")).not.toContainText("thử lại");
   await expect(panel.getByRole("button", { name: "Tạo lại ảnh", exact: true })).toBeDisabled();
@@ -199,7 +199,7 @@ test("quota errors survive reload as a server cooldown and leave manual posting 
   let calls = 0;
   let cooldown: { until: number; message: string } | null = null;
   const message = "Gemini đang chặn quota Free Tier của model tạo ảnh. Quản trị viên cần kiểm tra Billing và hạn mức trong Google AI Studio; bấm tạo lại không khắc phục được.";
-  await page.route("**/api/posts/illustrations/draft", route => route.fulfill({ json: { available: true, id: "draft-1", used: 2 + calls, maxAttempts: 4, remaining: 2 - calls, attempts: [], cooldown } }));
+  await page.route("**/api/posts/illustrations/draft", route => route.fulfill({ json: { available: true, id: "draft-1", used: 2 + calls, maxAttempts: 5, remaining: 3 - calls, attempts: [], cooldown } }));
   await page.route(/\/api\/posts\/illustrations$/, route => {
     calls++; cooldown = { until: Date.now() + 76_775_000, message };
     return route.fulfill({ status: 429, headers: { "retry-after": "76775" }, json: { message } });
@@ -215,7 +215,7 @@ test("quota errors survive reload as a server cooldown and leave manual posting 
   await expect(panel.getByRole("status")).toContainText("Tạm dừng thử lại");
   await expect(panel.getByRole("button", { name: "Tạo lại ảnh", exact: true })).toBeDisabled();
   await expect(form.getByRole("button", { name: "Đăng bài LOST" })).toBeEnabled();
-  await expect(panel.getByText("3/4 lượt")).toBeVisible();
+  await expect(panel.getByText("3/5 lượt")).toBeVisible();
   await panel.evaluate(element => window.scrollTo(0, element.getBoundingClientRect().top + window.scrollY - 160));
   await page.screenshot({ path: testInfo.outputPath("quota-cooldown-mobile.png") });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);

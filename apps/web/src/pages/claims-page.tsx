@@ -622,7 +622,11 @@ export function ClaimsPage() {
     pendingWithdrawal.current = null;
     roomSyncInFlight.current = false;
     syncAgain.current = false;
-    if (claimId) void loadClaimRoom(claimId, Boolean(handoffClaim && handoffMessage));
+    if (claimId) {
+      const hasHandoff = Boolean(handoffClaim && handoffMessage);
+      void loadClaimRoom(claimId, hasHandoff);
+      if (hasHandoff && handoffClaim?.canSend) void loadVerification(claimId);
+    }
     return () => {
       roomRequest.current.generation += 1;
       selectedClaimId.current = undefined;

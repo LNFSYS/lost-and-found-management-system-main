@@ -28,7 +28,7 @@ for (const legacy of [false, true]) {
     finally { connection.release(); }
     assert.equal((await claims.getClaim(claimId, ids.finder)).finderId, ids.finder);
     assert.equal((await claims.getVerification(claimId, ids.owner)).participantRole, "CLAIMANT");
-    const decision = { decision: "ESCALATE_TO_CUSTODY" as const, reason: "Transfer to Staff", handoverPointId: point, idempotencyKey: randomUUID() };
+    const decision = { decision: "ESCALATE_TO_CUSTODY" as const, reason: "Transfer to Staff", handoverPointId: point, requestedIntakeAt: f.requestedIntakeAt, idempotencyKey: randomUUID() };
     await claims.decideVerification(claimId, ids.finder, decision);
     await claims.decideVerification(claimId, ids.finder, decision);
     const [requests] = await pool.query<RowDataPacket[]>("SELECT id FROM custody_requests WHERE claim_id = ?", [claimId]);
@@ -97,7 +97,7 @@ test("photo custody requires the consumed Finder image, room consent and strict 
   const { ids, pool, claims, services } = f;
   const approval = await f.contactPhotos.analyze(ids.lost, ids.finder, f.image);
   const direct = await claims.createDirectMessage(ids.finder, { postId: ids.lost, contactCheckId: approval.checkId!, content: "Found your keys", clientMessageId: randomUUID() });
-  const decision = { decision: "ESCALATE_TO_CUSTODY" as const, reason: "Please receive these keys", handoverPointId: f.point, idempotencyKey: randomUUID() };
+  const decision = { decision: "ESCALATE_TO_CUSTODY" as const, reason: "Please receive these keys", handoverPointId: f.point, requestedIntakeAt: f.requestedIntakeAt, idempotencyKey: randomUUID() };
   await assert.rejects(claims.decideVerification(direct.claim.id, ids.owner, decision));
   await assert.rejects(services.warehouseService.getImage(approval.checkId!, "CONTACT_PHOTO", ids.staff));
   await assert.rejects(services.custodyRequestService.createRequest({ intakeType: "CUSTODY_TRANSFER", claimId: direct.claim.id, roomId: direct.claim.room!.id, handoverPointId: f.point }, ids.finder));

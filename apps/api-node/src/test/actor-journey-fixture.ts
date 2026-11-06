@@ -15,6 +15,7 @@ import { createContactPhotoUseCases } from "../modules/claims/application/contac
 import { createAuthSecurity } from "../modules/auth/infrastructure/auth-security.js";
 import { env } from "../shared/infrastructure/config/env.js";
 import { createPrivateMediaStorage } from "../shared/infrastructure/private-media-storage.js";
+import { nextCustodyIntakeAt } from "./custody-intake-time.js";
 
 after(async () => { await defaultPool.end(); });
 export const isolatedJourney = { skip: process.env.LNFS_DB_INTEGRATION !== "1" };
@@ -30,6 +31,7 @@ async function fixture(pool: Pool, uploadDir: string) {
   }
   const [points] = await pool.query<RowDataPacket[]>("SELECT id FROM handover_points WHERE is_active = TRUE LIMIT 1");
   const point = String(points[0]!.id);
+  const requestedIntakeAt = nextCustodyIntakeAt();
   const categoryId = randomUUID();
   await pool.execute("INSERT INTO item_categories (id,name,name_normalized) VALUES (?,'Journey keys','journey keys')", [categoryId]);
   for (const [post,user,type] of [[ids.found,ids.finder,"FOUND"],[ids.lost,ids.owner,"LOST"]]) {
@@ -49,7 +51,7 @@ async function fixture(pool: Pool, uploadDir: string) {
     const upload = await services.warehouseService.uploadIntakeImage({ intakeKey, ...(custodyRequestId ? { custodyRequestId } : {}) }, image, ids.staff);
     return { intakeKey, intakeImageIds: [upload.id], receivedQuantity: 1, accessories: "None", physicalReviewConfirmed: true as const, conditionNotes: "Good" };
   }
-  return { pool, p, ids, point, categoryId, services: { ...services, claimService: claims }, claims, contactPhotos, image, evidence };
+  return { pool, p, ids, point, requestedIntakeAt, categoryId, services: { ...services, claimService: claims }, claims, contactPhotos, image, evidence };
 }
 
 export async function withActorJourney(run: (context: Awaited<ReturnType<typeof fixture>>) => Promise<void>) {
