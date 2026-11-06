@@ -238,7 +238,7 @@ export interface ClaimVerificationState {
   participantRole: ClaimRole;
   roomEscalation: { escalatedAt: string; escalatedBy: string | null; reason: string | null } | null;
   policy: { templateId: string; templateVersion: number; minimumAnswers: number; answeredCount: number; matchedCount?: number; readyForDecision: boolean; photoContactEligible?: boolean };
-  questions: Array<{
+  questions: {
     id: string;
     prompt: string;
     questionType: VerificationTemplatePrompt["questionType"];
@@ -247,8 +247,8 @@ export interface ClaimVerificationState {
     assignedAt: string;
     template: { templateId: string; templateVersion: number; promptKey: string } | null;
     answer: { answered: true; attemptCount: number; answeredAt: string; isMatch?: boolean } | null;
-  }>;
-  history: Array<{ id: string; actorId: string; action: string; fromStatus: ClaimStatus | null; toStatus: ClaimStatus | null; metadata: Record<string, unknown> | null; createdAt: string }>;
+  }[];
+  history: { id: string; actorId: string; action: string; fromStatus: ClaimStatus | null; toStatus: ClaimStatus | null; metadata: Record<string, unknown> | null; createdAt: string }[];
 }
 
 export type AppointmentStatus = "PENDING" | "ACCEPTED" | "REJECTED" | "CANCELLED" | "COMPLETED" | "RESCHEDULED";
@@ -272,7 +272,7 @@ export interface AppointmentRecord {
   noShowUserId: string | null;
   custodyAuthorized: boolean;
   completedAt: string | null;
-  events: Array<{ id: string; action: string; actorId: string | null; createdAt: string; note?: string | null }>;
+  events: { id: string; action: string; actorId: string | null; createdAt: string; note?: string | null }[];
 }
 export interface AppointmentListResponse { results: AppointmentRecord[]; total: number }
 export interface PublicHandoverPoint { id: string; name: string; address?: string | null; openingHours?: string | null }
@@ -595,11 +595,63 @@ export interface StaffClaimReview {
 }
 
 export interface UserReportPayload {
-  targetType: "POST" | "CLAIM" | "CHAT" | "HANDOVER";
+  targetType: "POST" | "USER" | "CLAIM" | "MESSAGE" | "HANDOVER";
   targetId: string;
   reason: string;
   details?: string;
   idempotencyKey?: string;
+}
+
+export type NotificationEmailMode = "IMMEDIATE" | "DELAYED_UNREAD" | "DIGEST" | "DISABLED";
+export type NotificationCategory = "CHAT" | "CLAIM" | "MATCH" | "APPOINTMENT" | "HANDOVER" | "CUSTODY" | "OVERDUE" | "FEEDBACK";
+export interface AppNotification {
+  id: string; type: string; title: string; body: string | null; entityType: string | null; entityId: string | null;
+  isRead: boolean; readAt: string | null; createdAt: string;
+}
+export interface NotificationListResponse { items: AppNotification[]; unreadTotal: number }
+export interface NotificationPreference {
+  inAppEnabled: boolean; pushEnabled: boolean; emailMode: NotificationEmailMode;
+}
+export interface NotificationPreferences {
+  userId: string; chatMode: NotificationEmailMode; claimMode: NotificationEmailMode;
+  categories: Record<NotificationCategory, NotificationPreference>;
+  quietHoursStart: string | null; quietHoursEnd: string | null; timezone: string; updatedAt: string;
+}
+export type AdminAccessRole = "ADMIN" | "STAFF" | "USER";
+export type AdminUserStatus = "ACTIVE" | "DISABLED";
+export interface AdminUser {
+  id: string; email: string; fullName: string; studentCode: string | null; phoneNumber: string | null;
+  status: AdminUserStatus; roles: MobileUser["roles"]; accessRole: AdminAccessRole; createdAt: string; updatedAt: string;
+}
+export interface AdminDashboardKpis {
+  filters: { from: string; to: string; days: number; granularity: "day" };
+  totals: { posts: number; claims: number; appointments: number; returns: number };
+  snapshot: { openPosts: number; custodyItems: number; unresolvedReports: number };
+  trends: { date: string; posts: number; claims: number; appointments: number; returns: number; custody: number; reports: number }[];
+  statusBreakdown: Record<string, { status: string; total: number }[]>;
+}
+export interface AdminCatalog {
+  categories: { id: string; name: string; icon: string | null; parentId: string | null; isActive: boolean; sortOrder: number }[];
+  areas: { id: string; name: string; description: string | null; isActive: boolean; sortOrder: number }[];
+  buildings: { id: string; areaId: string; areaName: string; name: string; isActive: boolean; sortOrder: number }[];
+  handoverPoints: { id: string; name: string; address: string; areaId: string | null; areaName: string | null; buildingId: string | null; buildingName: string | null; openingHours: string | null; contactInfo: string | null; mapImageUrl: string | null; mapPositionX: number | null; mapPositionY: number | null; isActive: boolean }[];
+}
+export interface AdminSystemConfig {
+  id: string; configKey: string; configValue: string; valueType: "STRING" | "INTEGER" | "FLOAT" | "BOOLEAN" | "JSON";
+  description: string | null; isPublic: boolean; updatedAt: string;
+}
+export interface AdminModerationReport {
+  id: string; reporter: { id: string; fullName: string; email: string }; entityType: "POST" | "USER" | "CLAIM" | "CHAT" | "HANDOVER";
+  entityId: string; sourceType: string | null; sourceId: string | null; reason: string; details: string | null;
+  status: "PENDING" | "REVIEWED" | "DISMISSED" | "WITHDRAWN"; reviewer: { id: string; fullName: string } | null;
+  reviewedAt: string | null; createdAt: string; entity: { type: string; title: string | null; status: string | null; ownerName: string | null; referenceId: string | null };
+}
+export interface UserReportRecord {
+  id: string; entityType: "POST" | "USER" | "CLAIM" | "CHAT" | "HANDOVER"; entityId: string;
+  sourceType: "POST" | "USER" | "CLAIM" | "MESSAGE" | "HANDOVER"; sourceId: string;
+  reason: string; details: string | null; status: "PENDING" | "REVIEWED" | "DISMISSED" | "WITHDRAWN";
+  resolution: string | null; reviewedAt: string | null; withdrawnAt: string | null; createdAt: string;
+  target: { title: string; status: string };
 }
 
 interface RetryableRequest extends InternalAxiosRequestConfig {
@@ -1067,4 +1119,63 @@ export const staffService = {
     api.delete<{ removed: boolean }>(`/staff/warehouse-intake-images/${imageId}`, { data: { intakeKey } }).then((response) => response.data),
   createWalkInWarehouseItem: (payload: StaffCreateWarehouseItemPayload) =>
     api.post<StaffWarehouseItem>("/staff/warehouse-items", payload).then((response) => response.data),
+};
+
+export const notificationService = {
+  list: (limit = 50) => api.get<NotificationListResponse>(`/notifications${buildQueryString({ limit: Math.min(50, Math.max(1, limit)) })}`).then((res) => res.data),
+  markRead: (id: string) => api.post<{ read: boolean }>(`/notifications/${id}/read`).then((res) => res.data),
+  markAllRead: () => api.post<{ read: boolean; count: number }>("/notifications/read-all").then((res) => res.data),
+  getPreferences: () => api.get<{ preferences: NotificationPreferences }>("/notifications/preferences").then((res) => res.data.preferences),
+  updatePreferences: (payload: Omit<NotificationPreferences, "userId" | "updatedAt">) =>
+    api.put<{ preferences: NotificationPreferences }>("/notifications/preferences", payload).then((res) => res.data.preferences),
+};
+
+export const userReportService = {
+  submit: (payload: UserReportPayload) => {
+    const body = { ...payload, idempotencyKey: payload.idempotencyKey ?? `mobile-${createRequestUuid()}` };
+    return api.post<UserReportRecord>("/reports", body).then((res) => res.data);
+  },
+  list: (filters: { status?: UserReportRecord["status"] | ""; page?: number; pageSize?: number } = {}) =>
+    api.get<{ total: number; page: number; pageSize: number; items: UserReportRecord[] }>(`/reports/mine${buildQueryString(filters)}`).then((res) => res.data),
+  withdraw: (id: string) => api.post<UserReportRecord>(`/reports/mine/${id}/withdraw`).then((res) => res.data),
+};
+
+export const adminService = {
+  getDashboard: (filters: { from?: string; to?: string } = {}) => api.get<AdminDashboardKpis>(`/admin/dashboard/kpis${buildQueryString(filters)}`).then((res) => res.data),
+  exportStatistics: (payload: { from?: string; to?: string; format: "CSV" | "JSON"; sections?: ("overview" | "trends" | "statusBreakdown")[] }) =>
+    api.post<{ fileName: string; mimeType: string; generatedAt: string; rowCount: number; format: "CSV" | "JSON"; content: string }>("/admin/statistics/export", payload).then((res) => res.data),
+  listUsers: (filters: { q?: string; role?: AdminAccessRole | ""; status?: AdminUserStatus | ""; page?: number; pageSize?: number } = {}) =>
+    api.get<{ total: number; page: number; pageSize: number; items: AdminUser[] }>(`/admin/users${buildQueryString(filters)}`).then((res) => res.data),
+  createUser: (payload: { email: string; password: string; fullName: string; studentCode?: string | null; phoneNumber?: string | null; audienceRole?: "STUDENT" | "LECTURER" | null; accessRole: AdminAccessRole; status: AdminUserStatus; reason?: string | null }) =>
+    api.post<AdminUser>("/admin/users", payload).then((res) => res.data),
+  changeUserRole: (id: string, accessRole: AdminAccessRole, reason: string) => api.patch<AdminUser>(`/admin/users/${id}/role`, { accessRole, reason }).then((res) => res.data),
+  changeUserStatus: (id: string, status: AdminUserStatus, reason: string) => api.patch<AdminUser>(`/admin/users/${id}/status`, { status, reason }).then((res) => res.data),
+  listReports: (filters: { q?: string; status?: string; entityType?: string; page?: number; pageSize?: number } = {}) =>
+    api.get<{ total: number; page: number; pageSize: number; items: AdminModerationReport[] }>(`/admin/reports${buildQueryString(filters)}`).then((res) => res.data),
+  reviewReport: (id: string, actionType: "RESOLVE_REPORT" | "WARN_USER" | "HIDE_POST" | "DELETE_POST" | "BAN_USER" | "UNBAN_USER" | "DISMISS_REPORT", reason: string) =>
+    api.patch<AdminModerationReport>(`/admin/reports/${id}/review`, { actionType, reason }).then((res) => res.data),
+  getCatalog: () => api.get<AdminCatalog>("/admin/catalog").then((res) => res.data),
+  createCategory: (payload: { name: string; icon?: string | null; parentId?: string | null; isActive?: boolean; sortOrder?: number }) => api.post("/admin/categories", payload).then((res) => res.data),
+  updateCategory: (id: string, payload: Record<string, unknown>) => api.patch(`/admin/categories/${id}`, payload).then((res) => res.data),
+  deleteCategory: (id: string) => api.delete(`/admin/categories/${id}`).then((res) => res.data),
+  createArea: (payload: { name: string; description?: string | null; isActive?: boolean; sortOrder?: number }) => api.post("/admin/areas", payload).then((res) => res.data),
+  updateArea: (id: string, payload: Record<string, unknown>) => api.patch(`/admin/areas/${id}`, payload).then((res) => res.data),
+  deleteArea: (id: string) => api.delete(`/admin/areas/${id}`).then((res) => res.data),
+  createBuilding: (payload: { name: string; areaId: string; isActive?: boolean; sortOrder?: number }) => api.post("/admin/buildings", payload).then((res) => res.data),
+  updateBuilding: (id: string, payload: Record<string, unknown>) => api.patch(`/admin/buildings/${id}`, payload).then((res) => res.data),
+  deleteBuilding: (id: string) => api.delete(`/admin/buildings/${id}`).then((res) => res.data),
+  createHandoverPoint: (payload: Record<string, unknown>) => api.post("/admin/handover-points", payload).then((res) => res.data),
+  updateHandoverPoint: (id: string, payload: Record<string, unknown>) => api.patch(`/admin/handover-points/${id}`, payload).then((res) => res.data),
+  deleteHandoverPoint: (id: string) => api.delete(`/admin/handover-points/${id}`).then((res) => res.data),
+  uploadHandoverMap: async (id: string, file: MobileImageFile) => {
+    const formData = new FormData();
+    await appendFileToFormData(formData, "file", file);
+    return api.post(`/admin/handover-points/${id}/map-image`, formData).then((res) => res.data);
+  },
+  listConfigs: (filters: { q?: string; valueType?: string | ""; isPublic?: boolean | ""; page?: number; pageSize?: number } = {}) =>
+    api.get<{ total: number; page: number; pageSize: number; items: AdminSystemConfig[] }>(`/admin/configs${buildQueryString(filters)}`).then((res) => res.data),
+  createConfig: (payload: { configKey: string; configValue: string; valueType: AdminSystemConfig["valueType"]; description?: string | null; isPublic?: boolean; reason?: string | null }) => api.post<AdminSystemConfig>("/admin/configs", payload).then((res) => res.data),
+  updateConfig: (id: string, payload: Partial<Pick<AdminSystemConfig, "configKey" | "configValue" | "valueType" | "description" | "isPublic">> & { reason?: string | null }) => api.patch<AdminSystemConfig>(`/admin/configs/${id}`, payload).then((res) => res.data),
+  getConfigHistory: (id: string, limit = 20) => api.get<{ items: { id: string; action: string; configKey: string; oldValue: string | null; newValue: string; changedBy: string; changedAt: string; reason: string | null }[] }>(`/admin/configs/${id}/history${buildQueryString({ limit })}`).then((res) => res.data.items),
+  deleteConfig: (id: string, reason?: string) => api.delete(`/admin/configs/${id}`, { data: { reason } }),
 };

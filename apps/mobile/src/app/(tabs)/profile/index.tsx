@@ -201,7 +201,8 @@ export default function ProfileScreen() {
       </Card>
 
       <View style={styles.footerActions}>
-        <Button title={`Thông báo${unreadCount ? ` (${unreadCount})` : ""}`} variant="secondary" onPress={() => router.push("/profile/notifications")} />
+        <Button title={`Thông báo${unreadCount ? ` (${unreadCount})` : ""}`} variant="secondary" onPress={() => router.push("/notifications" as never)} />
+        <Button title="Báo cáo vi phạm" variant="secondary" onPress={() => router.push("/reports" as never)} />
         <Button title="Đăng xuất" variant="danger" onPress={() => void logout()} />
       </View>
     </AppScreen>

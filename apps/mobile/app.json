@@ -13,6 +13,7 @@
     },
     "android": {
       "package": "com.fptu.lostfound",
+      "versionCode": 1,
       "permissions": [
         "CAMERA",
         "READ_MEDIA_IMAGES",
@@ -54,7 +55,8 @@
           "imageWidth": 160,
           "resizeMode": "contain"
         }
-      ]
+      ],
+      "expo-sharing"
     ],
     "experiments": {
       "typedRoutes": true
