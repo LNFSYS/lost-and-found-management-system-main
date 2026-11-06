@@ -7,12 +7,13 @@ const valid = {
   reason: "Nội dung không phù hợp", details: "Mô tả ngắn", idempotencyKey: "retry-key-123"
 };
 
-test("report input accepts bounded supported target data", () => {
+test("report input accepts bounded supported post and user targets", () => {
   assert.equal(submitReportSchema.parse(valid).targetType, "POST");
+  assert.equal(submitReportSchema.parse({ ...valid, targetType: "USER" }).targetType, "USER");
 });
 
 test("report input rejects unsupported targets, HTML and oversized evidence text", () => {
-  assert.equal(submitReportSchema.safeParse({ ...valid, targetType: "USER" }).success, false);
+  assert.equal(submitReportSchema.safeParse({ ...valid, targetType: "BUILDING" }).success, false);
   assert.equal(submitReportSchema.safeParse({ ...valid, details: "<script>alert(1)</script>" }).success, false);
   assert.equal(submitReportSchema.safeParse({ ...valid, details: "x".repeat(1001) }).success, false);
 });

@@ -30,6 +30,9 @@ export default function TabsLayout() {
       <Tabs.Screen name="claims" options={{ title: "Claims", tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name="message-text-outline" color={String(color)} size={size} /> }} />
       <Tabs.Screen name="appointments" options={{ title: "Appointments", tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name="calendar-check-outline" color={String(color)} size={size} /> }} />
       <Tabs.Screen name="profile" options={{ title: "Profile", tabBarBadge: unreadCount > 0 ? (unreadCount > 99 ? "99+" : unreadCount) : undefined, tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name="account-circle-outline" color={String(color)} size={size} /> }} />
+      <Tabs.Screen name="notifications" options={{ href: null }} />
+      <Tabs.Screen name="reports" options={{ href: null }} />
+      <Tabs.Screen name="custody" options={{ href: null }} />
       <Tabs.Screen name="admin" options={{ title: "Admin", href: isAdmin ? undefined : null, tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name="shield-account-outline" color={String(color)} size={size} /> }} />
       <Tabs.Screen name="staff" options={{ title: "Staff", href: isStaff ? undefined : null, tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name="clipboard-check-outline" color={String(color)} size={size} /> }} />
     </Tabs>

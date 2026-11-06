@@ -59,17 +59,20 @@ const reportSelect = `SELECT r.id, r.entity_type, r.entity_id, r.source_type, r.
   CASE
     WHEN r.entity_type = 'POST' THEN CASE WHEN p.deleted_at IS NULL AND p.status NOT IN ('DELETED', 'HIDDEN') THEN p.title ELSE NULL END
     WHEN r.entity_type = 'CLAIM' THEN CONCAT('Yêu cầu xác minh cho ', COALESCE(cp.title, 'bài đăng'))
+    WHEN r.entity_type = 'USER' THEN COALESCE(report_target_user.full_name, 'Tài khoản người dùng')
     WHEN r.entity_type = 'CHAT' THEN 'Tin nhắn trong phòng trao đổi riêng'
     WHEN r.entity_type = 'HANDOVER' THEN 'Vấn đề bàn giao vật phẩm'
   END AS target_title,
   CASE
     WHEN r.entity_type = 'POST' THEN CASE WHEN p.deleted_at IS NULL THEN p.status ELSE NULL END
     WHEN r.entity_type = 'CLAIM' THEN c.status
+    WHEN r.entity_type = 'USER' THEN report_target_user.status
     WHEN r.entity_type = 'CHAT' THEN cc.status
     WHEN r.entity_type = 'HANDOVER' THEN ra.status
   END AS target_status
 FROM reports r
 LEFT JOIN posts p ON r.entity_type = 'POST' AND p.id = r.entity_id
+LEFT JOIN users report_target_user ON r.entity_type = 'USER' AND report_target_user.id = r.entity_id
 LEFT JOIN claims c ON r.entity_type = 'CLAIM' AND c.id = r.entity_id
 LEFT JOIN posts cp ON cp.id = c.post_id
 LEFT JOIN chat_rooms cr ON r.entity_type = 'CHAT' AND cr.id = r.entity_id
@@ -89,6 +92,9 @@ export function createReportRepository(database: SqlExecutor): ReportRepository 
       if (sourceType === "POST") {
         query = `SELECT 'POST' entity_type, p.id entity_id, 'POST' source_type, p.id source_id, p.title, p.status
           FROM posts p WHERE p.id = ? AND p.deleted_at IS NULL AND p.status NOT IN ('DELETED', 'HIDDEN')`;
+      } else if (sourceType === "USER") {
+        query = `SELECT 'USER' entity_type, u.id entity_id, 'USER' source_type, u.id source_id, u.full_name title, u.status
+          FROM users u WHERE u.id = ? AND u.id <> ?`;
       } else if (sourceType === "CLAIM") {
         query = `SELECT 'CLAIM' entity_type, c.id entity_id, 'CLAIM' source_type, c.id source_id,
           CONCAT('Yêu cầu xác minh cho ', p.title) title, c.status
@@ -123,10 +129,11 @@ export function createReportRepository(database: SqlExecutor): ReportRepository 
       const type = input.target.entityType;
       const targetId = input.target.entityId;
       const sourceQuery = type === "POST" ? "SELECT ? AS post_id"
+        : type === "USER" ? "SELECT NULL AS post_id"
         : type === "CLAIM" ? "SELECT COALESCE(source_found_post_id,post_id) AS post_id FROM claims WHERE id = ?"
           : type === "CHAT" ? "SELECT COALESCE(c.source_found_post_id,c.post_id) AS post_id FROM chat_rooms r JOIN claims c ON c.id = r.claim_id WHERE r.id = ?"
             : "SELECT COALESCE(c.source_found_post_id,c.post_id) AS post_id FROM return_appointments a JOIN claims c ON c.id = a.claim_id WHERE a.id = ?";
-      const [targets] = await executor(connection).execute<RowDataPacket[]>(sourceQuery, [targetId]);
+      const [targets] = await executor(connection).execute<RowDataPacket[]>(sourceQuery, type === "USER" ? [] : [targetId]);
       if (targets[0]?.post_id) await executor(connection).execute("SELECT id FROM posts WHERE id = ? FOR UPDATE", [targets[0].post_id]);
       await executor(connection).execute(
         `INSERT INTO reports (id, reporter_id, entity_type, entity_id, source_type, source_id, reason, details, idempotency_key, request_hash)
