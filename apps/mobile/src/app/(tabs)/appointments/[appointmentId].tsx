@@ -56,6 +56,7 @@ export default function AppointmentDetailScreen() {
   const [sendingFeedback, setSendingFeedback] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [now, setNow] = useState(() => Date.now());
   const actionKey = useRef<{ fingerprint: string; key: string } | null>(null);
   const feedbackKey = useRef<string | null>(null);
 
@@ -80,7 +81,13 @@ export default function AppointmentDetailScreen() {
     }
   }, [appointmentId]);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      void load();
+      setNow(Date.now());
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [load]);
 
   const act = async (action: AppointmentAction) => {
     if (!appointment || busy) return;
@@ -144,9 +151,10 @@ export default function AppointmentDetailScreen() {
   const ownResponse = finder ? appointment.finderResponse : appointment.ownerResponse;
   const otherResponse = finder ? appointment.ownerResponse : appointment.finderResponse;
   const ended = ["COMPLETED", "CANCELLED", "REJECTED"].includes(appointment.status);
-  const occurred = new Date(appointment.proposedAt).getTime() <= Date.now();
+  const proposedTime = new Date(appointment.proposedAt).getTime();
+  const occurred = proposedTime <= now;
   const canCancel = (appointment.finderResponse === "PENDING" && appointment.ownerResponse === "PENDING") || (appointment.finderResponse === "DISPUTED" && appointment.ownerResponse === "DISPUTED");
-  const canNoShow = occurred && Date.now() >= new Date(appointment.proposedAt).getTime() + 15 * 60_000 && appointment.finderResponse === "PENDING" && appointment.ownerResponse === "PENDING";
+  const canNoShow = occurred && now >= proposedTime + 15 * 60_000 && appointment.finderResponse === "PENDING" && appointment.ownerResponse === "PENDING";
   const feedbackRecord = eligibility?.currentUserFeedback;
   const selectedDelta = rating > 0 ? reputationDeltas[rating - 1] : null;
 

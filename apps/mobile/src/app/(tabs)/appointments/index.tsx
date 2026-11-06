@@ -91,6 +91,7 @@ export default function AppointmentsScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [defaultProposedDate] = useState(() => new Date(Date.now() + 60 * 60 * 1000));
   const [loadingPoints, setLoadingPoints] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const requestKey = useRef<string | null>(null);
@@ -116,23 +117,42 @@ export default function AppointmentsScreen() {
     }
   }, [claimId]);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      void load();
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [load]);
 
   useEffect(() => {
     let active = true;
-    if (!claimId) { setClaim(null); return () => { active = false; }; }
-    setLoadingPoints(true);
-    void Promise.all([appointmentService.listHandoverPoints(), claimService.get(claimId)])
-      .then(([result, claimResult]) => {
-        if (!active) return;
-        const usable = result.handoverPoints;
-        setPoints(usable);
-        setSelectedPoint((current) => current || usable[0]?.id || "");
-        setClaim(claimResult);
-      })
-      .catch((pointError) => { if (active) setError(getApiErrorMessage(pointError)); })
-      .finally(() => { if (active) setLoadingPoints(false); });
-    return () => { active = false; };
+    if (!claimId) {
+      const timer = setTimeout(() => {
+        if (active) setClaim(null);
+      }, 0);
+      return () => {
+        active = false;
+        clearTimeout(timer);
+      };
+    }
+    const timer = setTimeout(() => {
+      if (!active) return;
+      setLoadingPoints(true);
+      void Promise.all([appointmentService.listHandoverPoints(), claimService.get(claimId)])
+        .then(([result, claimResult]) => {
+          if (!active) return;
+          const usable = result.handoverPoints;
+          setPoints(usable);
+          setSelectedPoint((current) => current || usable[0]?.id || "");
+          setClaim(claimResult);
+        })
+        .catch((pointError) => { if (active) setError(getApiErrorMessage(pointError)); })
+        .finally(() => { if (active) setLoadingPoints(false); });
+    }, 0);
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
   }, [claimId]);
 
   const loadMore = async () => {
@@ -199,7 +219,7 @@ export default function AppointmentsScreen() {
           {hasActive ? <View style={styles.infoBox}><MaterialCommunityIcons name="calendar-alert" size={18} color={colors.warning} /><Text style={styles.infoText}>Đã có lịch đang chờ xử lý cho yêu cầu này. Mở lịch hiện tại để phản hồi hoặc đề xuất lại sau khi lịch kết thúc.</Text></View> : <>
             <Text style={styles.fieldLabel}>Thời gian gặp</Text>
             <Pressable accessibilityRole="button" onPress={() => setPickerMode(Platform.OS === "ios" ? "datetime" : "date")} style={styles.dateButton}><MaterialCommunityIcons name="calendar-clock-outline" size={19} color={colors.primary} /><Text style={styles.dateButtonText}>{proposedAt ? new Intl.DateTimeFormat("vi-VN", { dateStyle: "full", timeStyle: "short" }).format(proposedAt) : "Chọn ngày và giờ"}</Text></Pressable>
-            {pickerMode ? <View style={styles.pickerPanel}><DateTimePicker value={proposedAt ?? new Date(Date.now() + 60 * 60 * 1000)} mode={Platform.OS === "ios" ? "datetime" : pickerMode === "time" ? "time" : "date"} minimumDate={new Date()} display={Platform.OS === "ios" ? "spinner" : "default"} onChange={onDateTimeChange} />{Platform.OS === "ios" ? <Button title="Xong" variant="secondary" onPress={() => setPickerMode(null)} /> : null}</View> : null}
+            {pickerMode ? <View style={styles.pickerPanel}><DateTimePicker value={proposedAt ?? defaultProposedDate} mode={Platform.OS === "ios" ? "datetime" : pickerMode === "time" ? "time" : "date"} minimumDate={new Date()} display={Platform.OS === "ios" ? "spinner" : "default"} onChange={onDateTimeChange} />{Platform.OS === "ios" ? <Button title="Xong" variant="secondary" onPress={() => setPickerMode(null)} /> : null}</View> : null}
             <Text style={styles.fieldLabel}>Điểm bàn giao an toàn</Text>
             {loadingPoints ? <ActivityIndicator color={colors.primary} /> : <View style={styles.pointsList}>{points.map((point) => <Pressable key={point.id} accessibilityRole="radio" accessibilityState={{ selected: selectedPoint === point.id }} onPress={() => setSelectedPoint(point.id)} style={[styles.pointCard, selectedPoint === point.id && styles.pointCardSelected]}><MaterialCommunityIcons name={selectedPoint === point.id ? "radiobox-marked" : "radiobox-blank"} size={20} color={selectedPoint === point.id ? colors.primary : colors.muted} /><View style={styles.headerCopy}><Text style={styles.pointName}>{point.name}</Text><Text style={styles.pointAddress}>{point.address ?? "Điểm bàn giao được trường quản lý"}</Text></View></Pressable>)}</View>}
             {points.length === 0 && !loadingPoints ? <Text style={styles.muted}>Chưa có điểm bàn giao khả dụng. Hãy thử tải lại sau.</Text> : null}

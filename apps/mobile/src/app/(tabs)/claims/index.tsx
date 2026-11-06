@@ -12,7 +12,6 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorBanner } from "@/components/ui/error-banner";
 import { Input } from "@/components/ui/input";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
-import { Badge } from "@/components/ui/badge";
 import { colors, radii, spacing } from "@/constants/theme";
 import { useAuth } from "@/context/auth-context";
 import { claimService, createRequestUuid, getApiErrorMessage, postService, type ClaimRecord, type MobileImageFile, type PostSummary } from "@/services/api";
@@ -258,28 +257,47 @@ export default function ClaimsScreen() {
     }
   }, []);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      void load();
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [load]);
 
   useEffect(() => {
     let active = true;
-    if (!postId) { setPost(null); return () => { active = false; }; }
-    setLoadingPost(true);
-    setError(null);
-    void (async () => {
-      try {
-        if (!sourceFoundPostId) {
-          const existing = await postService.findConversationByPost(postId);
-          if (active && existing?.id) { router.replace(`/claims/${existing.id}` as never); return; }
+    if (!postId) {
+      const timer = setTimeout(() => {
+        if (active) setPost(null);
+      }, 0);
+      return () => {
+        active = false;
+        clearTimeout(timer);
+      };
+    }
+    const timer = setTimeout(() => {
+      if (!active) return;
+      setLoadingPost(true);
+      setError(null);
+      void (async () => {
+        try {
+          if (!sourceFoundPostId) {
+            const existing = await postService.findConversationByPost(postId);
+            if (active && existing?.id) { router.replace(`/claims/${existing.id}` as never); return; }
+          }
+          const result = await postService.getPost(postId);
+          if (active) setPost(result);
+        } catch (postError) {
+          if (active) setError(getApiErrorMessage(postError));
+        } finally {
+          if (active) setLoadingPost(false);
         }
-        const result = await postService.getPost(postId);
-        if (active) setPost(result);
-      } catch (postError) {
-        if (active) setError(getApiErrorMessage(postError));
-      } finally {
-        if (active) setLoadingPost(false);
-      }
-    })();
-    return () => { active = false; };
+      })();
+    }, 0);
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
   }, [postId, sourceFoundPostId]);
 
   const loadMore = async () => {

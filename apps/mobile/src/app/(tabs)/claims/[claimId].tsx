@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Image, KeyboardAvoidingView, Modal, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, KeyboardAvoidingView, Modal, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import DateTimePicker, { type DateTimePickerEvent } from "@react-native-community/datetimepicker";
 import * as ImagePicker from "expo-image-picker";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
@@ -98,9 +98,10 @@ export default function ClaimDetailScreen() {
   const [answer, setAnswer] = useState("");
   const [decision, setDecision] = useState<ClaimDecision | null>(null);
   const [decisionReason, setDecisionReason] = useState("");
-  const [decisionPoints, setDecisionPoints] = useState<Array<{ id: string; name: string; address: string | null }>>([]);
+  const [decisionPoints, setDecisionPoints] = useState<{ id: string; name: string; address: string | null }[]>([]);
   const [handoverPointId, setHandoverPointId] = useState("");
   const [intakeAt, setIntakeAt] = useState<Date | null>(null);
+  const [defaultIntakeDate] = useState(() => new Date(Date.now() + 60 * 60 * 1000));
   const [pickerMode, setPickerMode] = useState<"date" | "time" | "datetime" | null>(null);
   const [imageToView, setImageToView] = useState<string | null>(null);
   const messagesScroll = useRef<React.ComponentRef<typeof ScrollView>>(null);
@@ -140,7 +141,12 @@ export default function ClaimDetailScreen() {
     }
   }, [claimId]);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      void load();
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [load]);
 
   useEffect(() => {
     if (!claimId) return;
@@ -157,7 +163,6 @@ export default function ClaimDetailScreen() {
   }, [messages.length]);
 
   const role = verification?.participantRole ?? (claim?.finderId === user?.id ? "FINDER" : "CLAIMANT");
-  const counterpart = claim ? (claim.claimantId === user?.id ? claim.finder : claim.claimant) : null;
   const activeQuestion = useMemo(() => verification?.questions.find((question) => question.status === "APPROVED" && !question.answer) ?? null, [verification]);
   const canSend = Boolean(claim && claim.canSend !== false && !["REJECTED", "CANCELLED"].includes(claim.status));
   const appointmentEligible = Boolean(verification?.appointmentEligible || claim?.appointmentEligible);
@@ -460,7 +465,7 @@ export default function ClaimDetailScreen() {
             <Text style={styles.fieldLabel}>Quầy tiếp nhận</Text>
             <ScrollView style={styles.pointList} nestedScrollEnabled>{decisionPoints.map((point) => <Pressable key={point.id} accessibilityRole="radio" accessibilityState={{ selected: handoverPointId === point.id }} onPress={() => setHandoverPointId(point.id)} style={[styles.pointOption, handoverPointId === point.id && styles.pointOptionSelected]}><MaterialCommunityIcons name={handoverPointId === point.id ? "radiobox-marked" : "radiobox-blank"} size={18} color={handoverPointId === point.id ? colors.primary : colors.muted} /><View style={styles.claimCopy}><Text style={styles.pointName}>{point.name}</Text><Text style={styles.cardSubtitle}>{point.address}</Text></View></Pressable>)}</ScrollView>
             <Pressable accessibilityRole="button" onPress={() => setPickerMode(Platform.OS === "ios" ? "datetime" : "date")} style={styles.dateButton}><MaterialCommunityIcons name="calendar-clock-outline" size={18} color={colors.primary} /><Text style={styles.dateButtonText}>{intakeAt ? new Intl.DateTimeFormat("vi-VN", { dateStyle: "medium", timeStyle: "short" }).format(intakeAt) : "Chọn thời gian bàn giao"}</Text></Pressable>
-            {pickerMode ? <View style={styles.pickerPanel}><DateTimePicker value={intakeAt ?? new Date(Date.now() + 60 * 60 * 1000)} mode={Platform.OS === "ios" ? "datetime" : pickerMode === "time" ? "time" : "date"} minimumDate={new Date()} display={Platform.OS === "ios" ? "spinner" : "default"} onChange={onDecisionTimeChange} />{Platform.OS === "ios" ? <Button title="Xong" variant="secondary" onPress={() => setPickerMode(null)} /> : null}</View> : null}
+            {pickerMode ? <View style={styles.pickerPanel}><DateTimePicker value={intakeAt ?? defaultIntakeDate} mode={Platform.OS === "ios" ? "datetime" : pickerMode === "time" ? "time" : "date"} minimumDate={new Date()} display={Platform.OS === "ios" ? "spinner" : "default"} onChange={onDecisionTimeChange} />{Platform.OS === "ios" ? <Button title="Xong" variant="secondary" onPress={() => setPickerMode(null)} /> : null}</View> : null}
           </> : null}
           {error ? <ErrorBanner message={error} /> : null}
           <View style={styles.modalActions}><Button title="Hủy" variant="secondary" onPress={() => setDecision(null)} disabled={sending} style={styles.modalButton} /><Button title="Xác nhận" onPress={() => void submitDecision()} loading={sending} disabled={decisionReason.trim().length < 3 || (decision === "ESCALATE_TO_CUSTODY" && (!handoverPointId || !intakeAt))} style={styles.modalButton} /></View>
