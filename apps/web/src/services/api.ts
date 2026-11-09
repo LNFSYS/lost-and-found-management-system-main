@@ -782,7 +782,10 @@ export type AdminHandoverPointPayload = {
 };
 interface SessionResponse { user: CurrentUser; accessToken: string; accessTokenExpiresIn: string; }
 
-const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3001/api";
+const defaultApiUrl = typeof window !== "undefined" && window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1"
+  ? `${window.location.origin}/api`
+  : "http://localhost:3001/api";
+const API_URL = import.meta.env.VITE_API_URL ?? defaultApiUrl;
 let accessToken: string | null = null;
 let refreshInFlight: Promise<SessionResponse | null> | null = null;
 let sessionGeneration = 0;
@@ -803,10 +806,11 @@ export interface RealtimeHandlers {
 }
 
 export interface ClaimChatSocketHandlers {
-  roomId: string;
+  roomId?: string;
   onConnected?: () => void;
   onReconnected?: () => void;
   onMessage?: (message: ClaimMessage) => void;
+  onSocket?: (socket: Socket | null) => void;
 }
 
 function subscribeRealtime(handlers: RealtimeHandlers) {
@@ -885,7 +889,7 @@ function subscribeRealtime(handlers: RealtimeHandlers) {
           if (!await refreshSession()) return;
           continue;
         }
-        if (response.status === 403) return;
+        if (response.status === 403 || response.status === 404) return;
         if (!response.ok) throw new Error(`Realtime request failed (${response.status})`);
         retryDelay = 500;
         await consume(response);
@@ -928,7 +932,7 @@ function subscribeClaimChatSocket(handlers: ClaimChatSocketHandlers) {
       const endpoint = new URL(`${API_URL.replace(/\/+$/, "")}/realtime/chat-socket`, window.location.href);
       const socket = io(endpoint.origin, {
         path: endpoint.pathname,
-        auth: { accessToken, roomId: handlers.roomId },
+        auth: { accessToken, roomId: handlers.roomId ?? "global" },
         withCredentials: true,
         autoConnect: false,
         forceNew: true,
@@ -948,6 +952,7 @@ function subscribeClaimChatSocket(handlers: ClaimChatSocketHandlers) {
         window.clearTimeout(readyTimeout);
         if (cancelConnection === cancel) cancelConnection = null;
         if (activeSocket === socket) activeSocket = null;
+        handlers.onSocket?.(null);
         socket.removeAllListeners();
         socket.disconnect();
         resolve({ code, connected });
@@ -964,6 +969,7 @@ function subscribeClaimChatSocket(handlers: ClaimChatSocketHandlers) {
         ready = true;
         window.clearTimeout(readyTimeout);
         retryDelay = 500;
+        handlers.onSocket?.(socket);
         if (wasConnected) handlers.onReconnected?.();
         else handlers.onConnected?.();
         wasConnected = true;
@@ -1015,6 +1021,7 @@ function subscribeClaimChatSocket(handlers: ClaimChatSocketHandlers) {
 
   return () => {
     stopped = true;
+    handlers.onSocket?.(null);
     if (retryTimer !== null) window.clearTimeout(retryTimer);
     retryTimer = null;
     finishWait?.();
