@@ -1,5 +1,6 @@
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import { Redirect, Tabs } from "expo-router";
+import { Platform } from "react-native";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { colors } from "@/constants/theme";
 import { useAuth } from "@/context/auth-context";
@@ -20,7 +21,7 @@ export default function TabsLayout() {
         tabBarActiveTintColor: colors.primary,
         tabBarInactiveTintColor: colors.muted,
         tabBarLabelStyle: { fontSize: 11, fontWeight: "600" },
-        tabBarStyle: { backgroundColor: colors.surface, borderTopColor: colors.border, paddingTop: 6 },
+        tabBarStyle: { backgroundColor: colors.surface, borderTopColor: colors.border, height: Platform.OS === "ios" ? 88 : 64, paddingTop: 6, paddingBottom: Platform.OS === "ios" ? 28 : 8 },
         tabBarBadgeStyle: { backgroundColor: colors.accent, color: colors.surface, fontSize: 10, fontWeight: "700" },
         tabBarHideOnKeyboard: true,
       }}
