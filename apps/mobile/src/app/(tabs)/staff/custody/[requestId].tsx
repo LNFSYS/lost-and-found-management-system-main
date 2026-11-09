@@ -128,7 +128,11 @@ export default function CustodyRequestDetailScreen() {
   };
 
   const confirmIntake = async () => {
-    if (!request || !context || busy) return;
+    if (!request || busy) return;
+    if (!context) {
+      setError("Chưa tải được ngữ cảnh bàn giao. Vui lòng làm mới.");
+      return;
+    }
     const parsedQuantity = Number(quantity);
     if (!physicalConfirmed) { setError("Cần xác nhận đã kiểm tra vật phẩm thực tế tại quầy."); return; }
     if (photos.length < 1) { setError("Tải lên ít nhất một ảnh tình trạng lúc tiếp nhận."); return; }
