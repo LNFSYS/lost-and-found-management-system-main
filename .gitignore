@@ -18,3 +18,38 @@ certs/*.key
 
 # Local binaries
 scripts/bin/
+
+# Local quick tunnel runners (laptop only)
+start-public.bat
+scripts/start-public.mjs
+
+# QA, manual test scripts and scratch reports
+scripts/test-*.mjs
+scripts/tester*.mjs
+scripts/crack-pass.mjs
+scripts/debug-*.mjs
+scripts/e2e-*.mjs
+scripts/*-results.json
+scripts/*.xlsx
+scripts/*.xlsm
+scripts/*.docx
+scripts/extracted_parts/
+scripts/report6_*
+scripts/reports_source/
+Lost_Found_System_All_Bugs_Report.xlsx
+*.xlsx
+*.xlsm
+*.docx
+scripts/test_profile_ui.mjs
+scripts/test_web_ui.mjs
+scripts/test_cases_list.json
+scripts/fe_sections.txt
+scripts/doc_report1.md
+scripts/__pycache__/
+1OmW28lweeiC2y9oyZytMkd3YX_OQt59CcrZsp2rKPww.md
+WEBRTC_CALL_REVIEW.md
+.agents/
+.github/agents/
+.github/hooks/
+.github/prompts/
+.github/skills/
