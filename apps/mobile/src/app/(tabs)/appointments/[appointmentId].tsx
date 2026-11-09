@@ -154,7 +154,7 @@ export default function AppointmentDetailScreen() {
   const proposedTime = new Date(appointment.proposedAt).getTime();
   const occurred = proposedTime <= now;
   const canCancel = (appointment.finderResponse === "PENDING" && appointment.ownerResponse === "PENDING") || (appointment.finderResponse === "DISPUTED" && appointment.ownerResponse === "DISPUTED");
-  const canNoShow = occurred && now >= proposedTime + 15 * 60_000 && appointment.finderResponse === "PENDING" && appointment.ownerResponse === "PENDING";
+  const canNoShow = occurred && now >= proposedTime + 15 * 60_000 && ownResponse === "CONFIRMED" && otherResponse === "PENDING";
   const feedbackRecord = eligibility?.currentUserFeedback;
   const selectedDelta = rating > 0 ? reputationDeltas[rating - 1] : null;
 
