@@ -4,12 +4,13 @@ import * as ImagePicker from "expo-image-picker";
 import { router } from "expo-router";
 
 import { colors, radii, spacing } from "@/constants/theme";
+import { warehouseStaffLabel } from "@/constants/labels";
 import type { MobileImageFile, StaffCustodyStatus, WarehouseItemStatus } from "@/services/api";
 
 type StaffSection = "dashboard" | "custody" | "warehouse" | "logs";
 
 const navigation: { key: StaffSection; title: string; icon: "view-dashboard-outline" | "clipboard-list-outline" | "archive-outline" | "history"; path: string }[] = [
-  { key: "dashboard", title: "Dashboard", icon: "view-dashboard-outline", path: "/staff" },
+  { key: "dashboard", title: "Tổng quan", icon: "view-dashboard-outline", path: "/staff" },
   { key: "custody", title: "Tiếp nhận", icon: "clipboard-list-outline", path: "/staff/custody" },
   { key: "warehouse", title: "Kho vật phẩm", icon: "archive-outline", path: "/staff/warehouse" },
   { key: "logs", title: "Nhật ký", icon: "history", path: "/staff/logs" },
@@ -21,7 +22,7 @@ export function StaffNavigation({ active }: { active: StaffSection }) {
       <View style={styles.brandRow}>
         <View style={styles.brandIcon}><MaterialCommunityIcons name="warehouse" size={21} color={colors.primary} /></View>
         <View style={styles.brandCopy}><Text style={styles.eyebrow}>FPTU LOST & FOUND</Text><Text style={styles.brandTitle}>Vận hành kho</Text></View>
-        <View style={styles.staffTag}><Text style={styles.staffTagText}>STAFF</Text></View>
+        <View style={styles.staffTag}><Text style={styles.staffTagText}>{warehouseStaffLabel.toLocaleUpperCase("vi-VN")}</Text></View>
       </View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.navigation}>
         {navigation.map((item) => {

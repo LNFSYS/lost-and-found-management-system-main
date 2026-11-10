@@ -7,6 +7,7 @@ import { Card } from "@/components/ui/card";
 import { ErrorBanner } from "@/components/ui/error-banner";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { Badge } from "@/components/ui/badge";
+import { custodyIntakeTypeLabels } from "@/constants/labels";
 import { colors, spacing } from "@/constants/theme";
 import { getApiErrorMessage, staffService } from "@/services/api";
 
@@ -25,7 +26,7 @@ export default function CustodyRequestScreen() {
       <View style={styles.top}><Text style={styles.name}>{request.post?.title || "Vật phẩm"}</Text><Badge status={request.status} /></View>
       <InfoRow label="Mã yêu cầu" value={request.id} />
       <InfoRow label="Người gửi yêu cầu" value={request.requester.fullName || "Người dùng"} />
-      <InfoRow label="Loại tiếp nhận" value={request.intakeType === "CUSTODY_TRANSFER" ? "Chuyển giao từ Finder" : "Tiếp nhận trực tiếp"} />
+      <InfoRow label="Loại tiếp nhận" value={custodyIntakeTypeLabels[request.intakeType]} />
       <InfoRow label="Điểm bàn giao" value={request.handoverPoint?.name || "Chưa được chỉ định"} />
       <InfoRow label="Lý do" value={request.reason || "Không có ghi chú"} />
       {request.confirmedHandoverAt ? <InfoRow label="Thời gian bàn giao" value={new Date(request.confirmedHandoverAt).toLocaleString("vi-VN")} /> : null}

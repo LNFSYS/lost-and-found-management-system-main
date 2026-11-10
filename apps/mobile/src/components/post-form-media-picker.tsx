@@ -152,46 +152,53 @@ export function PostFormMediaPicker({
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ["images"],
         allowsMultipleSelection: true,
-        selectionLimit: remainingSlots,
         quality: 0.8,
       });
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
-        let selectedAssets = result.assets;
-        const oversizedAssets = selectedAssets.filter(
+        const oversizedCount = result.assets.filter(
           (a) => a.fileSize && a.fileSize > MAX_FILE_SIZE_BYTES
+        ).length;
+        const eligibleAssets = result.assets.filter(
+          (a) => !a.fileSize || a.fileSize <= MAX_FILE_SIZE_BYTES
         );
+        const acceptedAssets = eligibleAssets.slice(0, remainingSlots);
+        const imageLimitExcludedCount = eligibleAssets.length - acceptedAssets.length;
+        const excludedCount = oversizedCount + imageLimitExcludedCount;
 
-        if (oversizedAssets.length > 0) {
-          Alert.alert(
-            "Ảnh vượt quá kích thước (10 MB)",
-            `Có ${oversizedAssets.length} ảnh vượt quá giới hạn 10 MB đã được bỏ qua.`
-          );
-          selectedAssets = selectedAssets.filter(
-            (a) => !a.fileSize || a.fileSize <= MAX_FILE_SIZE_BYTES
-          );
+        if (acceptedAssets.length === 0) {
+          Alert.alert("Không có ảnh phù hợp", "Các ảnh đã chọn vượt quá giới hạn 10 MB.");
+          return;
         }
 
-        if (selectedAssets.length === 0) return;
+        const appendAssets = () => {
+          const newFiles: MobileImageFile[] = acceptedAssets.map((asset) => ({
+            uri: asset.uri,
+            name:
+              asset.fileName ||
+              `library_${Date.now()}_${Math.random().toString(36).slice(2, 7)}.jpg`,
+            type: asset.mimeType || "image/jpeg",
+            size: asset.fileSize,
+          }));
+          onChangeImages([...images, ...newFiles]);
+        };
 
-        if (selectedAssets.length > remainingSlots) {
-          Alert.alert(
-            "Giới hạn ảnh",
-            `Bạn chỉ có thể thêm ${remainingSlots} ảnh nữa để đạt tối đa ${maxImages} ảnh. Hệ thống đã lấy ${remainingSlots} ảnh đầu tiên.`
-          );
-          selectedAssets = selectedAssets.slice(0, remainingSlots);
+        if (excludedCount > 0) {
+          const details = [
+            `Bạn đã chọn ${result.assets.length} ảnh. Có thể thêm ${acceptedAssets.length} ảnh vào bài viết.`,
+            imageLimitExcludedCount > 0
+              ? `${imageLimitExcludedCount} ảnh vượt quá giới hạn tối đa ${maxImages} ảnh đã bị loại.`
+              : "",
+            oversizedCount > 0 ? `${oversizedCount} ảnh vượt quá dung lượng 10 MB đã bị loại.` : "",
+          ].filter(Boolean).join("\n");
+          Alert.alert("Một số ảnh không được thêm", details, [
+            { text: "Hủy", style: "cancel" },
+            { text: "Thêm ảnh hợp lệ", onPress: appendAssets },
+          ]);
+          return;
         }
 
-        const newFiles: MobileImageFile[] = selectedAssets.map((asset) => ({
-          uri: asset.uri,
-          name:
-            asset.fileName ||
-            `library_${Date.now()}_${Math.random().toString(36).slice(2, 7)}.jpg`,
-          type: asset.mimeType || "image/jpeg",
-          size: asset.fileSize,
-        }));
-
-        onChangeImages([...images, ...newFiles]);
+        appendAssets();
       }
     } catch (error) {
       Alert.alert("Lỗi chọn ảnh", getApiErrorMessage(error));

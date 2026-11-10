@@ -20,14 +20,25 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
+function sanitizeUserCache(user: MobileUser): MobileUser {
+  return {
+    ...user,
+    avatar: {
+      hasAvatar: user.avatar?.hasAvatar ?? false,
+      updatedAt: user.avatar?.updatedAt ?? null,
+    },
+  };
+}
+
 export function AuthProvider({ children }: PropsWithChildren) {
   const [user, setUser] = useState<MobileUser | null>(null);
   const [isHydrating, setIsHydrating] = useState(true);
 
   const saveSession = useCallback(async (session: Pick<SessionResponse, "accessToken" | "user">) => {
-    await Promise.all([tokenStorage.set(session.accessToken), cachedUserStorage.set(session.user)]);
-    setUser(session.user);
-    return session.user;
+    const user = sanitizeUserCache(session.user);
+    await Promise.all([tokenStorage.set(session.accessToken), cachedUserStorage.set(user)]);
+    setUser(user);
+    return user;
   }, []);
 
   const login = useCallback(async (credentials: LoginCredentials) => {
@@ -45,7 +56,8 @@ export function AuthProvider({ children }: PropsWithChildren) {
     let cachedUser: MobileUser | null;
     try {
       accessToken = await tokenStorage.get();
-      cachedUser = await cachedUserStorage.get();
+      const storedUser = await cachedUserStorage.get();
+      cachedUser = storedUser ? sanitizeUserCache(storedUser) : null;
     } catch {
       setUser(null);
       return null;
@@ -59,9 +71,10 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
     try {
       const { data } = await api.get<{ user: MobileUser }>("/auth/me");
-      await cachedUserStorage.set(data.user);
-      setUser(data.user);
-      return data.user;
+      const user = sanitizeUserCache(data.user);
+      await cachedUserStorage.set(user);
+      setUser(user);
+      return user;
     } catch (error) {
       const status = isAxiosError(error) ? error.response?.status : undefined;
       if (accessToken && cachedUser && (isNetworkError(error) || (status !== undefined && status >= 500))) return cachedUser;
@@ -84,18 +97,20 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
   const updateProfile = useCallback(async (profile: ProfileUpdate) => {
     const { data } = await api.patch<{ user: MobileUser }>("/auth/profile", profile);
-    await cachedUserStorage.set(data.user);
-    setUser(data.user);
-    return data.user;
+    const user = sanitizeUserCache(data.user);
+    await cachedUserStorage.set(user);
+    setUser(user);
+    return user;
   }, []);
 
   const updateAvatar = useCallback(async (image: AvatarUpload) => {
     const formData = new FormData();
     formData.append("file", { uri: image.uri, name: image.name, type: image.type } as unknown as Blob);
     const { data } = await api.patch<{ user: MobileUser }>("/auth/profile/avatar", formData);
-    await cachedUserStorage.set(data.user);
-    setUser(data.user);
-    return data.user;
+    const user = sanitizeUserCache(data.user);
+    await cachedUserStorage.set(user);
+    setUser(user);
+    return user;
   }, []);
 
   useEffect(() => {

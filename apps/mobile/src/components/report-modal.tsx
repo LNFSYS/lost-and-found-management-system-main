@@ -56,7 +56,7 @@ const REPORT_REASONS: ReportOption[] = [
   {
     key: "KHÁC",
     label: "KHÁC",
-    description: "Các vấn đề khác cần BQT và Staff hỗ trợ xem xét",
+    description: "Các vấn đề khác cần ban quản trị và nhân viên hỗ trợ xem xét",
     icon: "dots-horizontal-circle-outline",
   },
 ];

@@ -62,7 +62,7 @@ export default function StaffDashboardScreen() {
       <StaffNavigation active="dashboard" />
       <ScrollView contentContainerStyle={styles.content} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void load(true)} tintColor={colors.primary} />}>
         <View style={styles.headingRow}>
-          <View style={styles.headingCopy}><Text style={styles.eyebrow}>TỔNG QUAN HÔM NAY</Text><Text accessibilityRole="header" style={styles.title}>Dashboard kho</Text><Text style={styles.subtitle}>Theo dõi tiếp nhận, lưu giữ và thời hạn xử lý vật phẩm.</Text></View>
+          <View style={styles.headingCopy}><Text style={styles.eyebrow}>TỔNG QUAN HÔM NAY</Text><Text accessibilityRole="header" style={styles.title}>Tổng quan kho</Text><Text style={styles.subtitle}>Theo dõi tiếp nhận, lưu giữ và thời hạn xử lý vật phẩm.</Text></View>
           <Pressable accessibilityRole="button" accessibilityLabel="Tải lại thống kê kho" onPress={() => void load(true)} style={styles.refreshButton}><MaterialCommunityIcons name="refresh" size={20} color={colors.primary} /></Pressable>
         </View>
         {error ? <ErrorBanner message={error} onRetry={() => void load(true)} /> : null}
@@ -77,7 +77,7 @@ export default function StaffDashboardScreen() {
 
         <View style={styles.quickActions}>
           <Button title="Mở hàng đợi" onPress={() => router.push("/staff/custody" as never)} style={styles.quickButton} />
-          <Button title="Tiếp nhận Walk-in" variant="secondary" onPress={() => router.push("/staff/custody/walk-in" as never)} style={styles.quickButton} />
+          <Button title="Tiếp nhận đồ mang trực tiếp" variant="secondary" onPress={() => router.push("/staff/custody/walk-in" as never)} style={styles.quickButton} />
         </View>
 
         <Card style={styles.sectionCard}>

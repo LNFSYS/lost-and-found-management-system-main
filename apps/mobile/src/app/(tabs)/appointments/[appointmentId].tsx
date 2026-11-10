@@ -9,6 +9,7 @@ import { Card } from "@/components/ui/card";
 import { ErrorBanner } from "@/components/ui/error-banner";
 import { Input } from "@/components/ui/input";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
+import { appointmentEventLabels, claimRoleLabels } from "@/constants/labels";
 import { colors, radii, spacing } from "@/constants/theme";
 import { useAuth } from "@/context/auth-context";
 import { appointmentService, createRequestUuid, getApiErrorMessage, returnService, type AppointmentAction, type AppointmentRecord, type ReturnFeedbackEligibility, type ReturnFeedbackRecord } from "@/services/api";
@@ -35,8 +36,8 @@ function dateTime(value: string | null | undefined) {
 function eventLabel(action: string) {
   const labels: Record<string, string> = {
     PROPOSED: "Đề xuất lịch hẹn", ACCEPT: "Chấp nhận lịch hẹn", REJECT: "Từ chối lịch hẹn", CANCEL: "Hủy lịch hẹn",
-    FINDER_CONFIRM: "Finder xác nhận đã giao", OWNER_CONFIRM: "Người nhận xác nhận đã nhận", FINDER_DISPUTE: "Finder yêu cầu đối soát",
-    OWNER_DISPUTE: "Người nhận yêu cầu đối soát", NO_SHOW: "Báo bên còn lại không đến", RETURN_COMPLETED: "Hoàn tất trao trả", REMINDER_QUEUED: "Đã tạo nhắc lịch",
+    FINDER_CONFIRM: `${claimRoleLabels.FINDER} xác nhận đã giao`, OWNER_CONFIRM: "Người nhận xác nhận đã nhận", FINDER_DISPUTE: `${claimRoleLabels.FINDER} yêu cầu đối soát`,
+    OWNER_DISPUTE: "Người nhận yêu cầu đối soát", NO_SHOW: appointmentEventLabels.NO_SHOW, RETURN_COMPLETED: "Hoàn tất trao trả", REMINDER_QUEUED: "Đã tạo nhắc lịch",
   };
   return labels[action] ?? action.toLowerCase().replaceAll("_", " ");
 }
@@ -154,7 +155,7 @@ export default function AppointmentDetailScreen() {
   const proposedTime = new Date(appointment.proposedAt).getTime();
   const occurred = proposedTime <= now;
   const canCancel = (appointment.finderResponse === "PENDING" && appointment.ownerResponse === "PENDING") || (appointment.finderResponse === "DISPUTED" && appointment.ownerResponse === "DISPUTED");
-  const canNoShow = occurred && now >= proposedTime + 15 * 60_000 && appointment.finderResponse === "PENDING" && appointment.ownerResponse === "PENDING";
+  const canNoShow = occurred && now >= proposedTime + 15 * 60_000 && ownResponse === "CONFIRMED" && otherResponse === "PENDING";
   const feedbackRecord = eligibility?.currentUserFeedback;
   const selectedDelta = rating > 0 ? reputationDeltas[rating - 1] : null;
 
@@ -173,12 +174,12 @@ export default function AppointmentDetailScreen() {
           <View style={styles.detailRow}><MaterialCommunityIcons name="calendar-clock-outline" size={19} color={colors.primary} /><View style={styles.detailCopy}><Text style={styles.detailLabel}>Thời gian dự kiến</Text><Text style={styles.detailValue}>{dateTime(appointment.proposedAt)}</Text></View></View>
           <View style={styles.detailRow}><MaterialCommunityIcons name="map-marker-radius-outline" size={19} color={colors.primary} /><View style={styles.detailCopy}><Text style={styles.detailLabel}>Điểm bàn giao</Text><Text style={styles.detailValue}>{appointment.location ?? "Chưa ghi nhận địa điểm"}</Text></View></View>
           <View style={styles.responses}>
-            <View style={styles.responseCard}><Text style={styles.responseRole}>Người nhặt · Finder</Text><Text style={[styles.responseStatus, { color: responseColors[appointment.finderResponse] }]}>{responseLabels[appointment.finderResponse]}</Text></View>
-            <View style={styles.responseCard}><Text style={styles.responseRole}>Người nhận · Claimant</Text><Text style={[styles.responseStatus, { color: responseColors[appointment.ownerResponse] }]}>{responseLabels[appointment.ownerResponse]}</Text></View>
+            <View style={styles.responseCard}><Text style={styles.responseRole}>{claimRoleLabels.FINDER}</Text><Text style={[styles.responseStatus, { color: responseColors[appointment.finderResponse] }]}>{responseLabels[appointment.finderResponse]}</Text></View>
+            <View style={styles.responseCard}><Text style={styles.responseRole}>{claimRoleLabels.CLAIMANT}</Text><Text style={[styles.responseStatus, { color: responseColors[appointment.ownerResponse] }]}>{responseLabels[appointment.ownerResponse]}</Text></View>
           </View>
           {appointment.completedAt ? <View style={styles.infoSuccess}><MaterialCommunityIcons name="check-decagram-outline" size={19} color={colors.success} /><Text style={styles.infoSuccessText}>Hoàn tất lúc {dateTime(appointment.completedAt)}</Text></View> : null}
           {appointment.noShowUserId ? <View style={styles.infoWarning}><MaterialCommunityIcons name="account-alert-outline" size={19} color={colors.warning} /><Text style={styles.infoWarningText}>Đã ghi nhận báo vắng mặt. Đây không tự động xác nhận trao trả hoặc xử phạt.</Text></View> : null}
-          {appointment.custodyAuthorized ? <View style={styles.infoSuccess}><MaterialCommunityIcons name="warehouse" size={19} color={colors.success} /><Text style={styles.infoSuccessText}>Lượt bàn giao này được staff quản lý tại quầy.</Text></View> : null}
+          {appointment.custodyAuthorized ? <View style={styles.infoSuccess}><MaterialCommunityIcons name="warehouse" size={19} color={colors.success} /><Text style={styles.infoSuccessText}>Lượt bàn giao này do nhân viên kho quản lý tại quầy.</Text></View> : null}
         </Card>
 
         {!ended && !appointment.custodyAuthorized ? <Card style={styles.actionsCard}>
@@ -202,10 +203,10 @@ export default function AppointmentDetailScreen() {
             <Input label="Lý do hủy hoặc ghi chú đối soát" value={reason} onChangeText={setReason} multiline maxLength={500} placeholder="Nhập lý do (ít nhất 3 ký tự)…" />
             <Button title="Hủy lịch hẹn" variant="danger" onPress={() => void act("CANCEL")} loading={busy} disabled={reason.trim().length < 3} />
           </> : null}
-          {ownResponse !== "PENDING" && appointment.status === "ACCEPTED" ? <Text style={styles.helperText}>Đổi thời gian bằng cách hủy lịch khi đủ điều kiện, sau đó đề xuất lịch mới trong phòng Claim.</Text> : null}
+          {ownResponse !== "PENDING" && appointment.status === "ACCEPTED" ? <Text style={styles.helperText}>Đổi thời gian bằng cách hủy lịch khi đủ điều kiện, sau đó đề xuất lịch mới trong cuộc trao đổi.</Text> : null}
         </Card> : null}
 
-        {appointment.status === "CANCELLED" || appointment.status === "REJECTED" ? <Card style={styles.rescheduleCard}><MaterialCommunityIcons name="calendar-refresh-outline" size={21} color={colors.primary} /><View style={styles.summaryCopy}><Text style={styles.rescheduleTitle}>Cần thời gian khác?</Text><Text style={styles.helperText}>Mở yêu cầu Claim để đề xuất lịch hẹn mới tại một điểm bàn giao an toàn.</Text></View><Button title="Đề xuất lịch khác" variant="secondary" onPress={() => router.push(`/appointments?claimId=${encodeURIComponent(appointment.claimId)}` as never)} /></Card> : null}
+        {appointment.status === "CANCELLED" || appointment.status === "REJECTED" ? <Card style={styles.rescheduleCard}><MaterialCommunityIcons name="calendar-refresh-outline" size={21} color={colors.primary} /><View style={styles.summaryCopy}><Text style={styles.rescheduleTitle}>Cần thời gian khác?</Text><Text style={styles.helperText}>Mở yêu cầu nhận lại đồ để đề xuất lịch hẹn mới tại một điểm bàn giao an toàn.</Text></View><Button title="Đề xuất lịch khác" variant="secondary" onPress={() => router.push(`/appointments?claimId=${encodeURIComponent(appointment.claimId)}` as never)} /></Card> : null}
 
         {appointment.status === "COMPLETED" ? <Card style={styles.feedbackCard}>
           <View style={styles.feedbackHeading}><View style={styles.feedbackIcon}><MaterialCommunityIcons name="star-check-outline" size={21} color={colors.warning} /></View><View style={styles.summaryCopy}><Text style={styles.sectionTitle}>Đánh giá sau trao trả</Text><Text style={styles.helperText}>Chia sẻ trải nghiệm và cập nhật điểm uy tín cho bên còn lại.</Text></View></View>

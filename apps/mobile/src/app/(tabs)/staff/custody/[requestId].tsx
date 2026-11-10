@@ -128,7 +128,11 @@ export default function CustodyRequestDetailScreen() {
   };
 
   const confirmIntake = async () => {
-    if (!request || !context || busy) return;
+    if (!request || busy) return;
+    if (!context) {
+      setError("Chưa tải được ngữ cảnh bàn giao. Vui lòng làm mới.");
+      return;
+    }
     const parsedQuantity = Number(quantity);
     if (!physicalConfirmed) { setError("Cần xác nhận đã kiểm tra vật phẩm thực tế tại quầy."); return; }
     if (photos.length < 1) { setError("Tải lên ít nhất một ảnh tình trạng lúc tiếp nhận."); return; }
@@ -165,7 +169,7 @@ export default function CustodyRequestDetailScreen() {
     <SafeAreaView style={styles.safeArea} edges={["top", "left", "right"]}>
       <StaffNavigation active="custody" />
       <ScrollView contentContainerStyle={styles.content} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void load(true)} tintColor={colors.primary} />} keyboardShouldPersistTaps="handled">
-        <View style={styles.pageHeader}><Pressable accessibilityRole="button" accessibilityLabel="Quay lại hàng đợi" onPress={() => router.back()} style={styles.backButton}><MaterialCommunityIcons name="arrow-left" size={21} color={colors.primary} /></Pressable><View style={styles.headerCopy}><Text style={styles.eyebrow}>HỒ SƠ CUSTODY</Text><Text accessibilityRole="header" style={styles.title}>{context?.post.title || request.post?.title || "Yêu cầu bàn giao vật phẩm"}</Text></View><WarehouseStatusPill status={request.status} compact /></View>
+          <View style={styles.pageHeader}><Pressable accessibilityRole="button" accessibilityLabel="Quay lại hàng đợi" onPress={() => router.back()} style={styles.backButton}><MaterialCommunityIcons name="arrow-left" size={21} color={colors.primary} /></Pressable><View style={styles.headerCopy}><Text style={styles.eyebrow}>HỒ SƠ BÀN GIAO KHO</Text><Text accessibilityRole="header" style={styles.title}>{context?.post.title || request.post?.title || "Yêu cầu bàn giao vật phẩm"}</Text></View><WarehouseStatusPill status={request.status} compact /></View>
         {error ? <ErrorBanner message={error} /> : null}
         <Card style={styles.summaryCard}>
           <View style={styles.summaryRow}><View style={styles.summaryIcon}><MaterialCommunityIcons name="account-arrow-right-outline" size={20} color={colors.primary} /></View><View style={styles.summaryCopy}><Text style={styles.label}>Người nhặt / người gửi</Text><Text style={styles.value}>{request.requester.fullName || context?.post.finderName || "Chưa ghi nhận"}</Text></View></View>

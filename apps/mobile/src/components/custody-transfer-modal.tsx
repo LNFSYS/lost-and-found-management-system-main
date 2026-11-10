@@ -189,7 +189,7 @@ export function CustodyTransferModal({
                 />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={styles.title}>Bàn giao vào kho Staff</Text>
+                <Text style={styles.title}>Bàn giao vào kho trường</Text>
                 <Text style={styles.subtitle} numberOfLines={1}>
                   {postTitle || "Gửi vật phẩm nhặt được đến quầy tiếp nhận"}
                 </Text>
@@ -219,7 +219,7 @@ export function CustodyTransferModal({
                 />
                 <Text style={styles.successTitle}>Đã gửi yêu cầu bàn giao!</Text>
                 <Text style={styles.successDesc}>
-                  Staff đã nhận được thông báo. Bạn vui lòng mang đồ đến quầy theo lịch hẹn đã đăng ký.
+                  Nhân viên kho đã nhận được thông báo. Bạn vui lòng mang đồ đến quầy theo lịch hẹn đã đăng ký.
                 </Text>
               </View>
             ) : (
@@ -232,7 +232,7 @@ export function CustodyTransferModal({
                     color={colors.primary}
                   />
                   <Text style={styles.infoText}>
-                    Khi bàn giao vào quầy Staff, vật phẩm sẽ được gắn mã kiểm kê và bảo quản tập trung tại kho an toàn.
+                    Khi bàn giao vào quầy, vật phẩm sẽ được gắn mã kiểm kê và bảo quản tập trung tại kho an toàn.
                   </Text>
                 </View>
 
@@ -323,7 +323,7 @@ export function CustodyTransferModal({
                     2. Thời gian dự kiến mang đồ đến <Text style={styles.req}>*</Text>
                   </Text>
                   <Text style={styles.sectionHelp}>
-                    Lựa chọn khung giờ thuận tiện nhất để mang đồ tới quầy Staff:
+                    Lựa chọn khung giờ thuận tiện nhất để mang đồ tới quầy tiếp nhận:
                   </Text>
                   <View style={styles.presetChips}>
                     {presets.map((preset, idx) => {
@@ -368,7 +368,7 @@ export function CustodyTransferModal({
                 {/* Notes Input */}
                 <View style={styles.section}>
                   <Text style={styles.sectionLabel}>
-                    3. Ghi chú / Lời nhắn cho Staff (không bắt buộc)
+                    3. Ghi chú / Lời nhắn cho nhân viên kho (không bắt buộc)
                   </Text>
                   <TextInput
                     style={styles.notesInput}

@@ -15,6 +15,7 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 import { router, useLocalSearchParams } from "expo-router";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 
+import { custodyRequestStatusLabels } from "@/constants/labels";
 import { colors, radii, spacing } from "@/constants/theme";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
@@ -666,13 +667,13 @@ export default function PostDetailScreen() {
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.custodyTitle}>
-                    Bàn giao vật phẩm vào kho Staff
+                    Bàn giao vật phẩm vào kho trường
                   </Text>
                   <Text style={styles.custodyDesc}>
                     {custodyInfo?.warehouseItem
-                      ? "Vật phẩm đã được nhân viên Staff lưu trữ an toàn tại quầy tiếp nhận."
+                      ? "Vật phẩm đã được nhân viên kho lưu trữ an toàn tại quầy tiếp nhận."
                       : custodyInfo?.request?.status === "PENDING"
-                      ? "Yêu cầu bàn giao đang chờ Staff tiếp nhận tại quầy theo lịch hẹn."
+                      ? "Yêu cầu bàn giao đang chờ nhân viên kho tiếp nhận tại quầy theo lịch hẹn."
                       : custodyInfo?.request?.status === "ACCEPTED"
                       ? "Yêu cầu bàn giao đã được chấp nhận. Vui lòng mang đồ đến quầy."
                       : "Gửi vật phẩm nhặt được đến quầy tiếp nhận FPTU để bảo quản an toàn và hỗ trợ tìm chủ nhân."}
@@ -692,7 +693,7 @@ export default function PostDetailScreen() {
                   <Text style={styles.custodyStatusBadgeText}>
                     {custodyInfo.warehouseItem
                       ? "ĐÃ LƯU TRỮ TRONG KHO"
-                      : `YÊU CẦU: ${custodyInfo.request?.status}`}
+                      : `YÊU CẦU: ${custodyRequestStatusLabels[custodyInfo.request?.status ?? "PENDING"]}`}
                   </Text>
                 </View>
               ) : (
@@ -706,7 +707,7 @@ export default function PostDetailScreen() {
                     color="#fff"
                   />
                   <Text style={styles.custodyActionBtnText}>
-                    Gửi vào kho Staff
+                    Gửi vào kho trường
                   </Text>
                 </Pressable>
               )}
@@ -973,8 +974,8 @@ export default function PostDetailScreen() {
                   />
                   <Text style={styles.primaryDockBtnText}>
                     {isLost
-                      ? "Yêu cầu đối chiếu (Claim) / Nhắn tin"
-                      : "Yêu cầu nhận lại (Claim) / Nhắn tin"}
+                      ? "Yêu cầu đối chiếu / Nhắn tin"
+                      : "Yêu cầu nhận lại / Nhắn tin"}
                   </Text>
                 </>
               )}

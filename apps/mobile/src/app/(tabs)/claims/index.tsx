@@ -12,12 +12,13 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorBanner } from "@/components/ui/error-banner";
 import { Input } from "@/components/ui/input";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
+import { claimRoleLabels } from "@/constants/labels";
 import { colors, radii, spacing } from "@/constants/theme";
 import { useAuth } from "@/context/auth-context";
 import { claimService, createRequestUuid, getApiErrorMessage, postService, type ClaimRecord, type MobileImageFile, type PostSummary } from "@/services/api";
 
 const statusLabels: Record<ClaimRecord["status"], string> = {
-  PENDING: "Chờ Finder",
+  PENDING: `Chờ ${claimRoleLabels.FINDER.toLowerCase()}`,
   CONVERSATION_OPEN: "Đang trao đổi",
   NEED_MORE_INFO: "Cần bổ sung thông tin",
   ACCEPTED: "Đủ điều kiện hẹn gặp",
@@ -53,7 +54,7 @@ function ConversationCard({ claim, userId }: { claim: ClaimRecord; userId?: stri
   const counterpart = claim.claimantId === userId ? claim.finder : claim.claimant;
   const unreadCount = claim.conversation?.unreadCount ?? 0;
   const statusStyle = statusColors[claim.status];
-  const role = claim.finderId === userId ? "FINDER · NGƯỜI NHẶT" : "CLAIMANT · NGƯỜI NHẬN";
+  const role = claim.finderId === userId ? claimRoleLabels.FINDER : claimRoleLabels.CLAIMANT;
   return (
     <Pressable accessibilityRole="button" onPress={() => router.push(`/claims/${claim.id}` as never)} style={({ pressed }) => pressed && styles.pressed}>
       <Card style={styles.claimCard}>
@@ -221,7 +222,8 @@ function ClaimComposer({ post, sourceFoundPostId, onClose, onCreated }: { post: 
         {contactScore !== null ? <Text style={styles.photoSuccess}>Ảnh tương đồng {Math.round(contactScore * 100)}% · Có thể bắt đầu trao đổi</Text> : null}
       </View> : null}
       {error ? <ErrorBanner message={error} /> : null}
-      <Button title="Gửi yêu cầu và mở chat riêng" onPress={() => void submit()} loading={submitting} disabled={post.canEdit || (needsPhotoCheck && !contactCheckId)} />
+      <Button title="Gửi yêu cầu và mở cuộc trò chuyện riêng" onPress={() => void submit()} loading={submitting} disabled={post.canEdit || (needsPhotoCheck && !contactCheckId)} />
+      {needsPhotoCheck && !contactCheckId ? <View style={styles.photoRequiredNotice}><MaterialCommunityIcons name="alert-circle-outline" size={18} color={colors.warning} /><Text style={styles.photoRequiredText}>Vui lòng kiểm tra ảnh đối chiếu ở trên trước khi gửi yêu cầu.</Text></View> : null}
     </Card>
   );
 }
@@ -326,15 +328,15 @@ export default function ClaimsScreen() {
       <ScrollView contentContainerStyle={styles.content} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void load(true)} tintColor={colors.primary} />} keyboardShouldPersistTaps="handled">
         <View style={styles.header}>
           <View style={styles.headerIcon}><MaterialCommunityIcons name="message-processing-outline" size={23} color={colors.primary} /></View>
-          <View style={styles.headerCopy}><Text style={styles.eyebrow}>TRAO ĐỔI RIÊNG TƯ</Text><Text accessibilityRole="header" style={styles.title}>Yêu cầu nhận lại đồ</Text><Text style={styles.description}>Trao đổi bằng chứng riêng với Finder hoặc Claimant.</Text></View>
-          <View style={styles.headerCount}><Text style={styles.headerCountNumber}>{claims.length}</Text><Text style={styles.headerCountLabel}>cuộc chat</Text></View>
+          <View style={styles.headerCopy}><Text style={styles.eyebrow}>TRAO ĐỔI RIÊNG TƯ</Text><Text accessibilityRole="header" style={styles.title}>Yêu cầu nhận lại đồ</Text><Text style={styles.description}>Trao đổi bằng chứng riêng với người nhặt hoặc người nhận.</Text></View>
+          <View style={styles.headerCount}><Text style={styles.headerCountNumber}>{claims.length}</Text><Text style={styles.headerCountLabel}>cuộc trò chuyện</Text></View>
         </View>
         {error ? <ErrorBanner message={error} onRetry={() => void load()} /> : null}
         {postId ? loadingPost ? <Card style={styles.loadingPost}><ActivityIndicator color={colors.primary} /><Text style={styles.muted}>Đang mở biểu mẫu yêu cầu…</Text></Card> : post ? <ClaimComposer post={post} sourceFoundPostId={sourceFoundPostId} onClose={closeComposer} onCreated={onCreated} /> : null : null}
         <View style={styles.sectionHeading}><View><Text style={styles.sectionTitle}>Cuộc đối chiếu của bạn</Text><Text style={styles.sectionSubtitle}>Tin nhắn và trạng thái mới nhất</Text></View><Pressable accessibilityRole="button" accessibilityLabel="Tải lại danh sách" onPress={() => void load(true)} style={styles.refreshButton}><MaterialCommunityIcons name="refresh" size={19} color={colors.primary} /></Pressable></View>
         {claims.length ? <View style={styles.list}>{claims.map((claim) => <ConversationCard key={claim.id} claim={claim} userId={user?.id} />)}</View> : !error ? <Card style={styles.emptyCard}><EmptyState icon="message-text-outline" title="Chưa có cuộc đối chiếu" description="Mở một bài viết và chọn gửi yêu cầu nhận lại để bắt đầu trao đổi riêng." /></Card> : null}
         {hasMore ? <Button title="Tải thêm cuộc trao đổi" loading={loadingMore} variant="secondary" onPress={() => void loadMore()} /> : null}
-        <View style={styles.privacyNote}><MaterialCommunityIcons name="lock-outline" size={17} color={colors.success} /><Text style={styles.privacyText}>Chỉ Finder, Claimant và nhân sự được phân quyền mới xem được nội dung cuộc trao đổi.</Text></View>
+        <View style={styles.privacyNote}><MaterialCommunityIcons name="lock-outline" size={17} color={colors.success} /><Text style={styles.privacyText}>Chỉ người nhặt, người nhận và nhân sự được phân quyền mới xem được nội dung cuộc trao đổi.</Text></View>
       </ScrollView>
     </SafeAreaView>
   );
@@ -359,5 +361,5 @@ const styles = StyleSheet.create({
   pressed: { opacity: 0.78 }, composerCard: { gap: spacing.md }, composerHeader: { flexDirection: "row", alignItems: "center", gap: spacing.md }, composerIcon: { width: 42, height: 42, alignItems: "center", justifyContent: "center", borderRadius: 14, backgroundColor: colors.primarySoft }, composerTitle: { color: colors.ink, fontSize: 16, fontWeight: "900" }, composerSubtitle: { color: colors.muted, fontSize: 12, marginTop: 2 }, closeButton: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
   infoBox: { flexDirection: "row", alignItems: "center", gap: spacing.sm, padding: spacing.md, borderRadius: radii.control, backgroundColor: colors.warningSoft }, infoText: { flex: 1, color: colors.warning, fontSize: 12, lineHeight: 17 }, fieldLabel: { color: colors.ink, fontSize: 14, fontWeight: "700" },
   dateField: { gap: spacing.sm }, dateButton: { minHeight: 48, flexDirection: "row", alignItems: "center", gap: spacing.sm, paddingHorizontal: spacing.md, borderWidth: 1, borderColor: colors.border, borderRadius: radii.control, backgroundColor: colors.surface }, dateButtonText: { color: colors.ink, fontSize: 13, flex: 1 }, pickerPanel: { padding: spacing.sm, borderRadius: radii.control, backgroundColor: colors.surfaceMuted, gap: spacing.sm },
-  photoGate: { gap: spacing.sm, padding: spacing.md, borderRadius: radii.control, backgroundColor: colors.surfaceMuted }, photoGateHeading: { flexDirection: "row", alignItems: "center", gap: spacing.sm }, photoHint: { color: colors.muted, fontSize: 12, lineHeight: 17 }, contactPreview: { width: "100%", height: 150, borderRadius: radii.control, backgroundColor: colors.border }, photoActions: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm }, photoButton: { flexGrow: 1, minWidth: 92, paddingHorizontal: spacing.sm }, photoSuccess: { color: colors.success, fontSize: 12, fontWeight: "800" },
+  photoGate: { gap: spacing.sm, padding: spacing.md, borderRadius: radii.control, backgroundColor: colors.surfaceMuted }, photoGateHeading: { flexDirection: "row", alignItems: "center", gap: spacing.sm }, photoHint: { color: colors.muted, fontSize: 12, lineHeight: 17 }, contactPreview: { width: "100%", height: 150, borderRadius: radii.control, backgroundColor: colors.border }, photoActions: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm }, photoButton: { flexGrow: 1, minWidth: 92, paddingHorizontal: spacing.sm }, photoSuccess: { color: colors.success, fontSize: 12, fontWeight: "800" }, photoRequiredNotice: { flexDirection: "row", alignItems: "center", gap: spacing.xs, padding: spacing.sm, borderRadius: radii.control, backgroundColor: colors.warningSoft }, photoRequiredText: { flex: 1, color: colors.warning, fontSize: 12, lineHeight: 17, fontWeight: "700" },
 });
