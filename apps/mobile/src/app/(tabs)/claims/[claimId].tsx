@@ -383,7 +383,7 @@ export default function ClaimDetailScreen() {
       {error ? <View style={styles.inlineError}><ErrorBanner message={error} onRetry={() => void load(true)} /></View> : null}
       {notice ? <View style={styles.inlineNotice}><MaterialCommunityIcons name="check-circle-outline" size={17} color={colors.success} /><Text style={styles.noticeText}>{notice}</Text></View> : null}
 
-      {panel === "chat" ? <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === "ios" ? "padding" : undefined} keyboardVerticalOffset={Platform.OS === "ios" ? 8 : 0}>
+      {panel === "chat" ? <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === "ios" ? "padding" : "height"} keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}>
         <View style={styles.itemStrip}>
           <View style={styles.itemGlyph}><MaterialCommunityIcons name="package-variant-closed" size={20} color={colors.primary} /></View>
           <View style={styles.itemStripCopy}><Text style={styles.itemStripTitle} numberOfLines={1}>{item?.title ?? claim.posts.found.title}</Text><Text style={styles.itemStripLocation} numberOfLines={1}>{item?.locationLabel ?? "Vị trí vật phẩm được giữ riêng tư"}</Text></View>
