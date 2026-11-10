@@ -34,7 +34,8 @@ export default function HomeScreen() {
   return (
     <AppScreen title="Tìm lại. Trao trả." description="Kết nối người làm mất và người nhặt được đồ trong khuôn viên FPTU Đà Nẵng.">
       <View style={styles.actions}>
-        <Button title="Mở bảng tin" onPress={() => router.push("/posts")} />
+        <Button title="Tạo tin thất lạc / nhặt được" onPress={() => router.push("/posts/create")} />
+        <Button title="Mở bảng tin" variant="secondary" onPress={() => router.push("/posts")} />
         <Button title="Xem trao đổi" variant="secondary" onPress={() => router.push("/claims")} />
       </View>
       <Card style={styles.statusCard}>
