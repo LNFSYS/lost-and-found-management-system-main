@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
+import { router } from "expo-router";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import { File, Paths } from "expo-file-system";
 import * as Sharing from "expo-sharing";
@@ -52,6 +53,7 @@ export default function AdminDashboardScreen() {
   if (loading) return <LoadingSpinner label="Đang tải tổng quan quản trị…" />;
   return <AppScreen title="Tổng quan quản trị" description="Theo dõi hoạt động, báo cáo và kết quả xử lý trong khoảng thời gian chọn.">
     <AdminNavigation active="dashboard" />
+    <Button title="Tạo tin thất lạc / nhặt được" onPress={() => router.push("/posts/create")} />
     {error ? <ErrorBanner message={error} onRetry={() => void load(true)} /> : null}
     <Card style={styles.filters}>
       <View style={styles.filterHeading}><Text style={styles.sectionTitle}>Khoảng thống kê</Text><View style={styles.filterActions}><Button title="Áp dụng" loading={refreshing} onPress={() => { if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to) || from > to) { setError("Nhập ngày hợp lệ theo YYYY-MM-DD và đảm bảo ngày bắt đầu không sau ngày kết thúc."); return; } setApplied({ from, to }); }} /><Button title="Tải lại" variant="ghost" loading={refreshing} onPress={() => void load(true)} /></View></View>
