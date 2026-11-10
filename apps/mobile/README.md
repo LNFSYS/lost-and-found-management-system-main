@@ -10,7 +10,7 @@ Expo SDK 58 and TypeScript app for FPTU Lost & Found. Navigation uses Expo Route
 2. From the repository root, run `npm install` once, then `npm run dev:mobile`.
 3. Open the QR code in Expo Go or press `a` to open an installed Android emulator.
 
-`EXPO_PUBLIC_API_URL` defaults to `http://localhost:3001/api` when unset. Android emulators and physical devices should use the addresses above.
+When running in development, `EXPO_PUBLIC_API_URL` defaults to `http://localhost:3001/api` if it is unset. Preview and production builds require `EXPO_PUBLIC_API_URL` and reject localhost addresses so the deployed app cannot silently target a developer's machine.
 
 ## Shared foundations
 

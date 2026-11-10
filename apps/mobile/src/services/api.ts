@@ -5,8 +5,20 @@ import * as SecureStore from "expo-secure-store";
 const ACCESS_TOKEN_KEY = "lnfs.access-token";
 const CACHED_USER_KEY = "lnfs.cached-user";
 const configuredBaseUrl = process.env.EXPO_PUBLIC_API_URL?.trim();
+const apiBaseUrl = configuredBaseUrl || (__DEV__ ? "http://localhost:3001/api" : "");
 
-export const API_BASE_URL = (configuredBaseUrl || "http://localhost:3001/api").replace(/\/+$/, "");
+if (!apiBaseUrl) {
+  throw new Error("EXPO_PUBLIC_API_URL must be set to the deployed API URL for preview and production builds.");
+}
+
+if (!__DEV__) {
+  const hostname = new URL(apiBaseUrl).hostname.toLowerCase();
+  if (["localhost", "127.0.0.1", "0.0.0.0", "::1", "10.0.2.2"].includes(hostname)) {
+    throw new Error("EXPO_PUBLIC_API_URL must use the deployed API host in preview and production builds.");
+  }
+}
+
+export const API_BASE_URL = apiBaseUrl.replace(/\/+$/, "");
 
 export interface MobileUser {
   id: string;
