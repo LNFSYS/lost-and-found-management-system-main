@@ -16,7 +16,7 @@ import { adminService, getApiErrorMessage, type AdminDashboardKpis } from "@/ser
 function dateBefore(days: number) { const date = new Date(); date.setDate(date.getDate() - days); return date.toISOString().slice(0, 10); }
 const today = () => new Date().toISOString().slice(0, 10);
 const metricLabels: { key: keyof AdminDashboardKpis["totals"]; label: string; icon: "file-document-outline" | "shield-check-outline" | "calendar-check-outline" | "package-check" }[] = [
-  { key: "posts", label: "Bài đăng", icon: "file-document-outline" }, { key: "claims", label: "Lượt claim", icon: "shield-check-outline" },
+  { key: "posts", label: "Bài đăng", icon: "file-document-outline" }, { key: "claims", label: "Yêu cầu nhận đồ", icon: "shield-check-outline" },
   { key: "appointments", label: "Lịch hẹn", icon: "calendar-check-outline" }, { key: "returns", label: "Đã trả đồ", icon: "package-check" },
 ];
 
@@ -49,8 +49,8 @@ export default function AdminDashboardScreen() {
     catch (err) { setError(getApiErrorMessage(err)); }
     finally { setExporting(false); }
   };
-  if (loading) return <LoadingSpinner label="Đang tải dashboard quản trị…" />;
-  return <AppScreen title="Dashboard quản trị" description="Theo dõi hoạt động, báo cáo và kết quả xử lý trong khoảng thời gian chọn.">
+  if (loading) return <LoadingSpinner label="Đang tải tổng quan quản trị…" />;
+  return <AppScreen title="Tổng quan quản trị" description="Theo dõi hoạt động, báo cáo và kết quả xử lý trong khoảng thời gian chọn.">
     <AdminNavigation active="dashboard" />
     {error ? <ErrorBanner message={error} onRetry={() => void load(true)} /> : null}
     <Card style={styles.filters}>

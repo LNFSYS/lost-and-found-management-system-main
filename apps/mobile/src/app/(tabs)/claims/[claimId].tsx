@@ -12,6 +12,7 @@ import { Card } from "@/components/ui/card";
 import { ErrorBanner } from "@/components/ui/error-banner";
 import { Input } from "@/components/ui/input";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
+import { claimRoleLabels } from "@/constants/labels";
 import { colors, radii, spacing } from "@/constants/theme";
 import { useAuth } from "@/context/auth-context";
 import {
@@ -278,7 +279,7 @@ export default function ClaimDetailScreen() {
       setVerification(updated);
       setSelectedPromptKey(null);
       setSelectedPrompt("");
-      setNotice("Đã gửi câu hỏi xác minh riêng cho Claimant.");
+      setNotice("Đã gửi câu hỏi xác minh riêng cho người nhận.");
       void claimService.listMessages(claimId).then((result) => setMessages((current) => sortMessages([...current, ...result.items]))).catch(() => undefined);
     } catch (questionError) {
       setError(getApiErrorMessage(questionError));
@@ -294,7 +295,7 @@ export default function ClaimDetailScreen() {
     try {
       setVerification(await claimService.answerVerificationQuestion(claimId, activeQuestion.id, answer.trim(), createRequestUuid()));
       setAnswer("");
-      setNotice("Đã gửi câu trả lời riêng cho Finder.");
+      setNotice("Đã gửi câu trả lời riêng cho người nhặt.");
       void claimService.listMessages(claimId).then((result) => setMessages((current) => sortMessages([...current, ...result.items]))).catch(() => undefined);
     } catch (answerError) {
       setError(getApiErrorMessage(answerError));
@@ -371,7 +372,7 @@ export default function ClaimDetailScreen() {
       <View style={styles.topBar}>
         <Pressable accessibilityRole="button" accessibilityLabel="Quay lại danh sách claims" onPress={() => router.back()} style={styles.backButton}><MaterialCommunityIcons name="arrow-left" size={22} color={colors.ink} /></Pressable>
         <View style={styles.topBarCopy}><Text accessibilityRole="header" style={styles.topTitle}>{claimName}</Text><Text numberOfLines={1} style={styles.topSubtitle}>{item?.title ?? claim.posts.found.title}</Text></View>
-        <View style={styles.roleBadge}><Text style={styles.roleBadgeText}>{role}</Text></View>
+        <View style={styles.roleBadge}><Text style={styles.roleBadgeText}>{claimRoleLabels[role]}</Text></View>
       </View>
       <ScrollView style={styles.panelTabScroll} horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.panelTabs}>
         {(["chat", "verify", "item", "evidence"] as Panel[]).map((key) => {
@@ -401,7 +402,7 @@ export default function ClaimDetailScreen() {
               <Pressable accessibilityRole="button" accessibilityLabel="Chọn ảnh bằng chứng" disabled={sending} onPress={() => void pickChatImage("library")} style={styles.attachButton}><MaterialCommunityIcons name="image-plus-outline" size={22} color={colors.primary} /></Pressable>
               <Button title={sending ? "Đang gửi" : "Gửi"} loading={sending} disabled={!draft.trim()} onPress={() => void sendText()} style={styles.sendButton} />
             </View>
-          </> : <View style={styles.closedNote}><MaterialCommunityIcons name="lock-outline" size={17} color={colors.muted} /><Text style={styles.closedText}>Cuộc trao đổi này đã đóng hoặc đang chờ Finder chấp thuận.</Text></View>}
+          </> : <View style={styles.closedNote}><MaterialCommunityIcons name="lock-outline" size={17} color={colors.muted} /><Text style={styles.closedText}>Cuộc trao đổi này đã đóng hoặc đang chờ người nhặt chấp thuận.</Text></View>}
         </View>
       </KeyboardAvoidingView> : null}
 
@@ -414,7 +415,7 @@ export default function ClaimDetailScreen() {
         {verification?.questions.map((question) => <Card key={question.id} style={styles.questionCard}>
           <View style={styles.questionTop}><MaterialCommunityIcons name="help-circle-outline" size={19} color={colors.primary} /><Text style={styles.questionType}>{question.privacyLevel === "HIGHLY_PRIVATE" ? "RIÊNG TƯ CAO" : "CÂU HỎI RIÊNG"}</Text></View>
           <Text style={styles.questionText}>{question.prompt}</Text>
-          {question.answer ? <View style={styles.answerState}><MaterialCommunityIcons name="check-circle-outline" size={17} color={colors.success} /><Text style={styles.answerStateText}>{role === "FINDER" ? "Claimant đã gửi câu trả lời." : "Đã gửi câu trả lời riêng."}</Text></View> : role === "FINDER" ? <Text style={styles.waitingText}>Đang chờ Claimant trả lời.</Text> : activeQuestion?.id === question.id ? <View style={styles.answerForm}><Input label="Câu trả lời riêng" value={answer} onChangeText={setAnswer} maxLength={500} placeholder="Nhập câu trả lời…" /><Button title="Gửi câu trả lời" onPress={() => void submitAnswer()} loading={sending} disabled={!answer.trim()} /></View> : null}
+          {question.answer ? <View style={styles.answerState}><MaterialCommunityIcons name="check-circle-outline" size={17} color={colors.success} /><Text style={styles.answerStateText}>{role === "FINDER" ? "Người nhận đã gửi câu trả lời." : "Đã gửi câu trả lời riêng."}</Text></View> : role === "FINDER" ? <Text style={styles.waitingText}>Đang chờ người nhận trả lời.</Text> : activeQuestion?.id === question.id ? <View style={styles.answerForm}><Input label="Câu trả lời riêng" value={answer} onChangeText={setAnswer} maxLength={500} placeholder="Nhập câu trả lời…" /><Button title="Gửi câu trả lời" onPress={() => void submitAnswer()} loading={sending} disabled={!answer.trim()} /></View> : null}
         </Card>)}
         {role === "FINDER" && verification && !verification.roomEscalation && (verification.status === "CONVERSATION_OPEN" || verification.status === "NEED_MORE_INFO") ? <Card style={styles.verificationCard}>
           <Text style={styles.cardTitle}>Câu hỏi theo mẫu</Text><Text style={styles.cardSubtitle}>{templates ? `${templates.category} · tối thiểu ${templates.template.minimumAnswers} câu trả lời` : "Không tải được bộ câu hỏi mẫu."}</Text>
@@ -423,12 +424,12 @@ export default function ClaimDetailScreen() {
           {verification.policy.matchedCount !== undefined ? <Text style={styles.cardSubtitle}>Câu trả lời khớp: {verification.policy.matchedCount}/{verification.policy.answeredCount}</Text> : null}
         </Card> : null}
         {role === "FINDER" && verification && !verification.roomEscalation && (verification.status === "CONVERSATION_OPEN" || verification.status === "NEED_MORE_INFO") ? <Card style={styles.decisionCard}>
-          <Text style={styles.cardTitle}>Quyết định của Finder</Text><Text style={styles.cardSubtitle}>Chọn bước tiếp theo dựa trên câu trả lời và bằng chứng đã trao đổi.</Text>
+          <Text style={styles.cardTitle}>Quyết định của người nhặt</Text><Text style={styles.cardSubtitle}>Chọn bước tiếp theo dựa trên câu trả lời và bằng chứng đã trao đổi.</Text>
           {decisions.map((option) => <Pressable key={option.action} accessibilityRole="button" accessibilityState={{ disabled: option.action === "VERIFY_FOR_MEETUP" && !verification.policy.readyForDecision }} disabled={option.action === "VERIFY_FOR_MEETUP" && !verification.policy.readyForDecision} onPress={() => void openDecision(option.action)} style={[styles.decisionOption, option.action === "VERIFY_FOR_MEETUP" && !verification.policy.readyForDecision && styles.disabledOption]}><View style={styles.decisionIcon}><MaterialCommunityIcons name={option.icon} size={19} color={option.action === "DECLINE" ? colors.danger : colors.primary} /></View><Text style={[styles.decisionText, option.action === "DECLINE" && { color: colors.danger }]}>{option.label}</Text><MaterialCommunityIcons name="chevron-right" size={19} color={colors.muted} /></Pressable>)}
           {!verification.policy.readyForDecision ? <Text style={styles.waitingText}>Để đề xuất gặp mặt, cần đủ câu trả lời tối thiểu hoặc điều kiện xác minh ảnh.</Text> : null}
         </Card> : null}
-        {role === "CLAIMANT" && verification && !activeQuestion ? <Card style={styles.infoBox}><MaterialCommunityIcons name="clock-outline" size={18} color={colors.warning} /><Text style={styles.infoText}>Đang chờ Finder gửi câu hỏi hoặc ra quyết định xác minh.</Text></Card> : null}
-        {appointmentEligible ? <Button title="Đề xuất lịch gặp tại campus" onPress={openAppointment} /> : null}
+        {role === "CLAIMANT" && verification && !activeQuestion ? <Card style={styles.infoBox}><MaterialCommunityIcons name="clock-outline" size={18} color={colors.warning} /><Text style={styles.infoText}>Đang chờ người nhặt gửi câu hỏi hoặc ra quyết định xác minh.</Text></Card> : null}
+        {appointmentEligible ? <Button title="Đề xuất lịch gặp tại khuôn viên trường" onPress={openAppointment} /> : null}
       </ScrollView> : null}
 
       {panel === "item" ? <ScrollView style={styles.flex} contentContainerStyle={styles.panelContent} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void load(true)} tintColor={colors.primary} />}>
@@ -438,7 +439,7 @@ export default function ClaimDetailScreen() {
           <Text style={styles.itemPanelTitle}>{item?.title ?? claim.posts.found.title}</Text>
           <View style={styles.detailRow}><MaterialCommunityIcons name="tag-outline" size={18} color={colors.muted} /><Text style={styles.detailLabel}>Danh mục</Text><Text style={styles.detailValue}>{item?.categoryName ?? "Chưa cập nhật"}</Text></View>
           <View style={styles.detailRow}><MaterialCommunityIcons name="map-marker-outline" size={18} color={colors.muted} /><Text style={styles.detailLabel}>Vị trí</Text><Text style={styles.detailValue}>{item?.locationLabel ?? "Được giữ riêng tư"}</Text></View>
-          {claim.conversation?.custodyEscalated ? <View style={styles.infoBox}><MaterialCommunityIcons name="warehouse" size={18} color={colors.success} /><Text style={[styles.infoText, { color: colors.success }]}>Đang được lưu giữ tại quầy Lost & Found của trường.</Text></View> : null}
+          {claim.conversation?.custodyEscalated ? <View style={styles.infoBox}><MaterialCommunityIcons name="warehouse" size={18} color={colors.success} /><Text style={[styles.infoText, { color: colors.success }]}>Đang được lưu giữ tại quầy tiếp nhận đồ thất lạc của trường.</Text></View> : null}
           <Text style={styles.privacyText}>Không chia sẻ số seri, giấy tờ tùy thân hoặc bí mật sở hữu trong khu vực công khai.</Text>
         </Card>
       </ScrollView> : null}
@@ -479,7 +480,7 @@ export default function ClaimDetailScreen() {
 }
 
 const panelInfo: Record<Panel, { label: string; icon: "message-text-outline" | "shield-check-outline" | "package-variant-closed" | "folder-lock-outline" }> = {
-  chat: { label: "Chat", icon: "message-text-outline" }, verify: { label: "Xác minh", icon: "shield-check-outline" }, item: { label: "Vật phẩm", icon: "package-variant-closed" }, evidence: { label: "Bằng chứng", icon: "folder-lock-outline" },
+  chat: { label: "Trò chuyện", icon: "message-text-outline" }, verify: { label: "Xác minh", icon: "shield-check-outline" }, item: { label: "Vật phẩm", icon: "package-variant-closed" }, evidence: { label: "Bằng chứng", icon: "folder-lock-outline" },
 };
 
 const styles = StyleSheet.create({

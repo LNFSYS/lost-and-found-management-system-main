@@ -2,6 +2,7 @@ import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import { Redirect, Tabs } from "expo-router";
 import { Platform } from "react-native";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
+import { appTabLabels } from "@/constants/labels";
 import { colors } from "@/constants/theme";
 import { useAuth } from "@/context/auth-context";
 import { useNotificationCount } from "@/context/notification-count-context";
@@ -26,16 +27,16 @@ export default function TabsLayout() {
         tabBarHideOnKeyboard: true,
       }}
     >
-      <Tabs.Screen name="home" options={{ title: "Home", tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name="home-variant-outline" color={String(color)} size={size} /> }} />
-      <Tabs.Screen name="posts" options={{ title: "Posts", tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name="view-grid-outline" color={String(color)} size={size} /> }} />
-      <Tabs.Screen name="claims" options={{ title: "Claims", tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name="message-text-outline" color={String(color)} size={size} /> }} />
-      <Tabs.Screen name="appointments" options={{ title: "Appointments", tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name="calendar-check-outline" color={String(color)} size={size} /> }} />
-      <Tabs.Screen name="profile" options={{ title: "Profile", tabBarBadge: unreadCount > 0 ? (unreadCount > 99 ? "99+" : unreadCount) : undefined, tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name="account-circle-outline" color={String(color)} size={size} /> }} />
+      <Tabs.Screen name="home" options={{ title: appTabLabels.home, tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name="home-variant-outline" color={String(color)} size={size} /> }} />
+      <Tabs.Screen name="posts" options={{ title: appTabLabels.posts, tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name="view-grid-outline" color={String(color)} size={size} /> }} />
+      <Tabs.Screen name="claims" options={{ title: appTabLabels.claims, tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name="message-text-outline" color={String(color)} size={size} /> }} />
+      <Tabs.Screen name="appointments" options={{ title: appTabLabels.appointments, tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name="calendar-check-outline" color={String(color)} size={size} /> }} />
+      <Tabs.Screen name="profile" options={{ title: appTabLabels.profile, tabBarBadge: unreadCount > 0 ? (unreadCount > 99 ? "99+" : unreadCount) : undefined, tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name="account-circle-outline" color={String(color)} size={size} /> }} />
       <Tabs.Screen name="notifications" options={{ href: null }} />
       <Tabs.Screen name="reports" options={{ href: null }} />
       <Tabs.Screen name="custody" options={{ href: null }} />
-      <Tabs.Screen name="admin" options={{ title: "Admin", href: isAdmin ? undefined : null, tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name="shield-account-outline" color={String(color)} size={size} /> }} />
-      <Tabs.Screen name="staff" options={{ title: "Staff", href: isStaff ? undefined : null, tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name="clipboard-check-outline" color={String(color)} size={size} /> }} />
+      <Tabs.Screen name="admin" options={{ title: appTabLabels.admin, href: isAdmin ? undefined : null, tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name="shield-account-outline" color={String(color)} size={size} /> }} />
+      <Tabs.Screen name="staff" options={{ title: appTabLabels.staff, href: isStaff ? undefined : null, tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name="clipboard-check-outline" color={String(color)} size={size} /> }} />
     </Tabs>
   );
 }

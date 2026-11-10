@@ -11,6 +11,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorBanner } from "@/components/ui/error-banner";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { SecureImage } from "@/components/secure-image";
+import { claimRoleLabels } from "@/constants/labels";
 import { colors, radii, spacing } from "@/constants/theme";
 import { useAuth } from "@/context/auth-context";
 import { appointmentService, claimService, createRequestUuid, getApiErrorMessage, returnService, type AppointmentRecord, type ClaimRecord, type CompletedReturn, type PublicHandoverPoint } from "@/services/api";
@@ -58,7 +59,7 @@ function AppointmentCard({ appointment, userId }: { appointment: AppointmentReco
         <View style={[styles.statusPill, { backgroundColor: tone.background }]}><Text style={[styles.statusText, { color: tone.color }]}>{appointmentLabels[appointment.status]}</Text></View>
         <Text numberOfLines={1} style={styles.locationText}><MaterialCommunityIcons name="map-marker-outline" size={13} color={colors.muted} /> {appointment.location || "Chưa chọn điểm hẹn"}</Text>
       </View>
-      <Text style={styles.roleNote}>{appointment.finderId === userId ? "Bạn là người nhặt" : "Bạn là người nhận"} · {appointment.finderResponse === "CONFIRMED" ? "Finder đã xác nhận" : appointment.finderResponse === "DISPUTED" ? "Finder yêu cầu đối soát" : "Finder chưa xác nhận"} · {appointment.ownerResponse === "CONFIRMED" ? "Người nhận đã xác nhận" : appointment.ownerResponse === "DISPUTED" ? "Người nhận yêu cầu đối soát" : "Người nhận chưa xác nhận"}</Text>
+      <Text style={styles.roleNote}>{appointment.finderId === userId ? "Bạn là người nhặt" : "Bạn là người nhận"} · {appointment.finderResponse === "CONFIRMED" ? `${claimRoleLabels.FINDER} đã xác nhận` : appointment.finderResponse === "DISPUTED" ? `${claimRoleLabels.FINDER} yêu cầu đối soát` : `${claimRoleLabels.FINDER} chưa xác nhận`} · {appointment.ownerResponse === "CONFIRMED" ? "Người nhận đã xác nhận" : appointment.ownerResponse === "DISPUTED" ? "Người nhận yêu cầu đối soát" : "Người nhận chưa xác nhận"}</Text>
     </Card>
   </Pressable>;
 }
@@ -187,7 +188,7 @@ export default function AppointmentsScreen() {
   const createAppointment = async () => {
     if (!claimId || !claim || !proposedAt || !selectedPoint || creating) return;
     if (proposedAt.getTime() <= Date.now()) { setError("Chọn thời gian hẹn trong tương lai."); return; }
-    if (!claim.appointmentEligible) { setError("Finder chưa xác nhận đủ điều kiện để đề xuất lịch gặp."); return; }
+    if (!claim.appointmentEligible) { setError("Người nhặt chưa xác nhận đủ điều kiện để đề xuất lịch gặp."); return; }
     setCreating(true);
     setError(null);
     requestKey.current ??= createRequestUuid();
@@ -210,12 +211,12 @@ export default function AppointmentsScreen() {
       <ScrollView contentContainerStyle={styles.content} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void load(true)} tintColor={colors.primary} />} keyboardShouldPersistTaps="handled">
         <View style={styles.header}>
           <View style={styles.headerIcon}><MaterialCommunityIcons name="calendar-check-outline" size={23} color={colors.primary} /></View>
-          <View style={styles.headerCopy}><Text style={styles.eyebrow}>BÀN GIAO TRỰC TIẾP</Text><Text accessibilityRole="header" style={styles.title}>Lịch hẹn</Text><Text style={styles.description}>Chọn điểm gặp an toàn trong campus và cùng xác nhận khi trao trả xong.</Text></View>
+          <View style={styles.headerCopy}><Text style={styles.eyebrow}>BÀN GIAO TRỰC TIẾP</Text><Text accessibilityRole="header" style={styles.title}>Lịch hẹn</Text><Text style={styles.description}>Chọn điểm gặp an toàn trong khuôn viên trường và cùng xác nhận khi trao trả xong.</Text></View>
         </View>
         {error ? <ErrorBanner message={error} onRetry={() => void load(true)} /> : null}
         {claimId && claim ? <Card style={styles.proposalCard}>
           <View style={styles.proposalHeading}><View style={styles.proposalIcon}><MaterialCommunityIcons name="calendar-plus" size={20} color={colors.primary} /></View><View style={styles.headerCopy}><Text style={styles.proposalTitle}>Đề xuất lịch bàn giao</Text><Text style={styles.proposalSubtitle}>{claim.item?.title ?? claim.posts.found.title}</Text></View></View>
-          {!claim.appointmentEligible ? <View style={styles.infoBox}><MaterialCommunityIcons name="lock-outline" size={18} color={colors.warning} /><Text style={styles.infoText}>Chỉ đề xuất lịch khi Finder đã chọn gặp mặt xác minh.</Text></View> : null}
+          {!claim.appointmentEligible ? <View style={styles.infoBox}><MaterialCommunityIcons name="lock-outline" size={18} color={colors.warning} /><Text style={styles.infoText}>Chỉ đề xuất lịch khi người nhặt đã chọn gặp mặt xác minh.</Text></View> : null}
           {hasActive ? <View style={styles.infoBox}><MaterialCommunityIcons name="calendar-alert" size={18} color={colors.warning} /><Text style={styles.infoText}>Đã có lịch đang chờ xử lý cho yêu cầu này. Mở lịch hiện tại để phản hồi hoặc đề xuất lại sau khi lịch kết thúc.</Text></View> : <>
             <Text style={styles.fieldLabel}>Thời gian gặp</Text>
             <Pressable accessibilityRole="button" onPress={() => setPickerMode(Platform.OS === "ios" ? "datetime" : "date")} style={styles.dateButton}><MaterialCommunityIcons name="calendar-clock-outline" size={19} color={colors.primary} /><Text style={styles.dateButtonText}>{proposedAt ? new Intl.DateTimeFormat("vi-VN", { dateStyle: "full", timeStyle: "short" }).format(proposedAt) : "Chọn ngày và giờ"}</Text></Pressable>
@@ -228,8 +229,8 @@ export default function AppointmentsScreen() {
         </Card> : null}
         {claimId && !claim && !loadingPoints ? <Card style={styles.infoBox}><MaterialCommunityIcons name="information-outline" size={18} color={colors.warning} /><Text style={styles.infoText}>Không tải được yêu cầu để đề xuất lịch. Mở lại từ phòng chat.</Text></Card> : null}
 
-        <View style={styles.sectionHeading}><View><Text style={styles.sectionTitle}>{claimId ? "Lịch của yêu cầu này" : "Lịch đang xử lý"}</Text><Text style={styles.sectionSubtitle}>{total} lịch hẹn · phản hồi của Finder và người nhận</Text></View><Pressable accessibilityRole="button" accessibilityLabel="Tải lại lịch hẹn" onPress={() => void load(true)} style={styles.refreshButton}><MaterialCommunityIcons name="refresh" size={19} color={colors.primary} /></Pressable></View>
-        {appointments.length ? <View style={styles.list}>{appointments.map((appointment) => <AppointmentCard key={appointment.id} appointment={appointment} userId={user?.id} />)}</View> : !error ? <Card style={styles.emptyCard}><EmptyState icon="calendar-blank-outline" title="Chưa có lịch hẹn" description={claimId ? "Sau khi Finder chấp thuận gặp mặt, bạn có thể đề xuất một điểm bàn giao an toàn." : "Các lịch gặp và trạng thái xác nhận hai bên sẽ xuất hiện ở đây."} /></Card> : null}
+        <View style={styles.sectionHeading}><View><Text style={styles.sectionTitle}>{claimId ? "Lịch của yêu cầu này" : "Lịch đang xử lý"}</Text><Text style={styles.sectionSubtitle}>{total} lịch hẹn · phản hồi của người nhặt và người nhận</Text></View><Pressable accessibilityRole="button" accessibilityLabel="Tải lại lịch hẹn" onPress={() => void load(true)} style={styles.refreshButton}><MaterialCommunityIcons name="refresh" size={19} color={colors.primary} /></Pressable></View>
+        {appointments.length ? <View style={styles.list}>{appointments.map((appointment) => <AppointmentCard key={appointment.id} appointment={appointment} userId={user?.id} />)}</View> : !error ? <Card style={styles.emptyCard}><EmptyState icon="calendar-blank-outline" title="Chưa có lịch hẹn" description={claimId ? "Sau khi người nhặt chấp thuận gặp mặt, bạn có thể đề xuất một điểm bàn giao an toàn." : "Các lịch gặp và trạng thái xác nhận hai bên sẽ xuất hiện ở đây."} /></Card> : null}
         {hasMore ? <Button title="Tải thêm lịch" variant="secondary" loading={loadingMore} onPress={() => void loadMore()} /> : null}
 
         <View style={styles.sectionHeading}><View><Text style={styles.sectionTitle}>Đánh giá sau trao trả</Text><Text style={styles.sectionSubtitle}>Đánh giá chỉ khả dụng sau khi lượt trả đồ hoàn tất</Text></View></View>

@@ -110,7 +110,7 @@ export default function WalkInIntakeScreen() {
     <SafeAreaView style={styles.safeArea} edges={["top", "left", "right"]}>
       <StaffNavigation active="custody" />
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        <View style={styles.headingRow}><Pressable accessibilityRole="button" accessibilityLabel="Quay lại hàng đợi" onPress={() => router.back()} style={styles.backButton}><MaterialCommunityIcons name="arrow-left" size={21} color={colors.primary} /></Pressable><View style={styles.headingCopy}><Text style={styles.eyebrow}>TIẾP NHẬN TẠI QUẦY</Text><Text accessibilityRole="header" style={styles.title}>Walk-in</Text><Text style={styles.subtitle}>Lập hồ sơ kho khi vật phẩm được mang trực tiếp tới trường.</Text></View></View>
+        <View style={styles.headingRow}><Pressable accessibilityRole="button" accessibilityLabel="Quay lại hàng đợi" onPress={() => router.back()} style={styles.backButton}><MaterialCommunityIcons name="arrow-left" size={21} color={colors.primary} /></Pressable><View style={styles.headingCopy}><Text style={styles.eyebrow}>TIẾP NHẬN TẠI QUẦY</Text><Text accessibilityRole="header" style={styles.title}>Tiếp nhận trực tiếp</Text><Text style={styles.subtitle}>Lập hồ sơ kho khi vật phẩm được mang trực tiếp tới trường.</Text></View></View>
         {error ? <ErrorBanner message={error} /> : null}
         <Card style={styles.formCard}>
           <View style={styles.infoBanner}><MaterialCommunityIcons name="information-outline" size={18} color={colors.primary} /><Text style={styles.infoText}>Ghi nhận thông tin tối thiểu cần thiết. Không nhập giấy tờ hoặc dữ liệu cá nhân không liên quan vào phần ghi chú.</Text></View>

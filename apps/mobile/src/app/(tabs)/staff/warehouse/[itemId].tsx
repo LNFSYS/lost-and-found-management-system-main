@@ -149,7 +149,7 @@ export default function WarehouseItemDetailScreen() {
     if (identity.length < 3 || identity.length > 100) { setError("Mã thẻ hoặc giấy tờ cần từ 3 đến 100 ký tự."); return; }
     if (!proofs.length) { setError("Tải lên ít nhất một ảnh biên bản hoặc bằng chứng bàn giao."); return; }
     const selectedRecipient = recipients.find((recipient) => recipient.claimId === selectedClaimId);
-    if (item.status === "CLAIMED" && !selectedRecipient) { setError("Vật phẩm đang được giữ cho Claim; chọn đúng người nhận đã xác minh."); return; }
+    if (item.status === "CLAIMED" && !selectedRecipient) { setError("Vật phẩm đang được giữ cho một yêu cầu nhận lại; hãy chọn đúng người đã được xác minh."); return; }
     if (selectedRecipient && !claimReviews.some((review) => review.claimId === selectedRecipient.claimId && review.verified)) { setError("Xác minh người nhận tại quầy trước khi hoàn tất trả đồ."); return; }
     setBusy(true);
     setError(null);

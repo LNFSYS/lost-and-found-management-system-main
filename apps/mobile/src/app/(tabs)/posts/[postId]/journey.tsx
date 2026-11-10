@@ -37,7 +37,7 @@ const eventLabels: Record<string, string> = {
   REJECT: "Từ chối lịch hẹn",
   CANCEL: "Hủy lịch hẹn",
   RESCHEDULE: "Đề xuất đổi lịch",
-  NO_SHOW: "Không có mặt tại lịch hẹn",
+  NO_SHOW: "Bên kia không đến",
   FINDER_CONFIRM: "Người nhặt xác nhận trao trả",
   OWNER_CONFIRM: "Người nhận xác nhận đã nhận đồ",
   FINDER_DISPUTE: "Người nhặt báo có vấn đề",

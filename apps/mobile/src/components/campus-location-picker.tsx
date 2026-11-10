@@ -305,7 +305,7 @@ export function CampusLocationPicker({
       <View style={styles.pickerRow}>
         {/* Area Field */}
         <View style={styles.pickerFieldHalf}>
-          <Text style={styles.fieldLabel}>Khu vực campus</Text>
+          <Text style={styles.fieldLabel}>Khu vực trong trường</Text>
           <Pressable
             disabled={disabled}
             onPress={() => setAreaModalVisible(true)}
@@ -432,7 +432,7 @@ export function CampusLocationPicker({
       {/* Custom Location / Outside Campus Input (Max 255 chars) */}
       <View style={styles.inputGroup}>
         <View style={styles.inputLabelRow}>
-          <Text style={styles.fieldLabel}>Vị trí khác / Ngoài campus (nếu có)</Text>
+          <Text style={styles.fieldLabel}>Vị trí khác / Ngoài khuôn viên trường (nếu có)</Text>
           <Text style={styles.charCounter}>{(customLocation || "").length}/255</Text>
         </View>
         <View

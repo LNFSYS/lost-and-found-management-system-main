@@ -14,8 +14,8 @@ import { useNotificationCount } from "@/context/notification-count-context";
 import { getApiErrorMessage, notificationService, type AppNotification } from "@/services/api";
 
 const labels: Record<string, string> = {
-  MATCH_FOUND: "Gợi ý khớp mới", CLAIM_REQUEST_RECEIVED: "Yêu cầu nhận lại đồ", CLAIM_ACCEPTED: "Claim được chấp nhận",
-  CLAIM_MORE_INFO_REQUESTED: "Cần thêm thông tin", CLAIM_REJECTED: "Claim bị từ chối", CLAIM_WITHDRAWN: "Claim đã rút",
+  MATCH_FOUND: "Gợi ý khớp mới", CLAIM_REQUEST_RECEIVED: "Yêu cầu nhận lại đồ", CLAIM_ACCEPTED: "Yêu cầu nhận lại được chấp nhận",
+  CLAIM_MORE_INFO_REQUESTED: "Cần thêm thông tin", CLAIM_REJECTED: "Yêu cầu nhận lại bị từ chối", CLAIM_WITHDRAWN: "Yêu cầu nhận lại đã rút",
   APPOINTMENT_PROPOSED: "Lịch hẹn mới", APPOINTMENT_ACCEPTED: "Lịch hẹn được chấp nhận", APPOINTMENT_REJECTED: "Lịch hẹn bị từ chối",
   APPOINTMENT_REMINDER: "Nhắc lịch hẹn", RETURN_COMPLETED: "Đã hoàn tất trao trả", CHAT_MESSAGE_RECEIVED: "Tin nhắn mới",
   CUSTODY_REQUEST_CREATED: "Yêu cầu chuyển kho", CUSTODY_ACCEPTED: "Đã nhận yêu cầu kho", CUSTODY_REJECTED: "Yêu cầu kho bị từ chối",

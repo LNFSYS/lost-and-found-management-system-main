@@ -10,6 +10,7 @@ import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorBanner } from "@/components/ui/error-banner";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
+import { custodyIntakeTypeLabels } from "@/constants/labels";
 import { colors, radii, spacing } from "@/constants/theme";
 import { getApiErrorMessage, staffService, type StaffCustodyFilter, type StaffCustodyListResponse, type StaffCustodyRequest } from "@/services/api";
 
@@ -29,7 +30,7 @@ function RequestCard({ request }: { request: StaffCustodyRequest }) {
       <View style={styles.requestIcon}><MaterialCommunityIcons name={request.intakeType === "WALK_IN" ? "account-arrow-right-outline" : "package-variant-closed"} size={21} color={colors.primary} /></View>
       <View style={styles.requestCopy}>
         <View style={styles.requestTop}><Text numberOfLines={1} style={styles.requestTitle}>{title}</Text><WarehouseStatusPill status={request.status} compact /></View>
-        <Text numberOfLines={1} style={styles.requestMeta}>{request.requester.fullName || "Người nhặt"} · {request.intakeType === "WALK_IN" ? "Walk-in" : "Bàn giao từ Finder"}</Text>
+        <Text numberOfLines={1} style={styles.requestMeta}>{request.requester.fullName || "Người nhặt"} · {custodyIntakeTypeLabels[request.intakeType]}</Text>
         <Text numberOfLines={2} style={styles.reason}>{request.reason || "Không có lý do kèm theo."}</Text>
         <View style={styles.requestFooter}><Text numberOfLines={1} style={styles.location}>{request.handoverPoint?.name || "Chưa chọn điểm bàn giao"}</Text><Text style={styles.date}>{staffDateTime(request.createdAt, false)}</Text></View>
         <Text style={styles.nextAction}>{nextAction}</Text>
@@ -82,10 +83,10 @@ export default function CustodyQueueScreen() {
       <StaffNavigation active="custody" />
       <ScrollView contentContainerStyle={styles.content} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void load(true, filter, 1)} tintColor={colors.primary} />}>
         <View style={styles.headingRow}>
-          <View style={styles.headingCopy}><Text style={styles.eyebrow}>CUSTODY</Text><Text accessibilityRole="header" style={styles.title}>Hàng đợi tiếp nhận</Text><Text style={styles.subtitle}>Kiểm tra nguồn vật phẩm, xử lý yêu cầu và ghi nhận nhập kho.</Text></View>
+          <View style={styles.headingCopy}><Text style={styles.eyebrow}>BÀN GIAO KHO</Text><Text accessibilityRole="header" style={styles.title}>Hàng đợi tiếp nhận</Text><Text style={styles.subtitle}>Kiểm tra nguồn vật phẩm, xử lý yêu cầu và ghi nhận nhập kho.</Text></View>
           <View style={styles.count}><Text style={styles.countValue}>{data?.counts.PENDING ?? 0}</Text><Text style={styles.countLabel}>đang chờ</Text></View>
         </View>
-        <Button title="Tiếp nhận đồ mang tới quầy · Walk-in" variant="secondary" onPress={() => router.push("/staff/custody/walk-in" as never)} />
+        <Button title="Tiếp nhận đồ mang trực tiếp tại quầy" variant="secondary" onPress={() => router.push("/staff/custody/walk-in" as never)} />
         {error ? <ErrorBanner message={error} onRetry={() => void load(true, filter, 1)} /> : null}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filters}>
           {filters.map((item) => {
@@ -95,7 +96,7 @@ export default function CustodyQueueScreen() {
           })}
         </ScrollView>
         <View style={styles.listHeading}><Text style={styles.listTitle}>{activeFilter?.label}</Text><Text style={styles.listCount}>{data?.total ?? 0} yêu cầu</Text></View>
-        {items.length ? <View style={styles.list}>{items.map((request) => <RequestCard key={request.id} request={request} />)}</View> : !error ? <Card style={styles.emptyCard}><EmptyState icon="clipboard-check-outline" title="Không có yêu cầu trong bộ lọc này" description="Các yêu cầu bàn giao từ Finder sẽ xuất hiện tại đây." /></Card> : null}
+        {items.length ? <View style={styles.list}>{items.map((request) => <RequestCard key={request.id} request={request} />)}</View> : !error ? <Card style={styles.emptyCard}><EmptyState icon="clipboard-check-outline" title="Không có yêu cầu trong bộ lọc này" description="Các yêu cầu bàn giao từ người nhặt sẽ xuất hiện tại đây." /></Card> : null}
         {data && data.page * data.pageSize < data.total ? <Button title={loadingMore ? "Đang tải…" : "Tải thêm yêu cầu"} variant="secondary" loading={loadingMore} onPress={loadMore} /> : null}
         {loadingMore ? <ActivityIndicator color={colors.primary} /> : null}
       </ScrollView>
