@@ -49,6 +49,16 @@ export default function WarehouseItemsScreen() {
 
   useEffect(() => { const timer = setTimeout(() => { void load(false, 1); }, 0); return () => clearTimeout(timer); }, [load]);
 
+  useEffect(() => {
+    const nextSearch = search.trim();
+    if (nextSearch === submittedSearch) return;
+    const timer = setTimeout(() => {
+      setSubmittedSearch(nextSearch);
+      setLoading(true);
+    }, nextSearch ? 400 : 300);
+    return () => clearTimeout(timer);
+  }, [search, submittedSearch]);
+
   const loadMore = () => {
     if (!data || loadingMore || data.page * data.pageSize >= data.total) return;
     setLoadingMore(true);
