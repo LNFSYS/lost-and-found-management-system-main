@@ -36,11 +36,11 @@ async function main() {
 
   try {
     const [posts] = await pool.execute(`
-      SELECT p.id, p.title, p.type, pm.secure_url
+      SELECT p.id, p.title, p.type, MIN(pm.secure_url) AS secure_url
       FROM posts p
       INNER JOIN post_media pm ON pm.post_id = p.id AND pm.media_kind = 'ITEM'
       WHERE p.deleted_at IS NULL
-      GROUP BY p.id
+      GROUP BY p.id, p.title, p.type, p.created_at
       ORDER BY p.created_at DESC
     `);
 
