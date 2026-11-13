@@ -493,7 +493,9 @@ export interface CreatePostPayload {
     visualAttributes: string[];
     visibleText: string[];
     confidence: number;
+    imageEmbedding?: number[] | null;
   };
+  imageEmbedding?: number[] | null;
 }
 export interface CreatedPost { id: string; type: "LOST" | "FOUND"; title: string; status: string; createdAt: string; }
 export interface LostIllustration {
@@ -521,6 +523,7 @@ export interface ImageAnalysisResult {
   assistedBy: string;
   model: string;
   imageCount: number;
+  imageEmbedding?: number[] | null;
 }
 export interface PostSummary {
   id: string;

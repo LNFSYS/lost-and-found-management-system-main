@@ -142,13 +142,14 @@ export function createServices(persistence: Persistence, config: typeof env = en
   const illustrations = createIllustrationUseCases({ repository: persistence.illustrationRepository, posts: postRepository,
     model: illustrationModel, storage: postMediaStorage,
     transaction, id, hash: security.hashToken });
-  const postService = createPostUseCases({
-    postRepository, matchingRepository, matchingService,
-    withTransaction: transaction, id, mediaStorage: postMediaStorage, logger: console, uploads: mediaUploads, illustrations
-  });
   const localImageAnalyzer = createLocalAiImageAnalyzer({
     serviceUrl: process.env.LNFS_AI_SERVICE_URL || "http://127.0.0.1:5000",
     fallback: config.gemini.apiKey ? createGeminiImageAnalyzer(config.gemini) : undefined
+  });
+  const postService = createPostUseCases({
+    postRepository, matchingRepository, matchingService,
+    withTransaction: transaction, id, mediaStorage: postMediaStorage, logger: console, uploads: mediaUploads, illustrations,
+    imageAnalyzer: localImageAnalyzer
   });
   const claimService = createClaimUseCases({
     contactPhotos: createContactPhotoUseCases({ repository: persistence.contactPhotoRepository, claims: claimRepository, matching: matchingRepository,

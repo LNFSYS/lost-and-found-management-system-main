@@ -20,6 +20,7 @@ import type {
 } from "./post.dto.js";
 import type { MediaKind, PostRecord, PostRepository, PostStatus, StoredMediaRecord, VisibilityMode } from "./post.repository.port.js";
 import type { IllustrationUseCases } from "./illustration.use-cases.js";
+import type { ImageAnalyzer } from "./image-analyzer.port.js";
 
 function canManagePost(viewer: AccessTokenPayload | undefined, post: PostRecord | StoredMediaRecord) {
   return Boolean(viewer && viewer.sub === ("userId" in post ? post.userId : post.ownerId));
@@ -109,6 +110,7 @@ export interface PostDependencies {
   id: () => string;
   mediaStorage: PrivateMediaStorage;
   logger: Logger;
+  imageAnalyzer?: ImageAnalyzer;
 }
 export function createPostUseCases(options: PostDependencies) {
   const { postRepository, matchingRepository, matchingService, withTransaction, id, mediaStorage } = options;
@@ -408,6 +410,21 @@ export function createPostUseCases(options: PostDependencies) {
         });
         const persisted = await read();
         if (!persisted) throw new AppError("unavailable", "Chưa thể đối soát ảnh đã lưu; vui lòng thử lại");
+
+        if (input.mediaKind === "ITEM" && options.imageAnalyzer && postRepository.updateImageEmbedding) {
+          try {
+            const analysis = await options.imageAnalyzer.analyze([file], post.type, []);
+            if (analysis.imageEmbedding && analysis.imageEmbedding.length > 0) {
+              await withTransaction(async (connection) => {
+                await postRepository.updateImageEmbedding!(postId, analysis.imageEmbedding!, connection);
+              });
+              await refreshMatchingBestEffort(postId, "update");
+            }
+          } catch (extractError) {
+            options.logger.warn(`[ai-matching] failed to extract visual vector for post ${postId}: ${extractError}`);
+          }
+        }
+
         return {
           id: mediaId,
           mediaKind: input.mediaKind,

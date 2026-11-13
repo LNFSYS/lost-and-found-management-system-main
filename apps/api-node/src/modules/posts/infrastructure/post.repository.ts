@@ -480,6 +480,13 @@ export function createPostRepository(pool: SqlExecutor) {
       return rows[0] ? { id: rows[0].id, status: rows[0].status } : null;
     },
 
+    async updateImageEmbedding(postId: string, embedding: number[], queryable: Queryable = pool) {
+      await sqlExecutor(queryable).execute(
+        "UPDATE posts SET image_embedding = ? WHERE id = ?",
+        [JSON.stringify(embedding), postId]
+      );
+    },
+
     async countMedia(postId: string, queryable: Queryable = pool) {
       const [rows] = await sqlExecutor(queryable).execute<CountRow[]>("SELECT COUNT(*) AS total FROM post_media WHERE post_id = ?", [postId]);
       return Number(rows[0]?.total ?? 0);

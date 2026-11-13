@@ -89,6 +89,7 @@ export interface PostRepository {
     id: string;
     status: PostStatus;
   } | null>;
+  updateImageEmbedding?(postId: string, embedding: number[], queryable?: TransactionContext): Promise<void>;
   countMedia(postId: string, queryable?: TransactionContext): Promise<number>;
   createMedia(input: {
     id: string;

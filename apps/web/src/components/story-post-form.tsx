@@ -267,8 +267,10 @@ export function StoryPostForm({
         analysisSignals: analysis && !illustrationId ? {
           visualAttributes: analysis.visualAttributes,
           visibleText: analysis.visibleText,
-          confidence: analysis.confidence
-        } : undefined
+          confidence: analysis.confidence,
+          imageEmbedding: analysis.imageEmbedding ?? undefined
+        } : undefined,
+        imageEmbedding: analysis?.imageEmbedding ?? undefined
       });
 
       let mediaWarning: string | undefined;
