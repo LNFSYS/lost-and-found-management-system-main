@@ -250,6 +250,24 @@ export interface WarehouseCatalog {
   buildings: Array<{ id: string; areaId: string; name: string }>;
   handoverPoints: Array<{ id: string; name: string; address: string; openingHours: string | null }>;
 }
+export interface DefectItem {
+  classId: number;
+  className: string;
+  vietnameseName: string;
+  confidence: number;
+  bbox: [number, number, number, number];
+  areaPixels: number;
+}
+export interface DamageAnalysisResult {
+  conditionScore: number;
+  grade: string;
+  statusText: string;
+  damagePercentage: number;
+  totalDefects: number;
+  defectCounts: Record<string, number>;
+  defectDetails: DefectItem[];
+  annotatedImage: string;
+}
 export type WarehouseConversationMode = "INTAKE" | "RETURN";
 export interface WarehouseConversationMessage { role: "user" | "assistant"; content: string }
 export type WarehouseIntakeConversationFields = {
@@ -418,7 +436,9 @@ export interface CustodyRequestDetailResponse {
   audit: CustodyRequestAuditEntry[];
 }
 export interface CustodyRequestFilters {
-  status?: CustodyRequestStatus | "AWAITING_INTAKE" | "";
+  status?: CustodyRequestStatus | "AWAITING_INTAKE" | "ALL" | "";
+  handoverPointId?: string;
+  q?: string;
   page?: number;
   pageSize?: number;
 }
@@ -1441,5 +1461,42 @@ export const api = {
   acceptCustodyRequest: (id: string, payload: AcceptCustodyRequestPayload) => raw<CustodyRequest>(`/staff/custody-requests/${id}/accept`, { method: "PATCH", body: JSON.stringify(payload) }),
   rejectCustodyRequest: (id: string, payload: RejectCustodyRequestPayload) => raw<CustodyRequest>(`/staff/custody-requests/${id}/reject`, { method: "PATCH", body: JSON.stringify(payload) }),
   cancelCustodyRequest: (id: string, payload: CancelCustodyRequestPayload) => raw<CustodyRequest>(`/staff/custody-requests/${id}/cancel`, { method: "PATCH", body: JSON.stringify(payload) }),
-  confirmCustodyIntake: (id: string, payload: IntakeCustodyRequestPayload) => raw<CustodyRequest>(`/staff/custody-requests/${id}/intake`, { method: "POST", body: JSON.stringify(payload) })
+  confirmCustodyIntake: (id: string, payload: IntakeCustodyRequestPayload) => raw<CustodyRequest>(`/staff/custody-requests/${id}/intake`, { method: "POST", body: JSON.stringify(payload) }),
+  analyzeDamageInspection: async (file: File) => {
+    let fileToSend = file;
+    if (file.type === "image/webp" || file.name.toLowerCase().endsWith(".webp")) {
+      try {
+        fileToSend = await new Promise<File>((resolve) => {
+          const img = new Image();
+          const url = URL.createObjectURL(file);
+          img.onload = () => {
+            URL.revokeObjectURL(url);
+            const canvas = document.createElement("canvas");
+            canvas.width = img.naturalWidth || img.width;
+            canvas.height = img.naturalHeight || img.height;
+            const ctx = canvas.getContext("2d");
+            ctx?.drawImage(img, 0, 0);
+            canvas.toBlob((blob) => {
+              if (blob) {
+                resolve(new File([blob], file.name.replace(/\.[^.]+$/, ".png"), { type: "image/png" }));
+              } else {
+                resolve(file);
+              }
+            }, "image/png");
+          };
+          img.onerror = () => {
+            URL.revokeObjectURL(url);
+            resolve(file);
+          };
+          img.src = url;
+        });
+      } catch {
+        fileToSend = file;
+      }
+    }
+    const form = new FormData();
+    form.append("file", fileToSend);
+    return raw<DamageAnalysisResult>("/damage-inspection/analyze", { method: "POST", body: form });
+  },
+  getDamageInspectionStatus: () => raw<{ status: string; runtime: string }>("/damage-inspection/status")
 };

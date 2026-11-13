@@ -1,4 +1,4 @@
-import { FileText, FolderTree, Globe2, Handshake, History, LogOut, MapPinned, Settings2, ShieldCheck, UsersRound, Warehouse } from "lucide-react";
+import { FileText, FolderTree, Globe2, Handshake, History, MapPinned, Power, Settings2, ShieldCheck, UsersRound, Warehouse } from "lucide-react";
 import { Link, NavLink, Outlet, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../context/auth-context";
 import { useNetworkStatus } from "../hooks/use-network-status";
@@ -43,7 +43,7 @@ export function AdminLayout() {
       <div className="admin-sidebar__account">
         <span>{user?.fullName.slice(0, 1).toUpperCase()}</span>
         <div><strong>{user?.fullName}</strong><small>{user?.email}</small></div>
-        <button type="button" title="Đăng xuất" aria-label="Đăng xuất" onClick={() => void logout().catch(() => undefined)}><LogOut size={18} /></button>
+        <button type="button" className="admin-logout-btn" title="Đăng xuất / Thoát tài khoản" aria-label="Đăng xuất" onClick={() => void logout().catch(() => undefined)}><Power size={17} /></button>
       </div>
     </aside>
     <main className="admin-main">
