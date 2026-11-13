@@ -51,8 +51,15 @@ async function main() {
       console.log(`\nDang xu ly bai [${post.id.slice(0, 8)}]: "${post.title}"...`);
 
       try {
+        const imgRes = await fetch(post.secure_url);
+        if (!imgRes.ok) {
+          console.warn(`  [WARN] Khong the tai anh tu Cloudinary: HTTP ${imgRes.status}`);
+          continue;
+        }
+        const imgBuffer = await imgRes.arrayBuffer();
+        const blob = new Blob([imgBuffer], { type: "image/jpeg" });
         const formData = new FormData();
-        formData.append("image_url", post.secure_url);
+        formData.append("file", blob, "image.jpg");
 
         const res = await fetch(`${AI_URL}/api/extract-features`, {
           method: "POST",
@@ -96,12 +103,8 @@ async function main() {
       }
     }
 
-    // Xoa cache match_results cu de he thong tu dong tinh lai toan bo theo mo hinh 60/40 moi
-    await pool.execute("DELETE FROM match_results");
-    console.log("\n-> Da don dep bang match_results cu de he thong tu dong tinh toan moi.");
-
     console.log("\n=== HOAN TAT DONG BO VECTOR VA TAGS CHO TAT CA BAI VIET ===");
-    console.log("Ban co the tai lai trang hoac vao xem muc Goi y de thay ket qua 60/40.");
+    console.log("Ban co the tai lai trang hoac bam 'Tinh lai matching' de xem ket qua 60/40.");
   } finally {
     await pool.end();
   }
