@@ -95,14 +95,21 @@ def analyze_condition(img_cv2: np.ndarray) -> str:
     return "Bề mặt nhẵn, tình trạng còn khá mới"
 
 def extract_ocr_text(img_cv2: np.ndarray) -> List[str]:
-    """Đọc chữ / logo / mã số trên ảnh"""
-    if ocr_reader is None:
+    """Đọc chữ / logo / mã số trên ảnh (tối ưu kích thước cho CPU)"""
+    if ocr_reader is None or img_cv2 is None:
         return []
     try:
-        results = ocr_reader.readtext(img_cv2)
+        h, w = img_cv2.shape[:2]
+        if max(h, w) > 640:
+            scale = 640.0 / max(h, w)
+            ocr_img = cv2.resize(img_cv2, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_AREA)
+        else:
+            ocr_img = img_cv2
+
+        results = ocr_reader.readtext(ocr_img, paragraph=False, batch_size=1)
         texts = []
         for res in results:
-            if res[2] > 0.35:  # Confidence > 35%
+            if len(res) >= 3 and res[2] > 0.35:  # Confidence > 35%
                 cleaned = str(res[1]).strip()
                 if len(cleaned) >= 2:
                     texts.append(cleaned)
@@ -165,8 +172,16 @@ async def extract_features(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Lỗi trích xuất vector DINOv2: {str(e)}")
 
-    # 2. Phân tích OpenCV
-    cv_img = cv2.cvtColor(np.array(pil_img), cv2.COLOR_RGB2BGR)
+    # 2. Phân tích OpenCV & OCR (Chuẩn hóa max 640px để CPU xử lý siêu tốc trong ~1 giây)
+    w, h = pil_img.size
+    max_dim = 640
+    if max(w, h) > max_dim:
+        scale = max_dim / float(max(w, h))
+        proc_img = pil_img.resize((int(w * scale), int(h * scale)), Image.Resampling.BILINEAR)
+    else:
+        proc_img = pil_img
+
+    cv_img = cv2.cvtColor(np.array(proc_img), cv2.COLOR_RGB2BGR)
     color = analyze_color(cv_img)
     condition = analyze_condition(cv_img)
     ocr_list = extract_ocr_text(cv_img)

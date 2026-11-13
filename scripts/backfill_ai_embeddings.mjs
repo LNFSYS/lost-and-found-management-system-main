@@ -166,6 +166,7 @@ async function main() {
           continue;
         }
 
+        const t0 = Date.now();
         const blob = new Blob([imgBuffer], { type: "image/jpeg" });
         const formData = new FormData();
         formData.append("file", blob, "image.jpg");
@@ -173,7 +174,7 @@ async function main() {
         const res = await fetch(`${AI_URL}/api/extract-features`, {
           method: "POST",
           body: formData,
-          signal: AbortSignal.timeout(60000)
+          signal: AbortSignal.timeout(120000)
         });
 
         if (!res.ok) {
@@ -188,7 +189,6 @@ async function main() {
             "UPDATE posts SET image_embedding = ? WHERE id = ?",
             [JSON.stringify(data.embedding), post.id]
           );
-          console.log(`  -> Da luu vector DINOv2 (${data.embedding.length} chieu).`);
         }
 
         await pool.execute("DELETE FROM ai_tags WHERE post_id = ? AND source IN ('VISION_LABEL', 'VISION_OBJECT', 'OCR')", [post.id]);
@@ -208,8 +208,9 @@ async function main() {
             );
           }
         }
-        console.log(`  -> Da cap nhat thuoc tinh: mau="${data.color}", tinh trang="${data.condition}", OCR=[${data.visibleText?.join(", ") || "khong co"}]`);
+        console.log(`  -> Xong trong ${Date.now() - t0}ms: DINOv2 (${data.embedding?.length || 0}D), mau="${data.color}", OCR=[${data.visibleText?.join(", ") || "khong co"}]`);
         successCount++;
+        await new Promise((r) => setTimeout(r, 100));
       } catch (err) {
         console.error(`  [ERROR] Loi khi xu ly bai ${post.id}:`, err.message);
         skipCount++;
