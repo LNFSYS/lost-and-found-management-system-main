@@ -250,6 +250,24 @@ export interface WarehouseCatalog {
   buildings: Array<{ id: string; areaId: string; name: string }>;
   handoverPoints: Array<{ id: string; name: string; address: string; openingHours: string | null }>;
 }
+export interface DefectItem {
+  classId: number;
+  className: string;
+  vietnameseName: string;
+  confidence: number;
+  bbox: [number, number, number, number];
+  areaPixels: number;
+}
+export interface DamageAnalysisResult {
+  conditionScore: number;
+  grade: string;
+  statusText: string;
+  damagePercentage: number;
+  totalDefects: number;
+  defectCounts: Record<string, number>;
+  defectDetails: DefectItem[];
+  annotatedImage: string;
+}
 export type WarehouseConversationMode = "INTAKE" | "RETURN";
 export interface WarehouseConversationMessage { role: "user" | "assistant"; content: string }
 export type WarehouseIntakeConversationFields = {
@@ -418,7 +436,9 @@ export interface CustodyRequestDetailResponse {
   audit: CustodyRequestAuditEntry[];
 }
 export interface CustodyRequestFilters {
-  status?: CustodyRequestStatus | "AWAITING_INTAKE" | "";
+  status?: CustodyRequestStatus | "AWAITING_INTAKE" | "ALL" | "";
+  handoverPointId?: string;
+  q?: string;
   page?: number;
   pageSize?: number;
 }
@@ -473,7 +493,9 @@ export interface CreatePostPayload {
     visualAttributes: string[];
     visibleText: string[];
     confidence: number;
+    imageEmbedding?: number[] | null;
   };
+  imageEmbedding?: number[] | null;
 }
 export interface CreatedPost { id: string; type: "LOST" | "FOUND"; title: string; status: string; createdAt: string; }
 export interface LostIllustration {
@@ -501,6 +523,7 @@ export interface ImageAnalysisResult {
   assistedBy: string;
   model: string;
   imageCount: number;
+  imageEmbedding?: number[] | null;
 }
 export interface PostSummary {
   id: string;
@@ -537,6 +560,44 @@ export interface MatchFeedbackRecord {
   value: MatchFeedbackValue; note: string | null; correlationKey: string;
   createdAt: string; updatedAt: string;
 }
+export interface AiFeatureSummary {
+  color: string | null;
+  condition: string | null;
+  ocrText: string | null;
+  tags: string[];
+}
+
+export interface MatchBreakdown {
+  vectorScore: number | null;
+  vectorWeight: number;
+  vectorContribution: number;
+  contextScore: number;
+  contextWeight: number;
+  contextContribution: number;
+  hasVector: boolean;
+}
+
+export interface AiVisualAnalysis {
+  hasImageAnalysis: boolean;
+  sourceSummary?: AiFeatureSummary;
+  candidateSummary?: AiFeatureSummary;
+  colorMatch?: {
+    matched: boolean;
+    sourceColor?: string;
+    candidateColor?: string;
+  };
+  conditionMatch?: {
+    sourceCondition?: string;
+    candidateCondition?: string;
+  };
+  ocrMatch?: {
+    matched: boolean;
+    sourceOcr?: string;
+    candidateOcr?: string;
+    commonTokens: string[];
+  };
+}
+
 export interface MatchExplanation {
   tier: MatchTier;
   summary: string;
@@ -548,6 +609,8 @@ export interface MatchExplanation {
   categoryReason: string;
   daysDiff: number | null;
   penalties: string[];
+  breakdown?: MatchBreakdown;
+  aiVisualAnalysis?: AiVisualAnalysis;
 }
 export interface PostMatchResult {
   matchId: string;
@@ -759,6 +822,8 @@ export interface PostListFilters {
   type?: "LOST" | "FOUND";
   status?: PostSummary["status"];
   categoryId?: string;
+  areaId?: string;
+  buildingId?: string;
   page?: number;
   pageSize?: number;
   sort?: "newest" | "oldest" | "incident_newest" | "incident_oldest";
@@ -780,7 +845,10 @@ export type AdminHandoverPointPayload = {
 };
 interface SessionResponse { user: CurrentUser; accessToken: string; accessTokenExpiresIn: string; }
 
-const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3001/api";
+const defaultApiUrl = typeof window !== "undefined" && window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1"
+  ? `${window.location.origin}/api`
+  : "http://localhost:3001/api";
+const API_URL = import.meta.env.VITE_API_URL ?? defaultApiUrl;
 let accessToken: string | null = null;
 let refreshInFlight: Promise<SessionResponse | null> | null = null;
 let sessionGeneration = 0;
@@ -801,10 +869,11 @@ export interface RealtimeHandlers {
 }
 
 export interface ClaimChatSocketHandlers {
-  roomId: string;
+  roomId?: string;
   onConnected?: () => void;
   onReconnected?: () => void;
   onMessage?: (message: ClaimMessage) => void;
+  onSocket?: (socket: Socket | null) => void;
 }
 
 function subscribeRealtime(handlers: RealtimeHandlers) {
@@ -883,7 +952,7 @@ function subscribeRealtime(handlers: RealtimeHandlers) {
           if (!await refreshSession()) return;
           continue;
         }
-        if (response.status === 403) return;
+        if (response.status === 403 || response.status === 404) return;
         if (!response.ok) throw new Error(`Realtime request failed (${response.status})`);
         retryDelay = 500;
         await consume(response);
@@ -926,7 +995,7 @@ function subscribeClaimChatSocket(handlers: ClaimChatSocketHandlers) {
       const endpoint = new URL(`${API_URL.replace(/\/+$/, "")}/realtime/chat-socket`, window.location.href);
       const socket = io(endpoint.origin, {
         path: endpoint.pathname,
-        auth: { accessToken, roomId: handlers.roomId },
+        auth: { accessToken, roomId: handlers.roomId ?? "global" },
         withCredentials: true,
         autoConnect: false,
         forceNew: true,
@@ -946,6 +1015,7 @@ function subscribeClaimChatSocket(handlers: ClaimChatSocketHandlers) {
         window.clearTimeout(readyTimeout);
         if (cancelConnection === cancel) cancelConnection = null;
         if (activeSocket === socket) activeSocket = null;
+        handlers.onSocket?.(null);
         socket.removeAllListeners();
         socket.disconnect();
         resolve({ code, connected });
@@ -962,6 +1032,7 @@ function subscribeClaimChatSocket(handlers: ClaimChatSocketHandlers) {
         ready = true;
         window.clearTimeout(readyTimeout);
         retryDelay = 500;
+        handlers.onSocket?.(socket);
         if (wasConnected) handlers.onReconnected?.();
         else handlers.onConnected?.();
         wasConnected = true;
@@ -1013,6 +1084,7 @@ function subscribeClaimChatSocket(handlers: ClaimChatSocketHandlers) {
 
   return () => {
     stopped = true;
+    handlers.onSocket?.(null);
     if (retryTimer !== null) window.clearTimeout(retryTimer);
     retryTimer = null;
     finishWait?.();
@@ -1240,6 +1312,8 @@ export const api = {
   listPosts: (filters: PostListFilters = {}) => raw<PostListResponse>(`/posts${queryString(filters)}`),
   listMyPosts: (filters: PostListFilters = {}) => raw<PostListResponse>(`/posts/mine${queryString(filters)}`),
   getPost: (postId: string) => raw<PostSummary>(`/posts/${postId}`),
+  closePost: (postId: string) => raw<PostSummary>(`/posts/${postId}/close`, { method: "POST" }),
+  deletePost: (postId: string) => raw<void>(`/posts/${postId}`, { method: "DELETE" }),
   getPostMedia: (path: string) => mediaBlob(path),
   createPost: (payload: CreatePostPayload) => raw<CreatedPost>("/posts", { method: "POST", body: JSON.stringify(payload) }),
   analyzePostImage: (type: "LOST" | "FOUND", files: File[]) => {
@@ -1434,5 +1508,42 @@ export const api = {
   acceptCustodyRequest: (id: string, payload: AcceptCustodyRequestPayload) => raw<CustodyRequest>(`/staff/custody-requests/${id}/accept`, { method: "PATCH", body: JSON.stringify(payload) }),
   rejectCustodyRequest: (id: string, payload: RejectCustodyRequestPayload) => raw<CustodyRequest>(`/staff/custody-requests/${id}/reject`, { method: "PATCH", body: JSON.stringify(payload) }),
   cancelCustodyRequest: (id: string, payload: CancelCustodyRequestPayload) => raw<CustodyRequest>(`/staff/custody-requests/${id}/cancel`, { method: "PATCH", body: JSON.stringify(payload) }),
-  confirmCustodyIntake: (id: string, payload: IntakeCustodyRequestPayload) => raw<CustodyRequest>(`/staff/custody-requests/${id}/intake`, { method: "POST", body: JSON.stringify(payload) })
+  confirmCustodyIntake: (id: string, payload: IntakeCustodyRequestPayload) => raw<CustodyRequest>(`/staff/custody-requests/${id}/intake`, { method: "POST", body: JSON.stringify(payload) }),
+  analyzeDamageInspection: async (file: File) => {
+    let fileToSend = file;
+    if (file.type === "image/webp" || file.name.toLowerCase().endsWith(".webp")) {
+      try {
+        fileToSend = await new Promise<File>((resolve) => {
+          const img = new Image();
+          const url = URL.createObjectURL(file);
+          img.onload = () => {
+            URL.revokeObjectURL(url);
+            const canvas = document.createElement("canvas");
+            canvas.width = img.naturalWidth || img.width;
+            canvas.height = img.naturalHeight || img.height;
+            const ctx = canvas.getContext("2d");
+            ctx?.drawImage(img, 0, 0);
+            canvas.toBlob((blob) => {
+              if (blob) {
+                resolve(new File([blob], file.name.replace(/\.[^.]+$/, ".png"), { type: "image/png" }));
+              } else {
+                resolve(file);
+              }
+            }, "image/png");
+          };
+          img.onerror = () => {
+            URL.revokeObjectURL(url);
+            resolve(file);
+          };
+          img.src = url;
+        });
+      } catch {
+        fileToSend = file;
+      }
+    }
+    const form = new FormData();
+    form.append("file", fileToSend);
+    return raw<DamageAnalysisResult>("/damage-inspection/analyze", { method: "POST", body: form });
+  },
+  getDamageInspectionStatus: () => raw<{ status: string; runtime: string }>("/damage-inspection/status")
 };

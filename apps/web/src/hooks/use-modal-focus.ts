@@ -46,7 +46,7 @@ function contain(event: FocusEvent) {
   if (modal && !modal.element.contains(event.target as Node)) focus(modal);
 }
 
-export function useModalFocus(ref: RefObject<HTMLElement | null>, open: boolean, onClose: () => void, busy = false) {
+export function useModalFocus(ref: RefObject<HTMLElement | null> | { current: HTMLElement | null }, open: boolean, onClose: () => void, busy = false) {
   const current = useRef({ onClose, busy });
   current.current = { onClose, busy };
   useLayoutEffect(() => {

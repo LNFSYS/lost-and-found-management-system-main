@@ -1155,6 +1155,13 @@ export function createClaimUseCases(options: ClaimDependencies) {
       return { room, ...(await claimRepository.listMessages(room.id, query)) };
     },
 
+    async markMessagesRead(claimId: string, userId: string) {
+      const room = await this.getRoom(claimId, userId);
+      const readCount = await claimRepository.markMessagesRead(room.id, userId);
+      await notificationEmailQueue?.cancelForRoom(userId, room.id);
+      return { roomId: room.id, readCount };
+    },
+
     async sendMessage(claimId: string, userId: string, input: CreateMessageInput) {
       const room = await this.getRoom(claimId, userId);
       const result = await withTransaction(async (connection) => {

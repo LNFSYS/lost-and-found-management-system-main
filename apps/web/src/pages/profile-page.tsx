@@ -2,6 +2,8 @@ import {
   Activity,
   BadgeCheck,
   Camera,
+  GraduationCap,
+  Phone,
   History,
   Mail,
   MessageSquare,
@@ -236,6 +238,8 @@ export function ProfilePage() {
         <div className="identity-copy">
           <h2>{user.fullName}</h2>
           <p><Mail size={16} /> {user.email}</p>
+          {user.studentCode && <p><GraduationCap size={16} /> MSSV: {user.studentCode}</p>}
+          {user.phoneNumber && <p><Phone size={16} /> SĐT: {user.phoneNumber}</p>}
           <span className="status-chip"><BadgeCheck size={15} /> Email đã xác thực</span>
         </div>
         <div className="profile-actions">
@@ -296,6 +300,20 @@ export function ProfilePage() {
           <p>Phân quyền</p>
           <strong>{roleLabel(user.roles)}</strong>
         </article>
+        {user.studentCode && (
+          <article>
+            <GraduationCap size={21} />
+            <p>Mã sinh viên / nhân sự</p>
+            <strong>{user.studentCode}</strong>
+          </article>
+        )}
+        {user.phoneNumber && (
+          <article>
+            <Phone size={21} />
+            <p>Số điện thoại</p>
+            <strong>{user.phoneNumber}</strong>
+          </article>
+        )}
         <article>
           <Star size={21} />
           <p>Điểm uy tín</p>

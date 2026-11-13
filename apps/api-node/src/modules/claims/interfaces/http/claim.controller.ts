@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { Request, Response } from "express";
 import { z } from "zod";
 import { HttpError } from "../../../../shared/interfaces/http/http-error.js";
@@ -75,6 +76,50 @@ export function createClaimController({ claimService }: {
       })));
     },
 
+    async accept(request: Request, response: Response) {
+      const id = claimId(request);
+      const claim = await claimService.getClaim(id, request.auth!.sub);
+      const key = idempotencyKey(request) ?? request.body?.idempotencyKey ?? randomUUID();
+      const reason = (typeof request.body?.reason === "string" && request.body.reason.trim())
+        || (typeof request.body?.note === "string" && request.body.note.trim())
+        || "Đồng ý yêu cầu nhận lại";
+      if (claim.status === "PENDING") {
+        response.json(await claimService.decide(id, request.auth!.sub, {
+          decision: "ACCEPT",
+          note: reason,
+          idempotencyKey: key
+        }));
+      } else {
+        response.json(await claimService.decideVerification(id, request.auth!.sub, {
+          decision: "VERIFY_FOR_MEETUP",
+          reason,
+          idempotencyKey: key
+        }));
+      }
+    },
+
+    async reject(request: Request, response: Response) {
+      const id = claimId(request);
+      const claim = await claimService.getClaim(id, request.auth!.sub);
+      const key = idempotencyKey(request) ?? request.body?.idempotencyKey ?? randomUUID();
+      const reason = (typeof request.body?.reason === "string" && request.body.reason.trim())
+        || (typeof request.body?.note === "string" && request.body.note.trim())
+        || "Từ chối yêu cầu nhận lại";
+      if (claim.status === "PENDING") {
+        response.json(await claimService.decide(id, request.auth!.sub, {
+          decision: "DECLINE",
+          note: reason,
+          idempotencyKey: key
+        }));
+      } else {
+        response.json(await claimService.decideVerification(id, request.auth!.sub, {
+          decision: "DECLINE",
+          reason,
+          idempotencyKey: key
+        }));
+      }
+    },
+
     async getVerificationTemplates(request: Request, response: Response) {
       response.json(await claimService.getVerificationTemplates(claimId(request), request.auth!.sub));
     },
@@ -118,6 +163,10 @@ export function createClaimController({ claimService }: {
 
     async listMessages(request: Request, response: Response) {
       response.json(await claimService.listMessages(claimId(request), request.auth!.sub, listMessagesQuerySchema.parse(request.query)));
+    },
+
+    async markMessagesRead(request: Request, response: Response) {
+      response.json(await claimService.markMessagesRead(claimId(request), request.auth!.sub));
     },
 
     async sendMessage(request: Request, response: Response) {

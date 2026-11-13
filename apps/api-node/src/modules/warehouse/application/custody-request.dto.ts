@@ -34,6 +34,8 @@ export type IntakeCustodyRequestInput = IntakeEvidenceInput & IntakeReconciliati
 
 export type ListCustodyRequestsQuery = {
   status?: "AWAITING_INTAKE" | "PENDING" | "ACCEPTED" | "REJECTED" | "CANCELLED" | "INTAKED" | undefined;
+  handoverPointId?: string | undefined;
+  q?: string | undefined;
   page: number;
   pageSize: number;
 };

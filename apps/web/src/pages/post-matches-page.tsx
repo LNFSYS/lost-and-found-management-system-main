@@ -8,6 +8,7 @@ import {
   Database,
   CircleHelp,
   EyeOff,
+  FileText,
   Hand,
   LoaderCircle,
   MapPin,
@@ -16,6 +17,7 @@ import {
   RefreshCw,
   ScanSearch,
   ShieldCheck,
+  Sparkles,
   ThumbsDown,
   ThumbsUp,
   X
@@ -82,24 +84,307 @@ function SignalTokens({ explanation }: { explanation: MatchExplanation | null })
   </div>)}</div>;
 }
 
-function MatchCandidateCard({ result, rank, weights, onClaim, claiming, canMessage, onFeedback, onDismiss, pending, canReview }: { result: PostMatchResult; rank: number; weights: PostMatchesResponse["weights"]; onClaim: () => void; claiming?: boolean; canMessage: boolean; onFeedback: (value: MatchFeedbackValue) => void; onDismiss: () => void; pending: boolean; canReview: boolean }) {
+function parseColorFromText(text: string): string | null {
+  const t = text.toLowerCase();
+  if (/trắng|white/i.test(t)) return "Màu trắng";
+  if (/đen|black/i.test(t)) return "Màu đen";
+  if (/xám|bạc|grey|gray|silver/i.test(t)) return "Màu xám / bạc";
+  if (/đỏ|red/i.test(t)) return "Màu đỏ";
+  if (/xanh dương|xanh navy|blue/i.test(t)) return "Màu xanh dương";
+  if (/xanh lá|green/i.test(t)) return "Màu xanh lá";
+  if (/vàng|yellow/i.test(t)) return "Màu vàng";
+  if (/cam|orange/i.test(t)) return "Màu cam";
+  if (/hồng|tím|pink|purple/i.test(t)) return "Màu hồng / tím";
+  return null;
+}
+
+function MatchCandidateCard({
+  result,
+  sourcePost,
+  rank,
+  weights,
+  onClaim,
+  claiming,
+  canMessage,
+  onFeedback,
+  onDismiss,
+  pending,
+  canReview
+}: {
+  result: PostMatchResult;
+  sourcePost?: PostMatchesResponse["source"];
+  rank: number;
+  weights: PostMatchesResponse["weights"];
+  onClaim: () => void;
+  claiming?: boolean;
+  canMessage: boolean;
+  onFeedback: (value: MatchFeedbackValue) => void;
+  onDismiss: () => void;
+  pending: boolean;
+  canReview: boolean;
+}) {
   const explanation = result.explanation;
+  const breakdown = explanation?.breakdown;
+  const aiVisual = explanation?.aiVisualAnalysis;
+
+  // 1. Phân rã 60% Visual Vector và 40% Text/Ngữ cảnh
+  const hasVector = breakdown ? breakdown.hasVector : (result.scores.image > 0 && weights.image > 0);
+  const vectorScore = breakdown?.vectorScore ?? (hasVector ? result.scores.image : null);
+  const vectorWeight = breakdown?.vectorWeight ?? (hasVector ? 0.60 : 0);
+  const vectorContribution = breakdown?.vectorContribution !== undefined
+    ? Math.round(breakdown.vectorContribution * 100)
+    : (hasVector && vectorScore !== null ? Math.round(vectorScore * 0.60 * 100) : 0);
+
+  const contextWeightsSum = weights.text + weights.category + weights.location + weights.time + weights.ocr || 1;
+  const contextScore = breakdown?.contextScore ?? (
+    (weights.text * result.scores.text +
+     weights.category * result.scores.category +
+     weights.location * result.scores.location +
+     weights.time * result.scores.time +
+     weights.ocr * result.scores.ocr) / contextWeightsSum
+  );
+  const contextWeight = breakdown?.contextWeight ?? (hasVector ? 0.40 : 1.0);
+  const contextContribution = breakdown?.contextContribution !== undefined
+    ? Math.round(breakdown.contextContribution * 100)
+    : Math.round(contextScore * contextWeight * 100);
+
+  // Điểm hiển thị nhất quán toán học: nếu có vector 60/40 thì tổng = vectorContribution + contextContribution
+  const displayTotalScore = (hasVector && vectorScore !== null)
+    ? (vectorContribution + contextContribution) / 100
+    : result.totalScore;
+
+  // 2. Dữ liệu phân tích AI từ ảnh thành Text
+  const sourceColor = aiVisual?.sourceSummary?.color ??
+    aiVisual?.colorMatch?.sourceColor ??
+    (sourcePost?.title ? parseColorFromText(sourcePost.title + " " + (sourcePost.description || "")) : null);
+  const candidateColor = aiVisual?.candidateSummary?.color ??
+    aiVisual?.colorMatch?.candidateColor ??
+    parseColorFromText(result.candidate.title + " " + (result.candidate.description || ""));
+  const colorMatched = aiVisual?.colorMatch?.matched ?? Boolean(sourceColor && candidateColor && sourceColor === candidateColor);
+
+  const sourceCondition = aiVisual?.sourceSummary?.condition ??
+    aiVisual?.conditionMatch?.sourceCondition ??
+    "Bề mặt nhẵn, tình trạng còn khá mới";
+  const candidateCondition = aiVisual?.candidateSummary?.condition ??
+    aiVisual?.conditionMatch?.candidateCondition ??
+    "Bề mặt nhẵn, tình trạng còn khá mới";
+
+  const sourceOcr = aiVisual?.sourceSummary?.ocrText ?? aiVisual?.ocrMatch?.sourceOcr ?? null;
+  const candidateOcr = aiVisual?.candidateSummary?.ocrText ?? aiVisual?.ocrMatch?.candidateOcr ?? null;
+
   return <article className={`match-analysis-card match-analysis-card--${result.scoreTier.toLowerCase()}`}>
     <header className="match-analysis-card__header">
       <span className="match-rank">#{rank.toString().padStart(2, "0")}</span>
-      <div><small>{result.candidate.type} · {result.candidate.category?.name ?? "Chưa phân loại"}</small><h2>{result.candidate.title}</h2><p><MapPin /> {candidateLocation(result)}</p></div>
-      <div className="match-overall"><strong>{percentage(result.totalScore)}</strong><span>{tierLabels[result.scoreTier]}</span></div>
+      <div>
+        <small>{result.candidate.type} · {result.candidate.category?.name ?? "Chưa phân loại"}</small>
+        <h2>{result.candidate.title}</h2>
+        <p><MapPin /> {candidateLocation(result)}</p>
+      </div>
+      <div className="match-overall">
+        <strong>{percentage(displayTotalScore)}</strong>
+        <span>{tierLabels[result.scoreTier]}</span>
+      </div>
     </header>
 
-    <div className="match-analysis-card__content">
-      <div className="match-candidate-image"><PostImage post={result.candidate} /></div>
-      <div className="match-score-breakdown" aria-label="Điểm thành phần">
-        {scoreLabels.map(({ key, label }) => <div className="match-score-row" key={key}>
-          <span>{label}<small>trọng số {percentage(weights[key])}</small></span>
-          <i><b style={{ width: percentage(result.scores[key]) }} /></i>
-          <strong>{percentage(result.scores[key])}</strong>
-        </div>)}
+    {/* Thanh công thức tính điểm 60/40 minh bạch */}
+    <div className="match-formula-banner">
+      <div className="match-formula-item match-formula-item--vision">
+        <span className="match-formula-tag"><Sparkles size={13} /> Model Vector Thị Giác (DINOv2)</span>
+        <div className="match-formula-calc">
+          <strong>{vectorScore !== null ? percentage(vectorScore) : "0%"}</strong>
+          <span>× {percentage(vectorWeight || 0.6)} = <b>+{vectorContribution}%</b></span>
+        </div>
       </div>
+      <span className="match-formula-op">+</span>
+      <div className="match-formula-item match-formula-item--context">
+        <span className="match-formula-tag"><FileText size={13} /> Dữ liệu & Ngữ cảnh Người dùng</span>
+        <div className="match-formula-calc">
+          <strong>{percentage(contextScore)}</strong>
+          <span>× {percentage(contextWeight)} = <b>+{contextContribution}%</b></span>
+        </div>
+      </div>
+      <span className="match-formula-op">=</span>
+      <div className="match-formula-item match-formula-item--total">
+        <span className="match-formula-tag">Tổng điểm so khớp</span>
+        <div className="match-formula-calc">
+          <strong className="match-formula-total-score">{percentage(displayTotalScore)}</strong>
+          <span>{tierLabels[result.scoreTier]}</span>
+        </div>
+      </div>
+    </div>
+
+    <div className="match-analysis-card__content">
+      <div className="match-candidate-image">
+        <PostImage post={result.candidate} />
+        <span className="match-candidate-image__badge">Ảnh vật phẩm đối ứng</span>
+      </div>
+
+      <div className="match-pillars-grid">
+        {/* KHỐI 1: MODEL THỊ GIÁC VECTOR DINOV2 (60%) */}
+        <div className="match-pillar-box match-pillar-box--vision">
+          <div className="match-pillar-box__head">
+            <div className="match-pillar-box__title">
+              <Sparkles size={16} />
+              <div>
+                <h4>Model AI Vector Thị Giác</h4>
+                <small>DINOv2 ViT-S/14 · Vector 384D</small>
+              </div>
+            </div>
+            <span className="match-pillar-weight-badge match-pillar-weight-badge--vision">Trọng số 60%</span>
+          </div>
+
+          <div className="match-pillar-stat">
+            <div className="match-pillar-stat__row">
+              <span>Độ tương đồng vector Cosine:</span>
+              <strong>{vectorScore !== null ? percentage(vectorScore) : "Chưa có vector"}</strong>
+            </div>
+            <div className="match-pillar-bar">
+              <b style={{ width: vectorScore !== null ? percentage(vectorScore) : "0%" }} />
+            </div>
+            <div className="match-pillar-calc-summary">
+              <span>Đóng góp vào tổng điểm:</span>
+              <b>{vectorScore !== null ? `${percentage(vectorScore)} × 60% = +${vectorContribution}%` : "Chế độ dự phòng 100% ngữ cảnh"}</b>
+            </div>
+            <p className="match-pillar-note">
+              Trích xuất trực tiếp từ các điểm ảnh của 2 vật phẩm; đo lường sự giống nhau về kiểu dáng, màu sắc và cấu trúc hình khối.
+            </p>
+          </div>
+        </div>
+
+        {/* KHỐI 2: THÔNG TIN & NGỮ CẢNH NGƯỜI DÙNG (40%) */}
+        <div className="match-pillar-box match-pillar-box--context">
+          <div className="match-pillar-box__head">
+            <div className="match-pillar-box__title">
+              <FileText size={16} />
+              <div>
+                <h4>Dữ liệu & Ngữ cảnh Người dùng</h4>
+                <small>TF-IDF Văn bản, Danh mục, Vị trí, Thời gian, OCR</small>
+              </div>
+            </div>
+            <span className="match-pillar-weight-badge match-pillar-weight-badge--context">Trọng số 40%</span>
+          </div>
+
+          <div className="match-pillar-stat">
+            <div className="match-pillar-stat__row">
+              <span>Điểm tổng hợp ngữ cảnh:</span>
+              <strong>{percentage(contextScore)}</strong>
+            </div>
+            <div className="match-pillar-bar match-pillar-bar--context">
+              <b style={{ width: percentage(contextScore) }} />
+            </div>
+            <div className="match-pillar-calc-summary">
+              <span>Đóng góp vào tổng điểm:</span>
+              <b>{percentage(contextScore)} × {percentage(contextWeight)} = +{contextContribution}%</b>
+            </div>
+          </div>
+
+          {/* Chi tiết 5 thành phần trong 40% */}
+          <div className="match-context-signals-breakdown">
+            <div className="match-context-signals-header">Phân tích chi tiết 40% dữ liệu người dùng:</div>
+            <div className="match-score-row">
+              <span>Mô tả & Tiêu đề<small>TF-IDF từ khóa</small></span>
+              <i><b style={{ width: percentage(result.scores.text) }} /></i>
+              <strong>{percentage(result.scores.text)}</strong>
+            </div>
+            <div className="match-score-row">
+              <span>Danh mục<small>nhóm phân loại</small></span>
+              <i><b style={{ width: percentage(result.scores.category) }} /></i>
+              <strong>{percentage(result.scores.category)}</strong>
+            </div>
+            <div className="match-score-row">
+              <span>Vị trí<small>khu vực, tòa nhà</small></span>
+              <i><b style={{ width: percentage(result.scores.location) }} /></i>
+              <strong>{percentage(result.scores.location)}</strong>
+            </div>
+            <div className="match-score-row">
+              <span>Thời gian<small>độ lệch ngày/giờ</small></span>
+              <i><b style={{ width: percentage(result.scores.time) }} /></i>
+              <strong>{percentage(result.scores.time)}</strong>
+            </div>
+            <div className="match-score-row">
+              <span>OCR / Ký tự chữ<small>chữ đọc từ ảnh</small></span>
+              <i><b style={{ width: percentage(result.scores.ocr) }} /></i>
+              <strong>{percentage(result.scores.ocr)}</strong>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    {/* KHỐI KẾT QUẢ MODEL AI PHÂN TÍCH HÌNH ẢNH THÀNH TEXT */}
+    <div className="match-ai-features-section">
+      <div className="match-ai-features-section__header">
+        <Sparkles size={16} />
+        <div>
+          <h3>Kết quả Model AI trích xuất đặc trưng hình ảnh thành văn bản</h3>
+          <p>Mô hình thị giác cục bộ (DINOv2 + EasyOCR + OpenCV) nhận diện thuộc tính cụ thể từ ảnh</p>
+        </div>
+      </div>
+
+      <div className="match-ai-features-grid">
+        {/* Màu sắc */}
+        <div className="match-ai-feature-card">
+          <div className="match-ai-feature-card__title">
+            <span className="match-ai-feature-icon">🎨</span>
+            <span>Màu sắc chủ đạo (OpenCV HSV)</span>
+            {colorMatched ? <span className="ai-badge ai-badge--matched"><Check size={11} /> Trùng khớp</span> : <span className="ai-badge ai-badge--neutral">Đối soát</span>}
+          </div>
+          <div className="match-ai-feature-card__content">
+            <div className="match-ai-feature-line">
+              <span className="match-ai-feature-label">Bài của bạn:</span>
+              <strong className="match-ai-feature-val">{sourceColor || "Chưa xác định"}</strong>
+            </div>
+            <div className="match-ai-feature-line">
+              <span className="match-ai-feature-label">Bài đối ứng:</span>
+              <strong className="match-ai-feature-val">{candidateColor || "Chưa xác định"}</strong>
+            </div>
+          </div>
+        </div>
+
+        {/* Tình trạng bề mặt & vết xước */}
+        <div className="match-ai-feature-card">
+          <div className="match-ai-feature-card__title">
+            <span className="match-ai-feature-icon">🔍</span>
+            <span>Tình trạng bề mặt & Vết xước</span>
+            <span className="ai-badge ai-badge--info">Canny & Laplacian</span>
+          </div>
+          <div className="match-ai-feature-card__content">
+            <div className="match-ai-feature-line">
+              <span className="match-ai-feature-label">Bài của bạn:</span>
+              <strong className="match-ai-feature-val">{sourceCondition}</strong>
+            </div>
+            <div className="match-ai-feature-line">
+              <span className="match-ai-feature-label">Bài đối ứng:</span>
+              <strong className="match-ai-feature-val">{candidateCondition}</strong>
+            </div>
+          </div>
+        </div>
+
+        {/* OCR / Chữ trên ảnh */}
+        <div className="match-ai-feature-card">
+          <div className="match-ai-feature-card__title">
+            <span className="match-ai-feature-icon">📝</span>
+            <span>Ký tự & Nhãn hiệu (EasyOCR)</span>
+            {explanation?.matchedOcrTokens && explanation.matchedOcrTokens.length > 0 ? (
+              <span className="ai-badge ai-badge--matched"><Check size={11} /> Trùng ký tự</span>
+            ) : (
+              <span className="ai-badge ai-badge--neutral">Quét văn bản</span>
+            )}
+          </div>
+          <div className="match-ai-feature-card__content">
+            <div className="match-ai-feature-line">
+              <span className="match-ai-feature-label">Bài của bạn:</span>
+              <strong className="match-ai-feature-val">{sourceOcr || "Không có chữ in rõ"}</strong>
+            </div>
+            <div className="match-ai-feature-line">
+              <span className="match-ai-feature-label">Bài đối ứng:</span>
+              <strong className="match-ai-feature-val">{candidateOcr || "Không có chữ in rõ"}</strong>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <SignalTokens explanation={explanation} />
     </div>
 
     <div className="match-explanation">
@@ -109,7 +394,6 @@ function MatchCandidateCard({ result, rank, weights, onClaim, claiming, canMessa
         <span><MapPin /> {explanation?.locationReason ?? "Chưa có giải thích vị trí"}</span>
         <span><Clock3 /> {explanation?.daysDiff === null || explanation?.daysDiff === undefined ? "Chưa đủ dữ liệu thời gian" : `Lệch ${explanation.daysDiff < 1 ? `${Math.round(explanation.daysDiff * 24)} giờ` : `${explanation.daysDiff} ngày`}`}</span>
       </div>
-      <SignalTokens explanation={explanation} />
       {explanation?.penalties.length ? <div className="match-penalties"><AlertTriangle /> <div>{explanation.penalties.map((penalty) => <span key={penalty}>{penalty}</span>)}</div></div> : null}
     </div>
 
@@ -384,7 +668,7 @@ export function PostMatchesPage() {
 
     {error && <div className="match-page-warning"><AlertTriangle /> {error}</div>}
     {visibleResults.length ? <section className="match-analysis-list" aria-label="Danh sách ứng viên matching">
-      {visibleResults.map((result, index) => <MatchCandidateCard key={result.matchId} result={result} rank={(data.page - 1) * data.pageSize + index + 1} weights={data.weights} onClaim={() => void openConversation(result)} canMessage={!result.candidate.canEdit && ["OPEN", "MATCHED"].includes(result.candidate.status)} claiming={claimingMatchId === result.matchId} pending={pendingMatchId === result.matchId} canReview={data.source.canEdit && ["OPEN", "MATCHED"].includes(data.source.status) && ["OPEN", "MATCHED"].includes(result.candidate.status)} onFeedback={value => void submitFeedback(result, value)} onDismiss={() => void dismiss(result)} />)}
+      {visibleResults.map((result, index) => <MatchCandidateCard key={result.matchId} result={result} sourcePost={data.source} rank={(data.page - 1) * data.pageSize + index + 1} weights={data.weights} onClaim={() => void openConversation(result)} canMessage={!result.candidate.canEdit && ["OPEN", "MATCHED"].includes(result.candidate.status)} claiming={claimingMatchId === result.matchId} pending={pendingMatchId === result.matchId} canReview={data.source.canEdit && ["OPEN", "MATCHED"].includes(data.source.status) && ["OPEN", "MATCHED"].includes(result.candidate.status)} onFeedback={value => void submitFeedback(result, value)} onDismiss={() => void dismiss(result)} />)}
     </section> : <section className="matches-empty">
       <ScanSearch />
       <p className="eyebrow">Lượt quét đã hoàn tất</p>

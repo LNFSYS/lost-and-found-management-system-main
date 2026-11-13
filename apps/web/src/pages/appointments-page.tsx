@@ -144,6 +144,7 @@ export function AppointmentWorkspace({ claimId, appointmentId, embedded = false,
           <label className="workflow-check"><input type="checkbox" checked={checked} disabled={busy} onChange={e=>setChecked(e.target.checked)}/> Tôi đã trực tiếp đối chiếu và {finder?"giao đúng vật phẩm cho người mất":"nhận đúng vật phẩm"}.</label>
           {(finder?selected.finderResponse:selected.ownerResponse)==="CONFIRMED"&&<p className="workflow-check" role="status">Bạn đã xác nhận bàn giao. Đang chờ xác nhận hợp lệ của bên còn lại.</p>}
           <button disabled={busy||!occurred||!checked||(finder?selected.finderResponse:selected.ownerResponse)==="CONFIRMED"} onClick={()=>void act("CONFIRM")}><CheckCircle2/> {finder?"Xác nhận đã giao đồ":"Xác nhận đã nhận đồ"}</button>
+          {!occurred && <p className="appointment-hint" role="status" style={{ fontSize: "0.85rem", color: "#6b7280", margin: "0.25rem 0" }}>⏳ Nút xác nhận bàn giao sẽ mở sau khi đến giờ hẹn ({displayTime(selected.proposedAt)}).</p>}
           <button disabled={busy||!occurred} onClick={()=>void act("DISPUTE")}><ShieldAlert/> Bàn giao chưa khớp</button>
           <button disabled={busy||!occurred||clock<new Date(selected.proposedAt).getTime()+900000||selected.finderResponse!=="PENDING"||selected.ownerResponse!=="PENDING"} onClick={()=>void act("NO_SHOW")}><XCircle/> Báo bên còn lại không đến</button>
         </>}
@@ -154,7 +155,7 @@ export function AppointmentWorkspace({ claimId, appointmentId, embedded = false,
     </>:<>
       {!canPropose && <p role="status">Vật phẩm đang chuyển sang kho. Lịch hẹn trực tiếp chỉ được xem; việc tiếp nhận và trả đồ sẽ do Staff xử lý.</p>}
       {claimId&&canPropose&&!items.some(a=>["PENDING","ACCEPTED","RESCHEDULED"].includes(a.status))&&<form className="workflow-proposal" onSubmit={e=>void create(e)}><h2>Đề xuất lịch mới</h2>
-        <label>Thời gian hẹn<input required type="datetime-local" value={date} disabled={busy} onChange={e=>setDate(e.target.value)}/></label>
+        <label>Thời gian hẹn<input required type="datetime-local" min={new Date(Date.now() + 60000).toISOString().slice(0, 16)} value={date} disabled={busy} onChange={e=>setDate(e.target.value)}/></label>
         <fieldset className="appointment-location-choice" disabled={busy}><legend>Địa điểm</legend>
           <label><input type="radio" name="appointment-location" checked={locationMode==="point"} onChange={()=>setLocationMode("point")}/> Điểm bàn giao</label>
           <label><input type="radio" name="appointment-location" checked={locationMode==="custom"} onChange={()=>setLocationMode("custom")}/> Địa điểm riêng</label>

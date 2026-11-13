@@ -761,7 +761,7 @@ export function createClaimRepository(pool: SqlExecutor) {
         `${claimSelect}
        INNER JOIN claim_participants room_participant
          ON room_participant.claim_id = c.id AND room_participant.user_id = ? AND room_participant.consent_status = 'ACCEPTED'
-       WHERE room.id IS NOT NULL AND c.status IN ('CONVERSATION_OPEN', 'NEED_MORE_INFO', 'ACCEPTED')
+       WHERE room.id IS NOT NULL AND c.status IN ('CONVERSATION_OPEN', 'NEED_MORE_INFO', 'ACCEPTED', 'REJECTED')
        ORDER BY room.created_at DESC`,
         [userId]
       );
@@ -774,7 +774,7 @@ export function createClaimRepository(pool: SqlExecutor) {
        INNER JOIN chat_rooms authorized_room ON authorized_room.claim_id = c.id AND authorized_room.id = ?
        INNER JOIN claim_participants room_participant
          ON room_participant.claim_id = c.id AND room_participant.user_id = ? AND room_participant.consent_status = 'ACCEPTED'
-       WHERE c.status IN ('CONVERSATION_OPEN', 'NEED_MORE_INFO', 'ACCEPTED') LIMIT 1`,
+       WHERE c.status IN ('CONVERSATION_OPEN', 'NEED_MORE_INFO', 'ACCEPTED', 'REJECTED') LIMIT 1`,
         [roomId, userId]
       );
       return rows[0] ? mapClaim(rows[0]) : null;

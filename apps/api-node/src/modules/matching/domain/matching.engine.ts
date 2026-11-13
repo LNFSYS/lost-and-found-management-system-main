@@ -19,6 +19,7 @@ export interface MatchCandidate {
   roomText: string | null;
   customLocation: string | null;
   lostFoundAt: string | null;
+  imageEmbedding?: number[] | null;
 }
 
 export interface MatchingConfig {
@@ -36,6 +37,44 @@ export interface MatchingConfig {
   };
 }
 
+export interface AiFeatureSummary {
+  color: string | null;
+  condition: string | null;
+  ocrText: string | null;
+  tags: string[];
+}
+
+export interface MatchBreakdown {
+  vectorScore: number | null;
+  vectorWeight: number;
+  vectorContribution: number;
+  contextScore: number;
+  contextWeight: number;
+  contextContribution: number;
+  hasVector: boolean;
+}
+
+export interface AiVisualAnalysis {
+  hasImageAnalysis: boolean;
+  sourceSummary?: AiFeatureSummary;
+  candidateSummary?: AiFeatureSummary;
+  colorMatch?: {
+    matched: boolean;
+    sourceColor?: string;
+    candidateColor?: string;
+  };
+  conditionMatch?: {
+    sourceCondition?: string;
+    candidateCondition?: string;
+  };
+  ocrMatch?: {
+    matched: boolean;
+    sourceOcr?: string;
+    candidateOcr?: string;
+    commonTokens: string[];
+  };
+}
+
 export interface MatchExplanation {
   tier: MatchTier;
   summary: string;
@@ -47,6 +86,8 @@ export interface MatchExplanation {
   categoryReason: string;
   daysDiff: number | null;
   penalties: string[];
+  breakdown?: MatchBreakdown;
+  aiVisualAnalysis?: AiVisualAnalysis;
 }
 
 export interface ScoredMatch {
@@ -69,7 +110,19 @@ export function redactPrivateMatchExplanation(explanation: MatchExplanation): Ma
     matchedTokens: [],
     matchedImageTags: [],
     matchedOcrTokens: [],
-    locationReason: "Có tín hiệu vị trí nội bộ; chi tiết chỉ dành cho chủ bài và Staff/Admin."
+    locationReason: "Có tín hiệu vị trí nội bộ; chi tiết chỉ dành cho chủ bài và Staff/Admin.",
+    aiVisualAnalysis: explanation.aiVisualAnalysis ? {
+      ...explanation.aiVisualAnalysis,
+      sourceSummary: explanation.aiVisualAnalysis.sourceSummary ? {
+        ...explanation.aiVisualAnalysis.sourceSummary,
+        ocrText: null
+      } : undefined,
+      candidateSummary: explanation.aiVisualAnalysis.candidateSummary ? {
+        ...explanation.aiVisualAnalysis.candidateSummary,
+        ocrText: null
+      } : undefined,
+      ocrMatch: undefined
+    } : undefined
   };
 }
 
@@ -269,6 +322,75 @@ function applyFalsePositiveCaps(input: {
   return { score: clamp(score), penalties };
 }
 
+function dotProduct(a: number[], b: number[]): number {
+  const len = Math.min(a.length, b.length);
+  let sum = 0;
+  for (let i = 0; i < len; i++) {
+    sum += a[i] * b[i];
+  }
+  return sum;
+}
+
+function vectorSimilarity(left: MatchCandidate, right: MatchCandidate) {
+  if (
+    !left.imageEmbedding || !right.imageEmbedding
+    || left.imageEmbedding.length === 0 || right.imageEmbedding.length === 0
+  ) {
+    return { score: null as number | null, reason: "Chưa có vector ảnh DINOv2 cho cả hai bài" };
+  }
+  const dot = dotProduct(left.imageEmbedding, right.imageEmbedding);
+  const score = clamp(Math.max(0, dot));
+  return { score, reason: `Vector thị giác DINOv2 ${percent(score)}` };
+}
+
+export function extractAiFeatureSummary(candidate: MatchCandidate): AiFeatureSummary {
+  const combined = `${candidate.imageText} ${candidate.title} ${candidate.text}`.toLowerCase();
+
+  // 1. Phân tích màu sắc
+  let color: string | null = null;
+  const colors = [
+    { pattern: /màu trắng|mau trang|\bwhite\b/i, name: "Màu trắng" },
+    { pattern: /màu đen|mau den|\bblack\b/i, name: "Màu đen" },
+    { pattern: /màu xám|màu bạc|mau xam|mau bac|\bgrey\b|\bgray\b|\bsilver\b/i, name: "Màu xám / bạc" },
+    { pattern: /màu đỏ|mau do|\bred\b/i, name: "Màu đỏ" },
+    { pattern: /màu xanh dương|xanh navy|mau xanh duong|\bblue\b/i, name: "Màu xanh dương" },
+    { pattern: /màu xanh lá|mau xanh la|\bgreen\b/i, name: "Màu xanh lá" },
+    { pattern: /màu vàng|mau vang|\byellow\b/i, name: "Màu vàng" },
+    { pattern: /màu cam|mau cam|\borange\b/i, name: "Màu cam" },
+    { pattern: /màu tím|màu hồng|mau tim|mau hong|\bpink\b|\bpurple\b/i, name: "Màu hồng / tím" },
+    { pattern: /màu hỗn hợp|mau hon hop/i, name: "Màu phối hợp" }
+  ];
+  for (const c of colors) {
+    if (c.pattern.test(candidate.imageText) || c.pattern.test(combined)) {
+      color = c.name;
+      break;
+    }
+  }
+
+  // 2. Phân tích tình trạng bề mặt & vết xước
+  let condition: string | null = null;
+  if (/trầy xước nhiều|tray xuoc nhieu|dấu hiệu cũ|dau hieu cu/i.test(candidate.imageText) || /trầy xước nhiều|cũ kỹ/i.test(combined)) {
+    condition = "Bề mặt trầy xước nhiều / có dấu hiệu cũ";
+  } else if (/vết xước nhẹ|vet xuoc nhe|hoa văn|hoa van/i.test(candidate.imageText) || /vết xước|xước nhẹ|trầy nhẹ/i.test(combined)) {
+    condition = "Có vết xước nhẹ hoặc hoa văn bề mặt";
+  } else if (/bề mặt nhẵn|be mat nhan|còn mới|con moi/i.test(candidate.imageText) || /mới|nguyên vẹn|còn mới/i.test(combined)) {
+    condition = "Bề mặt nhẵn, tình trạng còn khá mới";
+  } else if (candidate.imageEmbedding) {
+    condition = "Bề mặt nhẵn, tình trạng còn khá mới";
+  }
+
+  // 3. Phân tích OCR
+  const ocrText = candidate.ocrText.trim() || null;
+  const rawTags = candidate.imageText.split(/\s+/).filter((t) => t.length > 2);
+
+  return {
+    color,
+    condition,
+    ocrText,
+    tags: [...new Set(rawTags)].slice(0, 10)
+  };
+}
+
 export function scoreMatchCandidates(
   source: MatchCandidate,
   candidates: MatchCandidate[],
@@ -285,13 +407,14 @@ export function scoreMatchCandidates(
     const category = categorySimilarity(source, candidate);
     const location = locationSimilarity(source, candidate);
     const temporal = temporalSimilarity(source, candidate);
+    const vectorSim = vectorSimilarity(source, candidate);
     const textScore = clamp(Math.max(cosine(vectors[0], vectors[index + 1]), textOverlap.score));
     const categoryScore = clamp(category.score);
     const locationScore = clamp(location.score);
     const timeScore = clamp(temporal.score);
-    const imageScore = clamp(imageOverlap.score);
+    const imageScore = vectorSim.score !== null ? vectorSim.score : clamp(imageOverlap.score);
     const ocrScore = clamp(ocrOverlap.score);
-    const weightedScore = (
+    const baseWeightedScore = (
       weights.text * textScore
       + weights.category * categoryScore
       + weights.location * locationScore
@@ -299,6 +422,28 @@ export function scoreMatchCandidates(
       + weights.image * imageScore
       + weights.ocr * ocrScore
     );
+    // Khi cả 2 bài đều có ảnh trích xuất vector DINOv2: kết hợp 60% Visual Vector + 40% Dữ liệu & Ngữ cảnh người dùng
+    const hasVector = vectorSim.score !== null;
+    const vectorScore = hasVector ? vectorSim.score : null;
+    const vectorWeight = hasVector ? 0.60 : 0.0;
+    const vectorContribution = hasVector ? Math.round(vectorSim.score! * 0.60 * 100) / 100 : 0;
+
+    // Ngữ cảnh người dùng (40%): chuẩn hóa từ 5 tín hiệu Text, Danh mục, Vị trí, Thời gian, OCR
+    const contextWeightsSum = weights.text + weights.category + weights.location + weights.time + weights.ocr || 1;
+    const userContextScore = clamp(
+      (weights.text * textScore
+      + weights.category * categoryScore
+      + weights.location * locationScore
+      + weights.time * timeScore
+      + weights.ocr * ocrScore) / contextWeightsSum
+    );
+    const contextScore = hasVector ? userContextScore : baseWeightedScore;
+    const contextWeight = hasVector ? 0.40 : 1.0;
+    const contextContribution = hasVector ? Math.round(contextScore * 0.40 * 100) / 100 : baseWeightedScore;
+
+    const weightedScore = hasVector
+      ? clamp(vectorContribution + contextContribution)
+      : baseWeightedScore;
     const capped = applyFalsePositiveCaps({
       score: weightedScore,
       categoryScore,
@@ -309,14 +454,29 @@ export function scoreMatchCandidates(
       ocrScore
     });
     const scoreTier = tierForScore(capped.score, config);
+
+    const sourceAi = extractAiFeatureSummary(source);
+    const candidateAi = extractAiFeatureSummary(candidate);
+    const colorMatched = Boolean(sourceAi.color && candidateAi.color && sourceAi.color === candidateAi.color);
+    const conditionMatched = Boolean(sourceAi.condition && candidateAi.condition && sourceAi.condition === candidateAi.condition);
+    const commonOcrTokens = ocrOverlap.tokens;
+
     const reasons = [
+      hasVector
+        ? `Vector thị giác DINOv2 ${percent(vectorSim.score!)} (Trọng số 60% -> đóng góp ${percent(vectorContribution)})`
+        : `Mô hình AI Thị giác: Chưa có vector ảnh (đang dùng 100% ngữ cảnh)`,
+      `Dữ liệu & Ngữ cảnh người dùng: ${percent(contextScore)} (Trọng số ${hasVector ? "40%" : "100%"} -> đóng góp ${percent(contextContribution)})`,
       `Mô tả ${percent(textScore)}`,
       `Danh mục ${percent(categoryScore)}`,
       `Vị trí ${percent(locationScore)}`,
       `Thời gian ${percent(timeScore)}`,
-      `Ảnh/tag ${percent(imageScore)}`,
       `OCR/chữ nhìn thấy ${percent(ocrScore)}`
     ];
+
+    const summary = hasVector
+      ? `Hai bài có mức tương đồng ${percent(capped.score)} (kết hợp 60% vector thị giác DINOv2 và 40% dữ liệu ngữ cảnh người dùng). Đây là gợi ý hỗ trợ, không phải kết luận quyền sở hữu.`
+      : `Hai bài có mức tương đồng ${percent(capped.score)}. Đây là gợi ý hỗ trợ, không phải kết luận quyền sở hữu.`;
+
     return {
       candidateId: candidate.id,
       totalScore: capped.score,
@@ -329,7 +489,7 @@ export function scoreMatchCandidates(
       scoreTier,
       explanation: {
         tier: scoreTier,
-        summary: `Hai bài có mức tương đồng ${percent(capped.score)}. Đây là gợi ý hỗ trợ, không phải kết luận quyền sở hữu.`,
+        summary,
         reasons,
         matchedTokens: textOverlap.tokens.slice(0, 12),
         matchedImageTags: imageOverlap.tokens.slice(0, 12),
@@ -337,7 +497,36 @@ export function scoreMatchCandidates(
         locationReason: location.reason,
         categoryReason: category.reason,
         daysDiff: temporal.daysDiff === null ? null : Number(temporal.daysDiff.toFixed(2)),
-        penalties: capped.penalties
+        penalties: capped.penalties,
+        breakdown: {
+          vectorScore,
+          vectorWeight,
+          vectorContribution,
+          contextScore: Math.round(contextScore * 100) / 100,
+          contextWeight,
+          contextContribution,
+          hasVector
+        },
+        aiVisualAnalysis: {
+          hasImageAnalysis: Boolean(sourceAi.color || candidateAi.color || sourceAi.condition || candidateAi.condition || hasVector),
+          sourceSummary: sourceAi,
+          candidateSummary: candidateAi,
+          colorMatch: {
+            matched: colorMatched,
+            sourceColor: sourceAi.color ?? undefined,
+            candidateColor: candidateAi.color ?? undefined
+          },
+          conditionMatch: {
+            sourceCondition: sourceAi.condition ?? undefined,
+            candidateCondition: candidateAi.condition ?? undefined
+          },
+          ocrMatch: {
+            matched: commonOcrTokens.length > 0,
+            sourceOcr: sourceAi.ocrText ?? undefined,
+            candidateOcr: candidateAi.ocrText ?? undefined,
+            commonTokens: commonOcrTokens
+          }
+        }
       }
     };
   }).sort((left, right) => right.totalScore - left.totalScore);

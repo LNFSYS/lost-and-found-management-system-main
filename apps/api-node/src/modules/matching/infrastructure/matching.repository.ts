@@ -36,6 +36,7 @@ interface MatchCandidateRow extends RowDataPacket {
   lost_found_at: Date | string | null;
   image_tag_text: string | null;
   ocr_tag_text: string | null;
+  image_embedding?: unknown;
 }
 
 interface MatchResultRow extends RowDataPacket {
@@ -103,6 +104,20 @@ function parseExplanation(value: MatchResultRow["explanation_json"]): MatchExpla
   }
 }
 
+function parseEmbedding(value: unknown): number[] | null {
+  if (!value) return null;
+  if (Array.isArray(value)) return value as number[];
+  if (typeof value === "string") {
+    try {
+      const parsed = JSON.parse(value);
+      return Array.isArray(parsed) ? parsed : null;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
 function mapCandidate(row: MatchCandidateRow): MatchCandidate {
   return {
     id: row.id,
@@ -120,7 +135,8 @@ function mapCandidate(row: MatchCandidateRow): MatchCandidate {
     buildingId: row.building_id,
     roomText: row.room_text,
     customLocation: row.custom_location,
-    lostFoundAt: iso(row.lost_found_at)
+    lostFoundAt: iso(row.lost_found_at),
+    imageEmbedding: parseEmbedding(row.image_embedding)
   };
 }
 
@@ -165,6 +181,7 @@ const candidateSelect = `SELECT
   p.title_normalized, p.description_normalized, p.category_id,
   c.parent_id AS parent_category_id, p.area_id, p.building_id,
   p.room_text, p.custom_location, p.lost_found_at,
+  p.image_embedding,
   tags.image_tag_text, tags.ocr_tag_text
 FROM posts p
 LEFT JOIN item_categories c ON c.id = p.category_id

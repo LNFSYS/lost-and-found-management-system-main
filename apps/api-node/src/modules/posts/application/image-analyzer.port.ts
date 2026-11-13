@@ -8,6 +8,7 @@ export interface ImageAnalysis {
   visibleText: string[];
   confidence: number;
   warnings: string[];
+  imageEmbedding?: number[] | null;
 }
 
 export interface ImageAnalyzer {

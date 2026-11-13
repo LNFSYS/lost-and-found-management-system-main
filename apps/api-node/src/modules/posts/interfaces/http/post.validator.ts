@@ -89,8 +89,10 @@ export const createPostSchema = z.object({
   analysisSignals: z.object({
     visualAttributes: z.array(z.string().trim().min(1).max(100)).max(12).default([]),
     visibleText: z.array(z.string().trim().min(1).max(100)).max(12).default([]),
-    confidence: z.coerce.number().min(0).max(1)
-  }).optional()
+    confidence: z.coerce.number().min(0).max(1),
+    imageEmbedding: z.array(z.number()).max(1024).optional()
+  }).optional(),
+  imageEmbedding: z.array(z.number()).max(1024).optional()
 }).superRefine((value, context) => {
   validatePostShape(value, context);
   if ((value.illustrationId || value.illustrationDraftId) && value.type !== "LOST") context.addIssue({ code: z.ZodIssueCode.custom, path: ["illustrationId"], message: "Ảnh minh họa AI chỉ dành cho bài LOST." });
@@ -119,8 +121,17 @@ export const updatePostSchema = z.object({
   status: writableStatus.optional()
 }).refine(atLeastOne, "Cần ít nhất một trường để cập nhật");
 
-export const listPostsQuerySchema = z.object({
+function resolveQueryAlias<T extends { q?: string; query?: string; keyword?: string }>(data: T): T {
+  return {
+    ...data,
+    q: data.q || data.query || data.keyword || undefined
+  };
+}
+
+const baseListPostsObject = z.object({
   q: z.string().trim().max(120).optional(),
+  query: z.string().trim().max(120).optional(),
+  keyword: z.string().trim().max(120).optional(),
   type: postType.optional(),
   status: publicStatus.optional(),
   categoryId: uuid.optional(),
@@ -131,9 +142,11 @@ export const listPostsQuerySchema = z.object({
   sort: z.enum(["newest", "oldest", "incident_newest", "incident_oldest"]).default("newest")
 });
 
-export const listOwnPostsQuerySchema = listPostsQuerySchema.extend({
+export const listPostsQuerySchema = baseListPostsObject.transform(resolveQueryAlias);
+
+export const listOwnPostsQuerySchema = baseListPostsObject.extend({
   status: ownerStatus.optional()
-});
+}).transform(resolveQueryAlias);
 
 export const uploadMediaSchema = z.object({
   mediaKind: z.enum(["ITEM", "EVIDENCE"]).default("ITEM"),

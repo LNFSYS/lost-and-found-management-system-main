@@ -7,7 +7,15 @@ import "./warehouse-intake.css";
 
 const labels = { SOURCE_POST: "Ảnh bài đăng", CONTACT_PHOTO: "Ảnh Finder đối chiếu trong chat", INTAKE: "Ảnh tiếp nhận", RETURN: "Ảnh trả đồ" };
 
-export function WarehouseImageView({ image, caption = false }: { image?: Pick<WarehouseImage, "id" | "provenance"> | null; caption?: boolean }) {
+export function WarehouseImageView({
+  image,
+  caption = false,
+  expandable = true
+}: {
+  image?: Pick<WarehouseImage, "id" | "provenance"> | null;
+  caption?: boolean;
+  expandable?: boolean;
+}) {
   const [url, setUrl] = useState("");
   const [expanded, setExpanded] = useState(false);
   const modal = useRef<HTMLDivElement>(null);
@@ -21,6 +29,21 @@ export function WarehouseImageView({ image, caption = false }: { image?: Pick<Wa
     }).catch(() => { if (active) setUrl(""); });
     return () => { active = false; if (objectUrl) URL.revokeObjectURL(objectUrl); };
   }, [image?.id, image?.provenance]);
+
+  if (!expandable) {
+    return (
+      <div
+        className="warehouse-image"
+        role="img"
+        aria-label={image ? labels[image.provenance] : "Vật phẩm"}
+        style={{ cursor: "pointer" }}
+      >
+        {url ? <img src={url} alt={image ? labels[image.provenance] : "Vật phẩm"} /> : <span><ImageOff size={24} />Chưa có ảnh</span>}
+        {caption && image && <small>{labels[image.provenance]}</small>}
+      </div>
+    );
+  }
+
   return <>
     <button type="button" className="warehouse-image" disabled={!url} onClick={() => setExpanded(true)} title="Xem ảnh vật phẩm" aria-label="Xem ảnh vật phẩm">
       {url ? <img src={url} alt={image ? labels[image.provenance] : "Vật phẩm"} /> : <span><ImageOff size={24} />Chưa có ảnh</span>}
@@ -33,11 +56,11 @@ export function WarehouseImageView({ image, caption = false }: { image?: Pick<Wa
   </>;
 }
 
-export function WarehouseImageGallery({ images }: { images: WarehouseImage[] }) {
+export function WarehouseImageGallery({ images, expandable = true }: { images: WarehouseImage[]; expandable?: boolean }) {
   return <div className="warehouse-image-gallery">
     {images.length ? images.map(image => <figure key={`${image.provenance}-${image.id}`}>
-      <WarehouseImageView image={image} caption />
+      <WarehouseImageView image={image} caption expandable={expandable} />
       <figcaption>{new Date(image.capturedAt ?? image.uploadedAt).toLocaleString("vi-VN")}</figcaption>
-    </figure>) : <WarehouseImageView />}
+    </figure>) : <WarehouseImageView expandable={expandable} />}
   </div>;
 }

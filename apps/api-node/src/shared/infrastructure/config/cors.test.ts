@@ -14,6 +14,8 @@ describe("CORS origin policy", () => {
   it("accepts alternate local Vite ports only outside production", () => {
     assert.equal(isOriginAllowed("http://localhost:5174", configured, "development"), true);
     assert.equal(isOriginAllowed("http://127.0.0.1:4173", configured, "test"), true);
+    assert.equal(isOriginAllowed("https://sample-app.trycloudflare.com", configured, "development"), true);
+    assert.equal(isOriginAllowed("https://fptu-lostandfound.loca.lt", configured, "development"), true);
     assert.equal(isOriginAllowed("http://localhost:5174", configured, "production"), false);
   });
 

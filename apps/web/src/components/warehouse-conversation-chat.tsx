@@ -8,8 +8,9 @@ const maxChatImages = 3;
 const maxChatImageBytes = 5 * 1024 * 1024;
 const allowedImageTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
 
-export function WarehouseConversationChat({ mode, warehouseItemId, onExtraction, disabled = false, allowImages = false }: {
+export function WarehouseConversationChat({ mode, intakeKind, warehouseItemId, onExtraction, disabled = false, allowImages = true }: {
   mode: WarehouseConversationMode;
+  intakeKind?: "WALK_IN" | "CUSTODY_REQUEST";
   warehouseItemId?: string;
   onExtraction: (result: WarehouseConversationExtraction) => void;
   disabled?: boolean;
@@ -63,7 +64,10 @@ export function WarehouseConversationChat({ mode, warehouseItemId, onExtraction,
   }
 
   async function sendMessage() {
-    const content = draft.trim() || (attachments.length ? "Vui lòng kiểm tra ảnh vật phẩm và ghi nhận tình trạng bên ngoài." : "");
+    const defaultImagePrompt = mode === "RETURN"
+      ? "Vui lòng đọc thông tin người nhận từ ảnh thẻ SV/CCCD hoặc đối chiếu vật phẩm."
+      : "Vui lòng kiểm tra ảnh vật phẩm và ghi nhận tình trạng bên ngoài.";
+    const content = draft.trim() || (attachments.length ? defaultImagePrompt : "");
     if ((!content && !attachments.length) || busyRef.current || disabled) return;
     if (content.length > 2000) { setError("Mỗi tin nhắn tối đa 2.000 ký tự."); return; }
     const submittedDraft = draft;
@@ -83,9 +87,11 @@ export function WarehouseConversationChat({ mode, warehouseItemId, onExtraction,
     setBusy(true);
     setBusyWithImages(submittedAttachments.length > 0);
     try {
-      const result = await api.extractWarehouseConversation({ mode,
-        ...(mode === "INTAKE" ? { intakeKind: allowImages ? "WALK_IN" as const : "CUSTODY_REQUEST" as const } : {}),
-        ...(warehouseItemId ? { warehouseItemId } : {}), messages: requestMessages
+      const result = await api.extractWarehouseConversation({
+        mode,
+        ...(mode === "INTAKE" ? { intakeKind: intakeKind ?? "WALK_IN" } : {}),
+        ...(warehouseItemId ? { warehouseItemId } : {}),
+        messages: requestMessages
       }, submittedAttachments.map(image => image.file));
       const confirmedMessages = nextMessages.map(message => message === pendingMessage ? { ...message, pending: false } : message);
       const responseMessages: DisplayMessage[] = [...confirmedMessages, { role: "assistant", content: result.assistantMessage }];
@@ -136,13 +142,13 @@ export function WarehouseConversationChat({ mode, warehouseItemId, onExtraction,
           <img src={image.previewUrl} alt={`Ảnh đính kèm ${index + 1}`} />
           <button type="button" aria-label={`Xóa ảnh đính kèm ${index + 1}`} disabled={disabled || busy} onClick={() => removeImage(image)}><X size={14} /></button>
         </div>)}
-        <small>Ảnh chỉ dùng để gợi ý tình trạng; vẫn cần tải ảnh chứng minh ở biểu mẫu.</small>
+        <small>{mode === "RETURN" ? "Ảnh đính kèm dùng để AI trích xuất thông tin người nhận; vui lòng kiểm tra trực tiếp." : "Ảnh chỉ dùng để gợi ý tình trạng; vẫn cần tải ảnh chứng minh ở biểu mẫu."}</small>
       </div>}
       <div className="warehouse-ai-chat__composer">
         {allowImages && <><input ref={fileInput} className="warehouse-ai-chat__file-input" type="file" accept="image/jpeg,image/png,image/webp" multiple disabled={disabled || busy || attachments.length >= maxChatImages} onChange={event => { selectImages(event.currentTarget.files); event.currentTarget.value = ""; }} />
-          <button type="button" className="warehouse-ai-chat__attach" title="Đính kèm ảnh vật phẩm" aria-label="Đính kèm ảnh vật phẩm" disabled={disabled || busy || attachments.length >= maxChatImages} onClick={() => fileInput.current?.click()}><ImagePlus size={19} /></button></>}
+          <button type="button" className="warehouse-ai-chat__attach" title={mode === "RETURN" ? "Đính kèm ảnh CCCD / thẻ SV / vật phẩm" : "Đính kèm ảnh vật phẩm"} aria-label={mode === "RETURN" ? "Đính kèm ảnh CCCD / thẻ SV / vật phẩm" : "Đính kèm ảnh vật phẩm"} disabled={disabled || busy || attachments.length >= maxChatImages} onClick={() => fileInput.current?.click()}><ImagePlus size={19} /></button></>}
         <textarea value={draft} maxLength={2000} rows={2} disabled={disabled || busy} onChange={event => setDraft(event.target.value)} onKeyDown={onKeyDown}
-          placeholder="Nhập tin nhắn…" aria-label="Tin nhắn cho trợ lý AI" />
+          placeholder={mode === "RETURN" ? "Nhập thông tin người nhận hoặc đính kèm ảnh CCCD / thẻ SV / vật phẩm…" : "Nhập tin nhắn hoặc đính kèm ảnh vật phẩm…"} aria-label="Tin nhắn cho trợ lý AI" />
         <button type="button" className="secondary-button" disabled={disabled || busy || (!draft.trim() && !attachments.length)} onClick={() => void sendMessage()}><Send size={16} /> Gửi</button>
       </div>
     </section>}
