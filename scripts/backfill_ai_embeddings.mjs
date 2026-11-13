@@ -6,26 +6,30 @@ import mysql from "mysql2/promise";
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
-for (const envPath of [
-  path.resolve(process.cwd(), ".env"),
-  path.resolve(repositoryRoot, ".env"),
-  path.resolve(repositoryRoot, "apps/api-node/.env")
-]) {
-  dotenv.config({ path: envPath, override: false });
-}
+// Nạp file cấu hình môi trường chuẩn từ apps/api-node/.env và .env
+dotenv.config({ path: path.resolve(repositoryRoot, "apps/api-node/.env"), override: true });
+dotenv.config({ path: path.resolve(process.cwd(), "apps/api-node/.env"), override: true });
+dotenv.config({ path: path.resolve(repositoryRoot, ".env"), override: false });
+dotenv.config({ path: path.resolve(process.cwd(), ".env"), override: false });
 
+const dbHost = process.env.DB_HOST || "localhost";
+const dbPort = Number(process.env.DB_PORT) || 3306;
+const dbUser = process.env.DB_USER || "root";
+const dbPassword = process.env.DB_PASSWORD || "";
+const dbName = process.env.DB_NAME || "lnfs_auth";
 const AI_URL = process.env.LNFS_AI_SERVICE_URL || "http://127.0.0.1:5000";
 
 async function main() {
   console.log("=== DONG BO VECTOR DINOV2 VA AI TAGS CHO TAT CA BAI VIET ===");
-  console.log(`Connecting to AI service at: ${AI_URL}`);
+  console.log(`AI Microservice: ${AI_URL}`);
+  console.log(`Database target: ${dbUser}@${dbHost}:${dbPort}/${dbName}`);
 
   const pool = mysql.createPool({
-    host: process.env.LNFS_DB_HOST || "127.0.0.1",
-    port: Number(process.env.LNFS_DB_PORT || 3306),
-    user: process.env.LNFS_DB_USER || "root",
-    password: process.env.LNFS_DB_PASSWORD || "",
-    database: process.env.LNFS_DB_NAME || "lnfs_db",
+    host: dbHost,
+    port: dbPort,
+    user: dbUser,
+    password: dbPassword,
+    database: dbName,
     waitForConnections: true,
     connectionLimit: 5
   });
@@ -40,11 +44,11 @@ async function main() {
       ORDER BY p.created_at DESC
     `);
 
-    console.log(`Tim thay ${posts.length} bai viet co anh tren he thong.`);
+    console.log(`\nTim thay ${posts.length} bai viet co anh can dong bo vector.`);
 
     for (const post of posts) {
       if (!post.secure_url) continue;
-      console.log(`\nDang xu ly bai [${post.id.slice(0, 8)}]: "${post.title}" (${post.secure_url})...`);
+      console.log(`\nDang xu ly bai [${post.id.slice(0, 8)}]: "${post.title}"...`);
 
       try {
         const formData = new FormData();
@@ -56,7 +60,7 @@ async function main() {
         });
 
         if (!res.ok) {
-          console.warn(`  [WARN] Khong the trich xuat cho bai ${post.id}: HTTP ${res.status}`);
+          console.warn(`  [WARN] AI service tra ve ma HTTP ${res.status}`);
           continue;
         }
 
@@ -86,14 +90,18 @@ async function main() {
             );
           }
         }
-        console.log(`  -> Da cap nhat thuoc tinh AI: mau="${data.color}", tinh trang="${data.condition}", OCR=[${data.visibleText?.join(", ") || "none"}].`);
+        console.log(`  -> Da cap nhat thuoc tinh: mau="${data.color}", tinh trang="${data.condition}", OCR=[${data.visibleText?.join(", ") || "khong co"}]`);
       } catch (err) {
         console.error(`  [ERROR] Loi khi xu ly bai ${post.id}:`, err.message);
       }
     }
 
+    // Xoa cache match_results cu de he thong tu dong tinh lai toan bo theo mo hinh 60/40 moi
+    await pool.execute("DELETE FROM match_results");
+    console.log("\n-> Da don dep bang match_results cu de he thong tu dong tinh toan moi.");
+
     console.log("\n=== HOAN TAT DONG BO VECTOR VA TAGS CHO TAT CA BAI VIET ===");
-    console.log("Ban co the tai lai trang hoac bam 'Tinh lai matching' de xem ket qua 60/40.");
+    console.log("Ban co the tai lai trang hoac vao xem muc Goi y de thay ket qua 60/40.");
   } finally {
     await pool.end();
   }
