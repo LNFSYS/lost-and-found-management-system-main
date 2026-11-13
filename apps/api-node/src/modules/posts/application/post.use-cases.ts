@@ -277,7 +277,8 @@ export function createPostUseCases(options: PostDependencies) {
           contactInfo: input.contactInfo,
           lostFoundAt: input.lostFoundAt,
           handoverPointId: input.handoverPointId ?? null,
-          expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+          expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+          imageEmbedding: input.imageEmbedding ?? input.analysisSignals?.imageEmbedding ?? null
         }, connection);
         if (input.illustrationId) {
           await options.illustrations!.attach(ownerId, input.illustrationId, postId, input, connection);

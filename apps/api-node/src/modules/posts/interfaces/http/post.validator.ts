@@ -89,8 +89,10 @@ export const createPostSchema = z.object({
   analysisSignals: z.object({
     visualAttributes: z.array(z.string().trim().min(1).max(100)).max(12).default([]),
     visibleText: z.array(z.string().trim().min(1).max(100)).max(12).default([]),
-    confidence: z.coerce.number().min(0).max(1)
-  }).optional()
+    confidence: z.coerce.number().min(0).max(1),
+    imageEmbedding: z.array(z.number()).max(1024).optional()
+  }).optional(),
+  imageEmbedding: z.array(z.number()).max(1024).optional()
 }).superRefine((value, context) => {
   validatePostShape(value, context);
   if ((value.illustrationId || value.illustrationDraftId) && value.type !== "LOST") context.addIssue({ code: z.ZodIssueCode.custom, path: ["illustrationId"], message: "Ảnh minh họa AI chỉ dành cho bài LOST." });

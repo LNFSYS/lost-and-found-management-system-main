@@ -19,6 +19,7 @@ export interface MatchCandidate {
   roomText: string | null;
   customLocation: string | null;
   lostFoundAt: string | null;
+  imageEmbedding?: number[] | null;
 }
 
 export interface MatchingConfig {
@@ -269,6 +270,27 @@ function applyFalsePositiveCaps(input: {
   return { score: clamp(score), penalties };
 }
 
+function dotProduct(a: number[], b: number[]): number {
+  const len = Math.min(a.length, b.length);
+  let sum = 0;
+  for (let i = 0; i < len; i++) {
+    sum += a[i] * b[i];
+  }
+  return sum;
+}
+
+function vectorSimilarity(left: MatchCandidate, right: MatchCandidate) {
+  if (
+    !left.imageEmbedding || !right.imageEmbedding
+    || left.imageEmbedding.length === 0 || right.imageEmbedding.length === 0
+  ) {
+    return { score: null as number | null, reason: "Chưa có vector ảnh DINOv2 cho cả hai bài" };
+  }
+  const dot = dotProduct(left.imageEmbedding, right.imageEmbedding);
+  const score = clamp(Math.max(0, dot));
+  return { score, reason: `Vector thị giác DINOv2 ${percent(score)}` };
+}
+
 export function scoreMatchCandidates(
   source: MatchCandidate,
   candidates: MatchCandidate[],
@@ -285,13 +307,14 @@ export function scoreMatchCandidates(
     const category = categorySimilarity(source, candidate);
     const location = locationSimilarity(source, candidate);
     const temporal = temporalSimilarity(source, candidate);
+    const vectorSim = vectorSimilarity(source, candidate);
     const textScore = clamp(Math.max(cosine(vectors[0], vectors[index + 1]), textOverlap.score));
     const categoryScore = clamp(category.score);
     const locationScore = clamp(location.score);
     const timeScore = clamp(temporal.score);
-    const imageScore = clamp(imageOverlap.score);
+    const imageScore = vectorSim.score !== null ? vectorSim.score : clamp(imageOverlap.score);
     const ocrScore = clamp(ocrOverlap.score);
-    const weightedScore = (
+    const baseWeightedScore = (
       weights.text * textScore
       + weights.category * categoryScore
       + weights.location * locationScore
@@ -299,6 +322,10 @@ export function scoreMatchCandidates(
       + weights.image * imageScore
       + weights.ocr * ocrScore
     );
+    // Khi cả 2 bài đều có ảnh trích xuất vector DINOv2: kết hợp 60% Visual Vector + 40% Hệ thống hiện tại
+    const weightedScore = vectorSim.score !== null
+      ? clamp(0.60 * vectorSim.score + 0.40 * baseWeightedScore)
+      : baseWeightedScore;
     const capped = applyFalsePositiveCaps({
       score: weightedScore,
       categoryScore,
@@ -314,7 +341,7 @@ export function scoreMatchCandidates(
       `Danh mục ${percent(categoryScore)}`,
       `Vị trí ${percent(locationScore)}`,
       `Thời gian ${percent(timeScore)}`,
-      `Ảnh/tag ${percent(imageScore)}`,
+      vectorSim.score !== null ? vectorSim.reason : `Ảnh/tag ${percent(imageScore)}`,
       `OCR/chữ nhìn thấy ${percent(ocrScore)}`
     ];
     return {

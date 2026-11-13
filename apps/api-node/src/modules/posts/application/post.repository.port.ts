@@ -63,6 +63,7 @@ export interface PostRepository {
     lostFoundAt: Date;
     handoverPointId?: string | null;
     expiresAt: Date;
+    imageEmbedding?: number[] | null;
   }, queryable?: TransactionContext): Promise<void>;
   updatePost(postId: string, input: {
     title?: string;
