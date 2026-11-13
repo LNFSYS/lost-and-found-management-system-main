@@ -135,18 +135,23 @@ function MatchCandidateCard({
     ? Math.round(breakdown.vectorContribution * 100)
     : (hasVector && vectorScore !== null ? Math.round(vectorScore * 0.60 * 100) : 0);
 
+  const contextWeightsSum = weights.text + weights.category + weights.location + weights.time + weights.ocr || 1;
   const contextScore = breakdown?.contextScore ?? (
     (weights.text * result.scores.text +
      weights.category * result.scores.category +
      weights.location * result.scores.location +
      weights.time * result.scores.time +
-     weights.ocr * result.scores.ocr) /
-    (weights.text + weights.category + weights.location + weights.time + weights.ocr || 1)
+     weights.ocr * result.scores.ocr) / contextWeightsSum
   );
   const contextWeight = breakdown?.contextWeight ?? (hasVector ? 0.40 : 1.0);
   const contextContribution = breakdown?.contextContribution !== undefined
     ? Math.round(breakdown.contextContribution * 100)
     : Math.round(contextScore * contextWeight * 100);
+
+  // Điểm hiển thị nhất quán toán học: nếu có vector 60/40 thì tổng = vectorContribution + contextContribution
+  const displayTotalScore = (hasVector && vectorScore !== null)
+    ? (vectorContribution + contextContribution) / 100
+    : result.totalScore;
 
   // 2. Dữ liệu phân tích AI từ ảnh thành Text
   const sourceColor = aiVisual?.sourceSummary?.color ??
@@ -176,7 +181,7 @@ function MatchCandidateCard({
         <p><MapPin /> {candidateLocation(result)}</p>
       </div>
       <div className="match-overall">
-        <strong>{percentage(result.totalScore)}</strong>
+        <strong>{percentage(displayTotalScore)}</strong>
         <span>{tierLabels[result.scoreTier]}</span>
       </div>
     </header>
@@ -202,7 +207,7 @@ function MatchCandidateCard({
       <div className="match-formula-item match-formula-item--total">
         <span className="match-formula-tag">Tổng điểm so khớp</span>
         <div className="match-formula-calc">
-          <strong className="match-formula-total-score">{percentage(result.totalScore)}</strong>
+          <strong className="match-formula-total-score">{percentage(displayTotalScore)}</strong>
           <span>{tierLabels[result.scoreTier]}</span>
         </div>
       </div>

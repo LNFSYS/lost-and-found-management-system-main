@@ -422,17 +422,27 @@ export function scoreMatchCandidates(
       + weights.image * imageScore
       + weights.ocr * ocrScore
     );
-    // Khi cả 2 bài đều có ảnh trích xuất vector DINOv2: kết hợp 60% Visual Vector + 40% Hệ thống hiện tại
+    // Khi cả 2 bài đều có ảnh trích xuất vector DINOv2: kết hợp 60% Visual Vector + 40% Dữ liệu & Ngữ cảnh người dùng
     const hasVector = vectorSim.score !== null;
     const vectorScore = hasVector ? vectorSim.score : null;
     const vectorWeight = hasVector ? 0.60 : 0.0;
     const vectorContribution = hasVector ? Math.round(vectorSim.score! * 0.60 * 100) / 100 : 0;
-    const contextScore = baseWeightedScore;
+
+    // Ngữ cảnh người dùng (40%): chuẩn hóa từ 5 tín hiệu Text, Danh mục, Vị trí, Thời gian, OCR
+    const contextWeightsSum = weights.text + weights.category + weights.location + weights.time + weights.ocr || 1;
+    const userContextScore = clamp(
+      (weights.text * textScore
+      + weights.category * categoryScore
+      + weights.location * locationScore
+      + weights.time * timeScore
+      + weights.ocr * ocrScore) / contextWeightsSum
+    );
+    const contextScore = hasVector ? userContextScore : baseWeightedScore;
     const contextWeight = hasVector ? 0.40 : 1.0;
-    const contextContribution = hasVector ? Math.round(baseWeightedScore * 0.40 * 100) / 100 : baseWeightedScore;
+    const contextContribution = hasVector ? Math.round(contextScore * 0.40 * 100) / 100 : baseWeightedScore;
 
     const weightedScore = hasVector
-      ? clamp(0.60 * vectorSim.score! + 0.40 * baseWeightedScore)
+      ? clamp(vectorContribution + contextContribution)
       : baseWeightedScore;
     const capped = applyFalsePositiveCaps({
       score: weightedScore,
