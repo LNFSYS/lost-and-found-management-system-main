@@ -116,11 +116,33 @@ async function resolveImageBuffer(post) {
   return null;
 }
 
+const forceAll = process.argv.includes("--force");
+
+async function waitForAiService() {
+  process.stdout.write("Dang kiem tra ket noi den AI microservice");
+  for (let i = 0; i < 30; i++) {
+    try {
+      const res = await fetch(`${AI_URL}/health`, { signal: AbortSignal.timeout(2000) });
+      if (res.ok) {
+        const data = await res.json();
+        console.log(` -> San sang (${data.service}, device: ${data.device}, ocr: ${data.ocr_available})\n`);
+        return true;
+      }
+    } catch {}
+    process.stdout.write(".");
+    await new Promise((r) => setTimeout(r, 1000));
+  }
+  throw new Error(`\nKhong the ket noi den AI microservice tai ${AI_URL} sau 30 giay!`);
+}
+
 async function main() {
   console.log("=== DONG BO VECTOR DINOV2 VA AI TAGS CHO TAT CA BAI VIET ===");
   console.log(`AI Microservice: ${AI_URL}`);
   console.log(`Database target: ${dbUser}@${dbHost}:${dbPort}/${dbName}`);
   console.log(`Cloudinary configured: ${Boolean(cloudName && apiKey && apiSecret)} (cloud: ${cloudName || "none"})`);
+  console.log(`Che do: ${forceAll ? "Ghi de tat ca (--force)" : "Bo qua cac bai da co vector"}`);
+
+  await waitForAiService();
 
   const pool = mysql.createPool({
     host: dbHost,
@@ -133,6 +155,10 @@ async function main() {
   });
 
   try {
+    const filterClause = forceAll
+      ? "WHERE p.deleted_at IS NULL"
+      : "WHERE p.deleted_at IS NULL AND (p.image_embedding IS NULL OR p.image_embedding = '' OR p.image_embedding = '[]')";
+
     const [posts] = await pool.execute(`
       SELECT p.id, p.title, p.type,
              MIN(pm.id) AS media_id,
@@ -141,12 +167,12 @@ async function main() {
              MIN(pm.format) AS format
       FROM posts p
       INNER JOIN post_media pm ON pm.post_id = p.id AND pm.media_kind = 'ITEM'
-      WHERE p.deleted_at IS NULL
+      ${filterClause}
       GROUP BY p.id, p.title, p.type, p.created_at
       ORDER BY p.created_at DESC
     `);
 
-    console.log(`\nTim thay ${posts.length} bai viet co anh can dong bo vector.`);
+    console.log(`Tim thay ${posts.length} bai viet can dong bo vector.`);
 
     let successCount = 0;
     let skipCount = 0;
