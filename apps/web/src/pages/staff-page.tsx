@@ -7,6 +7,8 @@ import {
   Building2,
   Calendar,
   CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
   Clock3,
   ClipboardCheck,
   FileText,
@@ -18,6 +20,7 @@ import {
   Layers3,
   LoaderCircle,
   MapPin,
+  Package,
   PackageCheck,
   Plus,
   RefreshCw,
@@ -32,6 +35,9 @@ import {
 import {
   api,
   ApiError,
+  type ClaimHistoryResponse,
+  type ClaimStatus,
+  type CustodyIntakeContext,
   type CustodyRequest,
   type CustodyRequestListResponse,
   type CustodyRequestStatus,
@@ -88,6 +94,34 @@ const custodyStatusLabels: Record<CustodyRequestStatus, { label: string; icon: R
   INTAKED: { label: "Đã tiếp nhận", icon: <CheckCircle2 size={14} /> }
 };
 
+const claimActionLabels: Record<string, string> = {
+  CLAIM_CREATED: "Claim được tạo",
+  CONVERSATION_OPENED: "Mở trao đổi riêng",
+  CLAIM_ACCEPTED: "Claim được chấp nhận",
+  CLAIM_REJECTED: "Claim bị từ chối",
+  CLAIM_WITHDRAWN: "Claim được rút",
+  MESSAGE_SENT: "Gửi tin nhắn",
+  QUESTION_SENT: "Gửi câu hỏi xác minh",
+  ANSWER_SUBMITTED: "Trả lời câu hỏi xác minh",
+  MORE_INFO_REQUESTED: "Yêu cầu bổ sung thông tin",
+  VERIFICATION_ACCEPTED: "Xác minh đủ điều kiện gặp mặt",
+  VERIFICATION_DECLINED: "Từ chối claim sau xác minh",
+  VERIFICATION_DECISION_CORRECTED: "Điều chỉnh quyết định xác minh",
+  CUSTODY_ESCALATED: "Chuyển yêu cầu sang custody",
+  STAFF_CUSTODY_VERIFIED: "Staff ghi nhận kết quả xác minh",
+  DIRECT_RETURN_COMPLETED: "Ghi nhận hoàn trả trực tiếp",
+  PRIVATE_EVIDENCE_UPLOADED: "Thêm bằng chứng riêng"
+};
+
+const claimStatusLabels: Record<ClaimStatus, string> = {
+  PENDING: "Chờ Finder",
+  CONVERSATION_OPEN: "Đang trao đổi",
+  NEED_MORE_INFO: "Cần thêm thông tin",
+  ACCEPTED: "Đủ điều kiện gặp mặt",
+  REJECTED: "Đã từ chối",
+  CANCELLED: "Đã đóng"
+};
+
 const emptyFilters = { q: "", status: "", handoverPointId: "", overdue: false };
 const emptyRejectForm = { reason: "" };
 
@@ -131,7 +165,36 @@ function ProofImage({ proofId, onPreview, ...props }: ImgHTMLAttributes<HTMLImag
 
 function Pagination({ page, pageSize, total, busy, onPage }: { page: number; pageSize: number; total: number; busy: boolean; onPage: (page: number) => void }) {
   const pages = Math.max(1, Math.ceil(total / pageSize));
-  return <nav className="warehouse-pagination" aria-label="Phân trang"><button type="button" className="secondary-button" disabled={busy || page <= 1} onClick={() => onPage(page - 1)}>Trước</button><span>{page} / {pages} · {total} mục</span><button type="button" className="secondary-button" disabled={busy || page >= pages} onClick={() => onPage(page + 1)}>Sau</button></nav>;
+  return (
+    <nav className="warehouse-pagination" aria-label="Phân trang">
+      <div className="warehouse-pagination__info">
+        <span>Trang <strong>{page}</strong> / <strong>{pages}</strong></span>
+        <span className="warehouse-pagination__badge">{total} mục</span>
+      </div>
+      <div className="warehouse-pagination__actions">
+        <button
+          type="button"
+          className="secondary-button"
+          disabled={busy || page <= 1}
+          onClick={() => onPage(page - 1)}
+          style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
+        >
+          <ChevronLeft size={16} />
+          <span>Trước</span>
+        </button>
+        <button
+          type="button"
+          className="secondary-button"
+          disabled={busy || page >= pages}
+          onClick={() => onPage(page + 1)}
+          style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
+        >
+          <span>Sau</span>
+          <ChevronRight size={16} />
+        </button>
+      </div>
+    </nav>
+  );
 }
 
 function isOverdue(item: WarehouseItem) {
@@ -159,6 +222,335 @@ function ItemMeta({ label, value }: { label: string; value: ReactNode }) {
   );
 }
 
+/* ─────────────── Custody Request Detail Modal ─────────────── */
+
+function CustodyDetailModal({
+  request,
+  catalog,
+  onClose,
+  onIntake,
+  onReject
+}: {
+  request: CustodyRequest;
+  catalog: WarehouseCatalog | null;
+  onClose: () => void;
+  onIntake: (req: CustodyRequest) => void;
+  onReject: (req: CustodyRequest) => void;
+}) {
+  const modalRef = useRef<HTMLDivElement>(null);
+  useModalFocus(modalRef, true, onClose);
+
+  const [loading, setLoading] = useState(true);
+  const [claimHistory, setClaimHistory] = useState<ClaimHistoryResponse | null>(null);
+  const [claimHistoryError, setClaimHistoryError] = useState("");
+  const [intakeContext, setIntakeContext] = useState<CustodyIntakeContext | null>(null);
+  const [contextError, setContextError] = useState("");
+
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    setClaimHistory(null);
+    setClaimHistoryError("");
+    setIntakeContext(null);
+    setContextError("");
+
+    const promises: Promise<unknown>[] = [
+      api.getCustodyIntakeContext(request.id).then((ctx) => {
+        if (active) setIntakeContext(ctx);
+      }).catch((err) => {
+        if (active) setContextError(err instanceof Error ? err.message : "Không tải được bài đăng");
+      })
+    ];
+
+    if (request.claimId) {
+      promises.push(
+        api.getClaimHistory(request.claimId).then((history) => {
+          if (active) setClaimHistory(history);
+        }).catch((err) => {
+          if (active) setClaimHistoryError(err instanceof Error ? err.message : "Không tải được lịch sử claim");
+        })
+      );
+    }
+
+    Promise.allSettled(promises).finally(() => {
+      if (active) setLoading(false);
+    });
+
+    return () => { active = false; };
+  }, [request.id, request.claimId]);
+
+  const statusCfg = custodyStatusLabels[request.status];
+
+  useEffect(() => {
+    const overflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = overflow; };
+  }, []);
+
+  return (
+    <div className="custody-modal-overlay warehouse-detail-overlay" onClick={onClose}>
+      <div
+        ref={modalRef}
+        tabIndex={-1}
+        className="warehouse-detail-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="custody-detail-title"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <header className="warehouse-detail-modal__header">
+          <span className="panel-icon-badge" style={{ background: "#eff6ff", color: "#2563eb" }}>
+            <ShieldCheck size={20} />
+          </span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <h2 id="custody-detail-title">
+              Chi tiết yêu cầu bàn giao #{request.id.slice(0, 8)}
+            </h2>
+            <p style={{ margin: "2px 0 0", fontSize: "0.82rem", color: "#64748b" }}>
+              Tạo lúc {formatDateTime(request.createdAt)} · Hình thức: {request.intakeType === "CUSTODY_TRANSFER" ? "Bàn giao trực tuyến" : "Walk-in tại quầy"}
+            </p>
+          </div>
+          <button type="button" className="close-btn" aria-label="Đóng chi tiết" title="Đóng chi tiết" onClick={onClose}>
+            <X size={20} />
+          </button>
+        </header>
+
+        <div className="warehouse-detail-modal__body">
+          {/* CỘT TRÁI: THÔNG TIN VẬT PHẨM & BÀN GIAO */}
+          <div className="warehouse-selected-summary">
+            <div className="summary-header">
+              <span className={`warehouse-status warehouse-status--${request.status === "PENDING" ? "received" : request.status === "ACCEPTED" ? "stored" : request.status === "INTAKED" ? "claimed" : "expired"}`}>
+                {statusCfg?.icon}
+                <span>{statusCfg?.label ?? request.status}</span>
+              </span>
+              <code className="code-badge">#{request.id.slice(0, 8)}</code>
+            </div>
+
+            <h3>{request.post?.title ?? intakeContext?.post.title ?? request.photoSource?.title ?? "Bàn giao vật phẩm tìm thấy"}</h3>
+
+            {intakeContext?.images && intakeContext.images.length > 0 ? (
+              <WarehouseImageGallery images={intakeContext.images} />
+            ) : (
+              <WarehouseImageView
+                image={
+                  request.post?.thumbnailId
+                    ? { id: request.post.thumbnailId, provenance: "SOURCE_POST" }
+                    : request.photoSource
+                    ? { id: request.photoSource.imageId, provenance: "CONTACT_PHOTO" }
+                    : null
+                }
+              />
+            )}
+            {contextError && <p className="field-error" role="alert">{contextError}</p>}
+
+            <h4>Mô tả vật phẩm bài đăng</h4>
+            <p className="summary-desc">
+              {intakeContext?.post.description ?? "Không có mô tả chi tiết."}
+            </p>
+
+            {request.reason && (
+              <>
+                <h4>Lý do / Ghi chú bàn giao</h4>
+                <p className="summary-desc" style={{ fontStyle: "italic", color: "#475569" }}>
+                  "{request.reason}"
+                </p>
+              </>
+            )}
+
+            {request.rejectionReason && (
+              <div style={{ margin: "14px 0", padding: "12px 14px", background: "#fef2f2", border: "1px solid #fecaca", borderRadius: "8px", color: "#991b1b" }}>
+                <strong>Lý do từ chối:</strong> {request.rejectionReason}
+              </div>
+            )}
+
+            <dl className="warehouse-detail-meta">
+              <ItemMeta
+                label="Danh mục"
+                value={
+                  catalog?.categories.find((c) => c.id === intakeContext?.post.categoryId)?.name ??
+                  "Chưa ghi nhận"
+                }
+              />
+              <ItemMeta label="Người bàn giao" value={request.requester.fullName ?? "Không rõ"} />
+              <ItemMeta
+                label="Liên hệ Finder"
+                value={intakeContext?.post.finderContact ?? "Chưa có số liên hệ"}
+              />
+              <ItemMeta
+                label="Điểm tiếp nhận"
+                value={request.handoverPoint?.name ?? "Tại quầy"}
+              />
+              <ItemMeta
+                label="Địa chỉ điểm nhận"
+                value={request.handoverPoint?.address ?? "Chưa ghi nhận"}
+              />
+              <ItemMeta
+                label="Vị trí nhặt được"
+                value={
+                  [
+                    catalog?.areas.find((a) => a.id === intakeContext?.post.areaId)?.name,
+                    catalog?.buildings.find((b) => b.id === intakeContext?.post.buildingId)?.name,
+                    intakeContext?.post.roomText
+                  ]
+                    .filter(Boolean)
+                    .join(" · ") || "Chưa ghi nhận"
+                }
+              />
+              <ItemMeta
+                label="Hình thức"
+                value={request.intakeType === "CUSTODY_TRANSFER" ? "Online (Bàn giao trực tuyến)" : "Walk-in (Tại quầy)"}
+              />
+              <ItemMeta label="Gửi yêu cầu lúc" value={formatDateTime(request.createdAt)} />
+              {request.confirmedHandoverAt && (
+                <ItemMeta label="Hẹn bàn giao lúc" value={formatDateTime(request.confirmedHandoverAt)} />
+              )}
+              {request.requestedIntakeAt && (
+                <ItemMeta label="Giờ Finder đề xuất" value={formatDateTime(request.requestedIntakeAt)} />
+              )}
+              {request.handler && (
+                <ItemMeta label="Nhân viên xử lý" value={request.handler.fullName ?? "Staff"} />
+              )}
+            </dl>
+
+            <div className="summary-action-bar" style={{ display: "flex", gap: "10px", marginTop: "16px", flexWrap: "wrap" }}>
+              {["PENDING", "ACCEPTED"].includes(request.status) && (
+                <>
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    style={{ color: "#dc2626", borderColor: "#fecaca" }}
+                    onClick={() => onReject(request)}
+                  >
+                    <XCircle size={16} /> Từ chối tiếp nhận
+                  </button>
+                  <button
+                    type="button"
+                    className="primary-button"
+                    onClick={() => onIntake(request)}
+                  >
+                    <PackageCheck size={16} /> Tiếp nhận vật phẩm vào kho
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* CỘT PHẢI: LỊCH SỬ CLAIM & XÁC MINH */}
+          <div className="warehouse-log-list">
+            <div className="admin-list-heading" style={{ marginBottom: "16px" }}>
+              <div>
+                <p className="eyebrow">XÁC MINH & ĐỐI CHIẾU</p>
+                <h2 style={{ fontSize: "1.15rem", display: "flex", alignItems: "center", gap: "8px" }}>
+                  <ShieldCheck size={18} color="#2563eb" />
+                  Lịch sử Claim & Xác minh
+                </h2>
+                {request.claimId ? (
+                  <p style={{ margin: "2px 0 0", fontSize: "0.8rem", color: "#64748b" }}>
+                    Mã Claim: <code>#{request.claimId.slice(0, 8)}</code>
+                  </p>
+                ) : (
+                  <p style={{ margin: "2px 0 0", fontSize: "0.8rem", color: "#64748b" }}>
+                    Tiếp nhận trực tiếp / không qua claim
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {loading && (
+              <div className="loading-inline" style={{ padding: "20px 0" }}>
+                <LoaderCircle className="spin-icon" size={18} /> Đang tải dữ liệu lịch sử xác minh...
+              </div>
+            )}
+
+            {claimHistoryError && (
+              <div className="warehouse-log-error" role="alert" style={{ marginBottom: "12px" }}>
+                <p className="field-error">{claimHistoryError}</p>
+              </div>
+            )}
+
+            {!request.claimId && !loading && (
+              <div style={{ padding: "24px 16px", textAlign: "center", background: "#f8fafc", borderRadius: "8px", border: "1px dashed #cbd5e1" }}>
+                <Info size={28} color="#64748b" style={{ margin: "0 auto 8px" }} />
+                <p style={{ margin: 0, fontSize: "0.9rem", fontWeight: 600, color: "#334155" }}>
+                  Yêu cầu bàn giao trực tiếp tại quầy
+                </p>
+                <p style={{ margin: "4px 0 0", fontSize: "0.8rem", color: "#64748b" }}>
+                  Yêu cầu này không thông qua luồng claim đối chiếu giữa người mất và người nhặt.
+                </p>
+              </div>
+            )}
+
+            {request.claimId && !loading && claimHistory && (
+              <>
+                {claimHistory.events.length === 0 ? (
+                  <div style={{ padding: "20px 16px", textAlign: "center", color: "#64748b", fontStyle: "italic" }}>
+                    Chưa có sự kiện nào được ghi nhận cho claim này.
+                  </div>
+                ) : (
+                  <div className="timeline-log">
+                    {claimHistory.events.map((event) => (
+                      <article key={event.id} className="timeline-log__item">
+                        <div className="timeline-log__marker" />
+                        <div className="timeline-log__content">
+                          <strong style={{ fontSize: "0.9rem", color: "#0f172a" }}>
+                            {claimActionLabels[event.action] ?? event.action}
+                          </strong>
+                          <span className="timeline-log__meta">
+                            {event.actor} • {formatDateTime(event.createdAt)}
+                          </span>
+
+                          {(event.fromStatus || event.toStatus) && (
+                            <p style={{ margin: "4px 0 2px", fontSize: "0.82rem", color: "#2563eb", fontWeight: 600 }}>
+                              {event.fromStatus ? claimStatusLabels[event.fromStatus] ?? event.fromStatus : "Bắt đầu"} → {event.toStatus ? claimStatusLabels[event.toStatus] ?? event.toStatus : "—"}
+                            </p>
+                          )}
+
+                          {event.metadata?.decision && (
+                            <p className="timeline-log__notes" style={{ margin: "4px 0 2px" }}>
+                              <strong>Quyết định:</strong> {event.metadata.decision}
+                            </p>
+                          )}
+
+                          {event.metadata?.reason && (
+                            <p className="timeline-log__notes" style={{ margin: "4px 0 2px" }}>
+                              <strong>Lý do:</strong> {event.metadata.reason}
+                            </p>
+                          )}
+
+                          {event.metadata?.communicationOnly && (
+                            <p style={{ margin: "4px 0 2px", fontSize: "0.78rem", color: "#64748b", fontStyle: "italic" }}>
+                              (Đây là quyết định trao đổi/gặp mặt, không xác nhận quyền sở hữu)
+                            </p>
+                          )}
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+
+        <div className="custody-modal-actions" style={{ padding: "14px 24px", borderTop: "1px solid #e2e8f0", background: "#f8fafc" }}>
+          <button type="button" className="secondary-button" onClick={onClose}>
+            Đóng
+          </button>
+          {["PENDING", "ACCEPTED"].includes(request.status) && (
+            <button
+              type="button"
+              className="primary-button"
+              onClick={() => onIntake(request)}
+            >
+              <PackageCheck size={16} /> Tiếp nhận vật phẩm
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ─────────────── Custody Queue Tab ─────────────── */
 
 function CustodyQueueTab({
@@ -177,24 +569,53 @@ function CustodyQueueTab({
   pendingAction: PendingAction;
   error: string;
   notice: string;
-  onRefreshCustody: (status?: string, page?: number) => Promise<void>;
+  onRefreshCustody: (filters?: { status?: string; handoverPointId?: string; q?: string }, page?: number) => Promise<void>;
   onNotice: (msg: string) => void;
   onError: (msg: string) => void;
   setPendingAction: (action: PendingAction) => void;
 }) {
   const [rejectModal, setRejectModal] = useState<CustodyRequest | null>(null);
   const [intakeModal, setIntakeModal] = useState<CustodyRequest | null>(null);
+  const [detailModal, setDetailModal] = useState<CustodyRequest | null>(null);
   const [walkInModalOpen, setWalkInModalOpen] = useState(false);
   const [rejectForm, setRejectForm] = useState(emptyRejectForm);
-  const [statusFilter, updateStatusFilter] = useState<string>("ALL");
-  function setStatusFilter(status: string) { updateStatusFilter(status); void onRefreshCustody(status, 1); }
+  const [custodyFilters, setCustodyFilters] = useState<{ status: string; handoverPointId: string; q: string }>({
+    status: "ALL",
+    handoverPointId: "",
+    q: ""
+  });
+
+  const isCustodyFirstMount = useRef(true);
+  useEffect(() => {
+    if (isCustodyFirstMount.current) {
+      isCustodyFirstMount.current = false;
+      return;
+    }
+    const timer = setTimeout(() => {
+      void onRefreshCustody(custodyFilters, 1);
+    }, 280);
+    return () => clearTimeout(timer);
+  }, [custodyFilters.q]);
+
+  function updateCustodyFilter<K extends keyof typeof custodyFilters>(key: K, value: typeof custodyFilters[K]) {
+    const next = { ...custodyFilters, [key]: value };
+    setCustodyFilters(next);
+    if (key !== "q") {
+      void onRefreshCustody(next, 1);
+    }
+  }
 
   const filteredRequests = useMemo(() => {
     if (!custodyData?.items) return [];
     return custodyData.items;
-  }, [custodyData, statusFilter]);
+  }, [custodyData]);
 
   const [createdWalkInItem, setCreatedWalkInItem] = useState<WarehouseItem | null>(null);
+
+  function submitCustodyFilters(event: FormEvent) {
+    event.preventDefault();
+    void onRefreshCustody(custodyFilters, 1);
+  }
 
   async function submitReject(event: FormEvent) {
     event.preventDefault();
@@ -207,7 +628,7 @@ function CustodyQueueTab({
       onNotice("Đã từ chối yêu cầu bàn giao");
       setRejectModal(null);
       setRejectForm(emptyRejectForm);
-      await onRefreshCustody();
+      await onRefreshCustody(custodyFilters);
     } catch (reason) {
       onError(messageOf(reason, "Không thể từ chối yêu cầu"));
     } finally {
@@ -218,7 +639,7 @@ function CustodyQueueTab({
   return (
     <>
       {/* Stats summary banner */}
-      <div className="admin-stats warehouse-stats" aria-label="Thống kê custody">
+      <div className="admin-stats warehouse-stats" aria-label="Thống kê hàng đợi bàn giao">
         <StatCard icon={<Clock3 size={20} />} value={(custodyData?.counts.PENDING ?? 0) + (custodyData?.counts.ACCEPTED ?? 0)} label="Chờ tiếp nhận" tone="orange" />
         <StatCard icon={<CheckCircle2 size={20} />} value={custodyData?.counts.INTAKED ?? 0} label="Đã tiếp nhận" tone="green" />
         <StatCard icon={<XCircle size={20} />} value={(custodyData?.counts.REJECTED ?? 0) + (custodyData?.counts.CANCELLED ?? 0)} label="Từ chối / Hủy" tone="red" />
@@ -241,127 +662,201 @@ function CustodyQueueTab({
 
       {/* Main Custody Queue Section - Spans Full Width */}
       <section className="warehouse-main custody-queue-full">
-        <div className="custody-toolbar">
+        <div className="custody-toolbar" style={{ marginBottom: "16px" }}>
           <div className="admin-list-heading">
-            <div>
-              <p className="eyebrow">HÀNG ĐỜI BÀN GIAO</p>
-              <h2>Yêu cầu Custody ({custodyData?.total ?? 0})</h2>
-            </div>
+            <h2 style={{ fontSize: "1.25rem", fontWeight: 800, margin: 0, color: "#0f172a" }}>HÀNG ĐỜI BÀN GIAO</h2>
           </div>
 
-          <div className="custody-toolbar-right">
-            {/* Filter chips */}
-            <div className="custody-filter-chips">
-              <button type="button" className={`chip ${statusFilter === "ALL" ? "chip--active" : ""}`} onClick={() => setStatusFilter("ALL")}>Tất cả</button>
-              <button type="button" className={`chip ${statusFilter === "AWAITING_INTAKE" ? "chip--active" : ""}`} onClick={() => setStatusFilter("AWAITING_INTAKE")}>Chờ tiếp nhận ({(custodyData?.counts.PENDING ?? 0) + (custodyData?.counts.ACCEPTED ?? 0)})</button>
-              <button type="button" className={`chip ${statusFilter === "INTAKED" ? "chip--active" : ""}`} onClick={() => setStatusFilter("INTAKED")}>Đã tiếp nhận ({custodyData?.counts.INTAKED ?? 0})</button>
-            </div>
-
-            {/* Walk-in Intake Trigger Button */}
-            <button
-              type="button"
-              className="primary-button add-walkin-btn"
-              onClick={() => setWalkInModalOpen(true)}
-            >
-              <Plus size={16} />
-              <span>Tiếp nhận Walk-in (Tại quầy)</span>
-            </button>
-          </div>
+          <button
+            type="button"
+            className="primary-button add-walkin-btn"
+            onClick={() => setWalkInModalOpen(true)}
+          >
+            <Plus size={16} />
+            <span>Tiếp nhận Walk-in (Tại quầy)</span>
+          </button>
         </div>
 
-        {custodyData && <Pagination page={custodyData.page} pageSize={custodyData.pageSize} total={custodyData.total} busy={Boolean(pendingAction)} onPage={page => void onRefreshCustody(statusFilter, page)} />}
-        <div className="custody-request-list">
+        {/* Bộ lọc và tìm kiếm đồng bộ với Kho tài sản */}
+        <form className="warehouse-filter-bar" onSubmit={submitCustodyFilters}>
+          <label className="input-field search-field">
+            <span>Tìm kiếm yêu cầu</span>
+            <div className="input-with-icon" style={{ position: "relative" }}>
+              <Search size={16} />
+              <input
+                aria-label="Tìm yêu cầu bàn giao"
+                value={custodyFilters.q}
+                onChange={(event) => updateCustodyFilter("q", event.target.value)}
+                placeholder="Tên người gửi, tiêu đề, mã đơn..."
+                style={{ paddingRight: custodyFilters.q ? "32px" : undefined }}
+              />
+              {custodyFilters.q && (
+                <button
+                  type="button"
+                  aria-label="Xóa từ khóa tìm kiếm"
+                  onClick={() => updateCustodyFilter("q", "")}
+                  style={{
+                    position: "absolute",
+                    right: "8px",
+                    top: "50%",
+                    transform: "translateY(-50%)",
+                    background: "transparent",
+                    border: "none",
+                    color: "#94a3b8",
+                    cursor: "pointer",
+                    padding: "4px",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center"
+                  }}
+                >
+                  <X size={14} />
+                </button>
+              )}
+            </div>
+          </label>
+
+          <label className="input-field">
+            <span>Trạng thái</span>
+            <select
+              value={custodyFilters.status}
+              onChange={(event) => updateCustodyFilter("status", event.target.value)}
+            >
+              <option value="ALL">Tất cả trạng thái</option>
+              <option value="AWAITING_INTAKE">Chờ tiếp nhận ({(custodyData?.counts.PENDING ?? 0) + (custodyData?.counts.ACCEPTED ?? 0)})</option>
+              <option value="PENDING">Chờ duyệt (PENDING)</option>
+              <option value="ACCEPTED">Đã duyệt (ACCEPTED)</option>
+              <option value="INTAKED">Đã tiếp nhận (INTAKED)</option>
+              <option value="REJECTED">Đã từ chối (REJECTED)</option>
+              <option value="CANCELLED">Đã hủy (CANCELLED)</option>
+            </select>
+          </label>
+
+          <label className="input-field">
+            <span>Điểm bàn giao</span>
+            <select
+              value={custodyFilters.handoverPointId}
+              onChange={(event) => updateCustodyFilter("handoverPointId", event.target.value)}
+            >
+              <option value="">Tất cả điểm</option>
+              {catalog?.handoverPoints.map((point) => (
+                <option key={point.id} value={point.id}>{point.name}</option>
+              ))}
+            </select>
+          </label>
+
+          <button type="submit" className="secondary-button search-btn">
+            <Filter size={16} /> Lọc
+          </button>
+        </form>
+
+        <div className="custody-request-list warehouse-item-list">
           {filteredRequests.map((request) => {
             const statusCfg = custodyStatusLabels[request.status];
             return (
-              <article key={request.id} className={`custody-request-card custody-request-card--${request.status.toLowerCase()}`}>
-                <div className="custody-request-card__header">
-                  <div className="custody-request-card__badges">
-                    <span className={`custody-status custody-status--${request.status.toLowerCase()}`}>
+              <article
+                key={request.id}
+                className="warehouse-item-card warehouse-item-card--interactive"
+                style={{
+                  borderLeftColor:
+                    request.status === "PENDING"
+                      ? "#f97316"
+                      : request.status === "ACCEPTED"
+                      ? "#2563eb"
+                      : request.status === "INTAKED"
+                      ? "#16a34a"
+                      : "#ef4444"
+                }}
+                onClick={() => setDetailModal(request)}
+              >
+                <div
+                  className="warehouse-card-thumbnail"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setDetailModal(request);
+                  }}
+                  title="Nhấp để xem chi tiết & lịch sử claim"
+                >
+                  <WarehouseImageView
+                    image={
+                      request.post?.thumbnailId
+                        ? { id: request.post.thumbnailId, provenance: "SOURCE_POST" }
+                        : request.photoSource
+                        ? { id: request.photoSource.imageId, provenance: "CONTACT_PHOTO" }
+                        : null
+                    }
+                    expandable={false}
+                  />
+                </div>
+
+                <div className="warehouse-card-body">
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "6px", flexWrap: "wrap" }}>
+                    <span
+                      className={`warehouse-status warehouse-status--${
+                        request.status === "PENDING"
+                          ? "received"
+                          : request.status === "ACCEPTED"
+                          ? "stored"
+                          : request.status === "INTAKED"
+                          ? "claimed"
+                          : "expired"
+                      }`}
+                    >
                       {statusCfg?.icon}
                       <span>{statusCfg?.label ?? request.status}</span>
                     </span>
-                    <span className="custody-type-pill">
-                      {request.intakeType === "CUSTODY_TRANSFER" ? "Bàn giao trực tuyến" : "Walk-in tại quầy"}
-                    </span>
-                  </div>
-                  <span className="custody-request-id">#{request.id.slice(0, 8)}</span>
-                </div>
-
-                <div className="custody-request-card__body">
-                  <div className="custody-item-preview">
-                    <WarehouseImageView image={request.post?.thumbnailId ? { id: request.post.thumbnailId, provenance: "SOURCE_POST" }
-                      : request.photoSource ? { id: request.photoSource.imageId, provenance: "CONTACT_PHOTO" } : null} />
-                    <h3>{request.post?.title ?? request.photoSource?.title ?? "Bàn giao vật phẩm tìm thấy"}</h3>
-                    {request.reason && <p className="custody-reason">"{request.reason}"</p>}
+                    <span style={{ fontSize: "0.75rem", fontWeight: 700, color: "#64748b" }}>#{request.id.slice(0, 8)}</span>
                   </div>
 
-                  <div className="custody-meta-grid">
-                    <div className="custody-meta-item">
-                      <User size={14} />
-                      <span><strong>Người gửi:</strong> {request.requester.fullName ?? "Không rõ"}</span>
-                    </div>
-                    {request.handoverPoint && (
-                      <div className="custody-meta-item">
-                        <MapPin size={14} />
-                        <span><strong>Điểm bàn giao:</strong> {request.handoverPoint.name}</span>
-                      </div>
-                    )}
-                    {request.claimId && (
-                      <div className="custody-meta-item">
-                        <History size={14} />
-                        <Link to={`/claims/${request.claimId}/history`}>Mở lịch sử claim / xác minh</Link>
-                      </div>
-                    )}
-                    <div className="custody-meta-item">
-                      <Calendar size={14} />
-                      <span><strong>Tạo lúc:</strong> {formatDateTime(request.createdAt)}</span>
-                    </div>
+                  <h2
+                    title={request.post?.title ?? request.photoSource?.title ?? "Bàn giao vật phẩm tìm thấy"}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setDetailModal(request);
+                    }}
+                  >
+                    {request.post?.title ?? request.photoSource?.title ?? "Bàn giao vật phẩm tìm thấy"}
+                  </h2>
+
+                  {request.reason && (
+                    <p style={{ margin: 0, fontSize: "0.8rem", color: "#64748b", fontStyle: "italic", overflow: "hidden", textOverflow: "ellipsis", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>
+                      "{request.reason}"
+                    </p>
+                  )}
+
+                  <dl className="warehouse-card-meta">
+                    <ItemMeta label="Người gửi" value={request.requester.fullName ?? "Không rõ"} />
+                    <ItemMeta label="Điểm nhận" value={request.handoverPoint?.name ?? "Tại quầy"} />
+                    <ItemMeta label="Hình thức" value={request.intakeType === "CUSTODY_TRANSFER" ? "Online" : "Walk-in"} />
+                    <ItemMeta label="Tạo lúc" value={<time dateTime={request.createdAt}>{formatDateTime(request.createdAt)}</time>} />
                     {request.confirmedHandoverAt && (
-                      <div className="custody-meta-item">
-                        <Clock3 size={14} />
-                        <span><strong>Hẹn bàn giao:</strong> {formatDateTime(request.confirmedHandoverAt)}</span>
-                      </div>
-                    )}
-                    {request.requestedIntakeAt && (
-                      <div className="custody-meta-item">
-                        <Clock3 size={14} />
-                        <span><strong>Giờ Finder dự kiến:</strong> {formatDateTime(request.requestedIntakeAt)}</span>
-                      </div>
-                    )}
-                    {request.handler && (
-                      <div className="custody-meta-item">
-                        <UserCheck size={14} />
-                        <span><strong>Xử lý bởi:</strong> {request.handler.fullName}</span>
-                      </div>
+                      <ItemMeta label="Hẹn nhận" value={<time dateTime={request.confirmedHandoverAt}>{formatDateTime(request.confirmedHandoverAt)}</time>} />
                     )}
                     {request.rejectionReason && (
-                      <div className="custody-meta-item custody-meta-item--danger">
-                        <XCircle size={14} />
-                        <span><strong>Lý do từ chối:</strong> {request.rejectionReason}</span>
-                      </div>
+                      <ItemMeta label="Từ chối" value={<span style={{ color: "#dc2626" }}>{request.rejectionReason}</span>} />
                     )}
-                  </div>
+                  </dl>
                 </div>
 
-                <div className="custody-request-card__actions">
+                <div className="warehouse-card-actions" onClick={(e) => e.stopPropagation()}>
                   {request.status === "PENDING" && (
                     <>
                       <button
                         type="button"
-                        className="primary-button custody-action-btn"
-                        onClick={() => setIntakeModal(request)}
-                        disabled={Boolean(pendingAction)}
-                      >
-                        <PackageCheck size={16} /> Tiếp nhận vật phẩm
-                      </button>
-                      <button
-                        type="button"
-                        className="secondary-button custody-action-btn custody-action-btn--danger"
+                        className="secondary-button warehouse-select-button"
+                        style={{ color: "#dc2626", borderColor: "#fecaca" }}
                         onClick={() => { setRejectForm(emptyRejectForm); setRejectModal(request); }}
                         disabled={Boolean(pendingAction)}
                       >
                         <XCircle size={15} /> Từ chối
+                      </button>
+                      <button
+                        type="button"
+                        className="primary-button warehouse-select-button"
+                        onClick={() => setIntakeModal(request)}
+                        disabled={Boolean(pendingAction)}
+                      >
+                        <PackageCheck size={16} /> Tiếp nhận
                       </button>
                     </>
                   )}
@@ -370,21 +865,33 @@ function CustodyQueueTab({
                     <>
                       <button
                         type="button"
-                        className="primary-button custody-action-btn custody-action-btn--success"
-                        onClick={() => setIntakeModal(request)}
-                        disabled={Boolean(pendingAction)}
-                      >
-                        <PackageCheck size={16} /> Tiếp nhận vật phẩm
-                      </button>
-                      <button
-                        type="button"
-                        className="secondary-button custody-action-btn custody-action-btn--danger"
+                        className="secondary-button warehouse-select-button"
+                        style={{ color: "#dc2626", borderColor: "#fecaca" }}
                         onClick={() => { setRejectForm(emptyRejectForm); setRejectModal(request); }}
                         disabled={Boolean(pendingAction)}
                       >
-                        <XCircle size={15} /> Từ chối tiếp nhận
+                        <XCircle size={15} /> Từ chối
+                      </button>
+                      <button
+                        type="button"
+                        className="primary-button warehouse-select-button primary-button--success"
+                        onClick={() => setIntakeModal(request)}
+                        disabled={Boolean(pendingAction)}
+                      >
+                        <PackageCheck size={16} /> Tiếp nhận
                       </button>
                     </>
+                  )}
+
+                  {!["PENDING", "ACCEPTED"].includes(request.status) && (
+                    <button
+                      type="button"
+                      className="secondary-button warehouse-select-button"
+                      style={{ gridColumn: "1 / -1" }}
+                      onClick={() => setDetailModal(request)}
+                    >
+                      <History size={16} /> Xem chi tiết & lịch sử
+                    </button>
                   )}
                 </div>
               </article>
@@ -394,11 +901,21 @@ function CustodyQueueTab({
           {!filteredRequests.length && (
             <div className="warehouse-empty">
               <Inbox size={48} className="empty-icon" />
-              <h3>Chưa có yêu cầu custody</h3>
+              <h3>Chưa có yêu cầu bàn giao</h3>
               <p>Hiện không có yêu cầu bàn giao nào phù hợp với bộ lọc.</p>
             </div>
           )}
         </div>
+
+        {custodyData && (
+          <Pagination
+            page={custodyData.page}
+            pageSize={custodyData.pageSize}
+            total={custodyData.total}
+            busy={Boolean(pendingAction)}
+            onPage={page => void onRefreshCustody(custodyFilters, page)}
+          />
+        )}
       </section>
 
       {walkInModalOpen && <WarehouseIntakeDialog catalog={catalog} onClose={() => setWalkInModalOpen(false)} onReceived={async item => {
@@ -452,7 +969,7 @@ function CustodyQueueTab({
             <div className="custody-modal__header">
               <span className="modal-badge modal-badge--red"><XCircle size={18} /></span>
               <div>
-                <h3>Từ chối yêu cầu Custody</h3>
+                <h3>Từ chối yêu cầu Bàn giao</h3>
                 <p>Từ chối yêu cầu từ người dùng <strong>{rejectModal.requester.fullName}</strong></p>
               </div>
               <button type="button" className="close-btn" aria-label="Đóng từ chối" disabled={Boolean(pendingAction)} onClick={() => setRejectModal(null)}><X size={18} /></button>
@@ -474,6 +991,23 @@ function CustodyQueueTab({
             </form>
           </AccessibleDialog>
         </div>
+      )}
+
+      {detailModal && (
+        <CustodyDetailModal
+          request={detailModal}
+          catalog={catalog}
+          onClose={() => setDetailModal(null)}
+          onIntake={(req) => {
+            setDetailModal(null);
+            setIntakeModal(req);
+          }}
+          onReject={(req) => {
+            setDetailModal(null);
+            setRejectForm(emptyRejectForm);
+            setRejectModal(req);
+          }}
+        />
       )}
 
       {intakeModal && <WarehouseIntakeDialog request={intakeModal} catalog={catalog} onClose={() => setIntakeModal(null)} onReceived={async () => {
@@ -509,6 +1043,25 @@ function WarehouseInventoryTab({
   onError: (msg: string) => void;
 }) {
   const [filters, setFilters] = useState(emptyFilters);
+  const isWarehouseFirstMount = useRef(true);
+  useEffect(() => {
+    if (isWarehouseFirstMount.current) {
+      isWarehouseFirstMount.current = false;
+      return;
+    }
+    const timer = setTimeout(() => {
+      void onRefresh(filters, 1);
+    }, 280);
+    return () => clearTimeout(timer);
+  }, [filters.q]);
+
+  function updateFilter<K extends keyof typeof emptyFilters>(key: K, value: typeof emptyFilters[K]) {
+    const next = { ...filters, [key]: value };
+    setFilters(next);
+    if (key !== "q") {
+      void onRefresh(next, 1);
+    }
+  }
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [logs, setLogs] = useState<WarehouseStorageLog[]>([]);
   const [logsError, setLogsError] = useState("");
@@ -862,23 +1415,46 @@ function WarehouseInventoryTab({
         <section className="warehouse-main">
           {/* Search and Filter bar */}
           <form className="warehouse-filter-bar" onSubmit={submitFilters}>
-            <label className="warehouse-check warehouse-overdue-filter"><input type="checkbox" checked={filters.overdue} onChange={event => setFilters({ ...filters, overdue: event.target.checked })} /> Quá hạn, không tạm giữ pháp lý</label>
             <label className="input-field search-field">
               <span>Tìm kiếm vật phẩm</span>
-              <div className="input-with-icon">
+              <div className="input-with-icon" style={{ position: "relative" }}>
                 <Search size={16} />
                 <input
                   aria-label="Tìm vật phẩm trong kho"
                   value={filters.q}
-                  onChange={(event) => setFilters({ ...filters, q: event.target.value })}
+                  onChange={(event) => updateFilter("q", event.target.value)}
                   placeholder="Tên vật phẩm, mô tả, mã kho..."
+                  style={{ paddingRight: filters.q ? "32px" : undefined }}
                 />
+                {filters.q && (
+                  <button
+                    type="button"
+                    aria-label="Xóa từ khóa tìm kiếm"
+                    onClick={() => updateFilter("q", "")}
+                    style={{
+                      position: "absolute",
+                      right: "8px",
+                      top: "50%",
+                      transform: "translateY(-50%)",
+                      background: "transparent",
+                      border: "none",
+                      color: "#94a3b8",
+                      cursor: "pointer",
+                      padding: "4px",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center"
+                    }}
+                  >
+                    <X size={14} />
+                  </button>
+                )}
               </div>
             </label>
 
             <label className="input-field">
               <span>Trạng thái</span>
-              <select value={filters.status} onChange={(event) => setFilters({ ...filters, status: event.target.value })}>
+              <select value={filters.status} onChange={(event) => updateFilter("status", event.target.value)}>
                 <option value="">Tất cả trạng thái</option>
                 {statusOptions.map((status) => (
                   <option key={status.value} value={status.value}>{status.label}</option>
@@ -888,7 +1464,7 @@ function WarehouseInventoryTab({
 
             <label className="input-field">
               <span>Điểm bàn giao</span>
-              <select value={filters.handoverPointId} onChange={(event) => setFilters({ ...filters, handoverPointId: event.target.value })}>
+              <select value={filters.handoverPointId} onChange={(event) => updateFilter("handoverPointId", event.target.value)}>
                 <option value="">Tất cả điểm</option>
                 {catalog?.handoverPoints.map((point) => (
                   <option key={point.id} value={point.id}>{point.name}</option>
@@ -896,28 +1472,42 @@ function WarehouseInventoryTab({
               </select>
             </label>
 
-            <button className="secondary-button search-btn">
+            <button type="submit" className="secondary-button search-btn">
               <Filter size={16} /> Lọc
             </button>
           </form>
 
           {/* Item List Grid */}
-          {dashboard && <Pagination page={dashboard.page} pageSize={dashboard.pageSize} total={dashboard.total} busy={Boolean(pendingAction)} onPage={page => void onRefresh(filters, page)} />}
           <div className="warehouse-item-list">
             {dashboard?.items.map((item) => (
-              <article className="warehouse-item-card" key={item.id}>
-                <WarehouseImageView image={item.thumbnail} />
+              <article
+                className="warehouse-item-card warehouse-item-card--interactive"
+                key={item.id}
+                onClick={() => selectItem(item)}
+              >
+                <div
+                  className="warehouse-card-thumbnail"
+                  onClick={(e) => { e.stopPropagation(); selectItem(item); }}
+                  title="Xem chi tiết vật phẩm"
+                >
+                  <WarehouseImageView image={item.thumbnail} expandable={false} />
+                </div>
                 <div className="warehouse-card-body">
                   <span className={`warehouse-status warehouse-status--${item.status.toLowerCase()}`}>
                     {statusLabel(item.status)}
                   </span>
-                  <h2 title={item.itemName}>{item.itemName}</h2>
+                  <h2
+                    title={item.itemName}
+                    onClick={(e) => { e.stopPropagation(); selectItem(item); }}
+                  >
+                    {item.itemName}
+                  </h2>
                   <dl className="warehouse-card-meta">
                     <ItemMeta label="Danh mục" value={item.category?.name ?? "Chưa ghi nhận"} />
                     <ItemMeta label="Tiếp nhận" value={<time dateTime={item.receivedAt}>{formatDateTime(item.receivedAt)}</time>} />
                   </dl>
                 </div>
-                <div className="warehouse-card-actions">
+                <div className="warehouse-card-actions" onClick={(e) => e.stopPropagation()}>
                   <button type="button" className="secondary-button warehouse-select-button" onClick={() => selectItem(item)}>
                     <History size={16} /> Xem chi tiết
                   </button>
@@ -938,6 +1528,16 @@ function WarehouseInventoryTab({
               </div>
             )}
           </div>
+
+          {dashboard && (
+            <Pagination
+              page={dashboard.page}
+              pageSize={dashboard.pageSize}
+              total={dashboard.total}
+              busy={Boolean(pendingAction)}
+              onPage={page => void onRefresh(filters, page)}
+            />
+          )}
         </section>
       </div>
 
@@ -1121,236 +1721,313 @@ function WarehouseInventoryTab({
       {returnTargetItem && (
         <div className="custody-modal-overlay" onClick={() => { if (!claimReviewBusy && !pendingAction && !uploadingProof) closeReturnModal(); }}>
           <AccessibleDialog
-            aria-label="Xác nhận trả hàng cho chủ sở hữu" onDismiss={closeReturnModal} busy={claimReviewBusy || Boolean(pendingAction) || uploadingProof}
+            aria-label="Xác nhận trả hàng cho chủ sở hữu"
+            onDismiss={closeReturnModal}
+            busy={claimReviewBusy || Boolean(pendingAction) || uploadingProof}
             className="custody-modal custody-modal--warehouse-return"
-            style={{ maxWidth: "760px", width: "95%", maxHeight: "90vh", display: "flex", flexDirection: "column" }}
+            style={{ maxWidth: "min(1180px, 95vw)", width: "min(1180px, 95vw)", maxHeight: "calc(100dvh - 36px)", padding: 0, overflow: "hidden", display: "flex", flexDirection: "column" }}
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="custody-modal__header" style={{ padding: "14px 20px", borderBottom: "1px solid #e2e8f0" }}>
-              <span className="modal-badge modal-badge--green"><UserCheck size={18} /></span>
-              <div style={{ flex: 1 }}>
-                <h3 style={{ margin: 0, fontSize: "1.05rem", fontWeight: 700 }}>Xác nhận trả hàng cho chủ sở hữu</h3>
-                <p style={{ margin: 0, fontSize: "0.82rem", color: "#64748b" }}>Vật phẩm: <strong style={{ color: "#0f172a" }}>{returnTargetItem.itemName}</strong></p>
+            <div className="custody-modal__header" style={{ padding: "16px 24px", borderBottom: "1px solid #e2e8f0", background: "#fff", display: "flex", alignItems: "center", gap: "12px", flexShrink: 0 }}>
+              <span className="modal-badge modal-badge--green"><UserCheck size={20} /></span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <h3 style={{ margin: 0, fontSize: "1.1rem", fontWeight: 700, color: "#0f172a" }}>Xác nhận trả hàng cho chủ sở hữu</h3>
+                <p style={{ margin: "2px 0 0", fontSize: "0.82rem", color: "#64748b" }}>
+                  Vật phẩm: <strong style={{ color: "#0f172a" }}>{returnTargetItem.itemName}</strong> · Mã lưu kho: <code style={{ background: "#f1f5f9", padding: "1px 6px", borderRadius: "4px", fontSize: "0.82rem" }}>{returnTargetItem.storageCode || "Chưa có"}</code>
+                </p>
               </div>
               <button type="button" className="close-btn" aria-label="Đóng trả hàng" disabled={claimReviewBusy || Boolean(pendingAction) || uploadingProof} onClick={closeReturnModal}><X size={18} /></button>
             </div>
 
-            <form noValidate className="admin-form modal-form" style={{ padding: "16px 20px", overflowY: "auto", flex: 1, display: "flex", flexDirection: "column", gap: "12px" }} onSubmit={submitReturn}>
-              <div className="staff-alert staff-alert--info" style={{ padding: "8px 12px", fontSize: "0.78rem", margin: 0, display: "flex", alignItems: "center", gap: "8px" }}>
-                <Info size={15} style={{ flexShrink: 0 }} />
-                <span>Người nhận có thể không có tài khoản hoặc không có claim trên hệ thống. Vui lòng kiểm tra giấy tờ tùy thân trước khi xác nhận; thông tin sẽ được lưu trong hồ sơ bàn giao riêng tư.</span>
-              </div>
-              {claimReviewsLoading && <p role="status">Đang kiểm tra claim của vật phẩm...</p>}
-              {claimReviewsError && <div>
-                <p className="form-error" role="alert">{claimReviewsError}</p>
-                <button type="button" className="secondary-button" disabled={claimReviewsLoading} onClick={() => { setClaimReviewsLoading(true); setClaimReviewsReady(false); setClaimReviewsError(""); setClaimReviewReload(previous => previous + 1); }}><RefreshCw size={17} />Thử lại kiểm tra claim</button>
-              </div>}
+            <form noValidate className="intake-dialog__body" style={{ padding: "20px 24px", overflowY: "auto", flex: 1, display: "flex", flexDirection: "column" }} onSubmit={submitReturn}>
+              <div className="warehouse-return-workspace">
+                {/* CỘT TRÁI: DỮ LIỆU ĐỐI CHIẾU, CHAT AI TRẢ HÀNG & BẰNG CHỨNG HÌNH ẢNH */}
+                <div className="warehouse-return-left">
+                  {/* Thẻ tóm tắt thông tin vật phẩm kho */}
+                  <div className="intake-card intake-card--source" style={{ background: "#f8fafc", border: "1px solid #cbd5e1", borderRadius: "10px", padding: "14px 16px" }}>
+                    <h4 className="intake-card__title" style={{ margin: "0 0 10px 0", fontSize: "0.92rem", fontWeight: 700, color: "#1e293b", display: "flex", alignItems: "center", gap: "8px" }}>
+                      <span className="intake-card__icon" style={{ color: "#16a34a", display: "inline-flex" }}><Package size={16} /></span>
+                      Hồ sơ vật phẩm bàn giao
+                    </h4>
+                    <dl className="intake-source-dl" style={{ display: "grid", gridTemplateColumns: "110px minmax(0, 1fr)", gap: "8px 12px", margin: 0, fontSize: "0.84rem" }}>
+                      <dt style={{ color: "#64748b", fontWeight: 500 }}>Tên vật phẩm</dt>
+                      <dd style={{ margin: 0, color: "#0f172a", fontWeight: 600 }}>{returnTargetItem.itemName}</dd>
 
-              <WarehouseConversationChat mode="RETURN" warehouseItemId={returnTargetItem.id} onExtraction={applyReturnConversationExtraction} disabled={claimReviewsLoading} />
+                      <dt style={{ color: "#64748b", fontWeight: 500 }}>Vị trí kho</dt>
+                      <dd style={{ margin: 0, color: "#0f172a" }}>{returnTargetItem.storageCode || "Chưa ghi nhận mã vị trí"}</dd>
 
-              <div className="warehouse-return-grid">
-                <label className="input-field" style={{ margin: 0 }}>
-                  <span>Họ và tên người nhận <strong className="required-star">*</strong></span>
-                  <input required minLength={2} maxLength={150} value={returnForm.receiverName} aria-invalid={Boolean(returnErrors.receiverName)} aria-describedby={returnErrors.receiverName ? "return-receiverName-error" : undefined} onChange={(event) => changeReturnText("receiverName", event.target.value)} onBlur={() => setReturnErrors(prev => ({ ...prev, receiverName: returnTextError("receiverName", returnForm.receiverName) }))} placeholder="Nhập họ và tên người nhận" />
-                  {returnFieldError("receiverName")}
-                </label>
-                <label className="input-field" style={{ margin: 0 }}>
-                  <span>Số điện thoại <strong className="required-star">*</strong></span>
-                  <input required type="tel" minLength={9} maxLength={20} value={returnForm.receiverPhone} aria-invalid={Boolean(returnErrors.receiverPhone)} aria-describedby={returnErrors.receiverPhone ? "return-receiverPhone-error" : undefined} onChange={(event) => changeReturnText("receiverPhone", event.target.value)} onBlur={() => setReturnErrors(prev => ({ ...prev, receiverPhone: returnTextError("receiverPhone", returnForm.receiverPhone) }))} placeholder="Nhập số điện thoại" />
-                  {returnFieldError("receiverPhone")}
-                </label>
-                <label className="input-field" style={{ margin: 0 }}>
-                  <span>Mã thẻ SV / CMND / CCCD <strong className="required-star">*</strong></span>
-                  <input required minLength={3} maxLength={100} value={returnForm.receiverIdentity} aria-invalid={Boolean(returnErrors.receiverIdentity)} aria-describedby={returnErrors.receiverIdentity ? "return-receiverIdentity-error" : undefined} onChange={(event) => changeReturnText("receiverIdentity", event.target.value)} onBlur={() => setReturnErrors(prev => ({ ...prev, receiverIdentity: returnTextError("receiverIdentity", returnForm.receiverIdentity) }))} placeholder="Nhập mã số giấy tờ" />
-                  {returnFieldError("receiverIdentity")}
-                </label>
-              </div>
-              {returnRecipients.length > 0 && (
-                <label className="input-field" style={{ margin: 0 }}>
-                  <span>Liên kết claim trực tuyến (không bắt buộc)</span>
-                  <select value={returnForm.claimId} disabled={claimReviewBusy} onChange={(event) => changeReturnClaim(event.target.value)}>
-                    <option value="">Trả trực tiếp, không có claim</option>
-                    {returnRecipients.map(recipient => <option key={recipient.claimId} value={recipient.claimId}>{recipient.fullName} · {recipient.verified ? "Đã xác minh" : "Chưa xác minh"} · {recipient.claimId.slice(0, 8)}</option>)}
-                  </select>
-                  {returnFieldError("claimId")}
-                  {returnFieldError("recipientId")}
-                </label>
-              )}
-              {returnRecipients.some(recipient => recipient.claimId === returnForm.claimId && !recipient.verified) && (
-                <section aria-label="Xác minh claim tại quầy">
-                  <h4>Xác minh quyền sở hữu tại quầy</h4>
-                  <p>{returnRecipients.find(recipient => recipient.claimId === returnForm.claimId)?.description}</p>
-                  <label className="input-field">
-                    <span>Nội dung đối chiếu</span>
-                    <textarea maxLength={1000} rows={3} value={claimReviewReason} onChange={event => setClaimReviewReason(event.target.value)} aria-invalid={Boolean(returnErrors.claimReviewReason)} placeholder="Đặc điểm riêng, phụ kiện hoặc thông tin đã đối chiếu; không ghi số giấy tờ tại đây" />
-                    {returnFieldError("claimReviewReason")}
-                  </label>
-                  <label className="warehouse-return-verification"><input type="checkbox" checked={claimReviewConfirmed} onChange={event => setClaimReviewConfirmed(event.target.checked)} />Tôi đã đối chiếu quyền sở hữu tại quầy</label>
-                  {returnFieldError("claimReviewConfirmed")}
-                  <button type="button" className="secondary-button" disabled={claimReviewBusy || claimReviewsLoading} onClick={() => void verifyReturnClaim()}><UserCheck size={17} />{claimReviewBusy ? "Đang xác minh..." : "Xác minh claim tại quầy"}</button>
-                </section>
-              )}
-              <div className="warehouse-return-grid">
-                <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-                  <label className="warehouse-return-verification"><input type="checkbox" required checked={returnVerified} aria-invalid={Boolean(returnErrors.verified)} aria-describedby={returnErrors.verified ? "return-verified-error" : undefined} onChange={event => { setReturnVerified(event.target.checked); setReturnErrors(prev => ({ ...prev, verified: "" })); }} />Tôi đã đối chiếu người nhận và bằng chứng bàn giao</label>
-                  {returnFieldError("verified")}
+                      <dt style={{ color: "#64748b", fontWeight: 500 }}>Tình trạng nhận</dt>
+                      <dd style={{ margin: 0, color: "#334155" }}>{returnTargetItem.conditionNotes || "Không có ghi chú lúc nhận"}</dd>
 
-                  <label className="input-field" style={{ margin: 0 }}>
-                    <span style={{ fontSize: "0.8rem" }}>Ghi chú bàn giao</span>
-                    <textarea maxLength={1000} value={returnForm.note} aria-invalid={Boolean(returnErrors.note)} aria-describedby={returnErrors.note ? "return-note-error" : undefined} onChange={(event) => changeReturnText("note", event.target.value)} rows={2} style={{ padding: "6px 10px", fontSize: "0.82rem", resize: "none" }} placeholder="Ghi chú tình trạng lúc giao (nếu có)..." />
-                    {returnFieldError("note")}
-                  </label>
-                </div>
+                      <dt style={{ color: "#64748b", fontWeight: 500 }}>Điểm bàn giao</dt>
+                      <dd style={{ margin: 0, color: "#334155" }}>{returnTargetItem.handoverPoint?.name || "Tại quầy"}</dd>
+                    </dl>
+                  </div>
 
-                <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-                  <span style={{ fontSize: "0.8rem", fontWeight: 600, color: "#334155" }}>Ảnh bằng chứng bàn giao <strong className="required-star">*</strong></span>
-
-                  <label
-                    style={{
-                      border: "2px dashed #cbd5e1",
-                      borderRadius: "8px",
-                      padding: "14px 12px",
-                      background: "#f8fafc",
-                      textAlign: "center",
-                      cursor: uploadingProof ? "not-allowed" : "pointer",
-                      display: "flex",
-                      flexDirection: "column",
-                      alignItems: "center",
-                      gap: "4px",
-                      transition: "all 0.2s"
-                    }}
-                  >
-                    <span style={{ color: "#2563eb", display: "flex", alignItems: "center" }}>
-                      {uploadingProof ? <LoaderCircle className="spin-icon" size={22} /> : <ImagePlus size={22} />}
+                  <div className="staff-alert staff-alert--info" style={{ padding: "10px 14px", fontSize: "0.8rem", margin: 0, display: "flex", alignItems: "flex-start", gap: "10px", borderRadius: "8px", background: "#eff6ff", border: "1px solid #bfdbfe", color: "#1e40af" }}>
+                    <Info size={16} style={{ flexShrink: 0, marginTop: "2px" }} />
+                    <span style={{ lineHeight: 1.45 }}>
+                      Vui lòng đối chiếu kỹ Thẻ sinh viên / CMND / CCCD trước khi trả hàng. Hồ sơ bàn giao và ảnh bằng chứng sẽ được lưu trữ bảo mật trong lịch sử giao dịch.
                     </span>
-                    <strong style={{ fontSize: "0.82rem", color: "#1e293b" }}>
-                      {uploadingProof ? "Đang lưu ảnh riêng tư..." : returnForm.proofImages.length ? "Thêm ảnh bằng chứng khác" : "Chọn ảnh bằng chứng"}
-                    </strong>
-                    <small style={{ fontSize: "0.72rem", color: "#64748b" }}>
-                      {returnForm.proofImages.length ? `${returnForm.proofImages.length} ảnh đã lưu riêng tư` : "JPEG, PNG, WEBP; tối đa 5 ảnh"}
-                    </small>
-                    <input
-                      type="file"
-                      accept="image/jpeg,image/png,image/webp"
-                      multiple
-                      disabled={uploadingProof}
-                      aria-label="Ảnh bằng chứng bàn giao"
-                      aria-invalid={Boolean(returnErrors.proofImage)}
-                      aria-describedby={returnErrors.proofImage ? "return-proofImage-error" : undefined}
-                      style={{ display: "none" }}
-                      onChange={async (event) => {
-                        const input = event.currentTarget;
-                        const files = Array.from(input.files || []);
-                        if (!files.length) return;
-                        if (returnForm.proofImages.length + files.length > 5) {
-                          setReturnErrors(prev => ({ ...prev, proofImage: "Chỉ được tải lên tối đa 5 ảnh bằng chứng." }));
-                          input.value = "";
-                          return;
-                        }
-                        setReturnErrors(prev => ({ ...prev, proofImage: "" }));
-                        setUploadingProof(true);
-                        const sequence = returnSequence.current;
-                        const itemId = returnTargetItem.id;
-                        try {
-                          for (const file of files) {
-                            const res = await api.uploadWarehouseProof(file, itemId);
-                            if (sequence !== returnSequence.current || returnItemId.current !== itemId) return;
-                            setReturnForm((prev) => ({ ...prev, proofImages: prev.proofImages.includes(res.id) ? prev.proofImages : [...prev.proofImages, res.id] }));
-                            setReturnVerified(false);
-                          }
-                        } catch (error) {
-                          if (sequence === returnSequence.current && returnItemId.current === itemId) setReturnErrors(prev => ({ ...prev, proofImage: messageOf(error, "Không thể tải lên ảnh bằng chứng") }));
-                        } finally {
-                          if (sequence === returnSequence.current && returnItemId.current === itemId) setUploadingProof(false);
-                          input.value = "";
-                        }
-                      }}
-                    />
-                  </label>
+                  </div>
 
-                  {returnFieldError("proofImage")}
-
-                  {returnForm.proofImages.length > 0 && (
-                    <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", marginTop: "6px", maxHeight: "190px", overflowY: "auto" }}>
-                      {returnForm.proofImages.map((img, index) => (
-                        <div
-                          key={index}
-                          style={{
-                            position: "relative",
-                            width: "88px",
-                            height: "88px",
-                            borderRadius: "8px",
-                            overflow: "hidden",
-                            border: "1.5px solid #cbd5e1",
-                            background: "#f1f5f9",
-                            boxShadow: "0 2px 4px rgba(0, 0, 0, 0.06)"
-                          }}
-                        >
-                          <ProofImage
-                            proofId={img}
-                            alt={`Bằng chứng ${index + 1}`}
-                            onPreview={setPreviewImageUrl}
-                            style={{ width: "100%", height: "100%", objectFit: "cover", cursor: "pointer" }}
-                            title="Click để phóng to ảnh bằng chứng"
-                          />
-                          <span
-                            style={{
-                              position: "absolute",
-                              bottom: "0",
-                              left: "0",
-                              right: "0",
-                              background: "rgba(15, 23, 42, 0.65)",
-                              color: "#fff",
-                              fontSize: "0.66rem",
-                              textAlign: "center",
-                              padding: "1px 0",
-                              pointerEvents: "none"
-                            }}
-                          >
-                            Ảnh {index + 1}
-                          </span>
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setReturnForm((prev) => ({ ...prev, proofImages: prev.proofImages.filter((_, i) => i !== index) }));
-                              setReturnVerified(false);
-                              setReturnErrors(prev => ({ ...prev, proofImage: returnForm.proofImages.length <= 1 ? "Vui lòng tải lên từ 1 đến 5 ảnh bằng chứng." : "" }));
-                            }}
-                            style={{
-                              position: "absolute",
-                              top: "3px",
-                              right: "3px",
-                              width: "20px",
-                              height: "20px",
-                              borderRadius: "50%",
-                              border: "none",
-                              background: "rgba(220, 38, 38, 0.92)",
-                              color: "#fff",
-                              cursor: "pointer",
-                              display: "flex",
-                              alignItems: "center",
-                              justifyContent: "center",
-                              boxShadow: "0 1px 3px rgba(0,0,0,0.3)"
-                            }}
-                            title="Xóa ảnh này"
-                          >
-                            <X size={12} />
-                          </button>
-                        </div>
-                      ))}
+                  {claimReviewsLoading && <p role="status" style={{ fontSize: "0.85rem", color: "#64748b" }}>Đang kiểm tra claim của vật phẩm...</p>}
+                  {claimReviewsError && (
+                    <div style={{ padding: "10px", background: "#fef2f2", borderRadius: "8px", border: "1px solid #fecaca" }}>
+                      <p className="form-error" role="alert" style={{ margin: "0 0 8px 0" }}>{claimReviewsError}</p>
+                      <button type="button" className="secondary-button" disabled={claimReviewsLoading} onClick={() => { setClaimReviewsLoading(true); setClaimReviewsReady(false); setClaimReviewsError(""); setClaimReviewReload(previous => previous + 1); }}>
+                        <RefreshCw size={15} /> Thử lại kiểm tra claim
+                      </button>
                     </div>
                   )}
-                </div>
-              </div>
 
-              {returnError && <p className="form-error" role="alert">{returnError}</p>}
-              <div className="custody-modal-actions" style={{ marginTop: "4px", paddingTop: "10px", borderTop: "1px solid #f1f5f9" }}>
-                <button className="primary-button" disabled={Boolean(pendingAction) || uploadingProof || claimReviewBusy || claimReviewsLoading || !claimReviewsReady}>
-                  {pendingAction === "update" ? <LoaderCircle className="spin-icon" size={17} /> : <CheckCircle2 size={17} />}
-                  <span>Xác nhận Đã trả hàng</span>
-                </button>
-                <button type="button" className="secondary-button" disabled={claimReviewBusy || Boolean(pendingAction) || uploadingProof} onClick={closeReturnModal}>Hủy</button>
+                  {/* Chatbox AI hỗ trợ tiếp nhận & trả hàng */}
+                  <WarehouseConversationChat
+                    mode="RETURN"
+                    warehouseItemId={returnTargetItem.id}
+                    onExtraction={applyReturnConversationExtraction}
+                    disabled={claimReviewsLoading}
+                    allowImages={true}
+                  />
+
+                  {/* Khu vực Upload Ảnh bằng chứng bàn giao */}
+                  <section className="intake-card" style={{ background: "#fff", border: "1px solid #e2e8f0", borderRadius: "10px", padding: "14px 16px" }}>
+                    <div className="intake-card__header-row" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "8px" }}>
+                      <h4 className="intake-card__title" style={{ margin: 0, fontSize: "0.92rem", fontWeight: 700, color: "#1e293b", display: "flex", alignItems: "center", gap: "8px" }}>
+                        <span className="intake-card__icon" style={{ color: "#2563eb", display: "inline-flex" }}><ImagePlus size={16} /></span>
+                        Ảnh bằng chứng bàn giao <strong className="required-star">*</strong> ({returnForm.proofImages.length}/5)
+                      </h4>
+                      <span className="intake-card__hint" style={{ fontSize: "0.78rem", color: "#64748b" }}>Tối đa 5 ảnh (JPEG/PNG/WEBP)</span>
+                    </div>
+
+                    <label
+                      style={{
+                        border: "2px dashed #cbd5e1",
+                        borderRadius: "8px",
+                        padding: "16px 12px",
+                        background: "#f8fafc",
+                        textAlign: "center",
+                        cursor: uploadingProof ? "not-allowed" : "pointer",
+                        display: "flex",
+                        flexDirection: "column",
+                        alignItems: "center",
+                        gap: "6px",
+                        transition: "all 0.2s"
+                      }}
+                    >
+                      <span style={{ color: "#2563eb", display: "flex", alignItems: "center" }}>
+                        {uploadingProof ? <LoaderCircle className="spin-icon" size={24} /> : <ImagePlus size={24} />}
+                      </span>
+                      <strong style={{ fontSize: "0.84rem", color: "#1e293b" }}>
+                        {uploadingProof ? "Đang lưu ảnh bằng chứng..." : returnForm.proofImages.length ? "Thêm ảnh bằng chứng khác" : "Chọn ảnh bằng chứng bàn giao"}
+                      </strong>
+                      <small style={{ fontSize: "0.74rem", color: "#64748b" }}>
+                        {returnForm.proofImages.length ? `${returnForm.proofImages.length} ảnh đã lưu riêng tư` : "Chụp người nhận cùng vật phẩm hoặc biên bản bàn giao"}
+                      </small>
+                      <input
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp"
+                        multiple
+                        disabled={uploadingProof}
+                        aria-label="Ảnh bằng chứng bàn giao"
+                        aria-invalid={Boolean(returnErrors.proofImage)}
+                        aria-describedby={returnErrors.proofImage ? "return-proofImage-error" : undefined}
+                        style={{ display: "none" }}
+                        onChange={async (event) => {
+                          const input = event.currentTarget;
+                          const files = Array.from(input.files || []);
+                          if (!files.length) return;
+                          if (returnForm.proofImages.length + files.length > 5) {
+                            setReturnErrors(prev => ({ ...prev, proofImage: "Chỉ được tải lên tối đa 5 ảnh bằng chứng." }));
+                            input.value = "";
+                            return;
+                          }
+                          setReturnErrors(prev => ({ ...prev, proofImage: "" }));
+                          setUploadingProof(true);
+                          const sequence = returnSequence.current;
+                          const itemId = returnTargetItem.id;
+                          try {
+                            for (const file of files) {
+                              const res = await api.uploadWarehouseProof(file, itemId);
+                              if (sequence !== returnSequence.current || returnItemId.current !== itemId) return;
+                              setReturnForm((prev) => ({ ...prev, proofImages: prev.proofImages.includes(res.id) ? prev.proofImages : [...prev.proofImages, res.id] }));
+                              setReturnVerified(false);
+                            }
+                          } catch (error) {
+                            if (sequence === returnSequence.current && returnItemId.current === itemId) setReturnErrors(prev => ({ ...prev, proofImage: messageOf(error, "Không thể tải lên ảnh bằng chứng") }));
+                          } finally {
+                            if (sequence === returnSequence.current && returnItemId.current === itemId) setUploadingProof(false);
+                            input.value = "";
+                          }
+                        }}
+                      />
+                    </label>
+
+                    {returnFieldError("proofImage")}
+
+                    {returnForm.proofImages.length > 0 && (
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(90px, 1fr))", gap: "10px", marginTop: "12px" }}>
+                        {returnForm.proofImages.map((img, index) => (
+                          <div
+                            key={index}
+                            style={{
+                              position: "relative",
+                              aspectRatio: "1",
+                              borderRadius: "8px",
+                              overflow: "hidden",
+                              border: "1.5px solid #cbd5e1",
+                              background: "#f1f5f9",
+                              boxShadow: "0 2px 4px rgba(0, 0, 0, 0.06)"
+                            }}
+                          >
+                            <ProofImage
+                              proofId={img}
+                              alt={`Bằng chứng ${index + 1}`}
+                              onPreview={setPreviewImageUrl}
+                              style={{ width: "100%", height: "100%", objectFit: "cover", cursor: "pointer" }}
+                              title="Click để phóng to ảnh bằng chứng"
+                            />
+                            <span
+                              style={{
+                                position: "absolute",
+                                bottom: "0",
+                                left: "0",
+                                right: "0",
+                                background: "rgba(15, 23, 42, 0.65)",
+                                color: "#fff",
+                                fontSize: "0.66rem",
+                                textAlign: "center",
+                                padding: "2px 0",
+                                pointerEvents: "none"
+                              }}
+                            >
+                              Ảnh {index + 1}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setReturnForm((prev) => ({ ...prev, proofImages: prev.proofImages.filter((_, i) => i !== index) }));
+                                setReturnVerified(false);
+                                setReturnErrors(prev => ({ ...prev, proofImage: returnForm.proofImages.length <= 1 ? "Vui lòng tải lên từ 1 đến 5 ảnh bằng chứng." : "" }));
+                              }}
+                              style={{
+                                position: "absolute",
+                                top: "4px",
+                                right: "4px",
+                                width: "22px",
+                                height: "22px",
+                                borderRadius: "50%",
+                                border: "none",
+                                background: "rgba(220, 38, 38, 0.92)",
+                                color: "#fff",
+                                cursor: "pointer",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                boxShadow: "0 1px 3px rgba(0,0,0,0.3)"
+                              }}
+                              title="Xóa ảnh này"
+                            >
+                              <X size={13} />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </section>
+                </div>
+
+                {/* CỘT PHẢI: FORM THÔNG TIN NGƯỜI NHẬN, XÁC MINH CLAIM & HOÀN TẤT */}
+                <div className="warehouse-return-right">
+                  <section className="intake-card" style={{ background: "#fff", border: "1px solid #e2e8f0", borderRadius: "10px", padding: "16px", display: "flex", flexDirection: "column", gap: "14px" }}>
+                    <h4 className="intake-card__title" style={{ margin: 0, fontSize: "0.92rem", fontWeight: 700, color: "#1e293b", display: "flex", alignItems: "center", gap: "8px" }}>
+                      <span className="intake-card__icon" style={{ color: "#2563eb", display: "inline-flex" }}><UserCheck size={16} /></span>
+                      Thông tin người nhận thực tế
+                    </h4>
+
+                    <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                      <label className="input-field" style={{ margin: 0 }}>
+                        <span>Họ và tên người nhận <strong className="required-star">*</strong></span>
+                        <input required minLength={2} maxLength={150} value={returnForm.receiverName} aria-invalid={Boolean(returnErrors.receiverName)} aria-describedby={returnErrors.receiverName ? "return-receiverName-error" : undefined} onChange={(event) => changeReturnText("receiverName", event.target.value)} onBlur={() => setReturnErrors(prev => ({ ...prev, receiverName: returnTextError("receiverName", returnForm.receiverName) }))} placeholder="Nhập họ và tên người nhận" />
+                        {returnFieldError("receiverName")}
+                      </label>
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                        <label className="input-field" style={{ margin: 0 }}>
+                          <span>Số điện thoại <strong className="required-star">*</strong></span>
+                          <input required type="tel" minLength={9} maxLength={20} value={returnForm.receiverPhone} aria-invalid={Boolean(returnErrors.receiverPhone)} aria-describedby={returnErrors.receiverPhone ? "return-receiverPhone-error" : undefined} onChange={(event) => changeReturnText("receiverPhone", event.target.value)} onBlur={() => setReturnErrors(prev => ({ ...prev, receiverPhone: returnTextError("receiverPhone", returnForm.receiverPhone) }))} placeholder="Nhập số điện thoại" />
+                          {returnFieldError("receiverPhone")}
+                        </label>
+                        <label className="input-field" style={{ margin: 0 }}>
+                          <span>Mã thẻ SV / CCCD <strong className="required-star">*</strong></span>
+                          <input required minLength={3} maxLength={100} value={returnForm.receiverIdentity} aria-invalid={Boolean(returnErrors.receiverIdentity)} aria-describedby={returnErrors.receiverIdentity ? "return-receiverIdentity-error" : undefined} onChange={(event) => changeReturnText("receiverIdentity", event.target.value)} onBlur={() => setReturnErrors(prev => ({ ...prev, receiverIdentity: returnTextError("receiverIdentity", returnForm.receiverIdentity) }))} placeholder="Nhập mã số giấy tờ" />
+                          {returnFieldError("receiverIdentity")}
+                        </label>
+                      </div>
+                    </div>
+                  </section>
+
+                  {/* Liên kết claim nếu có */}
+                  {returnRecipients.length > 0 && (
+                    <section className="intake-card" style={{ background: "#fff", border: "1px solid #e2e8f0", borderRadius: "10px", padding: "16px", display: "flex", flexDirection: "column", gap: "12px" }}>
+                      <label className="input-field" style={{ margin: 0 }}>
+                        <span style={{ fontWeight: 600 }}>Liên kết claim trực tuyến (không bắt buộc)</span>
+                        <select value={returnForm.claimId} disabled={claimReviewBusy} onChange={(event) => changeReturnClaim(event.target.value)}>
+                          <option value="">Trả trực tiếp, không có claim</option>
+                          {returnRecipients.map(recipient => <option key={recipient.claimId} value={recipient.claimId}>{recipient.fullName} · {recipient.verified ? "Đã xác minh" : "Chưa xác minh"} · #{recipient.claimId.slice(0, 8)}</option>)}
+                        </select>
+                        {returnFieldError("claimId")}
+                        {returnFieldError("recipientId")}
+                      </label>
+
+                      {returnRecipients.some(recipient => recipient.claimId === returnForm.claimId && !recipient.verified) && (
+                        <div style={{ background: "#fffbeb", border: "1px solid #fde68a", borderRadius: "8px", padding: "12px", display: "flex", flexDirection: "column", gap: "10px" }} aria-label="Xác minh claim tại quầy">
+                          <h4 style={{ margin: 0, fontSize: "0.88rem", fontWeight: 700, color: "#92400e" }}>Xác minh quyền sở hữu tại quầy</h4>
+                          <p style={{ margin: 0, fontSize: "0.82rem", color: "#78350f" }}>{returnRecipients.find(recipient => recipient.claimId === returnForm.claimId)?.description}</p>
+                          <label className="input-field" style={{ margin: 0 }}>
+                            <span style={{ fontSize: "0.8rem" }}>Nội dung đối chiếu</span>
+                            <textarea maxLength={1000} rows={2} value={claimReviewReason} onChange={event => setClaimReviewReason(event.target.value)} aria-invalid={Boolean(returnErrors.claimReviewReason)} placeholder="Đặc điểm riêng, phụ kiện hoặc thông tin đã đối chiếu; không ghi số giấy tờ tại đây" />
+                            {returnFieldError("claimReviewReason")}
+                          </label>
+                          <label className="warehouse-return-verification" style={{ fontSize: "0.82rem" }}>
+                            <input type="checkbox" checked={claimReviewConfirmed} onChange={event => setClaimReviewConfirmed(event.target.checked)} />
+                            Tôi đã đối chiếu quyền sở hữu tại quầy
+                          </label>
+                          {returnFieldError("claimReviewConfirmed")}
+                          <button type="button" className="secondary-button" disabled={claimReviewBusy || claimReviewsLoading} onClick={() => void verifyReturnClaim()}>
+                            <UserCheck size={16} />{claimReviewBusy ? "Đang xác minh..." : "Xác minh claim tại quầy"}
+                          </button>
+                        </div>
+                      )}
+                    </section>
+                  )}
+
+                  <section className="intake-card" style={{ background: "#fff", border: "1px solid #e2e8f0", borderRadius: "10px", padding: "16px", display: "flex", flexDirection: "column", gap: "12px" }}>
+                    <label className="input-field" style={{ margin: 0 }}>
+                      <span style={{ fontWeight: 600 }}>Ghi chú bàn giao</span>
+                      <textarea maxLength={1000} value={returnForm.note} aria-invalid={Boolean(returnErrors.note)} aria-describedby={returnErrors.note ? "return-note-error" : undefined} onChange={(event) => changeReturnText("note", event.target.value)} rows={3} style={{ resize: "none" }} placeholder="Ghi chú thêm về hiện trạng lúc giao cho người nhận..." />
+                      {returnFieldError("note")}
+                    </label>
+
+                    <label className="warehouse-return-verification" style={{ padding: "8px 10px", background: "#f8fafc", borderRadius: "8px", border: "1px solid #e2e8f0", fontSize: "0.84rem", cursor: "pointer" }}>
+                      <input type="checkbox" required checked={returnVerified} aria-invalid={Boolean(returnErrors.verified)} aria-describedby={returnErrors.verified ? "return-verified-error" : undefined} onChange={event => { setReturnVerified(event.target.checked); setReturnErrors(prev => ({ ...prev, verified: "" })); }} />
+                      <span style={{ color: "#0f172a", fontWeight: 500 }}>Tôi đã đối chiếu người nhận và ảnh bằng chứng bàn giao thực tế</span>
+                    </label>
+                    {returnFieldError("verified")}
+                  </section>
+
+                  {returnError && <p className="form-error" role="alert" style={{ margin: 0 }}>{returnError}</p>}
+
+                  <div className="custody-modal-actions" style={{ marginTop: "auto", paddingTop: "14px", borderTop: "1px solid #e2e8f0", display: "flex", gap: "10px", justifyContent: "flex-end" }}>
+                    <button type="button" className="secondary-button" disabled={claimReviewBusy || Boolean(pendingAction) || uploadingProof} onClick={closeReturnModal}>
+                      Hủy bỏ
+                    </button>
+                    <button className="primary-button" style={{ background: "#16a34a", borderColor: "#16a34a" }} disabled={Boolean(pendingAction) || uploadingProof || claimReviewBusy || claimReviewsLoading || !claimReviewsReady}>
+                      {pendingAction === "update" ? <LoaderCircle className="spin-icon" size={17} /> : <CheckCircle2 size={17} />}
+                      <span>Xác nhận Đã trả hàng</span>
+                    </button>
+                  </div>
+                </div>
               </div>
             </form>
           </AccessibleDialog>
@@ -1382,7 +2059,7 @@ function WarehouseInventoryTab({
 export function StaffPage() {
   const [searchParams] = useSearchParams();
   const warehouseQuery = useRef({ ...emptyFilters, page: 1 });
-  const custodyQuery = useRef({ status: "ALL", page: 1 });
+  const custodyQuery = useRef<{ status: string; handoverPointId?: string; q?: string; page: number }>({ status: "ALL", page: 1 });
   const custodyLoadSequence = useRef(0);
   const warehouseLoadSequence = useRef(0);
   const [activeTab, setActiveTab] = useState<StaffTab>(searchParams.get("tab") === "warehouse" ? "warehouse" : "custody");
@@ -1401,14 +2078,20 @@ export function StaffPage() {
   async function loadDashboard() {
     const sequence = ++warehouseLoadSequence.current;
     const q = { ...warehouseQuery.current };
-    const result = await api.listWarehouseItems({ overdue: q.overdue || undefined, q: q.q || undefined, status: q.status ? q.status as WarehouseStatus : undefined, handoverPointId: q.handoverPointId || undefined, page: q.page, pageSize: 12 });
+    const result = await api.listWarehouseItems({ overdue: q.overdue || undefined, q: q.q || undefined, status: q.status ? q.status as WarehouseStatus : undefined, handoverPointId: q.handoverPointId || undefined, page: q.page, pageSize: 9 });
     if (sequence === warehouseLoadSequence.current) setDashboard(result);
   }
 
   async function loadCustody() {
     const sequence = ++custodyLoadSequence.current;
     const q = { ...custodyQuery.current };
-    const result = await api.listCustodyRequests({ status: q.status !== "ALL" ? q.status as CustodyRequestStatus : undefined, page: q.page, pageSize: 20 });
+    const result = await api.listCustodyRequests({
+      status: q.status !== "ALL" ? q.status as CustodyRequestStatus : undefined,
+      handoverPointId: q.handoverPointId || undefined,
+      q: q.q || undefined,
+      page: q.page,
+      pageSize: 9
+    });
     if (sequence === custodyLoadSequence.current) setCustodyData(result);
   }
 
@@ -1434,13 +2117,15 @@ export function StaffPage() {
     }
   }, [activeTab, dashboard]);
 
-  async function refreshCustody(status?: string, page?: number) {
-    if (status !== undefined) custodyQuery.current.status = status;
+  async function refreshCustody(filters?: { status?: string; handoverPointId?: string; q?: string }, page?: number) {
+    if (filters?.status !== undefined) custodyQuery.current.status = filters.status;
+    if (filters?.handoverPointId !== undefined) custodyQuery.current.handoverPointId = filters.handoverPointId;
+    if (filters?.q !== undefined) custodyQuery.current.q = filters.q;
     if (page !== undefined) custodyQuery.current.page = page;
     try {
       await Promise.all([loadCustody(), loadDashboard()]);
     } catch (reason) {
-      setError(messageOf(reason, "Không thể làm mới hàng đợi custody"));
+      setError(messageOf(reason, "Không thể làm mới hàng đợi bàn giao"));
     }
   }
 
@@ -1477,7 +2162,7 @@ export function StaffPage() {
   }
 
   const tabItems: Array<{ key: StaffTab; label: string; icon: ReactNode; badge?: number }> = [
-    { key: "custody", label: "Hàng đợi Custody", icon: <ShieldCheck size={18} />, badge: custodyData?.counts.PENDING },
+    { key: "custody", label: "Hàng đợi Bàn giao", icon: <ShieldCheck size={18} />, badge: custodyData?.counts.PENDING },
     { key: "warehouse", label: "Kho tài sản", icon: <Archive size={18} /> },
     { key: "dashboard", label: "Tổng quan", icon: <FileText size={18} /> },
     { key: "logs", label: "Lịch sử hệ thống", icon: <History size={18} /> }
@@ -1491,9 +2176,9 @@ export function StaffPage() {
           <span className="hero-eyebrow">
             <ShieldCheck size={14} /> KHU VỰC NHÂN VIÊN & DỊCH VỤ KHO
           </span>
-          <h1>Tiếp nhận & Quản lý Custody</h1>
+          <h1>Tiếp nhận & Hàng đợi Bàn giao</h1>
           <p className="hero-subtitle">
-            Hàng đợi tiếp nhận tài sản từ người nhặt, quản lý lưu trữ kho và bàn giao tài sản tại campus.
+            Hàng đợi bàn giao tài sản từ người nhặt, quản lý lưu trữ kho và bàn giao tài sản tại campus.
           </p>
         </div>
         <div className="staff-hero__actions">

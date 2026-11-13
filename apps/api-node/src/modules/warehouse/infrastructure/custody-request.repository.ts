@@ -155,6 +155,15 @@ export function createCustodyRequestRepository(pool: SqlExecutor) {
         where.push("cr.status = ?");
         values.push(input.status);
       }
+      if (input.handoverPointId) {
+        where.push("cr.handover_point_id = ?");
+        values.push(input.handoverPointId);
+      }
+      if (input.q && input.q.trim()) {
+        where.push("(ru.full_name LIKE ? OR p.title LIKE ? OR cr.id LIKE ? OR cr.reason LIKE ?)");
+        const term = `%${input.q.trim()}%`;
+        values.push(term, term, term, term);
+      }
       const whereClause = where.length ? `WHERE ${where.join(" AND ")}` : "";
       const [rows] = await pool.execute<CustodyRequestRow[]>(
         `${requestSelect} ${whereClause} ORDER BY
@@ -165,7 +174,10 @@ export function createCustodyRequestRepository(pool: SqlExecutor) {
         values
       );
       const [countRows] = await pool.execute<CountRow[]>(
-        `SELECT COUNT(*) AS total FROM custody_requests cr ${whereClause}`,
+        `SELECT COUNT(*) AS total FROM custody_requests cr
+         INNER JOIN users ru ON ru.id = cr.requester_id
+         LEFT JOIN posts p ON p.id = cr.post_id
+         ${whereClause}`,
         values
       );
       return { total: Number(countRows[0]?.total ?? 0), items: await Promise.all(rows.map(row => hydrate(row))) };
