@@ -1,11 +1,12 @@
 import os
 import io
+import urllib.request
 import cv2
 import numpy as np
 import torch
 import torchvision.transforms as T
 from PIL import Image
-from fastapi import FastAPI, File, UploadFile, HTTPException
+from fastapi import FastAPI, File, UploadFile, HTTPException, Form
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional
@@ -135,10 +136,22 @@ def health():
     }
 
 @app.post("/api/extract-features", response_model=FeatureResponse)
-async def extract_features(file: UploadFile = File(...)):
+async def extract_features(
+    file: Optional[UploadFile] = File(None),
+    image_url: Optional[str] = Form(None)
+):
     try:
-        contents = await file.read()
+        if file is not None and file.filename:
+            contents = await file.read()
+        elif image_url:
+            req = urllib.request.Request(image_url, headers={"User-Agent": "Mozilla/5.0"})
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                contents = resp.read()
+        else:
+            raise HTTPException(status_code=400, detail="Cần cung cấp file ảnh hoặc image_url")
         pil_img = Image.open(io.BytesIO(contents)).convert("RGB")
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Không thể đọc file ảnh: {str(e)}")
 

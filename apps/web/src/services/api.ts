@@ -560,6 +560,44 @@ export interface MatchFeedbackRecord {
   value: MatchFeedbackValue; note: string | null; correlationKey: string;
   createdAt: string; updatedAt: string;
 }
+export interface AiFeatureSummary {
+  color: string | null;
+  condition: string | null;
+  ocrText: string | null;
+  tags: string[];
+}
+
+export interface MatchBreakdown {
+  vectorScore: number | null;
+  vectorWeight: number;
+  vectorContribution: number;
+  contextScore: number;
+  contextWeight: number;
+  contextContribution: number;
+  hasVector: boolean;
+}
+
+export interface AiVisualAnalysis {
+  hasImageAnalysis: boolean;
+  sourceSummary?: AiFeatureSummary;
+  candidateSummary?: AiFeatureSummary;
+  colorMatch?: {
+    matched: boolean;
+    sourceColor?: string;
+    candidateColor?: string;
+  };
+  conditionMatch?: {
+    sourceCondition?: string;
+    candidateCondition?: string;
+  };
+  ocrMatch?: {
+    matched: boolean;
+    sourceOcr?: string;
+    candidateOcr?: string;
+    commonTokens: string[];
+  };
+}
+
 export interface MatchExplanation {
   tier: MatchTier;
   summary: string;
@@ -571,6 +609,8 @@ export interface MatchExplanation {
   categoryReason: string;
   daysDiff: number | null;
   penalties: string[];
+  breakdown?: MatchBreakdown;
+  aiVisualAnalysis?: AiVisualAnalysis;
 }
 export interface PostMatchResult {
   matchId: string;

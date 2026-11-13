@@ -414,12 +414,15 @@ export function createPostUseCases(options: PostDependencies) {
         if (input.mediaKind === "ITEM" && options.imageAnalyzer && postRepository.updateImageEmbedding) {
           try {
             const analysis = await options.imageAnalyzer.analyze([file], post.type, []);
-            if (analysis.imageEmbedding && analysis.imageEmbedding.length > 0) {
-              await withTransaction(async (connection) => {
+            await withTransaction(async (connection) => {
+              if (analysis.imageEmbedding && analysis.imageEmbedding.length > 0) {
                 await postRepository.updateImageEmbedding!(postId, analysis.imageEmbedding!, connection);
-              });
-              await refreshMatchingBestEffort(postId, "update");
-            }
+              }
+              if (analysis.visualAttributes.length > 0 || analysis.visibleText.length > 0) {
+                await matchingRepository.replaceAnalysisTags(postId, analysis, connection);
+              }
+            });
+            await refreshMatchingBestEffort(postId, "update");
           } catch (extractError) {
             options.logger.warn(`[ai-matching] failed to extract visual vector for post ${postId}: ${extractError}`);
           }
