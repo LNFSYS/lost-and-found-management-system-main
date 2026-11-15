@@ -10,6 +10,7 @@ import { Card } from "@/components/ui/card";
 import { ErrorBanner } from "@/components/ui/error-banner";
 import { Input } from "@/components/ui/input";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
+import { WarehouseConversationAssistant } from "@/components/staff/warehouse-conversation-assistant";
 import { colors, radii, spacing } from "@/constants/theme";
 import { createRequestUuid, getApiErrorMessage, postService, staffService, type HandoverPoint } from "@/services/api";
 
@@ -114,6 +115,16 @@ export default function WalkInIntakeScreen() {
         {error ? <ErrorBanner message={error} /> : null}
         <Card style={styles.formCard}>
           <View style={styles.infoBanner}><MaterialCommunityIcons name="information-outline" size={18} color={colors.primary} /><Text style={styles.infoText}>Ghi nhận thông tin tối thiểu cần thiết. Không nhập giấy tờ hoặc dữ liệu cá nhân không liên quan vào phần ghi chú.</Text></View>
+          <WarehouseConversationAssistant onExtraction={(result) => {
+            const fields = result.fields;
+            if (fields.itemName) setItemName((current) => current.trim() ? current : fields.itemName!);
+            if (fields.description) setDescription((current) => current.trim() ? current : fields.description!);
+            if (fields.finderName) setFinderName((current) => current.trim() ? current : fields.finderName!);
+            if (fields.finderContact) setFinderContact((current) => current.trim() ? current : fields.finderContact!);
+            if (fields.conditionNotes) setConditionNotes((current) => current.trim() ? current : fields.conditionNotes!);
+            if (fields.accessories) setAccessories((current) => current.trim() ? current : fields.accessories!);
+            if (fields.receivedQuantity !== null) setQuantity((current) => current === "1" ? String(fields.receivedQuantity) : current);
+          }} disabled={busy} />
           <Input label="Tên vật phẩm" value={itemName} onChangeText={setItemName} maxLength={255} placeholder="Ví dụ: Bình nước màu xanh" />
           <Input label="Mô tả thêm (không bắt buộc)" value={description} onChangeText={setDescription} multiline maxLength={2000} placeholder="Dấu hiệu nhận dạng bên ngoài…" />
           <View style={styles.fieldSection}><Text style={styles.fieldLabel}>Điểm tiếp nhận</Text><View style={styles.pointList}>{points.map((point) => <Pressable key={point.id} accessibilityRole="radio" accessibilityState={{ selected: pointId === point.id }} onPress={() => setPointId(point.id)} style={[styles.pointCard, pointId === point.id && styles.pointCardSelected]}><MaterialCommunityIcons name={pointId === point.id ? "radiobox-marked" : "radiobox-blank"} size={19} color={pointId === point.id ? colors.primary : colors.muted} /><View style={styles.headingCopy}><Text style={styles.pointName}>{point.name}</Text><Text style={styles.pointAddress}>{point.address || "Điểm bàn giao do trường quản lý"}</Text></View></Pressable>)}</View></View>

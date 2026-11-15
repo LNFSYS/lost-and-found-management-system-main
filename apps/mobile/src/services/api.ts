@@ -390,6 +390,30 @@ export interface MobileImageFile {
   id?: string;
 }
 
+export interface WarehouseConversationMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
+export interface WarehouseIntakeConversationExtraction {
+  mode: "INTAKE";
+  fields: {
+    itemName: string | null;
+    description: string | null;
+    categoryId: string | null;
+    areaId: string | null;
+    buildingId: string | null;
+    roomText: string | null;
+    finderName: string | null;
+    finderContact: string | null;
+    conditionNotes: string | null;
+    accessories: string | null;
+    receivedQuantity: number | null;
+  };
+  assistantMessage: string;
+  warnings: string[];
+}
+
 export interface CreatePostPayload {
   type: "LOST" | "FOUND";
   title: string;
@@ -1167,6 +1191,19 @@ export const staffService = {
   },
   deleteIntakeImage: (imageId: string, intakeKey: string) =>
     api.delete<{ removed: boolean }>(`/staff/warehouse-intake-images/${imageId}`, { data: { intakeKey } }).then((response) => response.data),
+  extractWalkInConversation: async (messages: WarehouseConversationMessage[], images: MobileImageFile[] = []) => {
+    if (!images.length) {
+      return api.post<WarehouseIntakeConversationExtraction>("/staff/warehouse-conversations/extract", {
+        mode: "INTAKE",
+        intakeKind: "WALK_IN",
+        messages,
+      }).then((response) => response.data);
+    }
+    const formData = new FormData();
+    formData.append("payload", JSON.stringify({ mode: "INTAKE", intakeKind: "WALK_IN", messages }));
+    for (const image of images) await appendFileToFormData(formData, "images", image);
+    return api.post<WarehouseIntakeConversationExtraction>("/staff/warehouse-conversations/extract", formData).then((response) => response.data);
+  },
   createWalkInWarehouseItem: (payload: StaffCreateWarehouseItemPayload) =>
     api.post<StaffWarehouseItem>("/staff/warehouse-items", payload).then((response) => response.data),
 };
