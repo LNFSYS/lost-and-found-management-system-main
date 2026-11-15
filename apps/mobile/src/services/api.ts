@@ -5,7 +5,16 @@ import * as SecureStore from "expo-secure-store";
 const ACCESS_TOKEN_KEY = "lnfs.access-token";
 const CACHED_USER_KEY = "lnfs.cached-user";
 const configuredBaseUrl = process.env.EXPO_PUBLIC_API_URL?.trim();
-const apiBaseUrl = configuredBaseUrl || (__DEV__ ? "http://localhost:3001/api" : "");
+const configuredApiBaseUrl = configuredBaseUrl || (__DEV__ ? "http://localhost:3001/api" : "");
+
+function normalizeApiBaseUrl(value: string) {
+  const url = new URL(value.replace(/\/+$/, ""));
+  const pathname = url.pathname.replace(/\/+$/, "");
+  url.pathname = pathname.endsWith("/api") ? pathname : `${pathname}/api`;
+  return url.toString().replace(/\/+$/, "");
+}
+
+const apiBaseUrl = configuredApiBaseUrl ? normalizeApiBaseUrl(configuredApiBaseUrl) : "";
 
 if (!apiBaseUrl) {
   throw new Error("EXPO_PUBLIC_API_URL must be set to the deployed API URL for preview and production builds.");
@@ -919,6 +928,7 @@ export function isNetworkError(error: unknown): error is AxiosError {
 export function getApiErrorMessage(error: unknown) {
   if (isAxiosError(error)) {
     const message = (error.response?.data as { message?: unknown } | undefined)?.message;
+    if (message === "Không tìm thấy endpoint") return "Máy chủ chưa có API này. Kiểm tra EXPO_PUBLIC_API_URL có phần /api và cập nhật phiên bản API đã triển khai.";
     if (typeof message === "string" && message.trim()) return message;
     if (!error.response) return "Không thể kết nối máy chủ. Hãy kiểm tra mạng và thử lại.";
   }
