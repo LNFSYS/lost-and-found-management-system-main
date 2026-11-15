@@ -55,6 +55,30 @@ interface CallSocket {
   connected?: boolean;
 }
 
+function createFallbackVideoTrack(label = "📷 Camera đang bận (Kiểm thử)"): MediaStreamTrack {
+  const canvas = document.createElement("canvas");
+  canvas.width = 640;
+  canvas.height = 480;
+  const ctx = canvas.getContext("2d");
+  if (ctx) {
+    ctx.fillStyle = "#0f172a";
+    ctx.fillRect(0, 0, 640, 480);
+    ctx.fillStyle = "#0b63b6";
+    ctx.beginPath();
+    ctx.arc(320, 200, 50, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "bold 22px system-ui, sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText(label, 320, 290);
+    ctx.font = "14px system-ui, sans-serif";
+    ctx.fillStyle = "#94a3b8";
+    ctx.fillText("(Camera đang được sử dụng ở cửa sổ gọi kia)", 320, 325);
+  }
+  const canvasStream = (canvas as HTMLCanvasElement & { captureStream(fps: number): MediaStream }).captureStream(10);
+  return canvasStream.getVideoTracks()[0];
+}
+
 export function useWebRTCCall({ roomId, userId, calleeId, socket, onCallEnded }: {
   roomId: string | null;
   userId: string | null;
@@ -142,27 +166,7 @@ export function useWebRTCCall({ roomId, userId, calleeId, socket, onCallEnded }:
         try {
           console.warn("Camera locked or unavailable, generating fallback audio + canvas track for testing");
           const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-          const canvas = document.createElement("canvas");
-          canvas.width = 640;
-          canvas.height = 480;
-          const ctx = canvas.getContext("2d");
-          if (ctx) {
-            ctx.fillStyle = "#0f172a";
-            ctx.fillRect(0, 0, 640, 480);
-            ctx.fillStyle = "#0b63b6";
-            ctx.beginPath();
-            ctx.arc(320, 200, 50, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.fillStyle = "#ffffff";
-            ctx.font = "bold 22px system-ui, sans-serif";
-            ctx.textAlign = "center";
-            ctx.fillText("📷 Camera đang bận (Kiểm thử)", 320, 290);
-            ctx.font = "14px system-ui, sans-serif";
-            ctx.fillStyle = "#94a3b8";
-            ctx.fillText("(Camera đang được sử dụng ở cửa sổ gọi kia)", 320, 325);
-          }
-          const canvasStream = (canvas as HTMLCanvasElement & { captureStream(fps: number): MediaStream }).captureStream(10);
-          const dummyVideoTrack = canvasStream.getVideoTracks()[0];
+          const dummyVideoTrack = createFallbackVideoTrack();
           if (dummyVideoTrack) {
             audioStream.addTrack(dummyVideoTrack);
           }
@@ -190,18 +194,34 @@ export function useWebRTCCall({ roomId, userId, calleeId, socket, onCallEnded }:
     setState(prev => ({ ...prev, remoteStream }));
 
     pc.ontrack = event => {
+      let currentStream = remoteStreamRef.current;
+      if (!currentStream) {
+        currentStream = new MediaStream();
+        remoteStreamRef.current = currentStream;
+      }
       if (event.streams && event.streams[0]) {
         event.streams[0].getTracks().forEach(track => {
-          if (!remoteStream.getTracks().some(t => t.id === track.id)) {
-            remoteStream.addTrack(track);
+          if (!currentStream!.getTracks().some(t => t.id === track.id)) {
+            currentStream!.addTrack(track);
           }
         });
       } else if (event.track) {
-        if (!remoteStream.getTracks().some(t => t.id === event.track.id)) {
-          remoteStream.addTrack(event.track);
+        if (!currentStream.getTracks().some(t => t.id === event.track.id)) {
+          currentStream.addTrack(event.track);
         }
       }
-      setState(prev => ({ ...prev, remoteStream }));
+
+      event.track.onunmute = () => {
+        if (remoteStreamRef.current) {
+          const freshStream = new MediaStream(remoteStreamRef.current.getTracks());
+          remoteStreamRef.current = freshStream;
+          setState(prev => ({ ...prev, remoteStream: freshStream }));
+        }
+      };
+
+      const freshStream = new MediaStream(currentStream.getTracks());
+      remoteStreamRef.current = freshStream;
+      setState(prev => ({ ...prev, remoteStream: freshStream }));
     };
 
     pc.onicecandidate = event => {
@@ -258,6 +278,7 @@ export function useWebRTCCall({ roomId, userId, calleeId, socket, onCallEnded }:
         callerId: userId,
         localStream: stream,
         isCameraOff: callType === "VOICE",
+        isRemoteCameraOff: callType === "VOICE",
         error: null
       });
 
@@ -328,36 +349,65 @@ export function useWebRTCCall({ roomId, userId, calleeId, socket, onCallEnded }:
   const toggleCamera = useCallback(async () => {
     const stream = localStreamRef.current;
     if (!stream) return;
-    const videoTrack = stream.getVideoTracks()[0];
+    const existingVideoTrack = stream.getVideoTracks()[0];
 
-    if (!videoTrack) {
+    if (!existingVideoTrack) {
       // In voice call: camera is currently off, turn it on
+      let camTrack: MediaStreamTrack | null = null;
       try {
         const camStream = await navigator.mediaDevices.getUserMedia({
           video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: "user" }
         });
-        const newTrack = camStream.getVideoTracks()[0];
-        if (newTrack) {
-          stream.addTrack(newTrack);
-          if (peerConnection.current) {
-            peerConnection.current.addTrack(newTrack, stream);
+        camTrack = camStream.getVideoTracks()[0] ?? null;
+      } catch (err) {
+        console.warn("Camera locked or unavailable, using fallback canvas track:", err);
+        camTrack = createFallbackVideoTrack();
+      }
+
+      if (camTrack) {
+        stream.addTrack(camTrack);
+
+        const pc = peerConnection.current;
+        let trackSent = false;
+        if (pc) {
+          const videoSender = pc.getSenders().find(s => s.track?.kind === "video" || s.track === null);
+          if (videoSender) {
+            try {
+              await videoSender.replaceTrack(camTrack);
+              trackSent = true;
+            } catch (err) {
+              console.warn("replaceTrack failed, falling back to addTrack:", err);
+            }
           }
-          setState(prev => ({ ...prev, callType: "VIDEO", isCameraOff: false, localStream: stream }));
-          if (socket && callIdRef.current) {
-            socket.emit("call.toggle-media", { callId: callIdRef.current, mediaType: "video", enabled: true });
+          if (!trackSent) {
+            try {
+              pc.addTrack(camTrack, stream);
+              if (pc.signalingState === "stable" && callIdRef.current && socket) {
+                const offer = await pc.createOffer();
+                await pc.setLocalDescription(offer);
+                socket.emit("call.offer", { callId: callIdRef.current, sdp: pc.localDescription });
+              }
+            } catch (err) {
+              console.error("Could not add track to peer connection:", err);
+            }
           }
         }
-      } catch (err) {
-        alert("Không thể bật camera: " + (err instanceof Error ? err.message : "Thiết bị không khả dụng"));
+
+        const freshLocalStream = new MediaStream(stream.getTracks());
+        localStreamRef.current = freshLocalStream;
+        setState(prev => ({ ...prev, callType: "VIDEO", isCameraOff: false, localStream: freshLocalStream }));
+        if (socket && callIdRef.current) {
+          socket.emit("call.toggle-media", { callId: callIdRef.current, mediaType: "video", enabled: true });
+        }
       }
       return;
     }
 
-    videoTrack.enabled = !videoTrack.enabled;
-    const off = !videoTrack.enabled;
-    setState(prev => ({ ...prev, isCameraOff: off }));
+    existingVideoTrack.enabled = !existingVideoTrack.enabled;
+    const isOff = !existingVideoTrack.enabled;
+    setState(prev => ({ ...prev, isCameraOff: isOff }));
     if (socket && callIdRef.current) {
-      socket.emit("call.toggle-media", { callId: callIdRef.current, mediaType: "video", enabled: !off });
+      socket.emit("call.toggle-media", { callId: callIdRef.current, mediaType: "video", enabled: !isOff });
     }
   }, [socket]);
 
@@ -373,6 +423,15 @@ export function useWebRTCCall({ roomId, userId, calleeId, socket, onCallEnded }:
 
       const pc = createPeerConnection(currentCallId);
       stream.getTracks().forEach(track => pc.addTrack(track, stream));
+
+      // In voice call, pre-allocate video transceiver so video capability is negotiated in SDP
+      if (stream.getVideoTracks().length === 0) {
+        try {
+          pc.addTransceiver("video", { direction: "sendrecv" });
+        } catch (err) {
+          console.warn("Could not pre-add video transceiver:", err);
+        }
+      }
 
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
@@ -412,7 +471,8 @@ export function useWebRTCCall({ roomId, userId, calleeId, socket, onCallEnded }:
         callId,
         callType,
         callerId: event.callerId as string,
-        isCameraOff: callType === "VOICE"
+        isCameraOff: callType === "VOICE",
+        isRemoteCameraOff: callType === "VOICE"
       });
     };
 
@@ -444,7 +504,7 @@ export function useWebRTCCall({ roomId, userId, calleeId, socket, onCallEnded }:
       }
     };
 
-    // Received SDP offer (callee side)
+    // Received SDP offer (callee side or renegotiation)
     const handleOffer = async (data: unknown) => {
       if (!data || typeof data !== "object") return;
       const event = data as Record<string, unknown>;
@@ -452,8 +512,11 @@ export function useWebRTCCall({ roomId, userId, calleeId, socket, onCallEnded }:
       if (!localStreamRef.current) return;
 
       try {
-        const pc = createPeerConnection(currentCallId);
-        localStreamRef.current.getTracks().forEach(track => pc.addTrack(track, localStreamRef.current!));
+        let pc = peerConnection.current;
+        if (!pc) {
+          pc = createPeerConnection(currentCallId);
+          localStreamRef.current.getTracks().forEach(track => pc!.addTrack(track, localStreamRef.current!));
+        }
 
         await pc.setRemoteDescription(new RTCSessionDescription(event.sdp as RTCSessionDescriptionInit));
 
@@ -463,6 +526,14 @@ export function useWebRTCCall({ roomId, userId, calleeId, socket, onCallEnded }:
             try { await pc.addIceCandidate(new RTCIceCandidate(cand)); } catch { /* Ignore */ }
           }
           pendingCandidatesRef.current = [];
+        }
+
+        // Ensure video transceiver is set to sendrecv if present
+        const videoTransceiver = pc.getTransceivers().find(t => t.receiver.track.kind === "video");
+        if (videoTransceiver && videoTransceiver.direction !== "sendrecv") {
+          try {
+            videoTransceiver.direction = "sendrecv";
+          } catch { /* Ignore */ }
         }
 
         const answer = await pc.createAnswer();
@@ -529,7 +600,14 @@ export function useWebRTCCall({ roomId, userId, calleeId, socket, onCallEnded }:
       if (!data || typeof data !== "object") return;
       const event = data as Record<string, unknown>;
       if (event.mediaType === "audio") setState(prev => ({ ...prev, isRemoteMicMuted: !event.enabled }));
-      if (event.mediaType === "video") setState(prev => ({ ...prev, isRemoteCameraOff: !event.enabled }));
+      if (event.mediaType === "video") {
+        const enabled = Boolean(event.enabled);
+        setState(prev => ({
+          ...prev,
+          callType: enabled ? "VIDEO" : prev.callType,
+          isRemoteCameraOff: !enabled
+        }));
+      }
     };
 
     socket.on("call.initiated", handleInitiated);
