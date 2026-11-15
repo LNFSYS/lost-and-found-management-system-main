@@ -39,7 +39,6 @@ const scoreLabels: { key: keyof MatchCandidateResult["scores"]; label: string; i
   { key: "category", label: "Danh mục", icon: "shape-outline" },
   { key: "location", label: "Địa điểm", icon: "map-marker-outline" },
   { key: "time", label: "Thời gian", icon: "clock-outline" },
-  { key: "image", label: "Nhãn hình ảnh", icon: "image-search-outline" },
   { key: "ocr", label: "Chữ nhận diện (OCR)", icon: "text-recognition" },
 ];
 
@@ -102,6 +101,7 @@ function TokenList({ title, values }: { title: string; values: string[] }) {
 
 function CandidateCard({
   result,
+  weights,
   busy,
   disabled,
   onFeedback,
@@ -109,6 +109,7 @@ function CandidateCard({
   onClaim,
 }: {
   result: MatchCandidateResult;
+  weights: PostMatchesResponse["weights"];
   busy: boolean;
   disabled: boolean;
   onFeedback: (value: MatchFeedbackValue) => void;
@@ -117,8 +118,59 @@ function CandidateCard({
 }) {
   const tier = tierAppearance[result.scoreTier];
   const explanation = result.explanation;
-  const totalPercent = percent(result.totalScore);
+  const breakdown = explanation?.breakdown;
+  const visual = explanation?.aiVisualAnalysis;
+  const hasVector = breakdown?.hasVector ?? (result.scores.image > 0 && (weights.image ?? 0) > 0);
+  const vectorScore = breakdown?.vectorScore ?? (hasVector ? result.scores.image : null);
+  const vectorWeight = breakdown?.vectorWeight ?? (hasVector ? 0.6 : 0);
+  const vectorContribution = breakdown?.vectorContribution !== undefined
+    ? Math.round(breakdown.vectorContribution * 100)
+    : (hasVector && vectorScore !== null ? Math.round(vectorScore * 0.6 * 100) : 0);
+  const contextWeightsSum = weights.text + weights.category + weights.location + weights.time + weights.ocr || 1;
+  const contextScore = breakdown?.contextScore ?? (
+    (weights.text * result.scores.text +
+      weights.category * result.scores.category +
+      weights.location * result.scores.location +
+      weights.time * result.scores.time +
+      weights.ocr * result.scores.ocr) / contextWeightsSum
+  );
+  const contextWeight = breakdown?.contextWeight ?? (hasVector ? 0.4 : 1);
+  const contextContribution = breakdown?.contextContribution !== undefined
+    ? Math.round(breakdown.contextContribution * 100)
+    : Math.round(contextScore * contextWeight * 100);
+  const totalScore = hasVector && vectorScore !== null
+    ? (vectorContribution + contextContribution) / 100
+    : result.totalScore;
+  const totalPercent = percent(totalScore);
   const existingFeedback = result.feedback ? feedbackChoices.find((choice) => choice.value === result.feedback?.value)?.label : null;
+  const sourceVisual = visual?.sourceSummary;
+  const candidateVisual = visual?.candidateSummary;
+  const visualFeatures = [
+    {
+      key: "color",
+      title: "Màu sắc chủ đạo",
+      icon: "palette-outline" as const,
+      source: sourceVisual?.color ?? visual?.colorMatch?.sourceColor ?? "Chưa xác định",
+      candidate: candidateVisual?.color ?? visual?.colorMatch?.candidateColor ?? "Chưa xác định",
+      matched: visual?.colorMatch?.matched,
+    },
+    {
+      key: "condition",
+      title: "Tình trạng bề mặt",
+      icon: "image-search-outline" as const,
+      source: sourceVisual?.condition ?? visual?.conditionMatch?.sourceCondition ?? "Chưa có dữ liệu",
+      candidate: candidateVisual?.condition ?? visual?.conditionMatch?.candidateCondition ?? "Chưa có dữ liệu",
+      matched: undefined,
+    },
+    {
+      key: "ocr",
+      title: "Chữ nhận diện (OCR)",
+      icon: "text-recognition" as const,
+      source: sourceVisual?.ocrText ?? visual?.ocrMatch?.sourceOcr ?? "Không nhận diện được chữ",
+      candidate: candidateVisual?.ocrText ?? visual?.ocrMatch?.candidateOcr ?? "Không nhận diện được chữ",
+      matched: visual?.ocrMatch?.matched ?? Boolean(explanation?.matchedOcrTokens.length),
+    },
+  ];
 
   return (
     <Card style={styles.candidateCard}>
@@ -144,10 +196,59 @@ function CandidateCard({
         <Text style={[styles.tierText, { color: tier.color }]}>{tier.label}</Text>
       </View>
 
-      <View style={styles.sectionDivider} />
-      <Text style={styles.sectionTitle}>Phân tích độ tương đồng</Text>
-      <View style={styles.scoreList}>
-        {scoreLabels.map(({ key, label, icon }) => <ScoreRow key={key} label={label} value={result.scores[key]} icon={icon} />)}
+      <View style={styles.analysisSection}>
+        <Text style={styles.sectionTitle}>Phân tích điểm ghép đôi</Text>
+        <View style={styles.analysisPillar}>
+          <View style={styles.analysisPillarHeading}>
+            <MaterialCommunityIcons name="image-search-outline" size={18} color={colors.accent} />
+            <Text style={styles.analysisPillarTitle}>AI vector thị giác</Text>
+            <Text style={styles.analysisWeight}>{percent(vectorWeight)}</Text>
+          </View>
+          <Text style={styles.analysisScore}>{vectorScore === null ? "Chưa có vector ảnh" : `${percent(vectorScore)} tương đồng`}</Text>
+          <View style={[styles.progressTrack, styles.analysisProgress]}><View style={[styles.analysisVectorFill, { width: `${vectorScore === null ? 0 : percent(vectorScore)}%` }]} /></View>
+          <Text style={styles.analysisEquation}>{vectorScore === null ? "Không có vector; toàn bộ điểm tính từ ngữ cảnh" : `${percent(vectorScore)} × ${percent(vectorWeight)} = +${vectorContribution}% vào tổng điểm`}</Text>
+        </View>
+        <View style={styles.analysisPillar}>
+          <View style={styles.analysisPillarHeading}>
+            <MaterialCommunityIcons name="text-box-outline" size={18} color={colors.primary} />
+            <Text style={styles.analysisPillarTitle}>Dữ liệu và ngữ cảnh</Text>
+            <Text style={styles.analysisWeight}>{percent(contextWeight)}</Text>
+          </View>
+          <Text style={styles.analysisScore}>{percent(contextScore)} tổng hợp</Text>
+          <View style={[styles.progressTrack, styles.analysisProgress]}><View style={[styles.progressFill, { width: `${percent(contextScore)}%` }]} /></View>
+          <Text style={styles.analysisEquation}>{percent(contextScore)} × {percent(contextWeight)} = +{contextContribution}% vào tổng điểm</Text>
+          <Text style={styles.detailLabel}>Các tín hiệu ngữ cảnh</Text>
+          <View style={styles.scoreList}>
+            {scoreLabels.map(({ key, label, icon }) => <ScoreRow key={key} label={label} value={result.scores[key]} icon={icon} />)}
+          </View>
+        </View>
+        <View style={styles.totalEquation}>
+          <Text style={styles.analysisEquation}>Tổng điểm hiển thị</Text>
+          <Text style={styles.totalEquationScore}>{totalPercent}%</Text>
+        </View>
+      </View>
+
+      <View style={styles.visualSection}>
+        <View style={styles.visualHeading}>
+          <MaterialCommunityIcons name="creation" size={18} color={colors.accent} />
+          <View style={styles.visualHeadingCopy}>
+            <Text style={styles.sectionTitle}>Phân tích đặc trưng hình ảnh</Text>
+            <Text style={styles.visualSubtitle}>Đối chiếu kết quả AI của bài bạn và bài đối ứng</Text>
+          </View>
+        </View>
+        {visual?.hasImageAnalysis ? visualFeatures.map((feature) => (
+          <View key={feature.key} style={styles.visualFeatureCard}>
+            <View style={styles.visualFeatureTitle}>
+              <MaterialCommunityIcons name={feature.icon} size={17} color={colors.primary} />
+              <Text style={styles.visualFeatureTitleText}>{feature.title}</Text>
+              {feature.matched ? <Text style={styles.visualMatched}>Trùng khớp</Text> : null}
+            </View>
+            <View style={styles.visualFeaturePair}>
+              <View style={styles.visualFeatureValue}><Text style={styles.visualFeatureLabel}>Bài của bạn</Text><Text style={styles.visualFeatureText}>{feature.source}</Text></View>
+              <View style={styles.visualFeatureValue}><Text style={styles.visualFeatureLabel}>Bài đối ứng</Text><Text style={styles.visualFeatureText}>{feature.candidate}</Text></View>
+            </View>
+          </View>
+        )) : <Text style={styles.privateNote}>Chưa có dữ liệu phân tích ảnh cho cặp bài này.</Text>}
       </View>
 
       {explanation ? (
@@ -349,6 +450,7 @@ export default function PostMatchesScreen() {
           <CandidateCard
             key={result.matchId}
             result={result}
+            weights={data.weights}
             busy={busyMatchId === result.matchId}
             disabled={Boolean(busyMatchId)}
             onFeedback={(value) => void submitFeedback(result, value)}
@@ -402,7 +504,30 @@ const styles = StyleSheet.create({
   tierText: { fontSize: 12, fontWeight: "800" },
   sectionDivider: { height: 1, backgroundColor: colors.border },
   sectionTitle: { color: colors.ink, fontSize: 15, fontWeight: "800" },
+  analysisSection: { gap: spacing.md, padding: spacing.md, borderRadius: radii.control, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
+  analysisPillar: { gap: spacing.sm, padding: spacing.md, borderRadius: radii.control, backgroundColor: colors.surfaceMuted },
+  analysisPillarHeading: { flexDirection: "row", alignItems: "center", gap: spacing.xs },
+  analysisPillarTitle: { flex: 1, color: colors.ink, fontSize: 13, fontWeight: "800" },
+  analysisWeight: { color: colors.ink, fontSize: 12, fontWeight: "900", paddingHorizontal: 8, paddingVertical: 4, borderRadius: radii.pill, backgroundColor: colors.surface },
+  analysisScore: { color: colors.ink, fontSize: 14, fontWeight: "800" },
+  analysisProgress: { height: 8 },
+  analysisVectorFill: { height: "100%", borderRadius: 99, backgroundColor: colors.accent },
+  analysisEquation: { color: colors.muted, fontSize: 12, lineHeight: 18 },
+  totalEquation: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingTop: spacing.sm, borderTopWidth: 1, borderTopColor: colors.border },
+  totalEquationScore: { color: colors.primaryDark, fontSize: 21, fontWeight: "900" },
   scoreList: { gap: 11 },
+  visualSection: { gap: spacing.sm },
+  visualHeading: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
+  visualHeadingCopy: { flex: 1, gap: 2 },
+  visualSubtitle: { color: colors.muted, fontSize: 12, lineHeight: 17 },
+  visualFeatureCard: { gap: spacing.sm, padding: spacing.md, borderRadius: radii.control, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
+  visualFeatureTitle: { flexDirection: "row", alignItems: "center", gap: spacing.xs },
+  visualFeatureTitleText: { flex: 1, color: colors.ink, fontSize: 13, fontWeight: "800" },
+  visualMatched: { color: colors.success, fontSize: 10, fontWeight: "800", paddingHorizontal: 7, paddingVertical: 4, borderRadius: radii.pill, backgroundColor: colors.successSoft },
+  visualFeaturePair: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
+  visualFeatureValue: { flex: 1, minWidth: 125, gap: 4 },
+  visualFeatureLabel: { color: colors.muted, fontSize: 11, fontWeight: "700" },
+  visualFeatureText: { color: colors.ink, fontSize: 13, lineHeight: 18 },
   scoreRow: { gap: 6 },
   scoreHeading: { flexDirection: "row", alignItems: "center", gap: 7 },
   scoreLabel: { flex: 1, color: colors.ink, fontSize: 13 },

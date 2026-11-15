@@ -39,6 +39,32 @@ export interface SessionResponse {
   user: MobileUser;
 }
 
+export interface MatchBreakdown {
+  vectorScore: number | null;
+  vectorWeight: number;
+  vectorContribution: number;
+  contextScore: number;
+  contextWeight: number;
+  contextContribution: number;
+  hasVector: boolean;
+}
+
+export interface AiFeatureSummary {
+  color: string | null;
+  condition: string | null;
+  ocrText: string | null;
+  tags: string[];
+}
+
+export interface AiVisualAnalysis {
+  hasImageAnalysis: boolean;
+  sourceSummary?: AiFeatureSummary;
+  candidateSummary?: AiFeatureSummary;
+  colorMatch?: { matched: boolean; sourceColor?: string; candidateColor?: string };
+  conditionMatch?: { sourceCondition?: string; candidateCondition?: string };
+  ocrMatch?: { matched: boolean; sourceOcr?: string; candidateOcr?: string; commonTokens: string[] };
+}
+
 export type MatchTier = "WEAK" | "SUGGESTION" | "NOTIFY" | "HIGH_CONFIDENCE";
 export type MatchFeedbackValue = "USEFUL" | "IRRELEVANT" | "INCORRECT";
 
@@ -53,6 +79,8 @@ export interface MatchExplanation {
   categoryReason: string;
   daysDiff: number | null;
   penalties: string[];
+  breakdown?: MatchBreakdown;
+  aiVisualAnalysis?: AiVisualAnalysis;
 }
 
 export interface MatchFeedback {
