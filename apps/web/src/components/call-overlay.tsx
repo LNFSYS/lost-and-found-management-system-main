@@ -260,6 +260,7 @@ export function CallOverlay({
                       className="call-remote-video"
                       autoPlay
                       playsInline
+                      muted
                     />
                   )}
 

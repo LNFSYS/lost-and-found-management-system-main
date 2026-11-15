@@ -667,23 +667,65 @@ export function ClaimsPage() {
   }, [claimId, location.state]);
 
   useEffect(() => {
-    const roomId = claim?.room?.id;
-    if (!claimId || !claim?.canSend || !roomId) return;
     let active = true;
     const unsubscribe = api.subscribeRealtime({
-      roomId,
       onNotification: (event) => {
         if (!active) return;
-        const sameClaimUpdate = event.workflow === "CLAIM" && event.notification.entityType === "CLAIM" && event.notification.entityId === claimId;
-        if (sameClaimUpdate) {
-          void api.getClaim(claimId).then(updated => {
-            if (active && isCurrentRoom(claimId, roomRequest.current.generation)) applyClaimUpdate(updated);
+        if (event.workflow === "CHAT" || event.workflow === "CLAIM") {
+          const targetClaimId = event.notification.entityType === "CLAIM" ? event.notification.entityId : null;
+          const targetRoomId = event.roomId;
+
+          // 1. Instantly bump conversation item in state (0ms UI latency)
+          setClaims((current) => {
+            const index = current.findIndex(
+              (item) => (targetClaimId && item.id === targetClaimId) || (targetRoomId && item.room?.id === targetRoomId)
+            );
+            if (index === -1) return current;
+            const targetItem = current[index];
+            const isCurrentlyOpen = selectedClaimId.current === targetItem.id;
+            const updatedItem: ClaimRecord = {
+              ...targetItem,
+              conversation: {
+                lastMessage: targetItem.conversation?.lastMessage ?? "Tin nhắn mới",
+                lastMessageAt: event.notification.createdAt || new Date().toISOString(),
+                unreadCount: isCurrentlyOpen ? 0 : (targetItem.conversation?.unreadCount ?? 0) + 1,
+                custodyEscalated: targetItem.conversation?.custodyEscalated ?? false,
+              }
+            };
+            return [updatedItem, ...current.filter((_, idx) => idx !== index)];
+          });
+
+          // 2. Refresh list from server to get accurate lastMessage preview, unreadCount, and handle new conversations
+          void api.listClaims({ page: 1, pageSize: 50 }).then((result) => {
+            if (!active) return;
+            setClaims((current) => {
+              const byId = new Map(current.map((item) => [item.id, item]));
+              result.items.forEach((item) => {
+                const isCurrentlyOpen = selectedClaimId.current === item.id;
+                const unreadCount = isCurrentlyOpen ? 0 : item.conversation?.unreadCount ?? 0;
+                byId.set(item.id, {
+                  ...item,
+                  conversation: item.conversation ? { ...item.conversation, unreadCount } : undefined
+                });
+              });
+              return [...byId.values()].sort((left, right) =>
+                (right.conversation?.lastMessageAt ?? "").localeCompare(left.conversation?.lastMessageAt ?? "") ||
+                right.id.localeCompare(left.id)
+              );
+            });
           }).catch(() => undefined);
+
+          // 3. If it's the currently open claim and a CLAIM update, update detail
+          if (targetClaimId && selectedClaimId.current === targetClaimId && event.workflow === "CLAIM") {
+            void api.getClaim(targetClaimId).then(updated => {
+              if (active && selectedClaimId.current === targetClaimId) applyClaimUpdate(updated);
+            }).catch(() => undefined);
+          }
         }
       }
     });
     return () => { active = false; unsubscribe(); };
-  }, [claimId, claim?.canSend, claim?.room?.id]);
+  }, [user?.id]);
 
   useEffect(() => {
     const roomId = claim?.room?.id;
@@ -697,15 +739,21 @@ export function ClaimsPage() {
       onMessage: (message) => {
         if (!active || !isCurrentRoom(claimId, generation) || message.roomId !== roomId) return;
         setMessages(current => mergeMessages(current, [message]));
-        setClaims(current => current.map(item => item.id === claimId ? {
-          ...item,
-          conversation: {
-            lastMessage: message.content ?? (message.messageType === "IMAGE" ? "Ảnh" : ""),
-            lastMessageAt: message.createdAt,
-            unreadCount: 0,
-            custodyEscalated: item.conversation?.custodyEscalated
-          }
-        } : item));
+        setClaims(current => {
+          const index = current.findIndex(item => item.id === claimId);
+          if (index === -1) return current;
+          const target = current[index];
+          const updated: ClaimRecord = {
+            ...target,
+            conversation: {
+              lastMessage: message.content ?? (message.messageType === "IMAGE" ? "Ảnh" : ""),
+              lastMessageAt: message.createdAt,
+              unreadCount: 0,
+              custodyEscalated: target.conversation?.custodyEscalated
+            }
+          };
+          return [updated, ...current.filter((_, idx) => idx !== index)];
+        });
         if (message.messageType === "IMAGE") {
           void api.listClaimEvidence(claimId).then(result => {
             if (active && isCurrentRoom(claimId, generation)) setEvidence(result.items);
@@ -845,7 +893,21 @@ export function ClaimsPage() {
       setReplyingToQuestion(current => current === replyingToQuestion ? null : current);
       const sent = imageRetry ? await api.sendClaimImage(claimId, imageRetry.file, imageRetry.content, imageRetry.key)
         : await api.sendClaimMessage(claimId, finalContent, retry.clientMessageId);
-      setClaims((items) => items.map((item) => item.id === claimId ? { ...item, conversation: { lastMessage: sent.content ?? (sent.messageType === "IMAGE" ? "Ảnh" : ""), lastMessageAt: sent.createdAt, unreadCount: 0, custodyEscalated: item.conversation?.custodyEscalated } } : item));
+      setClaims((items) => {
+        const index = items.findIndex(item => item.id === claimId);
+        if (index === -1) return items;
+        const target = items[index];
+        const updated: ClaimRecord = {
+          ...target,
+          conversation: {
+            lastMessage: sent.content ?? (sent.messageType === "IMAGE" ? "Ảnh" : ""),
+            lastMessageAt: sent.createdAt,
+            unreadCount: 0,
+            custodyEscalated: target.conversation?.custodyEscalated
+          }
+        };
+        return [updated, ...items.filter((_, idx) => idx !== index)];
+      });
       if (!isCurrentRoom(claimId, generation)) return;
       setMessages((current) => mergeMessages(current, [sent]));
       if (imageRetry) {
