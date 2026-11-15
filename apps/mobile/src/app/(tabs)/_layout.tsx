@@ -1,5 +1,6 @@
+import { useEffect } from "react";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
-import { Redirect, Tabs } from "expo-router";
+import { Redirect, router, Tabs, usePathname } from "expo-router";
 import { Platform } from "react-native";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { appTabLabels } from "@/constants/labels";
@@ -10,14 +11,22 @@ import { useNotificationCount } from "@/context/notification-count-context";
 export default function TabsLayout() {
   const { user, isHydrating } = useAuth();
   const { unreadCount } = useNotificationCount();
+  const pathname = usePathname();
+  const isAdmin = user?.roles.includes("ADMIN") ?? false;
+  const routeRoot = pathname.split("/").filter(Boolean)[0] ?? "";
+
+  useEffect(() => {
+    if (isHydrating || !user) return;
+    if (isAdmin && routeRoot !== "admin" && routeRoot !== "staff") router.replace("/admin");
+    if (!isAdmin && (routeRoot === "admin" || routeRoot === "staff")) router.replace("/home");
+  }, [isAdmin, isHydrating, routeRoot, user]);
+
   if (isHydrating) return <LoadingSpinner label="Đang khôi phục phiên đăng nhập…" />;
   if (!user) return <Redirect href="/login" />;
-  const isAdmin = user.roles.includes("ADMIN");
   const isStaff = isAdmin || user.roles.includes("STAFF");
 
   return (
     <Tabs
-      initialRouteName={isAdmin ? "admin" : "home"}
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: colors.primary,
