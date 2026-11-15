@@ -1,11 +1,21 @@
 import axios, { AxiosHeaders, create, isAxiosError, type AxiosError, type InternalAxiosRequestConfig } from "axios";
 import { Platform } from "react-native";
 import * as SecureStore from "expo-secure-store";
+import { io, type Socket } from "socket.io-client";
 
 const ACCESS_TOKEN_KEY = "lnfs.access-token";
 const CACHED_USER_KEY = "lnfs.cached-user";
 const configuredBaseUrl = process.env.EXPO_PUBLIC_API_URL?.trim();
-const apiBaseUrl = configuredBaseUrl || (__DEV__ ? "http://localhost:3001/api" : "");
+const configuredApiBaseUrl = configuredBaseUrl || (__DEV__ ? "http://localhost:3001/api" : "");
+
+function normalizeApiBaseUrl(value: string) {
+  const url = new URL(value.replace(/\/+$/, ""));
+  const pathname = url.pathname.replace(/\/+$/, "");
+  url.pathname = pathname.endsWith("/api") ? pathname : `${pathname}/api`;
+  return url.toString().replace(/\/+$/, "");
+}
+
+const apiBaseUrl = configuredApiBaseUrl ? normalizeApiBaseUrl(configuredApiBaseUrl) : "";
 
 if (!apiBaseUrl) {
   throw new Error("EXPO_PUBLIC_API_URL must be set to the deployed API URL for preview and production builds.");
@@ -39,6 +49,32 @@ export interface SessionResponse {
   user: MobileUser;
 }
 
+export interface MatchBreakdown {
+  vectorScore: number | null;
+  vectorWeight: number;
+  vectorContribution: number;
+  contextScore: number;
+  contextWeight: number;
+  contextContribution: number;
+  hasVector: boolean;
+}
+
+export interface AiFeatureSummary {
+  color: string | null;
+  condition: string | null;
+  ocrText: string | null;
+  tags: string[];
+}
+
+export interface AiVisualAnalysis {
+  hasImageAnalysis: boolean;
+  sourceSummary?: AiFeatureSummary;
+  candidateSummary?: AiFeatureSummary;
+  colorMatch?: { matched: boolean; sourceColor?: string; candidateColor?: string };
+  conditionMatch?: { sourceCondition?: string; candidateCondition?: string };
+  ocrMatch?: { matched: boolean; sourceOcr?: string; candidateOcr?: string; commonTokens: string[] };
+}
+
 export type MatchTier = "WEAK" | "SUGGESTION" | "NOTIFY" | "HIGH_CONFIDENCE";
 export type MatchFeedbackValue = "USEFUL" | "IRRELEVANT" | "INCORRECT";
 
@@ -53,6 +89,8 @@ export interface MatchExplanation {
   categoryReason: string;
   daysDiff: number | null;
   penalties: string[];
+  breakdown?: MatchBreakdown;
+  aiVisualAnalysis?: AiVisualAnalysis;
 }
 
 export interface MatchFeedback {
@@ -351,6 +389,30 @@ export interface MobileImageFile {
   type?: string;
   size?: number;
   id?: string;
+}
+
+export interface WarehouseConversationMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
+export interface WarehouseIntakeConversationExtraction {
+  mode: "INTAKE";
+  fields: {
+    itemName: string | null;
+    description: string | null;
+    categoryId: string | null;
+    areaId: string | null;
+    buildingId: string | null;
+    roomText: string | null;
+    finderName: string | null;
+    finderContact: string | null;
+    conditionNotes: string | null;
+    accessories: string | null;
+    receivedQuantity: number | null;
+  };
+  assistantMessage: string;
+  warnings: string[];
 }
 
 export interface CreatePostPayload {
@@ -824,6 +886,75 @@ api.interceptors.response.use(
   },
 );
 
+export function subscribeClaimChatSocket(handlers: { roomId?: string; onSocket: (socket: Socket | null) => void }) {
+  let active = true;
+  let socket: Socket | null = null;
+  let retryTimer: ReturnType<typeof setTimeout> | null = null;
+  let retryDelay = 500;
+
+  const scheduleReconnect = () => {
+    if (!active || retryTimer) return;
+    retryTimer = setTimeout(() => {
+      retryTimer = null;
+      void connect();
+    }, retryDelay);
+    retryDelay = Math.min(10_000, retryDelay * 2);
+  };
+
+  const connect = async () => {
+    const accessToken = await tokenStorage.get().catch(() => null);
+    if (!active) return;
+    if (!accessToken) {
+      scheduleReconnect();
+      return;
+    }
+
+    const endpoint = new URL(API_BASE_URL);
+    const basePath = endpoint.pathname.replace(/\/+$/, "") || "/api";
+    const current = io(endpoint.origin, {
+      path: `${basePath}/realtime/chat-socket`,
+      auth: { accessToken, roomId: handlers.roomId ?? "global" },
+      withCredentials: true,
+      autoConnect: false,
+      forceNew: true,
+      reconnection: false,
+      timeout: 15_000,
+    });
+    socket = current;
+    current.on("connect", () => {
+      retryDelay = 500;
+      handlers.onSocket(current);
+    });
+    current.on("disconnect", () => {
+      if (socket === current) handlers.onSocket(null);
+      scheduleReconnect();
+    });
+    current.on("connect_error", (error: Error & { data?: { code?: string } }) => {
+      if (socket === current) handlers.onSocket(null);
+      current.disconnect();
+      if (error.data?.code === "UNAUTHENTICATED") {
+        void api.post("/auth/refresh").catch(() => undefined).finally(scheduleReconnect);
+      } else {
+        scheduleReconnect();
+      }
+    });
+    current.connect();
+  };
+
+  void connect();
+  return () => {
+    active = false;
+    if (retryTimer) clearTimeout(retryTimer);
+    retryTimer = null;
+    if (socket) {
+      socket.removeAllListeners();
+      socket.disconnect();
+      socket = null;
+    }
+    handlers.onSocket(null);
+  };
+}
+
 function mediaApiPath(path: string) {
   const base = new URL(API_BASE_URL);
   const url = new URL(path, `${API_BASE_URL}/`);
@@ -891,6 +1022,7 @@ export function isNetworkError(error: unknown): error is AxiosError {
 export function getApiErrorMessage(error: unknown) {
   if (isAxiosError(error)) {
     const message = (error.response?.data as { message?: unknown } | undefined)?.message;
+    if (message === "Không tìm thấy endpoint") return "Máy chủ chưa có API này. Kiểm tra EXPO_PUBLIC_API_URL có phần /api và cập nhật phiên bản API đã triển khai.";
     if (typeof message === "string" && message.trim()) return message;
     if (!error.response) return "Không thể kết nối máy chủ. Hãy kiểm tra mạng và thử lại.";
   }
@@ -1129,6 +1261,19 @@ export const staffService = {
   },
   deleteIntakeImage: (imageId: string, intakeKey: string) =>
     api.delete<{ removed: boolean }>(`/staff/warehouse-intake-images/${imageId}`, { data: { intakeKey } }).then((response) => response.data),
+  extractWalkInConversation: async (messages: WarehouseConversationMessage[], images: MobileImageFile[] = []) => {
+    if (!images.length) {
+      return api.post<WarehouseIntakeConversationExtraction>("/staff/warehouse-conversations/extract", {
+        mode: "INTAKE",
+        intakeKind: "WALK_IN",
+        messages,
+      }).then((response) => response.data);
+    }
+    const formData = new FormData();
+    formData.append("payload", JSON.stringify({ mode: "INTAKE", intakeKind: "WALK_IN", messages }));
+    for (const image of images) await appendFileToFormData(formData, "images", image);
+    return api.post<WarehouseIntakeConversationExtraction>("/staff/warehouse-conversations/extract", formData).then((response) => response.data);
+  },
   createWalkInWarehouseItem: (payload: StaffCreateWarehouseItemPayload) =>
     api.post<StaffWarehouseItem>("/staff/warehouse-items", payload).then((response) => response.data),
 };

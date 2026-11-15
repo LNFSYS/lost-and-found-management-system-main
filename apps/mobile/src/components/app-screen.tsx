@@ -22,7 +22,7 @@ const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: colors.background },
   content: { width: "100%", maxWidth: 720, alignSelf: "center", gap: spacing.xl, paddingHorizontal: spacing.lg, paddingTop: spacing.xl, paddingBottom: spacing.xxl },
   heading: { gap: spacing.sm },
-  brand: { color: colors.primary, fontSize: 11, letterSpacing: 1.2, fontWeight: "800" },
+  brand: { color: colors.accent, fontSize: 11, letterSpacing: 1.2, fontWeight: "800" },
   title: { color: colors.ink, fontSize: 28, lineHeight: 34, fontWeight: "800" },
   description: { maxWidth: 520, color: colors.muted, fontSize: 15, lineHeight: 22 },
 });

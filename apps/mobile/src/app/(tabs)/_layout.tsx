@@ -1,5 +1,6 @@
+import { useEffect } from "react";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
-import { Redirect, Tabs } from "expo-router";
+import { Redirect, router, Tabs, usePathname } from "expo-router";
 import { Platform } from "react-native";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { appTabLabels } from "@/constants/labels";
@@ -10,11 +11,20 @@ import { useNotificationCount } from "@/context/notification-count-context";
 export default function TabsLayout() {
   const { user, isHydrating } = useAuth();
   const { unreadCount } = useNotificationCount();
+  const pathname = usePathname();
+  const isAdmin = user?.roles.includes("ADMIN") ?? false;
+  const isStaff = isAdmin || (user?.roles.includes("STAFF") ?? false);
+  const routeRoot = pathname.split("/").filter(Boolean)[0] ?? "";
+
+  useEffect(() => {
+    if (isHydrating || !user) return;
+    if (isAdmin && routeRoot === "home") router.replace("/admin");
+    if (!isAdmin && routeRoot === "admin") router.replace("/home");
+    if (!isStaff && routeRoot === "staff") router.replace("/home");
+  }, [isAdmin, isHydrating, isStaff, routeRoot, user]);
+
   if (isHydrating) return <LoadingSpinner label="Đang khôi phục phiên đăng nhập…" />;
   if (!user) return <Redirect href="/login" />;
-  const isAdmin = user.roles.includes("ADMIN");
-  const isStaff = isAdmin || user.roles.includes("STAFF");
-
   return (
     <Tabs
       screenOptions={{
@@ -27,16 +37,16 @@ export default function TabsLayout() {
         tabBarHideOnKeyboard: true,
       }}
     >
-      <Tabs.Screen name="home" options={{ title: appTabLabels.home, tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name="home-variant-outline" color={String(color)} size={size} /> }} />
-      <Tabs.Screen name="posts" options={{ title: appTabLabels.posts, tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name="view-grid-outline" color={String(color)} size={size} /> }} />
-      <Tabs.Screen name="claims" options={{ title: appTabLabels.claims, tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name="message-text-outline" color={String(color)} size={size} /> }} />
-      <Tabs.Screen name="appointments" options={{ title: appTabLabels.appointments, tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name="calendar-check-outline" color={String(color)} size={size} /> }} />
-      <Tabs.Screen name="profile" options={{ title: appTabLabels.profile, tabBarBadge: unreadCount > 0 ? (unreadCount > 99 ? "99+" : unreadCount) : undefined, tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name="account-circle-outline" color={String(color)} size={size} /> }} />
+      <Tabs.Screen name="home" options={{ title: appTabLabels.home, href: isAdmin ? null : undefined, tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name="home-variant-outline" color={String(color)} size={size} /> }} />
+      <Tabs.Screen name="posts" options={{ title: appTabLabels.posts, href: isAdmin ? null : undefined, tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name="view-grid-outline" color={String(color)} size={size} /> }} />
+      <Tabs.Screen name="claims" options={{ title: appTabLabels.claims, href: isAdmin ? null : undefined, tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name="message-text-outline" color={String(color)} size={size} /> }} />
+      <Tabs.Screen name="appointments" options={{ title: appTabLabels.appointments, href: isAdmin ? null : undefined, tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name="calendar-check-outline" color={String(color)} size={size} /> }} />
+      <Tabs.Screen name="profile" options={{ title: appTabLabels.profile, href: isAdmin ? null : undefined, tabBarBadge: unreadCount > 0 ? (unreadCount > 99 ? "99+" : unreadCount) : undefined, tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name="account-circle-outline" color={String(color)} size={size} /> }} />
       <Tabs.Screen name="notifications" options={{ href: null }} />
       <Tabs.Screen name="reports" options={{ href: null }} />
       <Tabs.Screen name="custody" options={{ href: null }} />
       <Tabs.Screen name="admin" options={{ title: appTabLabels.admin, href: isAdmin ? undefined : null, tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name="shield-account-outline" color={String(color)} size={size} /> }} />
-      <Tabs.Screen name="staff" options={{ title: appTabLabels.staff, href: isStaff ? undefined : null, tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name="clipboard-check-outline" color={String(color)} size={size} /> }} />
+      <Tabs.Screen name="staff" options={{ title: isAdmin ? "Nhiệm vụ" : appTabLabels.staff, href: isStaff ? undefined : null, tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name="clipboard-check-outline" color={String(color)} size={size} /> }} />
     </Tabs>
   );
 }

@@ -24,7 +24,9 @@ import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { SecureImage } from "@/components/secure-image";
 import { CustodyTransferModal } from "@/components/custody-transfer-modal";
 import { ReportModal } from "@/components/report-modal";
+import { useAuth } from "@/context/auth-context";
 import {
+  claimService,
   getApiErrorMessage,
   postService,
   type CustodyRequest,
@@ -85,8 +87,13 @@ function formatLocation(location: PostSummary["location"]): string {
 export default function PostDetailScreen() {
   const { postId } = useLocalSearchParams<{ postId: string }>();
   const insets = useSafeAreaInsets();
+  const { user } = useAuth();
 
   const [post, setPost] = useState<PostSummary | null>(null);
+  const [journeyAccess, setJourneyAccess] = useState<{ postId: string; userId: string } | null>(null);
+  const canViewJourney = Boolean(post && user && (
+    post.owner.id === user.id || (journeyAccess?.postId === post.id && journeyAccess.userId === user.id)
+  ));
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -173,6 +180,28 @@ export default function PostDetailScreen() {
     }, 0);
     return () => clearTimeout(timer);
   }, [loadPost]);
+
+  useEffect(() => {
+    if (!post || !user || post.owner.id === user.id) return;
+
+    let active = true;
+    const postId = post.id;
+    const userId = user.id;
+    void claimService.list(1, 50).then(({ items }) => {
+      if (!active) return;
+      const authorized = items.some((claim) => {
+        const isParticipant = claim.claimantId === userId || claim.finderId === userId;
+        const claimPostIds = [claim.foundPostId, claim.lostPostId, claim.posts.found.id, claim.posts.lost?.id];
+        return isParticipant && claimPostIds.includes(postId);
+      });
+      setJourneyAccess((current) => authorized
+        ? { postId, userId }
+        : current?.postId === postId && current.userId === userId ? null : current);
+    }).catch(() => {
+      if (active) setJourneyAccess((current) => current?.postId === postId && current.userId === userId ? null : current);
+    });
+    return () => { active = false; };
+  }, [post, user]);
 
   const handleBack = () => {
     if (router.canGoBack()) {
@@ -842,7 +871,7 @@ export default function PostDetailScreen() {
                 </View>
               </View>
             </View>
-            <Pressable
+            {canViewJourney ? <Pressable
               accessibilityRole="button"
               onPress={() => router.push(`/posts/${post.id}/journey` as never)}
               style={({ pressed }) => [styles.journeyButton, pressed && { opacity: 0.78 }]}
@@ -850,7 +879,7 @@ export default function PostDetailScreen() {
               <MaterialCommunityIcons name="timeline-clock-outline" size={18} color={colors.primary} />
               <Text style={styles.journeyButtonText}>Theo dõi hành trình vật phẩm</Text>
               <MaterialCommunityIcons name="chevron-right" size={20} color={colors.muted} />
-            </Pressable>
+            </Pressable> : null}
           </Card>
 
           {/* Related Counterpart Posts */}
