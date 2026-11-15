@@ -13,18 +13,18 @@ export default function TabsLayout() {
   const { unreadCount } = useNotificationCount();
   const pathname = usePathname();
   const isAdmin = user?.roles.includes("ADMIN") ?? false;
+  const isStaff = isAdmin || (user?.roles.includes("STAFF") ?? false);
   const routeRoot = pathname.split("/").filter(Boolean)[0] ?? "";
 
   useEffect(() => {
     if (isHydrating || !user) return;
-    if (isAdmin && routeRoot !== "admin" && routeRoot !== "staff") router.replace("/admin");
-    if (!isAdmin && (routeRoot === "admin" || routeRoot === "staff")) router.replace("/home");
-  }, [isAdmin, isHydrating, routeRoot, user]);
+    if (isAdmin && routeRoot === "home") router.replace("/admin");
+    if (!isAdmin && routeRoot === "admin") router.replace("/home");
+    if (!isStaff && routeRoot === "staff") router.replace("/home");
+  }, [isAdmin, isHydrating, isStaff, routeRoot, user]);
 
   if (isHydrating) return <LoadingSpinner label="Đang khôi phục phiên đăng nhập…" />;
   if (!user) return <Redirect href="/login" />;
-  const isStaff = isAdmin || user.roles.includes("STAFF");
-
   return (
     <Tabs
       screenOptions={{
