@@ -17,6 +17,7 @@ export default function TabsLayout() {
 
   return (
     <Tabs
+      initialRouteName={isAdmin ? "admin" : "home"}
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: colors.primary,
@@ -27,16 +28,16 @@ export default function TabsLayout() {
         tabBarHideOnKeyboard: true,
       }}
     >
-      <Tabs.Screen name="home" options={{ title: appTabLabels.home, tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name="home-variant-outline" color={String(color)} size={size} /> }} />
-      <Tabs.Screen name="posts" options={{ title: appTabLabels.posts, tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name="view-grid-outline" color={String(color)} size={size} /> }} />
-      <Tabs.Screen name="claims" options={{ title: appTabLabels.claims, tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name="message-text-outline" color={String(color)} size={size} /> }} />
-      <Tabs.Screen name="appointments" options={{ title: appTabLabels.appointments, tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name="calendar-check-outline" color={String(color)} size={size} /> }} />
-      <Tabs.Screen name="profile" options={{ title: appTabLabels.profile, tabBarBadge: unreadCount > 0 ? (unreadCount > 99 ? "99+" : unreadCount) : undefined, tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name="account-circle-outline" color={String(color)} size={size} /> }} />
+      <Tabs.Screen name="home" options={{ title: appTabLabels.home, href: isAdmin ? null : undefined, tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name="home-variant-outline" color={String(color)} size={size} /> }} />
+      <Tabs.Screen name="posts" options={{ title: appTabLabels.posts, href: isAdmin ? null : undefined, tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name="view-grid-outline" color={String(color)} size={size} /> }} />
+      <Tabs.Screen name="claims" options={{ title: appTabLabels.claims, href: isAdmin ? null : undefined, tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name="message-text-outline" color={String(color)} size={size} /> }} />
+      <Tabs.Screen name="appointments" options={{ title: appTabLabels.appointments, href: isAdmin ? null : undefined, tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name="calendar-check-outline" color={String(color)} size={size} /> }} />
+      <Tabs.Screen name="profile" options={{ title: appTabLabels.profile, href: isAdmin ? null : undefined, tabBarBadge: unreadCount > 0 ? (unreadCount > 99 ? "99+" : unreadCount) : undefined, tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name="account-circle-outline" color={String(color)} size={size} /> }} />
       <Tabs.Screen name="notifications" options={{ href: null }} />
       <Tabs.Screen name="reports" options={{ href: null }} />
       <Tabs.Screen name="custody" options={{ href: null }} />
       <Tabs.Screen name="admin" options={{ title: appTabLabels.admin, href: isAdmin ? undefined : null, tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name="shield-account-outline" color={String(color)} size={size} /> }} />
-      <Tabs.Screen name="staff" options={{ title: appTabLabels.staff, href: isStaff ? undefined : null, tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name="clipboard-check-outline" color={String(color)} size={size} /> }} />
+      <Tabs.Screen name="staff" options={{ title: isAdmin ? "Nhiệm vụ" : appTabLabels.staff, href: isStaff ? undefined : null, tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name="clipboard-check-outline" color={String(color)} size={size} /> }} />
     </Tabs>
   );
 }
