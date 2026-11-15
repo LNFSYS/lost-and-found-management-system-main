@@ -6,6 +6,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -95,6 +96,82 @@ function TokenList({ title, values }: { title: string; values: string[] }) {
       <View style={styles.tokenList}>
         {values.map((value, index) => <View key={`${value}-${index}`} style={styles.token}><Text style={styles.tokenText}>{value}</Text></View>)}
       </View>
+    </View>
+  );
+}
+
+type MatchAssistantMessage = { role: "user" | "assistant"; content: string };
+
+function MatchExplanationAssistant({ result, totalPercent, vectorContribution, contextContribution }: {
+  result: MatchCandidateResult;
+  totalPercent: number;
+  vectorContribution: number;
+  contextContribution: number;
+}) {
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState("");
+  const [messages, setMessages] = useState<MatchAssistantMessage[]>([]);
+  const prompts = ["Vì sao có gợi ý này?", "Ảnh giống nhau ở điểm nào?", "Tôi nên kiểm tra gì tiếp?"];
+
+  const sendQuestion = (question = draft) => {
+    const content = question.trim();
+    if (!content) return;
+    const normalized = content.toLocaleLowerCase("vi");
+    const explanation = result.explanation;
+    const visual = explanation?.aiVisualAnalysis;
+    const summary = explanation?.summary?.trim();
+    let answer: string;
+
+    if (["ảnh", "màu", "chữ", "ocr", "hình"].some((term) => normalized.includes(term))) {
+      if (!visual?.hasImageAnalysis) {
+        answer = "Cặp bài này chưa có đủ dữ liệu phân tích ảnh để so sánh màu sắc, tình trạng bề mặt hoặc chữ OCR. Hãy đối chiếu ảnh gốc và các dấu hiệu riêng trực tiếp.";
+      } else {
+        const source = visual.sourceSummary;
+        const candidate = visual.candidateSummary;
+        const color = source?.color && candidate?.color ? `Màu: ${source.color} ↔ ${candidate.color}.` : "Màu sắc: chưa đủ dữ liệu ở một trong hai ảnh.";
+        const condition = source?.condition && candidate?.condition ? `Tình trạng bề mặt: ${source.condition} ↔ ${candidate.condition}.` : "Tình trạng bề mặt: chưa đủ dữ liệu ở một trong hai ảnh.";
+        const ocr = source?.ocrText && candidate?.ocrText ? `Chữ nhận diện: ${source.ocrText} ↔ ${candidate.ocrText}.` : "Chữ OCR: chưa nhận diện được ở cả hai ảnh.";
+        answer = `${color} ${condition} ${ocr} Đây là tín hiệu hỗ trợ đối chiếu, không xác nhận vật phẩm là cùng một món.`;
+      }
+    } else if (["điểm", "vì sao", "khớp", "tương đồng", "gợi ý"].some((term) => normalized.includes(term))) {
+      answer = `Điểm tương đồng hiện là ${totalPercent}%. Vector thị giác đóng góp ${vectorContribution} điểm phần trăm; ngữ cảnh đóng góp ${contextContribution}. ${summary ? `${summary} ` : ""}Các con số là gợi ý để ưu tiên xem xét, không phải kết luận xác minh.`;
+    } else if (["kiểm tra", "tiếp theo", "xác minh", "sở hữu", "liên hệ"].some((term) => normalized.includes(term))) {
+      answer = "Hãy so sánh dấu hiệu riêng chưa công khai, thời gian và địa điểm nhặt/mất; sau đó dùng ‘Bắt đầu xác minh’ để trao đổi riêng. Không yêu cầu người khác gửi mật khẩu, giấy tờ hoặc mã xác thực.";
+    } else {
+      answer = `Gợi ý đạt ${totalPercent}% dựa trên ảnh và ngữ cảnh của hai bài đăng. ${summary ? `${summary} ` : ""}Bạn có thể hỏi về điểm số, ảnh, màu sắc, chữ OCR hoặc bước đối chiếu tiếp theo.`;
+    }
+
+    const userMessage: MatchAssistantMessage = { role: "user", content };
+    const assistantMessage: MatchAssistantMessage = { role: "assistant", content: answer };
+    setMessages((current) => [...current, userMessage, assistantMessage].slice(-8));
+    setDraft("");
+    setOpen(true);
+  };
+
+  return (
+    <View style={styles.matchAssistant}>
+      <Pressable accessibilityRole="button" accessibilityState={{ expanded: open }} onPress={() => setOpen((value) => !value)} style={styles.matchAssistantHeading}>
+        <View style={styles.matchAssistantIcon}><MaterialCommunityIcons name="creation" size={18} color={colors.accent} /></View>
+        <View style={styles.visualHeadingCopy}>
+          <Text style={styles.matchAssistantTitle}>Trợ lý giải thích ghép đôi</Text>
+          <Text style={styles.visualSubtitle}>Hỏi về điểm AI và tín hiệu đối chiếu</Text>
+        </View>
+        <MaterialCommunityIcons name={open ? "chevron-up" : "chevron-down"} size={20} color={colors.muted} />
+      </Pressable>
+      {open ? (
+        <View style={styles.matchAssistantBody}>
+          <Text style={styles.matchAssistantNote}>Câu trả lời dựa trên điểm số và dữ liệu đang hiển thị; gợi ý không xác nhận quyền sở hữu.</Text>
+          {messages.length ? (
+            <View style={styles.matchAssistantMessages}>
+              {messages.map((message, index) => <View key={`${index}-${message.role}`} style={[styles.matchAssistantBubble, message.role === "user" ? styles.matchAssistantUserBubble : styles.matchAssistantReplyBubble]}><Text style={[styles.matchAssistantMessageText, message.role === "user" && styles.matchAssistantUserText]}>{message.content}</Text></View>)}
+            </View>
+          ) : <View style={styles.matchAssistantPrompts}>{prompts.map((prompt) => <Pressable key={prompt} onPress={() => sendQuestion(prompt)} style={styles.matchAssistantPrompt}><Text style={styles.matchAssistantPromptText}>{prompt}</Text></Pressable>)}</View>}
+          <View style={styles.matchAssistantComposer}>
+            <TextInput accessibilityLabel="Hỏi về gợi ý ghép đôi" value={draft} onChangeText={setDraft} onSubmitEditing={() => sendQuestion()} returnKeyType="send" placeholder="Nhập câu hỏi…" placeholderTextColor={colors.muted} style={styles.matchAssistantInput} />
+            <Pressable accessibilityRole="button" accessibilityLabel="Gửi câu hỏi" disabled={!draft.trim()} onPress={() => sendQuestion()} style={[styles.matchAssistantSend, !draft.trim() && styles.matchAssistantSendDisabled]}><MaterialCommunityIcons name="send" size={17} color={colors.surface} /></Pressable>
+          </View>
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -278,6 +355,8 @@ function CandidateCard({
         <Text style={styles.privateNote}>Giải thích chi tiết chưa khả dụng cho gợi ý này.</Text>
       )}
 
+      <MatchExplanationAssistant result={result} totalPercent={totalPercent} vectorContribution={vectorContribution} contextContribution={contextContribution} />
+
       <View style={styles.sectionDivider} />
       <Text style={styles.feedbackHeading}>{existingFeedback ? `Bạn đã đánh giá: ${existingFeedback}` : "Gợi ý này có hữu ích không?"}</Text>
       <View style={styles.feedbackChoices}>
@@ -446,7 +525,7 @@ export default function PostMatchesScreen() {
           <View><Text style={styles.sectionHeading}>Ứng viên phù hợp</Text><Text style={styles.resultCount}>{suggestions.length} gợi ý đạt ngưỡng tương đồng</Text></View>
           <MaterialCommunityIcons name="tune-variant" size={20} color={colors.muted} />
         </View>
-        {suggestions.length ? suggestions.map((result) => (
+        {data && suggestions.length ? suggestions.map((result) => (
           <CandidateCard
             key={result.matchId}
             result={result}
@@ -544,6 +623,25 @@ const styles = StyleSheet.create({
   token: { paddingHorizontal: 9, paddingVertical: 5, borderRadius: radii.pill, backgroundColor: colors.surfaceMuted },
   tokenText: { color: colors.ink, fontSize: 12, fontWeight: "600" },
   explanationLine: { color: colors.muted, fontSize: 13, lineHeight: 19 },
+  matchAssistant: { overflow: "hidden", borderWidth: 1, borderColor: "#F2D4BC", borderRadius: radii.control, backgroundColor: colors.surface },
+  matchAssistantHeading: { minHeight: 64, flexDirection: "row", alignItems: "center", gap: spacing.sm, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
+  matchAssistantIcon: { width: 36, height: 36, alignItems: "center", justifyContent: "center", borderRadius: 12, backgroundColor: colors.accentSoft },
+  matchAssistantTitle: { color: colors.ink, fontSize: 13, fontWeight: "900" },
+  matchAssistantBody: { gap: spacing.sm, padding: spacing.md, borderTopWidth: 1, borderTopColor: "#F2D4BC" },
+  matchAssistantNote: { color: colors.muted, fontSize: 11, lineHeight: 16 },
+  matchAssistantMessages: { gap: spacing.xs },
+  matchAssistantBubble: { maxWidth: "92%", padding: spacing.sm, borderRadius: radii.control },
+  matchAssistantUserBubble: { alignSelf: "flex-end", backgroundColor: colors.primary },
+  matchAssistantReplyBubble: { alignSelf: "flex-start", backgroundColor: colors.surfaceMuted },
+  matchAssistantMessageText: { color: colors.ink, fontSize: 12, lineHeight: 18 },
+  matchAssistantUserText: { color: colors.surface },
+  matchAssistantPrompts: { gap: spacing.xs },
+  matchAssistantPrompt: { minHeight: 38, justifyContent: "center", paddingHorizontal: spacing.sm, borderRadius: radii.control, backgroundColor: colors.surfaceMuted },
+  matchAssistantPromptText: { color: colors.primaryDark, fontSize: 11, fontWeight: "700" },
+  matchAssistantComposer: { flexDirection: "row", alignItems: "center", gap: spacing.xs },
+  matchAssistantInput: { flex: 1, minHeight: 42, paddingHorizontal: spacing.sm, borderWidth: 1, borderColor: colors.border, borderRadius: radii.control, color: colors.ink, fontSize: 12 },
+  matchAssistantSend: { width: 42, height: 42, alignItems: "center", justifyContent: "center", borderRadius: radii.control, backgroundColor: colors.primary },
+  matchAssistantSendDisabled: { opacity: 0.5 },
   penaltyBox: { gap: 5, padding: spacing.md, borderRadius: radii.control, backgroundColor: colors.warningSoft },
   penaltyTitle: { color: colors.warning, fontSize: 13, fontWeight: "800" },
   penaltyText: { color: colors.ink, fontSize: 12, lineHeight: 18 },
