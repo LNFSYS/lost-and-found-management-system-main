@@ -300,6 +300,11 @@ export default function PostMatchesScreen() {
     router.push(`/claims?composePostId=${encodeURIComponent(candidateId)}` as never);
   };
 
+  const suggestions = data?.results.filter((result) =>
+    !(result.candidate.type === "LOST" && result.candidate.canEdit)
+    && result.totalScore >= (data.thresholds.suggestion ?? 0.6)
+  ) ?? [];
+
   if (loading) return <SafeAreaView style={styles.safeArea}><LoadingSpinner label="Đang tải gợi ý ghép đôi…" /></SafeAreaView>;
 
   return (
@@ -337,10 +342,10 @@ export default function PostMatchesScreen() {
         ) : null}
 
         <View style={styles.resultsHeading}>
-          <View><Text style={styles.sectionHeading}>Ứng viên phù hợp</Text><Text style={styles.resultCount}>{data?.total ?? 0} gợi ý đang hiển thị</Text></View>
+          <View><Text style={styles.sectionHeading}>Ứng viên phù hợp</Text><Text style={styles.resultCount}>{suggestions.length} gợi ý đạt ngưỡng tương đồng</Text></View>
           <MaterialCommunityIcons name="tune-variant" size={20} color={colors.muted} />
         </View>
-        {data?.results.length ? data.results.map((result) => (
+        {suggestions.length ? suggestions.map((result) => (
           <CandidateCard
             key={result.matchId}
             result={result}
@@ -352,7 +357,7 @@ export default function PostMatchesScreen() {
           />
         )) : data ? (
           <Card style={styles.emptyCard}>
-            <EmptyState icon="magnify-close" title="Chưa có gợi ý phù hợp" description="Bạn có thể tính toán lại sau khi hệ thống nhận thêm bài đăng mới." />
+            <EmptyState icon="magnify-close" title="Chưa có gợi ý phù hợp" description="Chưa có bài đối ứng đạt ngưỡng gợi ý. Bạn có thể tính lại sau khi bổ sung mô tả hoặc có bài đăng mới." />
           </Card>
         ) : null}
         <Text style={styles.disclaimer}>Điểm tương đồng chỉ là gợi ý để bạn đối chiếu thêm; không xác nhận quyền sở hữu vật phẩm.</Text>
