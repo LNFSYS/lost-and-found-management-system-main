@@ -15,6 +15,7 @@ import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { claimRoleLabels } from "@/constants/labels";
 import { colors, radii, spacing } from "@/constants/theme";
 import { useAuth } from "@/context/auth-context";
+import { useCall } from "@/context/call-context";
 import {
   claimService,
   createRequestUuid,
@@ -77,6 +78,7 @@ function PersonBubble({ message, own, onOpenImage }: { message: ClaimMessage; ow
 export default function ClaimDetailScreen() {
   const { claimId } = useLocalSearchParams<{ claimId: string }>();
   const { user } = useAuth();
+  const { startCall } = useCall();
   const [claim, setClaim] = useState<ClaimRecord | null>(null);
   const [messages, setMessages] = useState<ClaimMessage[]>([]);
   const [cursor, setCursor] = useState<MessageCursor | null>(null);
@@ -380,12 +382,21 @@ export default function ClaimDetailScreen() {
   const item = claim.item;
   const openAppointment = () => router.push(`/appointments?claimId=${encodeURIComponent(claim.id)}` as never);
   const claimName = claim.claimantId === user?.id ? claim.finder.fullName : claim.claimant.fullName;
+  const calleeId = claim.claimantId === user?.id ? claim.finderId : claim.claimantId;
 
   return (
     <SafeAreaView style={styles.safeArea} edges={["top", "left", "right"]}>
       <View style={styles.topBar}>
         <Pressable accessibilityRole="button" accessibilityLabel="Quay lại danh sách claims" onPress={() => router.back()} style={styles.backButton}><MaterialCommunityIcons name="arrow-left" size={22} color={colors.ink} /></Pressable>
         <View style={styles.topBarCopy}><Text accessibilityRole="header" style={styles.topTitle}>{claimName}</Text><Text numberOfLines={1} style={styles.topSubtitle}>{item?.title ?? claim.posts.found.title}</Text></View>
+        {claim.canSend !== false ? <View style={styles.callActions}>
+          <Pressable accessibilityRole="button" accessibilityLabel="Gọi thoại" onPress={() => void startCall("VOICE", { calleeId, roomId: claim.room?.id ?? claim.roomId ?? claim.id, claimId: claim.id, peerName: claimName })} style={styles.callButton}>
+            <MaterialCommunityIcons name="phone-outline" size={19} color={colors.primary} />
+          </Pressable>
+          <Pressable accessibilityRole="button" accessibilityLabel="Gọi video" onPress={() => void startCall("VIDEO", { calleeId, roomId: claim.room?.id ?? claim.roomId ?? claim.id, claimId: claim.id, peerName: claimName })} style={styles.callButton}>
+            <MaterialCommunityIcons name="video-outline" size={19} color={colors.accent} />
+          </Pressable>
+        </View> : null}
         <View style={styles.roleBadge}><Text style={styles.roleBadgeText}>{claimRoleLabels[role]}</Text></View>
       </View>
       <ScrollView style={styles.panelTabScroll} horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.panelTabs}>
@@ -511,6 +522,7 @@ const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: colors.background }, flex: { flex: 1 },
   topBar: { minHeight: 58, flexDirection: "row", alignItems: "center", gap: spacing.sm, paddingHorizontal: spacing.md, backgroundColor: colors.surface, borderBottomWidth: 1, borderBottomColor: colors.border },
   backButton: { width: 42, height: 44, justifyContent: "center" }, topBarCopy: { flex: 1 }, topTitle: { color: colors.ink, fontSize: 15, fontWeight: "900" }, topSubtitle: { color: colors.muted, fontSize: 11, marginTop: 2 },
+  callActions: { flexDirection: "row", alignItems: "center", gap: 4 }, callButton: { width: 36, height: 38, alignItems: "center", justifyContent: "center", borderRadius: radii.control, backgroundColor: colors.surfaceMuted },
   roleBadge: { paddingHorizontal: 9, paddingVertical: 6, borderRadius: radii.pill, backgroundColor: colors.primarySoft }, roleBadgeText: { color: colors.primaryDark, fontSize: 9, fontWeight: "900" },
   panelTabScroll: { flexGrow: 0, height: 48 }, panelTabs: { paddingHorizontal: spacing.md, alignItems: "center", gap: spacing.xs }, panelTab: { height: 38, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 5, paddingHorizontal: spacing.md, borderRadius: radii.pill, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border }, panelTabSelected: { backgroundColor: colors.primary, borderColor: colors.primary }, panelTabText: { color: colors.muted, fontSize: 12, fontWeight: "700" }, panelTabTextSelected: { color: colors.surface }, panelTabCount: { color: colors.primary, fontSize: 10, fontWeight: "900" }, panelTabCountSelected: { color: colors.surface },
   inlineError: { paddingHorizontal: spacing.md, paddingTop: spacing.xs }, inlineNotice: { marginHorizontal: spacing.md, marginTop: spacing.xs, padding: spacing.sm, flexDirection: "row", gap: spacing.xs, alignItems: "center", backgroundColor: colors.successSoft, borderRadius: radii.control }, noticeText: { color: colors.success, fontSize: 12, flex: 1 },

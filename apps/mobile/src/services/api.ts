@@ -1,6 +1,7 @@
 import axios, { AxiosHeaders, create, isAxiosError, type AxiosError, type InternalAxiosRequestConfig } from "axios";
 import { Platform } from "react-native";
 import * as SecureStore from "expo-secure-store";
+import { io, type Socket } from "socket.io-client";
 
 const ACCESS_TOKEN_KEY = "lnfs.access-token";
 const CACHED_USER_KEY = "lnfs.cached-user";
@@ -884,6 +885,75 @@ api.interceptors.response.use(
     }
   },
 );
+
+export function subscribeClaimChatSocket(handlers: { roomId?: string; onSocket: (socket: Socket | null) => void }) {
+  let active = true;
+  let socket: Socket | null = null;
+  let retryTimer: ReturnType<typeof setTimeout> | null = null;
+  let retryDelay = 500;
+
+  const scheduleReconnect = () => {
+    if (!active || retryTimer) return;
+    retryTimer = setTimeout(() => {
+      retryTimer = null;
+      void connect();
+    }, retryDelay);
+    retryDelay = Math.min(10_000, retryDelay * 2);
+  };
+
+  const connect = async () => {
+    const accessToken = await tokenStorage.get().catch(() => null);
+    if (!active) return;
+    if (!accessToken) {
+      scheduleReconnect();
+      return;
+    }
+
+    const endpoint = new URL(API_BASE_URL);
+    const basePath = endpoint.pathname.replace(/\/+$/, "") || "/api";
+    const current = io(endpoint.origin, {
+      path: `${basePath}/realtime/chat-socket`,
+      auth: { accessToken, roomId: handlers.roomId ?? "global" },
+      withCredentials: true,
+      autoConnect: false,
+      forceNew: true,
+      reconnection: false,
+      timeout: 15_000,
+    });
+    socket = current;
+    current.on("connect", () => {
+      retryDelay = 500;
+      handlers.onSocket(current);
+    });
+    current.on("disconnect", () => {
+      if (socket === current) handlers.onSocket(null);
+      scheduleReconnect();
+    });
+    current.on("connect_error", (error: Error & { data?: { code?: string } }) => {
+      if (socket === current) handlers.onSocket(null);
+      current.disconnect();
+      if (error.data?.code === "UNAUTHENTICATED") {
+        void api.post("/auth/refresh").catch(() => undefined).finally(scheduleReconnect);
+      } else {
+        scheduleReconnect();
+      }
+    });
+    current.connect();
+  };
+
+  void connect();
+  return () => {
+    active = false;
+    if (retryTimer) clearTimeout(retryTimer);
+    retryTimer = null;
+    if (socket) {
+      socket.removeAllListeners();
+      socket.disconnect();
+      socket = null;
+    }
+    handlers.onSocket(null);
+  };
+}
 
 function mediaApiPath(path: string) {
   const base = new URL(API_BASE_URL);

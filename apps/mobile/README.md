@@ -10,6 +10,16 @@ Expo SDK 58 and TypeScript app for FPTU Lost & Found. Navigation uses Expo Route
 2. From the repository root, run `npm install` once, then `npm run dev:mobile`.
 3. Open the QR code in Expo Go or press `a` to open an installed Android emulator.
 
+Voice and video calls use native WebRTC and are not available in Expo Go. Build and install the development client once, then start Metro in development-client mode:
+
+```powershell
+cd apps/mobile
+npx eas-cli@latest build --platform android --profile development
+npx expo start --dev-client
+```
+
+Open the Metro link with the installed development build. An Expo account and an EAS project link are required for the cloud build. The other mobile screens can still be opened with Expo Go.
+
 When running in development, `EXPO_PUBLIC_API_URL` defaults to `http://localhost:3001/api` if it is unset. Preview and production builds require `EXPO_PUBLIC_API_URL` and reject localhost addresses so the deployed app cannot silently target a developer's machine.
 
 ## Shared foundations
