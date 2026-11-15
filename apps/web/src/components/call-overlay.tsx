@@ -1,5 +1,16 @@
-import { useCallback, useEffect, useRef } from "react";
-import { Mic, MicOff, Phone, PhoneOff, Video, VideoOff, AlertCircle } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  Mic,
+  MicOff,
+  Phone,
+  PhoneOff,
+  Video,
+  VideoOff,
+  AlertCircle,
+  Maximize2,
+  Minimize2,
+  Minus
+} from "lucide-react";
 import type { CallState } from "../hooks/use-webrtc-call";
 import "./call-overlay.css";
 
@@ -12,6 +23,8 @@ interface CallOverlayProps {
   onToggleMic: () => void;
   onToggleCamera: () => void;
 }
+
+type ModalViewMode = "normal" | "maximized" | "minimized";
 
 function formatDuration(seconds: number): string {
   const mins = Math.floor(seconds / 60);
@@ -48,11 +61,75 @@ export function CallOverlay({
   onToggleMic,
   onToggleCamera
 }: CallOverlayProps) {
+  const [viewMode, setViewMode] = useState<ModalViewMode>("normal");
+
+  // Ẩn/Hiện thanh công cụ nổi khi di chuột trên khung video (Hover & Inactivity Auto-hide)
+  const [controlsVisible, setControlsVisible] = useState(true);
+  const hideTimerRef = useRef<number | null>(null);
+
   const localVideoRef = useRef<HTMLVideoElement | null>(null);
   const remoteVideoRef = useRef<HTMLVideoElement | null>(null);
   const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
 
-  // Callback ref đảm bảo video luôn gán srcObject ngay lập tức khi DOM mount (kể cả khi đổi state CALLING -> CONNECTED)
+  const isVideo = state.callType === "VIDEO";
+  const isVideoMode = isVideo && (state.status === "CALLING" || state.status === "CONNECTED");
+  const avatarLetter = (peerName || "U").charAt(0).toUpperCase();
+
+  // Đặt lại bộ đếm tự động ẩn thanh công cụ khi di chuột (Ẩn sau 2.5s không di chuột)
+  const resetHideTimer = useCallback(() => {
+    setControlsVisible(true);
+    if (hideTimerRef.current !== null) {
+      window.clearTimeout(hideTimerRef.current);
+      hideTimerRef.current = null;
+    }
+    // Tự động ẩn sau 2.5s nếu không di chuột khi đang trong cuộc gọi video
+    if (state.status === "CONNECTED" && isVideo) {
+      hideTimerRef.current = window.setTimeout(() => {
+        setControlsVisible(false);
+      }, 2500);
+    }
+  }, [state.status, isVideo]);
+
+  const handleMouseMove = useCallback(() => {
+    resetHideTimer();
+  }, [resetHideTimer]);
+
+  const handleMouseEnter = useCallback(() => {
+    resetHideTimer();
+  }, [resetHideTimer]);
+
+  // Khi chuột rời khỏi modal: ẩn ngay lập tức các nút bấm
+  const handleMouseLeave = useCallback(() => {
+    if (state.status === "CONNECTED" && isVideo) {
+      if (hideTimerRef.current !== null) {
+        window.clearTimeout(hideTimerRef.current);
+        hideTimerRef.current = null;
+      }
+      setControlsVisible(false);
+    }
+  }, [state.status, isVideo]);
+
+  // Luôn hiển thị thanh điều khiển khi không phải là cuộc gọi video CONNECTED
+  const isControlsVisible = controlsVisible || state.status !== "CONNECTED" || !isVideo;
+
+  // Tự động khôi phục kích thước chuẩn khi cuộc gọi kết thúc hoặc reset
+  useEffect(() => {
+    if (state.status === "IDLE" || state.status === "ENDED") {
+      setViewMode("normal");
+      setControlsVisible(true);
+    }
+  }, [state.status]);
+
+  // Dọn dẹp timer khi unmount
+  useEffect(() => {
+    return () => {
+      if (hideTimerRef.current !== null) {
+        window.clearTimeout(hideTimerRef.current);
+      }
+    };
+  }, []);
+
+  // Callback ref đảm bảo video luôn gán srcObject ngay lập tức khi DOM mount
   const setLocalVideoNode = useCallback((node: HTMLVideoElement | null) => {
     localVideoRef.current = node;
     if (node && state.localStream) {
@@ -99,7 +176,7 @@ export function CallOverlay({
     }
   }, [state.remoteStream, state.status, state.isRemoteCameraOff]);
 
-  // Ringtone synthesizer using Web Audio API for ringing/calling states
+  // Nhạc chuông Web Audio API cho trạng thái đổ chuông (Calling / Ringing)
   useEffect(() => {
     if (state.status !== "CALLING" && state.status !== "RINGING") return;
 
@@ -127,7 +204,7 @@ export function CallOverlay({
       playTone();
       timer = window.setInterval(playTone, state.status === "RINGING" ? 2500 : 3500);
     } catch {
-      // AudioContext might be blocked until user gesture, safe to ignore
+      // Bỏ qua nếu browser yêu cầu tương tác người dùng
     }
 
     return () => {
@@ -140,293 +217,318 @@ export function CallOverlay({
 
   if (state.status === "IDLE") return null;
 
-  const isVideo = state.callType === "VIDEO";
-  const isVideoMode = isVideo && (state.status === "CALLING" || state.status === "CONNECTED");
-
   return (
-    <div className={`call-overlay-backdrop call-overlay--${state.status.toLowerCase()}`}>
-      {/* Hidden remote audio element ensuring sound playback */}
+    <>
+      {/* Thẻ audio ẩn phát âm thanh đối phương mượt mà */}
       <audio ref={remoteAudioRef} autoPlay playsInline />
 
-      <div className={`call-overlay-modal ${isVideoMode ? "call-overlay-modal--video" : "call-overlay-modal--voice"}`}>
-        {/* Floating Header */}
-        <div className="call-header">
-          <div className="call-header-badge">
-            <span className={`call-pulse-dot ${state.status === "CONNECTED" ? "active" : ""}`} />
-            <span>
-              {state.status === "CONNECTED"
-                ? isVideo ? "Cuộc gọi video" : "Đang trò chuyện"
-                : state.status === "CALLING"
-                  ? "Đang đổ chuông..."
-                  : state.status === "RINGING"
-                    ? "Cuộc gọi đến..."
-                    : "Đã kết thúc"}
-            </span>
-          </div>
-          {state.status === "CONNECTED" && (
-            <div className="call-duration-badge">
-              {formatDuration(state.duration)}
+      <div className={`meet-call-backdrop meet-call--${state.status.toLowerCase()} meet-backdrop--${viewMode}`}>
+        <div
+          className={`meet-call-modal ${
+            isVideoMode ? "meet-call-modal--video" : "meet-call-modal--voice"
+          } meet-modal--${viewMode} ${
+            isControlsVisible ? "meet-controls-visible" : "meet-controls-hidden"
+          }`}
+          onMouseMove={handleMouseMove}
+          onMouseEnter={handleMouseEnter}
+          onMouseLeave={handleMouseLeave}
+          onClick={resetHideTimer}
+        >
+          {/* 1. Thanh Header Nổi Trên Cùng (Hiện khi di chuột / Hover) */}
+          <div className="meet-top-bar" onMouseMove={handleMouseMove}>
+            <div className="meet-info-pill">
+              <span className={`meet-status-dot ${state.status === "CONNECTED" ? "active" : ""}`} />
+              <span className="meet-info-text">
+                {state.status === "CONNECTED" ? (
+                  <>
+                    <span className="meet-timer">{formatDuration(state.duration)}</span>
+                    <span className="meet-separator">•</span>
+                    <span className="meet-peer-name-top">{peerName}</span>
+                  </>
+                ) : state.status === "CALLING" ? (
+                  "Đang gọi..."
+                ) : state.status === "RINGING" ? (
+                  "Cuộc gọi đến"
+                ) : (
+                  "Đã kết thúc"
+                )}
+              </span>
             </div>
-          )}
-        </div>
 
-        {/* Error notification if any */}
-        {state.error && (
-          <div className="call-error-banner">
-            <AlertCircle size={15} />
-            <span>{state.error}</span>
-          </div>
-        )}
+            <div className="meet-top-actions">
+              {/* Thông báo lỗi nếu có */}
+              {state.error && (
+                <div className="meet-error-pill">
+                  <AlertCircle size={14} />
+                  <span>{state.error}</span>
+                </div>
+              )}
 
-        {/* Content body based on call state */}
-        <div className="call-body">
-          {/* 1. OUTGOING CALL (CALLING) */}
-          {state.status === "CALLING" && (
-            isVideo ? (
-              <div className="call-preview-stage">
-                <video
-                  ref={setLocalVideoNode}
-                  className="call-preview-video"
-                  autoPlay
-                  playsInline
-                  muted
-                />
-                <div className="call-preview-overlay">
-                  <div className="call-preview-top-badge">
-                    <span className="call-pulse-dot" />
-                    <span>Camera của bạn</span>
-                  </div>
-                  <div className="call-preview-peer-glass">
-                    <div className="call-avatar mini">
-                      {peerName.charAt(0).toUpperCase()}
-                    </div>
-                    <div className="call-preview-peer-info">
-                      <h4 className="call-peer-name">{peerName}</h4>
-                      <p className="call-preview-ring-text">Đang đổ chuông đến đối phương...</p>
-                    </div>
-                  </div>
+              {/* Bộ điều khiển Phóng to / Thu nhỏ */}
+              {state.status !== "ENDED" && (
+                <div className="meet-window-controls">
+                  {viewMode === "minimized" ? (
+                    <button
+                      type="button"
+                      className="meet-win-btn"
+                      onClick={() => setViewMode("normal")}
+                      title="Mở rộng kích thước chuẩn"
+                      aria-label="Mở rộng kích thước chuẩn"
+                    >
+                      <Maximize2 size={15} />
+                    </button>
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        className="meet-win-btn"
+                        onClick={() => setViewMode("minimized")}
+                        title="Thu nhỏ xuống góc màn hình"
+                        aria-label="Thu nhỏ xuống góc màn hình"
+                      >
+                        <Minus size={15} />
+                      </button>
+                      <button
+                        type="button"
+                        className="meet-win-btn"
+                        onClick={() => setViewMode(prev => prev === "maximized" ? "normal" : "maximized")}
+                        title={viewMode === "maximized" ? "Thu về kích thước chuẩn" : "Phóng to toàn màn hình"}
+                        aria-label={viewMode === "maximized" ? "Thu về kích thước chuẩn" : "Phóng to toàn màn hình"}
+                      >
+                        {viewMode === "maximized" ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
+                      </button>
+                    </>
+                  )}
                 </div>
-              </div>
-            ) : (
-              <div className="call-status-view">
-                <div className="call-avatar-container">
-                  <div className="call-pulse-ring" />
-                  <div className="call-pulse-ring delay-1" />
-                  <div className="call-pulse-ring delay-2" />
-                  <div className="call-avatar">
-                    {peerName.charAt(0).toUpperCase()}
-                  </div>
-                </div>
-                <h3 className="call-peer-name">{peerName}</h3>
-                <p className="call-status-text">Đang gọi đi, vui lòng chờ máy...</p>
-              </div>
-            )
-          )}
-
-          {/* 2. INCOMING CALL (RINGING) */}
-          {state.status === "RINGING" && (
-            <div className="call-status-view">
-              <div className="call-avatar-container ringing">
-                <div className="call-pulse-ring pulse-green" />
-                <div className="call-pulse-ring pulse-green delay-1" />
-                <div className="call-pulse-ring pulse-green delay-2" />
-                <div className="call-avatar ring-avatar">
-                  {peerName.charAt(0).toUpperCase()}
-                </div>
-              </div>
-              <h3 className="call-peer-name">{peerName}</h3>
-              <p className="call-status-text">
-                {isVideo ? "Đang gọi video cho bạn..." : "Đang gọi thoại cho bạn..."}
-              </p>
+              )}
             </div>
-          )}
+          </div>
 
-          {/* 3. CONNECTED CALL */}
-          {state.status === "CONNECTED" && (
-            <div className="call-connected-view">
-              {isVideo ? (
-                <div className="call-video-stage">
-                  {/* Remote video */}
+          {/* 2. Thân Hiển Thị Tràn Viền Toàn Bộ Modal (Stage Body) */}
+          <div className="meet-stage">
+            {/* 1. ĐANG GỌI ĐI (CALLING) */}
+            {state.status === "CALLING" && (
+              isVideo ? (
+                <div className="meet-preview-stage">
+                  <video
+                    ref={setLocalVideoNode}
+                    className="meet-preview-video"
+                    autoPlay
+                    playsInline
+                    muted
+                  />
+                  <div className="meet-preview-overlay">
+                    <div className="meet-preview-center">
+                      <div className="meet-avatar mini-preview">{avatarLetter}</div>
+                      <h3 className="meet-title">{peerName}</h3>
+                      <p className="meet-subtitle">Đang đổ chuông đến đối phương...</p>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="meet-voice-center">
+                  <div className="meet-avatar-container">
+                    <div className="meet-pulse-ring ring-1" />
+                    <div className="meet-pulse-ring ring-2" />
+                    <div className="meet-pulse-ring ring-3" />
+                    <div className="meet-avatar large">{avatarLetter}</div>
+                  </div>
+                  <h3 className="meet-title">{peerName}</h3>
+                  <p className="meet-subtitle">Đang gọi đi, vui lòng chờ máy...</p>
+                </div>
+              )
+            )}
+
+            {/* 2. CUỘC GỌI ĐẾN (RINGING) */}
+            {state.status === "RINGING" && (
+              <div className="meet-voice-center">
+                <div className="meet-avatar-container ringing">
+                  <div className="meet-pulse-ring ring-green-1" />
+                  <div className="meet-pulse-ring ring-green-2" />
+                  <div className="meet-pulse-ring ring-green-3" />
+                  <div className="meet-avatar large green-avatar">{avatarLetter}</div>
+                </div>
+                <h3 className="meet-title">{peerName}</h3>
+                <p className="meet-subtitle">
+                  {isVideo ? "Cuộc gọi video đến..." : "Cuộc gọi thoại đến..."}
+                </p>
+              </div>
+            )}
+
+            {/* 3. ĐÃ KẾT NỐI (CONNECTED) */}
+            {state.status === "CONNECTED" && (
+              isVideo ? (
+                <div className="meet-video-stage">
+                  {/* Video từ xa tràn viền toàn bộ modal */}
                   {state.isRemoteCameraOff ? (
-                    <div className="call-video-placeholder">
-                      <div className="call-avatar large">
-                        {peerName.charAt(0).toUpperCase()}
-                      </div>
-                      <p className="call-placeholder-text">Camera của {peerName} đang tắt</p>
+                    <div className="meet-video-off-placeholder">
+                      <div className="meet-avatar large dark-bg-avatar">{avatarLetter}</div>
+                      <h4 className="meet-placeholder-name">{peerName}</h4>
+                      <p className="meet-placeholder-text">Camera của {peerName} đang tắt</p>
                     </div>
                   ) : (
                     <video
                       ref={setRemoteVideoNode}
-                      className="call-remote-video"
+                      className="meet-remote-video"
                       autoPlay
                       playsInline
+                      muted
                     />
                   )}
 
-                  {/* Local video PiP */}
-                  <div className={`call-local-pip ${state.isCameraOff ? "camera-off" : ""}`}>
+                  {/* Khung Camera Bản Thân Nổi (Picture-in-Picture) - Tự động trượt lên khi nút ở trên ẩn */}
+                  <div className={`meet-pip-card ${state.isCameraOff ? "camera-off" : ""}`}>
                     {state.isCameraOff ? (
-                      <div className="call-pip-placeholder">
+                      <div className="meet-pip-off">
                         <VideoOff size={18} />
                         <span>Camera tắt</span>
                       </div>
                     ) : (
                       <video
                         ref={setLocalVideoNode}
-                        className="call-local-video"
+                        className="meet-pip-video"
                         autoPlay
                         playsInline
                         muted
                       />
                     )}
-                    <span className="call-pip-label">Bạn</span>
+                    <div className="meet-pip-label">
+                      <span>Bạn</span>
+                      {state.isMicMuted && <MicOff size={11} className="meet-pip-muted-icon" />}
+                    </div>
                   </div>
 
-                  {/* Remote mic status badge */}
+                  {/* Báo đối phương tắt mic */}
                   {state.isRemoteMicMuted && (
-                    <div className="call-remote-muted-badge">
+                    <div className="meet-remote-muted-pill">
                       <MicOff size={13} />
                       <span>{peerName} đã tắt micro</span>
                     </div>
                   )}
                 </div>
               ) : (
-                /* Voice call layout */
-                <div className="call-voice-stage">
-                  <div className="call-voice-avatar-wrap">
-                    <div className="call-voice-wave wave-1" />
-                    <div className="call-voice-wave wave-2" />
-                    <div className="call-avatar large voice-avatar">
-                      {peerName.charAt(0).toUpperCase()}
-                    </div>
+                /* Giao diện gọi thoại */
+                <div className="meet-voice-center">
+                  <div className="meet-avatar-container in-call">
+                    <div className="meet-pulse-ring speaking-ring" />
+                    <div className="meet-avatar large voice-avatar">{avatarLetter}</div>
                   </div>
-                  <h3 className="call-peer-name">{peerName}</h3>
-                  <div className="call-voice-status">
+                  <h3 className="meet-title">{peerName}</h3>
+                  <div className="meet-voice-status">
                     {state.isRemoteMicMuted ? (
-                      <span className="call-remote-muted-indicator">
+                      <span className="meet-status-badge muted">
                         <MicOff size={14} /> Đối phương đã tắt micro
                       </span>
                     ) : (
-                      <span className="call-voice-active-indicator">
-                        <span className="call-voice-bar b1" />
-                        <span className="call-voice-bar b2" />
-                        <span className="call-voice-bar b3" />
-                        <span className="call-voice-bar b4" />
+                      <span className="meet-status-badge speaking">
+                        <span className="meet-wave-bar b1" />
+                        <span className="meet-wave-bar b2" />
+                        <span className="meet-wave-bar b3" />
                         Đang đàm thoại
                       </span>
                     )}
                   </div>
                 </div>
-              )}
-            </div>
-          )}
+              )
+            )}
 
-          {/* 4. ENDED STATE */}
-          {state.status === "ENDED" && (
-            <div className="call-status-view">
-              <div className="call-avatar-container ended">
-                <div className="call-avatar ended-avatar">
-                  {peerName.charAt(0).toUpperCase()}
-                </div>
-              </div>
-              <h3 className="call-peer-name">{peerName}</h3>
-              <p className="call-status-text ended-text">
-                {getEndReasonText(state.endReason)}
-              </p>
-              {state.duration > 0 && (
-                <p className="call-ended-duration">
-                  Thời lượng: {formatDuration(state.duration)}
+            {/* 4. KẾT THÚC (ENDED) */}
+            {state.status === "ENDED" && (
+              <div className="meet-voice-center">
+                <div className="meet-avatar large ended-avatar">{avatarLetter}</div>
+                <h3 className="meet-title">{peerName}</h3>
+                <p className="meet-subtitle ended-text">
+                  {getEndReasonText(state.endReason)}
                 </p>
-              )}
-            </div>
-          )}
-        </div>
+                {state.duration > 0 && (
+                  <p className="meet-duration-text">
+                    Thời lượng: {formatDuration(state.duration)}
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
 
-        {/* Controls action footer - Floating Dock */}
-        <div className="call-footer">
-          {state.status === "RINGING" ? (
-            <div className="call-incoming-actions">
-              <button
-                type="button"
-                className="call-dock-btn btn-decline"
-                onClick={onDecline}
-                title="Từ chối cuộc gọi"
-              >
-                <div className="btn-icon-wrap">
-                  <PhoneOff size={22} />
-                </div>
-                <span>Từ chối</span>
-              </button>
-              <button
-                type="button"
-                className="call-dock-btn btn-accept"
-                onClick={onAccept}
-                title="Trả lời cuộc gọi"
-              >
-                <div className="btn-icon-wrap">
-                  <Phone size={22} />
-                </div>
-                <span>Trả lời</span>
-              </button>
-            </div>
-          ) : state.status === "CALLING" ? (
-            <div className="call-single-action">
-              <button
-                type="button"
-                className="call-dock-btn btn-decline"
-                onClick={onEnd}
-                title="Hủy cuộc gọi"
-              >
-                <div className="btn-icon-wrap">
-                  <PhoneOff size={22} />
-                </div>
-                <span>Hủy gọi</span>
-              </button>
-            </div>
-          ) : state.status === "CONNECTED" ? (
-            <div className="call-connected-dock">
-              {/* Mic toggle */}
-              <button
-                type="button"
-                className={`call-dock-btn btn-control ${state.isMicMuted ? "is-off" : ""}`}
-                onClick={onToggleMic}
-                title={state.isMicMuted ? "Bật micro" : "Tắt micro"}
-              >
-                <div className="btn-icon-wrap">
+          {/* 3. Thanh Điều Khiển Nổi Bên Dưới (Hiện khi di chuột / Hover) */}
+          <div className="meet-bottom-dock" onMouseMove={handleMouseMove}>
+            {state.status === "RINGING" ? (
+              <div className="meet-incoming-dock">
+                <button
+                  type="button"
+                  className="meet-circle-btn btn-decline"
+                  onClick={onDecline}
+                  title="Từ chối cuộc gọi"
+                >
+                  <div className="meet-icon-circle">
+                    <PhoneOff size={24} />
+                  </div>
+                  <span className="meet-btn-text">Từ chối</span>
+                </button>
+                <button
+                  type="button"
+                  className="meet-circle-btn btn-accept"
+                  onClick={onAccept}
+                  title="Trả lời cuộc gọi"
+                >
+                  <div className="meet-icon-circle">
+                    <Phone size={24} />
+                  </div>
+                  <span className="meet-btn-text">Trả lời</span>
+                </button>
+              </div>
+            ) : state.status === "CALLING" ? (
+              <div className="meet-single-dock">
+                <button
+                  type="button"
+                  className="meet-circle-btn btn-cancel-call"
+                  onClick={onEnd}
+                  title="Hủy cuộc gọi"
+                >
+                  <div className="meet-icon-circle">
+                    <PhoneOff size={24} />
+                  </div>
+                  <span className="meet-btn-text">Hủy gọi</span>
+                </button>
+              </div>
+            ) : state.status === "CONNECTED" ? (
+              <div className="meet-controls-pill">
+                {/* Nút bật/tắt Micro */}
+                <button
+                  type="button"
+                  className={`meet-pill-btn ${state.isMicMuted ? "is-off" : "is-active"}`}
+                  onClick={onToggleMic}
+                  title={state.isMicMuted ? "Bật micro" : "Tắt micro"}
+                  aria-label={state.isMicMuted ? "Bật micro" : "Tắt micro"}
+                >
                   {state.isMicMuted ? <MicOff size={20} /> : <Mic size={20} />}
-                </div>
-                <span>{state.isMicMuted ? "Bật mic" : "Tắt mic"}</span>
-              </button>
+                </button>
 
-              {/* End call button */}
-              <button
-                type="button"
-                className="call-dock-btn btn-end"
-                onClick={onEnd}
-                title="Kết thúc cuộc gọi"
-              >
-                <div className="btn-icon-wrap">
-                  <PhoneOff size={24} />
-                </div>
-                <span>Kết thúc</span>
-              </button>
+                {/* Nút Kết Thúc Cuộc Gọi (Đỏ nổi bật) */}
+                <button
+                  type="button"
+                  className="meet-pill-btn btn-leave-call"
+                  onClick={onEnd}
+                  title="Rời khỏi cuộc gọi"
+                  aria-label="Rời khỏi cuộc gọi"
+                >
+                  <PhoneOff size={22} />
+                </button>
 
-              {/* Camera / Video toggle */}
-              <button
-                type="button"
-                className={`call-dock-btn btn-control ${state.isCameraOff ? "is-off" : ""}`}
-                onClick={onToggleCamera}
-                title={state.isCameraOff ? "Bật video" : "Tắt video"}
-              >
-                <div className="btn-icon-wrap">
+                {/* Nút bật/tắt Camera */}
+                <button
+                  type="button"
+                  className={`meet-pill-btn ${state.isCameraOff ? "is-off" : "is-active"}`}
+                  onClick={onToggleCamera}
+                  title={state.isCameraOff ? "Bật camera" : "Tắt camera"}
+                  aria-label={state.isCameraOff ? "Bật camera" : "Tắt camera"}
+                >
                   {state.isCameraOff ? <VideoOff size={20} /> : <Video size={20} />}
-                </div>
-                <span>{state.isCameraOff ? "Bật video" : "Tắt video"}</span>
-              </button>
-            </div>
-          ) : null}
+                </button>
+              </div>
+            ) : null}
+          </div>
         </div>
       </div>
-    </div>
+    </>
   );
 }
