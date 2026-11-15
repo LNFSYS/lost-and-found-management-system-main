@@ -90,7 +90,10 @@ export default function PostDetailScreen() {
   const { user } = useAuth();
 
   const [post, setPost] = useState<PostSummary | null>(null);
-  const [canViewJourney, setCanViewJourney] = useState(false);
+  const [journeyAccess, setJourneyAccess] = useState<{ postId: string; userId: string } | null>(null);
+  const canViewJourney = Boolean(post && user && (
+    post.owner.id === user.id || (journeyAccess?.postId === post.id && journeyAccess.userId === user.id)
+  ));
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -179,26 +182,23 @@ export default function PostDetailScreen() {
   }, [loadPost]);
 
   useEffect(() => {
-    if (!post || !user) {
-      setCanViewJourney(false);
-      return;
-    }
-    if (post.owner.id === user.id) {
-      setCanViewJourney(true);
-      return;
-    }
+    if (!post || !user || post.owner.id === user.id) return;
 
     let active = true;
-    setCanViewJourney(false);
+    const postId = post.id;
+    const userId = user.id;
     void claimService.list(1, 50).then(({ items }) => {
       if (!active) return;
-      setCanViewJourney(items.some((claim) => {
-        const isParticipant = claim.claimantId === user.id || claim.finderId === user.id;
+      const authorized = items.some((claim) => {
+        const isParticipant = claim.claimantId === userId || claim.finderId === userId;
         const claimPostIds = [claim.foundPostId, claim.lostPostId, claim.posts.found.id, claim.posts.lost?.id];
-        return isParticipant && claimPostIds.includes(post.id);
-      }));
+        return isParticipant && claimPostIds.includes(postId);
+      });
+      setJourneyAccess((current) => authorized
+        ? { postId, userId }
+        : current?.postId === postId && current.userId === userId ? null : current);
     }).catch(() => {
-      if (active) setCanViewJourney(false);
+      if (active) setJourneyAccess((current) => current?.postId === postId && current.userId === userId ? null : current);
     });
     return () => { active = false; };
   }, [post, user]);
