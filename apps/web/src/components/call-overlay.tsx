@@ -234,7 +234,7 @@ export function CallOverlay({
           onMouseLeave={handleMouseLeave}
           onClick={resetHideTimer}
         >
-          {/* 1. Thanh Header Nổi Trên Cùng (Hiện khi di chuột / Hover) */}
+          {/* 1. Thanh Header Nổi Trên Cùng (Hiện khi dddddi chuột / Hover) */}
           <div className="meet-top-bar" onMouseMove={handleMouseMove}>
             <div className="meet-info-pill">
               <span className={`meet-status-dot ${state.status === "CONNECTED" ? "active" : ""}`} />
@@ -253,6 +253,7 @@ export function CallOverlay({
                   "Đã kết thúc"
                 )}
               </span>
+
             </div>
 
             <div className="meet-top-actions">
