@@ -55,3 +55,17 @@ WEBRTC_CALL_REVIEW.md
 .github/hooks/
 .github/prompts/
 .github/skills/
+AGENTS.md
+GEMINI.md
+
+# Local helper scripts & benchmarks (keep local, do not push)
+notebooks/
+*.ipynb
+scripts/agent7_*
+scripts/build_report6_*
+scripts/generate_notebook.py
+scripts/launch-emulator.bat
+scripts/train_fptu_ai_model.py
+scripts/update_test_report_spreadsheet.py
+
+

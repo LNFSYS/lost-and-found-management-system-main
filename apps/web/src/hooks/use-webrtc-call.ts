@@ -190,18 +190,16 @@ export function useWebRTCCall({ roomId, userId, calleeId, socket, onCallEnded }:
     setState(prev => ({ ...prev, remoteStream }));
 
     pc.ontrack = event => {
-      if (event.streams && event.streams[0]) {
-        event.streams[0].getTracks().forEach(track => {
-          if (!remoteStream.getTracks().some(t => t.id === track.id)) {
-            remoteStream.addTrack(track);
-          }
-        });
-      } else if (event.track) {
-        if (!remoteStream.getTracks().some(t => t.id === event.track.id)) {
-          remoteStream.addTrack(event.track);
+      let stream = event.streams[0];
+      if (!stream) {
+        stream = new MediaStream();
+        if (remoteStreamRef.current) {
+          remoteStreamRef.current.getTracks().forEach(t => stream.addTrack(t));
         }
+        stream.addTrack(event.track);
       }
-      setState(prev => ({ ...prev, remoteStream }));
+      remoteStreamRef.current = stream;
+      setState(prev => ({ ...prev, remoteStream: stream }));
     };
 
     pc.onicecandidate = event => {
@@ -529,7 +527,7 @@ export function useWebRTCCall({ roomId, userId, calleeId, socket, onCallEnded }:
       if (!data || typeof data !== "object") return;
       const event = data as Record<string, unknown>;
       if (event.mediaType === "audio") setState(prev => ({ ...prev, isRemoteMicMuted: !event.enabled }));
-      if (event.mediaType === "video") setState(prev => ({ ...prev, isRemoteCameraOff: !event.enabled }));
+      if (event.mediaType === "video") setState(prev => ({ ...prev, callType: "VIDEO", isRemoteCameraOff: !event.enabled }));
     };
 
     socket.on("call.initiated", handleInitiated);

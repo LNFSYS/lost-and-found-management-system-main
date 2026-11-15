@@ -360,11 +360,11 @@ export function PostFormMediaPicker({
         Mẹo: Chọn góc chụp sáng rõ, bao quát toàn bộ đồ vật và các chi tiết đặc biệt (logo, tem, số hiệu, vết xước) để AI nhận dạng chính xác nhất.
       </Text>
 
-      {/* Gemini AI Action Card */}
+      {/* AI Vision Action Card */}
       <View style={styles.aiActionSection}>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Phân tích ảnh với AI Gemini"
+          accessibilityLabel="Phân tích ảnh với AI Vision DINOv2 & OCR"
           disabled={images.length === 0 || isAnalyzing || disabled}
           onPress={handleAnalyzeImages}
           style={({ pressed }) => [
@@ -389,7 +389,7 @@ export function PostFormMediaPicker({
                   images.length === 0 && styles.aiButtonTitleDisabled,
                 ]}
               >
-                Phân tích ảnh với AI (Gemini)
+                Phân tích ảnh với AI (DINOv2 & OCR)
               </Text>
               <Text
                 style={[
@@ -448,9 +448,9 @@ export function PostFormMediaPicker({
                 <MaterialCommunityIcons name="creation" size={18} color="#7C3AED" />
               </View>
               <View>
-                <Text style={styles.aiResultHeaderTitle}>Gợi ý từ Gemini AI</Text>
+                <Text style={styles.aiResultHeaderTitle}>Gợi ý từ AI Vision (DINOv2)</Text>
                 <Text style={styles.aiModelTag}>
-                  Mô hình: {aiResult.model || "Gemini 2.5 Flash"}
+                  Mô hình: {aiResult.model || "dinov2_vits14 + easyocr"}
                 </Text>
               </View>
             </View>

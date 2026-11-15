@@ -300,7 +300,7 @@ export default function CreateOrEditPostScreen() {
     });
     Alert.alert(
       "Đã áp dụng bản nháp AI",
-      "Thông tin tiêu đề, mô tả và danh mục gợi ý bởi Gemini đã được điền vào biểu mẫu."
+      "Thông tin tiêu đề, mô tả và danh mục gợi ý bởi AI Vision (DINOv2 & OCR) đã được điền vào biểu mẫu."
     );
   }, []);
 
@@ -627,7 +627,7 @@ export default function CreateOrEditPostScreen() {
               </Text>
             </View>
             <Text style={styles.sectionDescription}>
-              Tải lên tối đa 5 hình ảnh rõ nét. Sử dụng AI Gemini để nhận diện vật phẩm và tự động điền bản nháp.
+              Tải lên tối đa 5 hình ảnh rõ nét. Sử dụng AI Vision (DINOv2 & OCR) để nhận diện vật phẩm và tự động điền bản nháp.
             </Text>
 
             <PostFormMediaPicker
@@ -658,8 +658,8 @@ export default function CreateOrEditPostScreen() {
                       visibleText: ["FPTU Dev Club", "Model A2779"],
                       confidence: 0.94,
                       warnings: [],
-                      assistedBy: "Gemini 1.5 Pro",
-                      model: "gemini-1.5-pro",
+                      assistedBy: "DINOv2 + EasyOCR AI (local)",
+                      model: "dinov2_vits14 + easyocr (local)",
                       imageCount: 1,
                     }
                   : null
