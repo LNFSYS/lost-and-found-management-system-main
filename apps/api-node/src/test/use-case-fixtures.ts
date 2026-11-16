@@ -34,6 +34,8 @@ import { createPostUseCases, type PostDependencies } from "../modules/posts/appl
 import { createClaimUseCases, type ClaimDependencies } from "../modules/claims/application/claim.use-cases.js";
 import { createAuthUseCases, type AuthDependencies } from "../modules/auth/application/auth.use-cases.js";
 import { createRealtimeUseCases } from "../modules/realtime/application/realtime.use-cases.js";
+import type { RadarRepository } from "../modules/radar/application/radar.repository.port.js";
+import { createRadarUseCases, type RadarDependencies } from "../modules/radar/application/radar.use-cases.js";
 
 export const adminAuditRepository = unexpectedPort<AdminAuditRepository>("adminAuditRepository");
 export const adminCatalogRepository = unexpectedPort<AdminCatalogRepository>("adminCatalogRepository");
@@ -49,6 +51,7 @@ export const reportRepository = unexpectedPort<ReportRepository>("reportReposito
 export const systemConfigRepository = unexpectedPort<SystemConfigRepository>("systemConfigRepository");
 export const userRepository = unexpectedPort<UserRepository>("userRepository");
 export const warehouseRepository = unexpectedPort<WarehouseRepository>("warehouseRepository");
+export const radarRepository = unexpectedPort<RadarRepository>("radarRepository");
 export const fakeTransaction: TransactionRunner = (work) => work(Object.freeze({}) as TransactionContext);
 export const fakeMediaStorage = unexpectedPort<PrivateMediaStorage>("private media storage");
 export const fakeAvatarStorage = unexpectedPort<AvatarStorage>("avatar storage");
@@ -88,6 +91,8 @@ export function createTestAuthUseCases(overrides: Partial<AuthDependencies> = {}
 export const authService = createTestAuthUseCases();
 export const realtimeService = createRealtimeUseCases({ claimRepository, id: randomUUID, validateSession: session => authService.validateAccessSession(session) });
 export const geminiImageService = createImageAnalysisUseCases({ postRepository, analyzer: unexpectedPort<ImageAnalyzer>("image analyzer") });
+export function createTestRadarUseCases(overrides: Partial<RadarDependencies> = {}) { return createRadarUseCases({ radarRepository, idFactory: randomUUID, ...overrides }); }
+export const radarService = createTestRadarUseCases();
 export function createTestCustodyRequestUseCases(overrides: Partial<import("../modules/warehouse/application/custody-request.use-cases.js").CustodyRequestDependencies> = {}) { return import("../modules/warehouse/application/custody-request.use-cases.js").then(m => m.createCustodyRequestUseCases({ custodyRequestRepository: {} as any, warehouseRepository: {} as any, id: randomUUID, withTransaction: fakeTransaction, ...overrides })); }
 export const custodyRequestService = {} as any; // Fake it for now since we just need it to compile
 export const testServices = {
@@ -101,5 +106,6 @@ export const testServices = {
   reportService, matchingService, postService, claimService, realtimeService,
   chatSocketService: unexpectedPort<import("../main/services.js").ApplicationServices["chatSocketService"]>("chatSocketService"),
   authService, geminiImageService,
-  custodyRequestService
+  custodyRequestService,
+  radarService
 };

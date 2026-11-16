@@ -19,6 +19,7 @@ import { createReportRepository } from "../modules/reports/infrastructure/report
 import { createSystemConfigRepository } from "../modules/system-config/infrastructure/system-config.repository.js";
 import { createCustodyRequestRepository } from "../modules/warehouse/infrastructure/custody-request.repository.js";
 import { createWarehouseRepository } from "../modules/warehouse/infrastructure/warehouse.repository.js";
+import { createRadarRepository } from "../modules/radar/infrastructure/radar.repository.js";
 import { runInTransaction } from "../shared/infrastructure/config/db.js";
 import { createTransactionRunner, type SqlTransactionRunner } from "../shared/infrastructure/transaction-context.js";
 import { createMediaUploads } from "../shared/infrastructure/media-uploads.js";
@@ -50,6 +51,7 @@ export function createPersistence(database: Pool) {
     userRepository: createUserRepository(database),
     warehouseRepository: createWarehouseRepository(database),
     custodyRequestRepository: createCustodyRequestRepository(database),
+    radarRepository: createRadarRepository(database),
   };
 }
 export type Persistence = ReturnType<typeof createPersistence>;

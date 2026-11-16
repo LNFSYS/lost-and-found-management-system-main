@@ -31,6 +31,7 @@ import { createWarehouseUseCases } from "../modules/warehouse/application/wareho
 import { createWarehouseConversationUseCases } from "../modules/warehouse/application/warehouse-conversation.use-cases.js";
 import { createGeminiWarehouseConversationAnalyzer } from "../modules/warehouse/infrastructure/gemini-warehouse-conversation-analyzer.js";
 import { createCustodyRequestUseCases } from "../modules/warehouse/application/custody-request.use-cases.js";
+import { createRadarUseCases } from "../modules/radar/application/index.js";
 import { env } from "../shared/infrastructure/config/env.js";
 import { createCloudinaryPrivateMediaStorage } from "../shared/infrastructure/cloudinary-private-media-storage.js";
 import { createPrivateMediaStorage } from "../shared/infrastructure/private-media-storage.js";
@@ -157,15 +158,18 @@ export function createServices(persistence: Persistence, config: typeof env = en
     hashIdempotencyPayload: security.hashToken, logger: console, uploads: mediaUploads
   });
   const geminiImageService = createImageAnalysisUseCases({ postRepository, analyzer: createGeminiImageAnalyzer(config.gemini) });
+  const radarService = createRadarUseCases({ radarRepository: persistence.radarRepository, idFactory: id });
   return {
     appointmentService, activityService,
     notificationService, notificationEmailWorker, notificationPushWorker, systemConfigService, adminUserService, adminReportingService,
     adminCatalogService, warehouseService, warehouseConversationService, custodyRequestService, returnFeedbackService, matchingService,
-    postService, claimService, realtimeService, chatSocketService, callSocketService, reportService, authService, geminiImageService, illustrations
+    postService, claimService, realtimeService, chatSocketService, callSocketService, reportService, authService, geminiImageService, illustrations,
+    radarService
   };
 }
 type CreatedApplicationServices = ReturnType<typeof createServices>;
 export type ApplicationServices = Omit<CreatedApplicationServices, "warehouseConversationService" | "callSocketService"> & {
   warehouseConversationService?: CreatedApplicationServices["warehouseConversationService"];
   callSocketService?: CreatedApplicationServices["callSocketService"];
+  radarService?: CreatedApplicationServices["radarService"];
 };

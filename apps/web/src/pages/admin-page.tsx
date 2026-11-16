@@ -17,6 +17,7 @@ import {
   MapPinned,
   PencilLine,
   Plus,
+  Radar,
   RefreshCw,
   Settings2,
   ShieldCheck,
@@ -28,6 +29,7 @@ import {
 } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 import { selectedAdminTab, type AdminTab } from "../components/admin-layout";
+import { CampusRadarDashboard } from "../components/campus-radar-dashboard";
 import { api, type AdminAccessRole, type AdminArea, type AdminBuilding, type AdminCatalog, type AdminCategory, type AdminDashboardKpis, type AdminHandoverPoint, type AdminHandoverPointPayload, type AdminModerationReport, type AdminModerationReportDetail, type AdminReportEntityType, type AdminReportStatus, type AdminUser, type AdminUserStatus, type ConfigHistoryEntry, type ConfigValueType, type ModerationActionType, type SystemConfig } from "../services/api";
 
 type PendingAction = "" | "load" | "users" | "user" | "user-toggle" | "configs" | "config" | "config-history" | "reports" | "review" | "kpis" | "export" | "category" | "area" | "building" | "handover" | "toggle" | "delete";
@@ -754,6 +756,16 @@ export function AdminPage() {
           <button className="secondary-button" disabled={pendingAction === "kpis"}><Filter size={17} /> Lọc KPI</button>
         </form>
 
+        <div className="admin-operations-radar-banner">
+          <div>
+            <p className="eyebrow" style={{ color: "var(--fpt-blue)", margin: 0 }}>CAMPUS RADAR ANALYTICS</p>
+            <strong>Radar Điểm nóng Thất lạc & Phân tích Đột biến Tòa nhà</strong>
+          </div>
+          <button type="button" className="secondary-button" onClick={() => setActiveTab("radar")}>
+            <Radar size={16} /> Mở Radar Điểm nóng
+          </button>
+        </div>
+
         <div className="admin-kpi-metrics">
           <article><BarChart3 size={18} /><strong>{kpis?.totals.posts ?? 0}</strong><span>Bài đăng</span></article>
           <article><FileText size={18} /><strong>{kpis?.totals.claims ?? 0}</strong><span>Claims</span></article>
@@ -811,6 +823,8 @@ export function AdminPage() {
       </aside>
 
     </div>}
+
+    {activeTab === "radar" && <CampusRadarDashboard />}
 
     {activeTab === "moderation" && <div className="admin-operations-layout admin-moderation-layout">
       <section className="admin-panel admin-panel--list admin-reports-panel">

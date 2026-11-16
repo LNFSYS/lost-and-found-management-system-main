@@ -1,4 +1,4 @@
-import { CalendarDays, Files, FileUser, Home, LayoutDashboard, LogOut, MessageCircle, UserRound } from "lucide-react";
+import { CalendarDays, Files, FileUser, Home, LayoutDashboard, LogOut, MessageCircle, ShieldCheck, UserRound } from "lucide-react";
 import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 import { useEffect, useRef } from "react";
 import { useAuth } from "../context/auth-context";
@@ -37,5 +37,29 @@ export function AppLayout() {
     </header>
     {!online && <div className="offline-banner" role="status">Bạn đang offline. Ứng dụng chỉ hiển thị giao diện hoặc dữ liệu đã lưu tạm; thao tác gửi mới cần kết nối mạng.</div>}
     <main className="workspace"><Outlet /></main>
+    {!viewingChat && (
+      <footer className="app-footer">
+        <div className="app-footer__content">
+          <div className="app-footer__brand">
+            <span className="brand-mark"><i>F</i><i>P</i><i>T</i></span>
+            <div>
+              <strong>FPTU Lost &amp; Found</strong>
+              <small>Hệ thống Hỗ trợ Đồ Thất Lạc · ĐH FPT Đà Nẵng</small>
+            </div>
+          </div>
+          <nav className="app-footer__links" aria-label="Liên kết chân trang">
+            <Link to="/privacy-policy" className="app-footer__link">
+              <ShieldCheck size={16} /> Chính sách quyền riêng tư
+            </Link>
+            <Link to="/posts" className="app-footer__link">Tất cả bài đăng</Link>
+            <Link to="/reports" className="app-footer__link">Báo cáo &amp; Phản ánh</Link>
+          </nav>
+          <div className="app-footer__legal">
+            <span>© 2026 Phòng Dịch vụ Sinh viên (DVSV) FPTU Đà Nẵng</span>
+            <span>Căn cứ Điều 230 BLDS 2015 &amp; Nghị định 13/2023/NĐ-CP (PDPD)</span>
+          </div>
+        </div>
+      </footer>
+    )}
   </div>;
 }
