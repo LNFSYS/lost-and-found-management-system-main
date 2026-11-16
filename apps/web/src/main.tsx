@@ -60,16 +60,18 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
             <Route path="/forgot-password" element={<ForgotPasswordPage />} />
             <Route path="/reset-password" element={<ResetPasswordPage />} />
             <Route path="/privacy-policy" element={<Suspense fallback={<p role="status">Đang tải...</p>}><PrivacyPolicyPage /></Suspense>} />
-            <Route element={<RouteGuard />}>
-              <Route element={<RouteGuard roles={["STAFF", "ADMIN"]} />}>
-                <Route element={<AdminLayout />}>
-                  <Route path="/admin" element={<AdminHome />} />
-                  <Route path="/admin/staff" element={<StaffPage />} />
-                  <Route element={<RouteGuard roles={["ADMIN"]} />}><Route path="/admin/audit" element={<Suspense fallback={<p role="status">Đang tải nhật ký...</p>}><AdminAuditPage /></Suspense>} /></Route>
-                </Route>
-                <Route path="/staff" element={<StaffRedirect />} />
+            <Route element={<RouteGuard roles={["STAFF", "ADMIN"]} />}>
+              <Route element={<AdminLayout />}>
+                <Route path="/admin" element={<AdminHome />} />
+                <Route path="/admin/staff" element={<Suspense fallback={<p role="status">Đang tải...</p>}><StaffPage /></Suspense>} />
+                <Route element={<RouteGuard roles={["ADMIN"]} />}><Route path="/admin/audit" element={<Suspense fallback={<p role="status">Đang tải nhật ký...</p>}><AdminAuditPage /></Suspense>} /></Route>
               </Route>
-              <Route element={<AppLayout />}>
+              <Route path="/staff" element={<StaffRedirect />} />
+            </Route>
+            <Route element={<AppLayout />}>
+              <Route path="/posts/:postId" element={<PostDetailPage />} />
+              <Route path="/create-post" element={<Navigate to="/home#two-sides" replace />} />
+              <Route element={<RouteGuard />}>
                 <Route path="/home" element={<Suspense fallback={<main className="center-state">Đang mở hành trình...</main>}><HomePage /></Suspense>} />
                 <Route path="/profile" element={<ProfilePage />} />
                 <Route path="/notification-preferences" element={<NotificationPreferencesPage />} />
@@ -80,11 +82,10 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
                 <Route path="/appointments/:appointmentId" element={<Suspense fallback={<p role="status">Đang tải lịch hẹn...</p>}><AppointmentsPage /></Suspense>} />
                 <Route path="/posts/:postId/journey" element={<Suspense fallback={<p role="status">Đang tải hành trình...</p>}><ItemJourneyPage /></Suspense>} />
                 <Route path="/posts/:postId/matches" element={<PostMatchesPage />} />
-                <Route path="/posts/:postId" element={<PostDetailPage />} />
                 <Route path="/claims" element={<ClaimsPage />} />
                 <Route path="/claims/:claimId/history" element={<Suspense fallback={<p role="status">Đang tải lịch sử claim...</p>}><ClaimHistoryPage /></Suspense>} />
                 <Route path="/claims/:claimId" element={<ClaimsPage />} />
-                <Route path="/reports" element={<ReportsPage />} />
+                <Route path="/reports" element={<Suspense fallback={<p role="status">Đang tải...</p>}><ReportsPage /></Suspense>} />
               </Route>
             </Route>
             <Route path="*" element={<Navigate to="/home" replace />} />

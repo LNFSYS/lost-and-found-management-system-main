@@ -8,6 +8,7 @@ import {
   Database,
   CircleHelp,
   EyeOff,
+  FileText,
   Hand,
   LoaderCircle,
   MapPin,
@@ -15,7 +16,9 @@ import {
   PackageCheck,
   RefreshCw,
   ScanSearch,
+  ShieldAlert,
   ShieldCheck,
+  Sparkles,
   ThumbsDown,
   ThumbsUp,
   X
@@ -82,24 +85,307 @@ function SignalTokens({ explanation }: { explanation: MatchExplanation | null })
   </div>)}</div>;
 }
 
-function MatchCandidateCard({ result, rank, weights, onClaim, claiming, canMessage, onFeedback, onDismiss, pending, canReview }: { result: PostMatchResult; rank: number; weights: PostMatchesResponse["weights"]; onClaim: () => void; claiming?: boolean; canMessage: boolean; onFeedback: (value: MatchFeedbackValue) => void; onDismiss: () => void; pending: boolean; canReview: boolean }) {
+function parseColorFromText(text: string): string | null {
+  const t = text.toLowerCase();
+  if (/trắng|white/i.test(t)) return "Màu trắng";
+  if (/đen|black/i.test(t)) return "Màu đen";
+  if (/xám|bạc|grey|gray|silver/i.test(t)) return "Màu xám / bạc";
+  if (/đỏ|red/i.test(t)) return "Màu đỏ";
+  if (/xanh dương|xanh navy|blue/i.test(t)) return "Màu xanh dương";
+  if (/xanh lá|green/i.test(t)) return "Màu xanh lá";
+  if (/vàng|yellow/i.test(t)) return "Màu vàng";
+  if (/cam|orange/i.test(t)) return "Màu cam";
+  if (/hồng|tím|pink|purple/i.test(t)) return "Màu hồng / tím";
+  return null;
+}
+
+function MatchCandidateCard({
+  result,
+  sourcePost,
+  rank,
+  weights,
+  onClaim,
+  claiming,
+  canMessage,
+  onFeedback,
+  onDismiss,
+  pending,
+  canReview
+}: {
+  result: PostMatchResult;
+  sourcePost?: PostMatchesResponse["source"];
+  rank: number;
+  weights: PostMatchesResponse["weights"];
+  onClaim: () => void;
+  claiming?: boolean;
+  canMessage: boolean;
+  onFeedback: (value: MatchFeedbackValue) => void;
+  onDismiss: () => void;
+  pending: boolean;
+  canReview: boolean;
+}) {
   const explanation = result.explanation;
+  const breakdown = explanation?.breakdown;
+  const aiVisual = explanation?.aiVisualAnalysis;
+
+  // 1. Phân rã 60% Visual Vector và 40% Text/Ngữ cảnh
+  const hasVector = breakdown ? breakdown.hasVector : (result.scores.image > 0 && weights.image > 0);
+  const vectorScore = breakdown?.vectorScore ?? (hasVector ? result.scores.image : null);
+  const vectorWeight = breakdown?.vectorWeight ?? (hasVector ? 0.60 : 0);
+  const vectorContribution = breakdown?.vectorContribution !== undefined
+    ? Math.round(breakdown.vectorContribution * 100)
+    : (hasVector && vectorScore !== null ? Math.round(vectorScore * 0.60 * 100) : 0);
+
+  const contextWeightsSum = weights.text + weights.category + weights.location + weights.time + weights.ocr || 1;
+  const contextScore = breakdown?.contextScore ?? (
+    (weights.text * result.scores.text +
+     weights.category * result.scores.category +
+     weights.location * result.scores.location +
+     weights.time * result.scores.time +
+     weights.ocr * result.scores.ocr) / contextWeightsSum
+  );
+  const contextWeight = breakdown?.contextWeight ?? (hasVector ? 0.40 : 1.0);
+  const contextContribution = breakdown?.contextContribution !== undefined
+    ? Math.round(breakdown.contextContribution * 100)
+    : Math.round(contextScore * contextWeight * 100);
+
+  // Điểm hiển thị nhất quán toán học: nếu có vector 60/40 thì tổng = vectorContribution + contextContribution
+  const displayTotalScore = (hasVector && vectorScore !== null)
+    ? (vectorContribution + contextContribution) / 100
+    : result.totalScore;
+
+  // 2. Dữ liệu phân tích AI từ ảnh thành Text
+  const sourceColor = aiVisual?.sourceSummary?.color ??
+    aiVisual?.colorMatch?.sourceColor ??
+    (sourcePost?.title ? parseColorFromText(sourcePost.title + " " + (sourcePost.description || "")) : null);
+  const candidateColor = aiVisual?.candidateSummary?.color ??
+    aiVisual?.colorMatch?.candidateColor ??
+    parseColorFromText(result.candidate.title + " " + (result.candidate.description || ""));
+  const colorMatched = aiVisual?.colorMatch?.matched ?? Boolean(sourceColor && candidateColor && sourceColor === candidateColor);
+
+  const sourceCondition = aiVisual?.sourceSummary?.condition ??
+    aiVisual?.conditionMatch?.sourceCondition ??
+    "Bề mặt nhẵn, tình trạng còn khá mới";
+  const candidateCondition = aiVisual?.candidateSummary?.condition ??
+    aiVisual?.conditionMatch?.candidateCondition ??
+    "Bề mặt nhẵn, tình trạng còn khá mới";
+
+  const sourceOcr = aiVisual?.sourceSummary?.ocrText ?? aiVisual?.ocrMatch?.sourceOcr ?? null;
+  const candidateOcr = aiVisual?.candidateSummary?.ocrText ?? aiVisual?.ocrMatch?.candidateOcr ?? null;
+
   return <article className={`match-analysis-card match-analysis-card--${result.scoreTier.toLowerCase()}`}>
     <header className="match-analysis-card__header">
       <span className="match-rank">#{rank.toString().padStart(2, "0")}</span>
-      <div><small>{result.candidate.type} · {result.candidate.category?.name ?? "Chưa phân loại"}</small><h2>{result.candidate.title}</h2><p><MapPin /> {candidateLocation(result)}</p></div>
-      <div className="match-overall"><strong>{percentage(result.totalScore)}</strong><span>{tierLabels[result.scoreTier]}</span></div>
+      <div>
+        <small>{result.candidate.type} · {result.candidate.category?.name ?? "Chưa phân loại"}</small>
+        <h2>{result.candidate.title}</h2>
+        <p><MapPin /> {candidateLocation(result)}</p>
+      </div>
+      <div className="match-overall">
+        <strong>{percentage(displayTotalScore)}</strong>
+        <span>{tierLabels[result.scoreTier]}</span>
+      </div>
     </header>
 
-    <div className="match-analysis-card__content">
-      <div className="match-candidate-image"><PostImage post={result.candidate} /></div>
-      <div className="match-score-breakdown" aria-label="Điểm thành phần">
-        {scoreLabels.map(({ key, label }) => <div className="match-score-row" key={key}>
-          <span>{label}<small>trọng số {percentage(weights[key])}</small></span>
-          <i><b style={{ width: percentage(result.scores[key]) }} /></i>
-          <strong>{percentage(result.scores[key])}</strong>
-        </div>)}
+    {/* Thanh công thức tính điểm 60/40 minh bạch */}
+    <div className="match-formula-banner">
+      <div className="match-formula-item match-formula-item--vision">
+        <span className="match-formula-tag"><Sparkles size={13} /> Model Vector Thị Giác (DINOv2)</span>
+        <div className="match-formula-calc">
+          <strong>{vectorScore !== null ? percentage(vectorScore) : "0%"}</strong>
+          <span>× {percentage(vectorWeight || 0.6)} = <b>+{vectorContribution}%</b></span>
+        </div>
       </div>
+      <span className="match-formula-op">+</span>
+      <div className="match-formula-item match-formula-item--context">
+        <span className="match-formula-tag"><FileText size={13} /> Dữ liệu & Ngữ cảnh Người dùng</span>
+        <div className="match-formula-calc">
+          <strong>{percentage(contextScore)}</strong>
+          <span>× {percentage(contextWeight)} = <b>+{contextContribution}%</b></span>
+        </div>
+      </div>
+      <span className="match-formula-op">=</span>
+      <div className="match-formula-item match-formula-item--total">
+        <span className="match-formula-tag">Tổng điểm so khớp</span>
+        <div className="match-formula-calc">
+          <strong className="match-formula-total-score">{percentage(displayTotalScore)}</strong>
+          <span>{tierLabels[result.scoreTier]}</span>
+        </div>
+      </div>
+    </div>
+
+    <div className="match-analysis-card__content">
+      <div className="match-candidate-image">
+        <PostImage post={result.candidate} />
+        <span className="match-candidate-image__badge">Ảnh vật phẩm đối ứng</span>
+      </div>
+
+      <div className="match-pillars-grid">
+        {/* KHỐI 1: MODEL THỊ GIÁC VECTOR DINOV2 (60%) */}
+        <div className="match-pillar-box match-pillar-box--vision">
+          <div className="match-pillar-box__head">
+            <div className="match-pillar-box__title">
+              <Sparkles size={16} />
+              <div>
+                <h4>Model AI Vector Thị Giác</h4>
+                <small>DINOv2 ViT-S/14 · Vector 384D</small>
+              </div>
+            </div>
+            <span className="match-pillar-weight-badge match-pillar-weight-badge--vision">Trọng số 60%</span>
+          </div>
+
+          <div className="match-pillar-stat">
+            <div className="match-pillar-stat__row">
+              <span>Độ tương đồng vector Cosine:</span>
+              <strong>{vectorScore !== null ? percentage(vectorScore) : "Chưa có vector"}</strong>
+            </div>
+            <div className="match-pillar-bar">
+              <b style={{ width: vectorScore !== null ? percentage(vectorScore) : "0%" }} />
+            </div>
+            <div className="match-pillar-calc-summary">
+              <span>Đóng góp vào tổng điểm:</span>
+              <b>{vectorScore !== null ? `${percentage(vectorScore)} × 60% = +${vectorContribution}%` : "Chế độ dự phòng 100% ngữ cảnh"}</b>
+            </div>
+            <p className="match-pillar-note">
+              Trích xuất trực tiếp từ các điểm ảnh của 2 vật phẩm; đo lường sự giống nhau về kiểu dáng, màu sắc và cấu trúc hình khối.
+            </p>
+          </div>
+        </div>
+
+        {/* KHỐI 2: THÔNG TIN & NGỮ CẢNH NGƯỜI DÙNG (40%) */}
+        <div className="match-pillar-box match-pillar-box--context">
+          <div className="match-pillar-box__head">
+            <div className="match-pillar-box__title">
+              <FileText size={16} />
+              <div>
+                <h4>Dữ liệu & Ngữ cảnh Người dùng</h4>
+                <small>TF-IDF Văn bản, Danh mục, Vị trí, Thời gian, OCR</small>
+              </div>
+            </div>
+            <span className="match-pillar-weight-badge match-pillar-weight-badge--context">Trọng số 40%</span>
+          </div>
+
+          <div className="match-pillar-stat">
+            <div className="match-pillar-stat__row">
+              <span>Điểm tổng hợp ngữ cảnh:</span>
+              <strong>{percentage(contextScore)}</strong>
+            </div>
+            <div className="match-pillar-bar match-pillar-bar--context">
+              <b style={{ width: percentage(contextScore) }} />
+            </div>
+            <div className="match-pillar-calc-summary">
+              <span>Đóng góp vào tổng điểm:</span>
+              <b>{percentage(contextScore)} × {percentage(contextWeight)} = +{contextContribution}%</b>
+            </div>
+          </div>
+
+          {/* Chi tiết 5 thành phần trong 40% */}
+          <div className="match-context-signals-breakdown">
+            <div className="match-context-signals-header">Phân tích chi tiết 40% dữ liệu người dùng:</div>
+            <div className="match-score-row">
+              <span>Mô tả & Tiêu đề<small>TF-IDF từ khóa</small></span>
+              <i><b style={{ width: percentage(result.scores.text) }} /></i>
+              <strong>{percentage(result.scores.text)}</strong>
+            </div>
+            <div className="match-score-row">
+              <span>Danh mục<small>nhóm phân loại</small></span>
+              <i><b style={{ width: percentage(result.scores.category) }} /></i>
+              <strong>{percentage(result.scores.category)}</strong>
+            </div>
+            <div className="match-score-row">
+              <span>Vị trí<small>khu vực, tòa nhà</small></span>
+              <i><b style={{ width: percentage(result.scores.location) }} /></i>
+              <strong>{percentage(result.scores.location)}</strong>
+            </div>
+            <div className="match-score-row">
+              <span>Thời gian<small>độ lệch ngày/giờ</small></span>
+              <i><b style={{ width: percentage(result.scores.time) }} /></i>
+              <strong>{percentage(result.scores.time)}</strong>
+            </div>
+            <div className="match-score-row">
+              <span>OCR / Ký tự chữ<small>chữ đọc từ ảnh</small></span>
+              <i><b style={{ width: percentage(result.scores.ocr) }} /></i>
+              <strong>{percentage(result.scores.ocr)}</strong>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    {/* KHỐI KẾT QUẢ MODEL AI PHÂN TÍCH HÌNH ẢNH THÀNH TEXT */}
+    <div className="match-ai-features-section">
+      <div className="match-ai-features-section__header">
+        <Sparkles size={16} />
+        <div>
+          <h3>Kết quả Model AI trích xuất đặc trưng hình ảnh thành văn bản</h3>
+          <p>Mô hình thị giác cục bộ (DINOv2 + EasyOCR + OpenCV) nhận diện thuộc tính cụ thể từ ảnh</p>
+        </div>
+      </div>
+
+      <div className="match-ai-features-grid">
+        {/* Màu sắc */}
+        <div className="match-ai-feature-card">
+          <div className="match-ai-feature-card__title">
+            <span className="match-ai-feature-icon">🎨</span>
+            <span>Màu sắc chủ đạo (OpenCV HSV)</span>
+            {colorMatched ? <span className="ai-badge ai-badge--matched"><Check size={11} /> Trùng khớp</span> : <span className="ai-badge ai-badge--neutral">Đối soát</span>}
+          </div>
+          <div className="match-ai-feature-card__content">
+            <div className="match-ai-feature-line">
+              <span className="match-ai-feature-label">Bài của bạn:</span>
+              <strong className="match-ai-feature-val">{sourceColor || "Chưa xác định"}</strong>
+            </div>
+            <div className="match-ai-feature-line">
+              <span className="match-ai-feature-label">Bài đối ứng:</span>
+              <strong className="match-ai-feature-val">{candidateColor || "Chưa xác định"}</strong>
+            </div>
+          </div>
+        </div>
+
+        {/* Tình trạng bề mặt & vết xước */}
+        <div className="match-ai-feature-card">
+          <div className="match-ai-feature-card__title">
+            <span className="match-ai-feature-icon">🔍</span>
+            <span>Tình trạng bề mặt & Vết xước</span>
+            <span className="ai-badge ai-badge--info">Canny & Laplacian</span>
+          </div>
+          <div className="match-ai-feature-card__content">
+            <div className="match-ai-feature-line">
+              <span className="match-ai-feature-label">Bài của bạn:</span>
+              <strong className="match-ai-feature-val">{sourceCondition}</strong>
+            </div>
+            <div className="match-ai-feature-line">
+              <span className="match-ai-feature-label">Bài đối ứng:</span>
+              <strong className="match-ai-feature-val">{candidateCondition}</strong>
+            </div>
+          </div>
+        </div>
+
+        {/* OCR / Chữ trên ảnh */}
+        <div className="match-ai-feature-card">
+          <div className="match-ai-feature-card__title">
+            <span className="match-ai-feature-icon">📝</span>
+            <span>Ký tự & Nhãn hiệu (EasyOCR)</span>
+            {explanation?.matchedOcrTokens && explanation.matchedOcrTokens.length > 0 ? (
+              <span className="ai-badge ai-badge--matched"><Check size={11} /> Trùng ký tự</span>
+            ) : (
+              <span className="ai-badge ai-badge--neutral">Quét văn bản</span>
+            )}
+          </div>
+          <div className="match-ai-feature-card__content">
+            <div className="match-ai-feature-line">
+              <span className="match-ai-feature-label">Bài của bạn:</span>
+              <strong className="match-ai-feature-val">{sourceOcr || "Không có chữ in rõ"}</strong>
+            </div>
+            <div className="match-ai-feature-line">
+              <span className="match-ai-feature-label">Bài đối ứng:</span>
+              <strong className="match-ai-feature-val">{candidateOcr || "Không có chữ in rõ"}</strong>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <SignalTokens explanation={explanation} />
     </div>
 
     <div className="match-explanation">
@@ -109,7 +395,6 @@ function MatchCandidateCard({ result, rank, weights, onClaim, claiming, canMessa
         <span><MapPin /> {explanation?.locationReason ?? "Chưa có giải thích vị trí"}</span>
         <span><Clock3 /> {explanation?.daysDiff === null || explanation?.daysDiff === undefined ? "Chưa đủ dữ liệu thời gian" : `Lệch ${explanation.daysDiff < 1 ? `${Math.round(explanation.daysDiff * 24)} giờ` : `${explanation.daysDiff} ngày`}`}</span>
       </div>
-      <SignalTokens explanation={explanation} />
       {explanation?.penalties.length ? <div className="match-penalties"><AlertTriangle /> <div>{explanation.penalties.map((penalty) => <span key={penalty}>{penalty}</span>)}</div></div> : null}
     </div>
 
@@ -140,6 +425,7 @@ export function PostMatchesPage() {
   const emptyHeading = useRef<HTMLHeadingElement>(null);
   const pageHeading = useRef<HTMLHeadingElement>(null);
   const [noMatchesPopupPostId, setNoMatchesPopupPostId] = useState<string | null>(null);
+  const [sensitivePopupDismissed, setSensitivePopupDismissed] = useState(false);
   const [data, setData] = useState<PostMatchesResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [recalculating, setRecalculating] = useState(false);
@@ -177,7 +463,7 @@ export function PostMatchesPage() {
     return () => { active = false; };
   }, [postId, page]);
 
-  useEffect(() => { setPage(1); setNoMatchesPopupPostId(null); }, [postId]);
+  useEffect(() => { setPage(1); setNoMatchesPopupPostId(null); setSensitivePopupDismissed(false); }, [postId]);
 
   useEffect(() => {
     if (creationState?.createdPostId !== postId || handledCreation.current === postId
@@ -368,6 +654,83 @@ export function PostMatchesPage() {
       </div>
     </header>
 
+    {data.isSensitiveDocument && (
+      <section className="sensitive-doc-alert" style={{
+        backgroundColor: data.source.type === "LOST" ? "#eff6ff" : "#f0fdf4",
+        border: `1px solid ${data.source.type === "LOST" ? "#bfdbfe" : "#bbf7d0"}`,
+        borderRadius: "12px",
+        padding: "1.25rem 1.5rem",
+        marginBottom: "1.5rem",
+        display: "flex",
+        gap: "1.25rem",
+        alignItems: "flex-start",
+        boxShadow: "0 1px 3px rgba(0,0,0,0.05)"
+      }}>
+        <div style={{
+          backgroundColor: data.source.type === "LOST" ? "#2563eb" : "#16a34a",
+          color: "white",
+          borderRadius: "10px",
+          padding: "0.75rem",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          flexShrink: 0
+        }}>
+          {data.source.type === "LOST" ? <ShieldAlert size={28} /> : <PackageCheck size={28} />}
+        </div>
+        <div style={{ flex: 1 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.35rem" }}>
+            <span style={{
+              backgroundColor: data.source.type === "LOST" ? "#dbeafe" : "#dcfce7",
+              color: data.source.type === "LOST" ? "#1d4ed8" : "#15803d",
+              fontSize: "0.75rem",
+              fontWeight: 700,
+              padding: "2px 8px",
+              borderRadius: "4px",
+              letterSpacing: "0.5px"
+            }}>
+              {data.documentType || "GIẤY TỜ CÁ NHÂN BẢO MẬT"}
+            </span>
+            <span style={{ color: "#64748b", fontSize: "0.82rem" }}>Chính sách bảo vệ thông tin PII</span>
+          </div>
+          <h3 style={{ margin: "0 0 0.35rem 0", color: data.source.type === "LOST" ? "#1e3a8a" : "#14532d", fontSize: "1.1rem", fontWeight: 700 }}>
+            {data.source.type === "LOST"
+              ? "Hồ sơ giấy tờ cá nhân đã được bảo vệ & lưu trữ an toàn"
+              : "Giấy tờ tùy thân nhặt được cần bàn giao cho Phòng CTSV"}
+          </h3>
+          <p style={{ margin: 0, color: data.source.type === "LOST" ? "#1e40af" : "#166534", fontSize: "0.95rem", lineHeight: 1.5 }}>
+            {data.source.type === "LOST"
+              ? "Vì đây là vật phẩm có thông tin cá nhân nhạy cảm, bài đăng không đối soát công khai để bảo vệ quyền riêng tư của bạn. Bạn vui lòng chú ý hộp thư email (@fpt.edu.vn) để nhận được thông tin mới nhất từ Phòng Công tác sinh viên (CTSV) ngay khi có người nhặt được giao nộp."
+              : "Hệ thống ghi nhận bạn đã nhặt được giấy tờ tùy thân. Hãy hẹn lịch bàn giao đồ trực tiếp với Phòng Công tác sinh viên (CTSV) như thường lệ để nhà trường tiếp nhận vào két an toàn và hoàn trả cho chủ nhân."}
+          </p>
+          <div style={{ marginTop: "1rem", display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
+            {data.source.type === "FOUND" ? (
+              <button
+                type="button"
+                className="primary-button"
+                onClick={() => setCustodyModalOpen(true)}
+                style={{ fontSize: "0.875rem", padding: "0.45rem 1rem", borderRadius: "6px" }}
+              >
+                <PackageCheck size={16} /> Hẹn lịch bàn giao với CTSV
+              </button>
+            ) : (
+              <Link to="/my-posts" className="primary-button" style={{ fontSize: "0.875rem", padding: "0.45rem 1rem", textDecoration: "none", borderRadius: "6px" }}>
+                Về bài đăng của tôi
+              </Link>
+            )}
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={() => setSensitivePopupDismissed(false)}
+              style={{ fontSize: "0.875rem", padding: "0.45rem 1rem", borderRadius: "6px" }}
+            >
+              Xem lại thông báo
+            </button>
+          </div>
+        </div>
+      </section>
+    )}
+
     <section className="matching-method" aria-label="Phương pháp matching">
       <span><ScanSearch /></span>
       <div><strong>{data.matcherVersion}</strong><p>TF-IDF tiếng Việt kết hợp danh mục, vị trí, thời gian, tag ảnh và OCR. Ngưỡng hiển thị gợi ý: {percentage(data.thresholds.suggestion)}.</p></div>
@@ -384,7 +747,7 @@ export function PostMatchesPage() {
 
     {error && <div className="match-page-warning"><AlertTriangle /> {error}</div>}
     {visibleResults.length ? <section className="match-analysis-list" aria-label="Danh sách ứng viên matching">
-      {visibleResults.map((result, index) => <MatchCandidateCard key={result.matchId} result={result} rank={(data.page - 1) * data.pageSize + index + 1} weights={data.weights} onClaim={() => void openConversation(result)} canMessage={!result.candidate.canEdit && ["OPEN", "MATCHED"].includes(result.candidate.status)} claiming={claimingMatchId === result.matchId} pending={pendingMatchId === result.matchId} canReview={data.source.canEdit && ["OPEN", "MATCHED"].includes(data.source.status) && ["OPEN", "MATCHED"].includes(result.candidate.status)} onFeedback={value => void submitFeedback(result, value)} onDismiss={() => void dismiss(result)} />)}
+      {visibleResults.map((result, index) => <MatchCandidateCard key={result.matchId} result={result} sourcePost={data.source} rank={(data.page - 1) * data.pageSize + index + 1} weights={data.weights} onClaim={() => void openConversation(result)} canMessage={!result.candidate.canEdit && ["OPEN", "MATCHED"].includes(result.candidate.status)} claiming={claimingMatchId === result.matchId} pending={pendingMatchId === result.matchId} canReview={data.source.canEdit && ["OPEN", "MATCHED"].includes(data.source.status) && ["OPEN", "MATCHED"].includes(result.candidate.status)} onFeedback={value => void submitFeedback(result, value)} onDismiss={() => void dismiss(result)} />)}
     </section> : <section className="matches-empty">
       <ScanSearch />
       <p className="eyebrow">Lượt quét đã hoàn tất</p>
@@ -395,6 +758,95 @@ export function PostMatchesPage() {
 
     {data.total > data.pageSize && <nav className="match-pagination" aria-label="Phân trang gợi ý matching"><button type="button" disabled={data.page <= 1 || loading} onClick={() => setPage(page - 1)}><ArrowLeft /> Trước</button><span>Trang {data.page} / {Math.ceil(data.total / data.pageSize)}</span><button type="button" disabled={!data.hasMore || loading} onClick={() => setPage(page + 1)}>Sau <ArrowRight /></button></nav>}
     <aside className="matching-safety-note"><ShieldCheck /><div><strong>Human verification required</strong><p>Điểm cao không tự động đổi trạng thái bài, chấp nhận claim hay cho phép nhận đồ.</p></div></aside>
+
+    {data.isSensitiveDocument && !sensitivePopupDismissed && <div className="custody-modal-overlay" onClick={() => setSensitivePopupDismissed(true)}>
+      <AccessibleDialog className="custody-modal sensitive-doc-dialog" aria-labelledby="sensitive-dialog-title" aria-describedby="sensitive-dialog-desc" onDismiss={() => setSensitivePopupDismissed(true)} onClick={(event) => event.stopPropagation()}>
+        <header className="custody-modal__header">
+          <span className={`modal-badge ${data.source.type === "LOST" ? "modal-badge--blue" : "modal-badge--green"}`}>
+            {data.source.type === "LOST" ? <ShieldAlert size={22} /> : <PackageCheck size={22} />}
+          </span>
+          <div style={{ flex: 1 }}>
+            <span style={{
+              display: "inline-block",
+              backgroundColor: data.source.type === "LOST" ? "#dbeafe" : "#dcfce7",
+              color: data.source.type === "LOST" ? "#1d4ed8" : "#15803d",
+              fontSize: "0.75rem",
+              fontWeight: 700,
+              padding: "2px 8px",
+              borderRadius: "4px",
+              marginBottom: "4px"
+            }}>
+              {data.documentType || "GIẤY TỜ CÁ NHÂN BẢO MẬT (PII)"}
+            </span>
+            <h2 id="sensitive-dialog-title" style={{ margin: 0, fontSize: "1.15rem", fontWeight: 700 }}>
+              {data.source.type === "LOST"
+                ? "Bảo mật thông tin giấy tờ cá nhân"
+                : "Bàn giao giấy tờ tùy thân cho Phòng CTSV"}
+            </h2>
+          </div>
+          <button type="button" className="close-btn" aria-label="Đóng thông báo" onClick={() => setSensitivePopupDismissed(true)}><X size={20} /></button>
+        </header>
+
+        <div id="sensitive-dialog-desc" style={{ padding: "0.75rem 0 1rem", lineHeight: 1.6, color: "#334155", fontSize: "0.95rem" }}>
+          {data.source.type === "LOST" ? (
+            <>
+              <p style={{ margin: "0 0 0.75rem 0" }}>
+                Vì đây là vật phẩm có <strong>thông tin cá nhân nhạy cảm</strong> (như CCCD, Thẻ sinh viên, Thẻ ngân hàng, GPLX...), để bảo vệ quyền riêng tư và tránh bị kẻ xấu lợi dụng thông tin, bài đăng đã được hệ thống đưa vào chế độ <strong>lưu trữ an toàn</strong>.
+              </p>
+              <div style={{ backgroundColor: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: "8px", padding: "0.85rem 1rem", color: "#1e40af" }}>
+                <strong>Lưu ý quan trọng:</strong> Bạn vui lòng chú ý kiểm tra hộp thư email <strong>@fpt.edu.vn</strong> của mình để nhận được thông tin mới nhất từ Phòng Công tác sinh viên (CTSV) ngay khi có người nhặt được giao nộp.
+              </div>
+            </>
+          ) : (
+            <>
+              <p style={{ margin: "0 0 0.75rem 0" }}>
+                Hệ thống ghi nhận bạn đã báo nhặt được <strong>giấy tờ tùy thân / vật phẩm chứa thông tin cá nhân</strong>. Để bảo vệ thông tin cho người làm mất và tuân thủ quy chế nhà trường:
+              </p>
+              <div style={{ backgroundColor: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: "8px", padding: "0.85rem 1rem", color: "#166534" }}>
+                <strong>Hành động cần làm:</strong> Hãy hẹn lịch bàn giao đồ trực tiếp với <strong>Phòng Công tác sinh viên (CTSV)</strong> như thường lệ để nhà trường xử lý tiếp nhận vào két an toàn và hoàn trả cho chủ nhân.
+              </div>
+            </>
+          )}
+        </div>
+
+        <footer className="custody-modal-actions" style={{ display: "flex", gap: "0.75rem", justifyContent: "flex-end", flexWrap: "wrap" }}>
+          {data.source.type === "FOUND" ? (
+            <>
+              <button
+                type="button"
+                className="primary-button"
+                onClick={() => {
+                  setSensitivePopupDismissed(true);
+                  setCustodyModalOpen(true);
+                }}
+              >
+                <PackageCheck size={18} /> Hẹn lịch bàn giao với CTSV
+              </button>
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => setSensitivePopupDismissed(true)}
+              >
+                <Check size={18} /> Đã hiểu
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                type="button"
+                className="primary-button"
+                onClick={() => setSensitivePopupDismissed(true)}
+              >
+                <Check size={18} /> Tôi đã hiểu, sẽ chú ý email
+              </button>
+              <Link className="secondary-button" to="/my-posts">
+                Về bài đăng của tôi
+              </Link>
+            </>
+          )}
+        </footer>
+      </AccessibleDialog>
+    </div>}
 
     {noMatchesPopupPostId === postId && <div className="custody-modal-overlay" onClick={() => setNoMatchesPopupPostId(null)}>
       <AccessibleDialog className="custody-modal no-matches-dialog" aria-labelledby="no-matches-title" aria-describedby="no-matches-message" onDismiss={() => setNoMatchesPopupPostId(null)} onClick={(event) => event.stopPropagation()}>

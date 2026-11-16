@@ -1,4 +1,4 @@
-import { ArrowLeft, ArrowRight, CalendarClock, CheckCircle2, Clock3, Eye, FileWarning, LoaderCircle, LockKeyhole, MapPin, MessageCircle, PackageCheck, ScanSearch, Tag, UserRound, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, CalendarClock, CheckCircle2, Clock3, Eye, FileWarning, History, LoaderCircle, LockKeyhole, MapPin, MessageCircle, PackageCheck, ScanSearch, Tag, Trash2, UserRound, X, XCircle } from "lucide-react";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useNetworkStatus } from "../hooks/use-network-status";
@@ -14,6 +14,95 @@ const statusLabels: Record<PostSummary["status"], string> = {
 
 function formatDate(value: string | null) {
   return value ? new Intl.DateTimeFormat("vi-VN", { dateStyle: "long", timeStyle: "short" }).format(new Date(value)) : "Chưa cập nhật";
+}
+
+function PostGallery({ post }: { post: PostSummary }) {
+  const itemMedia = post.media.filter(item => item.mediaKind === "ITEM");
+  const [selectedIndex, setSelectedIndex] = useState(0);
+  const [imageSources, setImageSources] = useState<Record<string, string>>({});
+
+  const currentMedia = itemMedia[selectedIndex] ?? itemMedia[0] ?? post.media[0];
+
+  useEffect(() => {
+    let active = true;
+    const urlsToFetch = itemMedia.map(m => m.url).filter(url => !imageSources[url]);
+    if (!urlsToFetch.length) return;
+
+    urlsToFetch.forEach(url => {
+      api.getPostMedia(url)
+        .then(blob => {
+          if (!active) return;
+          const objectUrl = URL.createObjectURL(blob);
+          setImageSources(prev => ({ ...prev, [url]: objectUrl }));
+        })
+        .catch(() => {
+          if (active) setImageSources(prev => ({ ...prev, [url]: "" }));
+        });
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [itemMedia.map(m => m.url).join(",")]);
+
+  const currentSource = currentMedia ? imageSources[currentMedia.url] : null;
+
+  return (
+    <div className="post-detail-gallery">
+      <div className={`post-detail__media post-card__media--${post.type.toLowerCase()}`}>
+        {currentSource ? (
+          <img src={currentSource} alt={`Ảnh ${post.title} (${selectedIndex + 1}/${itemMedia.length || 1})`} />
+        ) : (
+          <div className="post-card__placeholder">
+            <span>{currentSource === "" ? "Không tải được ảnh" : currentMedia ? "Đang tải ảnh" : "Chưa có ảnh"}</span>
+          </div>
+        )}
+        <span className={`post-type post-type--${post.type.toLowerCase()}`}>{post.type}</span>
+        {post.visibilityMode === "PRIVATE_DETAILS" && (
+          <span className="post-private" title="Chi tiết được bảo vệ"><LockKeyhole /></span>
+        )}
+        {currentMedia?.isAiGenerated && (
+          <span className="post-ai-illustration">Ảnh minh họa do AI tạo</span>
+        )}
+      </div>
+
+      {itemMedia.length > 1 && (
+        <div className="post-gallery-thumbnails" style={{ display: "flex", gap: "0.5rem", marginTop: "0.75rem", overflowX: "auto", paddingBottom: "0.25rem" }}>
+          {itemMedia.map((m, idx) => {
+            const thumbSrc = imageSources[m.url];
+            const isSelected = idx === selectedIndex;
+            return (
+              <button
+                key={m.id || idx}
+                type="button"
+                onClick={() => setSelectedIndex(idx)}
+                style={{
+                  border: isSelected ? "2px solid #2563eb" : "1px solid #e5e7eb",
+                  borderRadius: "8px",
+                  padding: "2px",
+                  background: "#fff",
+                  cursor: "pointer",
+                  width: "56px",
+                  height: "56px",
+                  flexShrink: 0,
+                  overflow: "hidden"
+                }}
+                aria-label={`Xem ảnh ${idx + 1}`}
+              >
+                {thumbSrc ? (
+                  <img src={thumbSrc} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: "6px" }} />
+                ) : (
+                  <div style={{ width: "100%", height: "100%", background: "#f3f4f6", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "10px", color: "#9ca3af" }}>
+                    {idx + 1}
+                  </div>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
 }
 
 export function PostDetailPage() {
@@ -35,6 +124,42 @@ export function PostDetailPage() {
   const [submittingCustody, setSubmittingCustody] = useState(false);
   const [custodyNotice, setCustodyNotice] = useState("");
   const [custodyError, setCustodyError] = useState("");
+
+  const [actionBusy, setActionBusy] = useState(false);
+  const [actionNotice, setActionNotice] = useState("");
+  const [actionError, setActionError] = useState("");
+
+  async function handleClosePost() {
+    if (!post) return;
+    if (!window.confirm("Bạn có chắc chắn muốn đóng bài đăng này không?")) return;
+    setActionBusy(true);
+    setActionNotice("");
+    setActionError("");
+    try {
+      const updated = await api.closePost(post.id);
+      setPost(updated);
+      setActionNotice("Đã đóng bài đăng thành công.");
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "Không thể đóng bài đăng.");
+    } finally {
+      setActionBusy(false);
+    }
+  }
+
+  async function handleDeletePost() {
+    if (!post) return;
+    if (!window.confirm("Bạn có chắc chắn muốn xóa bài đăng này không? Thao tác này không thể hoàn tác.")) return;
+    setActionBusy(true);
+    setActionNotice("");
+    setActionError("");
+    try {
+      await api.deletePost(post.id);
+      navigate("/my-posts");
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "Không thể xóa bài đăng.");
+      setActionBusy(false);
+    }
+  }
 
   const openCustodyModal = useCallback(async () => {
     setCustodyError("");
@@ -144,14 +269,32 @@ export function PostDetailPage() {
   return <main className="post-detail-page">
     <div className="post-detail-topline">
       <Link className="post-detail-back" to="/posts"><ArrowLeft /> Quay lại bài đăng</Link>
-      <div className="post-detail-actions">{post.canEdit && <Link className="post-detail-matches" to={`/posts/${post.id}/matches`}><ScanSearch /> Xem phân tích matching</Link>}{!post.canEdit && <Link className="post-detail-matches" to={`/reports?targetType=POST&targetId=${post.id}`}><FileWarning /> Báo cáo bài đăng</Link>}</div>
+      <div className="post-detail-actions" style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
+        {post.canEdit && (
+          <>
+            <Link className="post-detail-matches" to={`/posts/${post.id}/matches`}><ScanSearch size={16} /> Matching</Link>
+            <Link className="post-detail-matches" to={`/posts/${post.id}/journey`}><History size={16} /> Xem hành trình vật phẩm</Link>
+            {post.status !== "CLOSED" && (
+              <button type="button" className="post-detail-matches" disabled={actionBusy} onClick={handleClosePost}>
+                <XCircle size={16} /> Đóng bài đăng
+              </button>
+            )}
+            <button type="button" className="post-detail-matches" style={{ color: "#dc2626" }} disabled={actionBusy} onClick={handleDeletePost}>
+              <Trash2 size={16} /> Xóa bài
+            </button>
+          </>
+        )}
+        {!post.canEdit && <Link className="post-detail-matches" to={`/reports?targetType=POST&targetId=${post.id}`}><FileWarning size={16} /> Báo cáo bài đăng</Link>}
+      </div>
+      {actionNotice && <p className="form-note" style={{ margin: "0.5rem 0", color: "#16a34a" }}>{actionNotice}</p>}
+      {actionError && <p className="form-error" style={{ margin: "0.5rem 0", color: "#dc2626" }}>{actionError}</p>}
     </div>
     {(!online || stale) && <div className="pwa-data-state" role="status">
       <strong>{online ? "Đang hiển thị dữ liệu lưu tạm" : "Bạn đang offline"}</strong>
       <span>{online ? "Kết nối đã khôi phục, hãy làm mới nếu cần dữ liệu mới nhất." : "Chi tiết bài có thể là dữ liệu cũ; thao tác cập nhật cần kết nối mạng."}</span>
     </div>}
     <div className="post-detail-grid">
-      <section className="post-detail-visual" aria-label="Ảnh vật phẩm"><PostImage post={post} detail /></section>
+      <section className="post-detail-visual" aria-label="Ảnh vật phẩm"><PostGallery post={post} /></section>
       <section className="post-detail-content">
         <div className="post-detail-heading">
           <div className="post-detail-badges"><span className={`post-type-inline post-type-inline--${post.type.toLowerCase()}`}>{post.type}</span><span className={`post-status post-status--${post.status.toLowerCase()}`}>{statusLabels[post.status]}</span>{post.visibilityMode === "PRIVATE_DETAILS" && <span className="post-protected"><LockKeyhole /> Chi tiết được bảo vệ</span>}</div>

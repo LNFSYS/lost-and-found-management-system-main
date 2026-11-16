@@ -1,0 +1,2 @@
+ALTER TABLE reports
+  MODIFY source_type ENUM('POST', 'USER', 'CLAIM', 'MESSAGE', 'HANDOVER') NULL;

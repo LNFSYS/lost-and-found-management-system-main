@@ -14,10 +14,14 @@ import { createDamageInspectionRoutes } from "../modules/damage-inspection/damag
 interface AppDependencies {
   services?: ApplicationServices;
   checkReadiness?: () => Promise<void>;
+  trustProxy?: boolean | number | string;
 }
 
-export function createApp({ services = defaultServices, checkReadiness = async () => { await pool.query("SELECT 1"); } }: AppDependencies = {}) {
+export function createApp({ services = defaultServices, checkReadiness = async () => { await pool.query("SELECT 1"); }, trustProxy = false }: AppDependencies = {}) {
   const app = express();
+  if (trustProxy) {
+    app.set("trust proxy", trustProxy);
+  }
   const { appointmentRoutes, activityRoutes, adminRoutes, handoverRoutes, authRoutes, claimRoutes, notificationRoutes, postRoutes, realtimeRoutes, returnRoutes, reportRoutes, adminConfigRoutes, configRoutes, staffRoutes, radarRoutes } = createHttpRoutes(services);
   const allowedOrigins = parseAllowedOrigins(env.frontendUrl);
   app.disable("x-powered-by");

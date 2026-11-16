@@ -17,7 +17,7 @@ export function createAuthRoutes({ authController, auth }: {
     limits: { fileSize: avatarMediaPolicy.maxBytes, files: 1 }
   });
   const otpLimit = rateLimit({ windowMs: 10 * 60_000, limit: 5, standardHeaders: true, legacyHeaders: false, message: { message: "Bạn đã yêu cầu quá nhiều mã OTP. Vui lòng thử lại sau." } });
-  const loginLimit = rateLimit({ windowMs: 15 * 60_000, limit: 20, standardHeaders: true, legacyHeaders: false, message: { message: "Bạn đã thử đăng nhập quá nhiều lần. Vui lòng thử lại sau." } });
+  const loginLimit = rateLimit({ windowMs: 15 * 60_000, limit: 20, standardHeaders: true, legacyHeaders: false, skipSuccessfulRequests: true, message: { message: "Bạn đã thử đăng nhập quá nhiều lần. Vui lòng thử lại sau." } });
   const sensitiveLimit = rateLimit({ windowMs: 15 * 60_000, limit: 10, standardHeaders: true, legacyHeaders: false, message: { message: "Quá nhiều yêu cầu. Vui lòng thử lại sau." } });
   // Separate cold starts/401 recovery from credential mutations; keep an IP abuse ceiling.
   const refreshLimit = rateLimit({ windowMs: 60_000, limit: 120, standardHeaders: true, legacyHeaders: false, message: { message: "Khôi phục phiên đang bị giới hạn. Vui lòng thử lại sau." } });
@@ -40,6 +40,8 @@ export function createAuthRoutes({ authController, auth }: {
   authRoutes.get("/me", requireAuth, (req, res, next) => authController.me(req, res).catch(next));
   authRoutes.patch("/profile", requireAuth, (req, res, next) => authController.updateProfile(req, res).catch(next));
   authRoutes.patch("/profile/avatar", requireAuth, uploadAvatar, (req, res, next) => authController.updateAvatar(req, res).catch(next));
+  authRoutes.post("/profile/avatar", requireAuth, uploadAvatar, (req, res, next) => authController.updateAvatar(req, res).catch(next));
+  authRoutes.post("/avatar", requireAuth, uploadAvatar, (req, res, next) => authController.updateAvatar(req, res).catch(next));
   authRoutes.get("/profile/avatar", requireAuth, (req, res, next) => authController.getAvatar(req, res).catch(next));
   authRoutes.get("/activity", requireAuth, (req, res, next) => authController.activity(req, res).catch(next));
   return authRoutes;

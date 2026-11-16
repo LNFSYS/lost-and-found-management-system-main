@@ -57,6 +57,7 @@ export interface WarehouseStorageLog {
   id: string;
   warehouseItemId: string | null;
   postId: string | null;
+  itemName?: string | null;
   handoverPoint: {
     id: string;
     name: string | null;
@@ -212,6 +213,7 @@ export interface WarehouseRepository {
     total: number;
     items: WarehouseItem[];
   }>;
+  listSensitiveDocuments(q?: string): Promise<any[]>;
   findItemById(itemId: string, db?: TransactionContext): Promise<WarehouseItem | null>;
   findItemByPostId(postId: string): Promise<{ id: string; status: WarehouseStatus; } | null>;
   lockItemForUpdate(itemId: string, connection: TransactionContext): Promise<WarehouseItemLock | null>;
@@ -280,4 +282,5 @@ export interface WarehouseRepository {
   } | null>;
   getConfigInt(key: string, fallback: number): Promise<number>;
   listLogs(itemId: string): Promise<WarehouseStorageLog[]>;
+  listAllLogs(input: { page: number; pageSize: number }): Promise<{ logs: WarehouseStorageLog[]; total: number }>;
 }

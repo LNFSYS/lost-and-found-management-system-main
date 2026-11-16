@@ -61,6 +61,7 @@ export function createClaimRoutes({ claimController, auth }: {
   });
   claimRoutes.get("/rooms", (req, res, next) => claimController.listRooms(req, res).catch(next));
   claimRoutes.get("/", (req, res, next) => claimController.listClaims(req, res).catch(next));
+  claimRoutes.get("/my-claims", (req, res, next) => claimController.listClaims(req, res).catch(next));
   claimRoutes.post("/", claimCreateLimit, (req, res, next) => claimController.createClaim(req, res).catch(next));
   claimRoutes.post("/direct-messages", messageLimit, (req, res, next) => claimController.createDirectMessage(req, res).catch(next));
   claimRoutes.post("/contact-photo-checks", evidenceLimit, uploadSingleEvidence, (req, res, next) => claimController.checkContactPhoto(req, res).catch(next));
@@ -68,6 +69,8 @@ export function createClaimRoutes({ claimController, auth }: {
   claimRoutes.get("/:claimId", (req, res, next) => claimController.getClaim(req, res).catch(next));
   claimRoutes.get("/:claimId/history", (req, res, next) => claimController.getHistory(req, res).catch(next));
   claimRoutes.post("/:claimId/decision", verificationWriteLimit, (req, res, next) => claimController.decide(req, res).catch(next));
+  claimRoutes.post("/:claimId/accept", verificationWriteLimit, (req, res, next) => claimController.accept(req, res).catch(next));
+  claimRoutes.post("/:claimId/reject", verificationWriteLimit, (req, res, next) => claimController.reject(req, res).catch(next));
   claimRoutes.post("/:claimId/withdraw", (req, res, next) => claimController.withdraw(req, res).catch(next));
   claimRoutes.get("/:claimId/verification/templates", (req, res, next) => claimController.getVerificationTemplates(req, res).catch(next));
   claimRoutes.get("/:claimId/verification", (req, res, next) => claimController.getVerification(req, res).catch(next));
@@ -77,6 +80,7 @@ export function createClaimRoutes({ claimController, auth }: {
   claimRoutes.get("/:claimId/room", (req, res, next) => claimController.getRoom(req, res).catch(next));
   claimRoutes.post("/:claimId/room", (req, res, next) => claimController.getRoom(req, res).catch(next));
   claimRoutes.get("/:claimId/messages", (req, res, next) => claimController.listMessages(req, res).catch(next));
+  claimRoutes.patch("/:claimId/messages/read", (req, res, next) => claimController.markMessagesRead(req, res).catch(next));
   claimRoutes.post("/:claimId/messages", messageLimit, (req, res, next) => claimController.sendMessage(req, res).catch(next));
   claimRoutes.post("/:claimId/messages/images", evidenceLimit, uploadSingleEvidence, (req, res, next) => claimController.uploadChatImage(req, res).catch(next));
   claimRoutes.get("/:claimId/evidence", (req, res, next) => claimController.listEvidence(req, res).catch(next));

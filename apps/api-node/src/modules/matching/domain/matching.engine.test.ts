@@ -114,4 +114,25 @@ describe("hybrid matching engine", () => {
     assert.ok(redacted.reasons.some((value) => value.includes("riêng tư")));
     assert.ok(explanation.matchedTokens.length > 0);
   });
+
+  it("applies 60% DINOv2 visual vector similarity when both candidates have image embeddings", () => {
+    // Vector 384 chiều giả lập: identical vectors (cosine = 1.0)
+    const vecA = new Array(384).fill(0);
+    vecA[0] = 1.0;
+    const vecB = new Array(384).fill(0);
+    vecB[0] = 1.0;
+
+    const source = candidate({ imageEmbedding: vecA });
+    const match = candidate({
+      id: "found-vector-match",
+      userId: "finder",
+      type: "FOUND",
+      imageEmbedding: vecB
+    });
+
+    const result = scoreMatchCandidates(source, [match])[0];
+    assert.equal(result.imageScore, 1);
+    assert.ok(result.totalScore >= 0.75);
+    assert.ok(result.explanation.reasons.some((r) => r.includes("Vector thị giác DINOv2 100%")));
+  });
 });

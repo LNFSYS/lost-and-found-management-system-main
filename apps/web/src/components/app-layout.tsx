@@ -33,7 +33,20 @@ export function AppLayout() {
         <NavLink to="/claims"><MessageCircle size={18} /> Trao đổi riêng</NavLink>
         <NavLink to="/appointments"><CalendarDays size={18} /> Lịch hẹn</NavLink>
       </nav>
-      <div className="topbar-actions"><NotificationCenter /><button className="icon-text-button" onClick={() => { void logout().catch(() => undefined); }}><LogOut size={18} /> Đăng xuất</button></div>
+      <div className="topbar-actions">
+        {user ? (
+          <>
+            <NotificationCenter />
+            <button className="icon-text-button" onClick={() => { void logout().catch(() => undefined); }}>
+              <LogOut size={18} /> Đăng xuất
+            </button>
+          </>
+        ) : (
+          <Link className="icon-text-button" to="/login">
+            <UserRound size={18} /> Đăng nhập
+          </Link>
+        )}
+      </div>
     </header>
     {!online && <div className="offline-banner" role="status">Bạn đang offline. Ứng dụng chỉ hiển thị giao diện hoặc dữ liệu đã lưu tạm; thao tác gửi mới cần kết nối mạng.</div>}
     <main className="workspace"><Outlet /></main>

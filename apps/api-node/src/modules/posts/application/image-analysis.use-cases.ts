@@ -16,10 +16,24 @@ const MAX_ANALYSIS_IMAGES = 5;
 
 const MAX_ANALYSIS_TOTAL_BYTES = 14 * 1024 * 1024;
 
+export interface PostImageAnalysisResult {
+  title: string;
+  description: string;
+  suggestedCategory: ReturnType<typeof matchSuggestedCategory>;
+  visualAttributes: string[];
+  visibleText: string[];
+  confidence: number;
+  warnings: string[];
+  assistedBy: string;
+  model: string;
+  imageCount: number;
+  imageEmbedding?: number[] | null;
+}
+
 export function createImageAnalysisUseCases({ postRepository, analyzer }: { postRepository: Pick<PostRepository, "getFormCatalog">; analyzer: ImageAnalyzer; }) {
 
   const useCases = {
-    async analyzePostImages(files: ImageUpload[], type: AnalyzePostImageInput["type"]) {
+    async analyzePostImages(files: ImageUpload[], type: AnalyzePostImageInput["type"]): Promise<PostImageAnalysisResult> {
       if (!files.length) throw new AppError("bad_request", "Cần gửi ít nhất một ảnh để phân tích.");
       if (files.length > MAX_ANALYSIS_IMAGES) {
         throw new AppError("bad_request", `Chỉ được phân tích tối đa ${MAX_ANALYSIS_IMAGES} ảnh trong một lần.`);
@@ -43,9 +57,10 @@ export function createImageAnalysisUseCases({ postRepository, analyzer }: { post
         visibleText: result.visibleText,
         confidence: result.confidence,
         warnings: result.warnings,
-        assistedBy: "Gemini image understanding",
+        assistedBy: analyzer.model.includes("local") ? "DINOv2 + EasyOCR AI (local)" : "Gemini image understanding",
         model: analyzer.model,
-        imageCount: files.length
+        imageCount: files.length,
+        imageEmbedding: result.imageEmbedding ?? null
       };
     }
   };

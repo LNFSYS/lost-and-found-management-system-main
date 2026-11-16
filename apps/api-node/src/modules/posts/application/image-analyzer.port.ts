@@ -8,9 +8,18 @@ export interface ImageAnalysis {
   visibleText: string[];
   confidence: number;
   warnings: string[];
+  imageEmbedding?: number[] | null;
+  isSensitiveDocument?: boolean;
+  documentType?: string | null;
+  sensitiveReason?: string | null;
+}
+
+export interface ImageAnalyzerContext {
+  title?: string;
+  description?: string;
 }
 
 export interface ImageAnalyzer {
   readonly model: string;
-  analyze(files: ImageUpload[], type: "LOST" | "FOUND", categoryNames: string[]): Promise<ImageAnalysis>;
+  analyze(files: ImageUpload[], type: "LOST" | "FOUND", categoryNames: string[], context?: ImageAnalyzerContext): Promise<ImageAnalysis>;
 }

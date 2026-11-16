@@ -31,6 +31,11 @@ export const listWarehouseItemsQuerySchema = z.object({
   pageSize: z.coerce.number().int().min(1).max(50).default(12)
 });
 
+export const listWarehouseLogsQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).max(999).default(1),
+  pageSize: z.coerce.number().int().min(1).max(50).default(20)
+});
+
 export const intakeEvidenceFields = {
   physicalReviewConfirmed: z.literal(true, { error: "Cần xác nhận đã đối chiếu vật phẩm thực tế tại quầy" }),
   intakeKey: uuid,

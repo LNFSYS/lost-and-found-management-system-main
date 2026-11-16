@@ -31,6 +31,8 @@ const ALLOWED_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 export interface StoryPostCreatedEvent {
   post: CreatedPost;
   categoryId: string;
+  isSensitive?: boolean;
+  documentType?: string | null;
 }
 
 interface StoryPostFormProps {
@@ -267,8 +269,10 @@ export function StoryPostForm({
         analysisSignals: analysis && !illustrationId ? {
           visualAttributes: analysis.visualAttributes,
           visibleText: analysis.visibleText,
-          confidence: analysis.confidence
-        } : undefined
+          confidence: analysis.confidence,
+          imageEmbedding: analysis.imageEmbedding ?? undefined
+        } : undefined,
+        imageEmbedding: analysis?.imageEmbedding ?? undefined
       });
 
       let mediaWarning: string | undefined;
@@ -285,8 +289,13 @@ export function StoryPostForm({
           mediaWarning = `Bài đã được tạo nhưng ${failedUploads}/${files.length} ảnh chưa tải lên thành công. Bạn có thể bổ sung ảnh ở trang bài đăng của tôi.`;
         }
       }
+
+      const isSensitive = Boolean(analysis?.isSensitiveDocument)
+        || /cccd|căn cước|cmnd|thẻ sinh viên|the sinh vien|mssv|gplx|bằng lái|thẻ ngân hàng|the atm|atm/i.test(`${post.title} ${draft.description}`);
+      const documentType = analysis?.documentType || (isSensitive ? "GIẤY TỜ CÁ NHÂN BẢO MẬT (PII)" : null);
+
       setCreated({ id: post.id, title: post.title, mediaWarning });
-      onPostCreated?.({ post, categoryId });
+      onPostCreated?.({ post, categoryId, isSensitive, documentType });
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Không thể tạo bài đăng. Vui lòng thử lại.");
     } finally {
@@ -295,11 +304,27 @@ export function StoryPostForm({
   }
 
   if (created) {
+    const isSensitive = Boolean(analysis?.isSensitiveDocument)
+      || /cccd|căn cước|cmnd|thẻ sinh viên|the sinh vien|mssv|gplx|bằng lái|thẻ ngân hàng|the atm|atm/i.test(`${created.title} ${draft.description}`);
     return <div className="story-post-success" role="status">
       <span><Check /></span>
       <p className="story-index">Đã đưa vào hành trình</p>
       <h3>{created.title}</h3>
-      <p>Bài {type} đang mở. Hệ thống đang tìm các bài {type === "LOST" ? "FOUND" : "LOST"} cùng danh mục; mọi gợi ý vẫn cần con người xác minh.</p>
+      {isSensitive ? (
+        type === "LOST" ? (
+          <div style={{ backgroundColor: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: "8px", padding: "1rem", margin: "1rem 0", textAlign: "left", color: "#1e40af" }}>
+            <strong style={{ display: "block", color: "#1e3a8a", marginBottom: "0.25rem" }}>Thông báo bảo mật giấy tờ tùy thân:</strong>
+            Vì đây là vật phẩm có thông tin cá nhân nhạy cảm, bài đăng đã được đưa vào chế độ lưu trữ an toàn để bảo vệ quyền riêng tư. Bạn vui lòng chú ý hộp thư email (@fpt.edu.vn) để nhận được thông tin mới nhất từ Phòng Công tác sinh viên (CTSV) ngay khi có người nhặt được giao nộp.
+          </div>
+        ) : (
+          <div style={{ backgroundColor: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: "8px", padding: "1rem", margin: "1rem 0", textAlign: "left", color: "#166534" }}>
+            <strong style={{ display: "block", color: "#14532d", marginBottom: "0.25rem" }}>Bàn giao cho Phòng CTSV:</strong>
+            Hệ thống ghi nhận bạn đã báo nhặt được giấy tờ tùy thân / vật phẩm chứa thông tin cá nhân. Hãy hẹn lịch bàn giao đồ trực tiếp với Phòng Công tác sinh viên (CTSV) như thường lệ để nhà trường xử lý tiếp nhận và trao trả cho chủ nhân.
+          </div>
+        )
+      ) : (
+        <p>Bài {type} đang mở. Hệ thống đang tìm các bài {type === "LOST" ? "FOUND" : "LOST"} cùng danh mục; mọi gợi ý vẫn cần con người xác minh.</p>
+      )}
       {created.mediaWarning && <div className="story-form-message is-warning">{created.mediaWarning}</div>}
       <button type="button" onClick={() => onSessionReset ? onSessionReset() : resetDraft()}>Tạo thêm bài <ChevronRight size={17} /></button>
     </div>;

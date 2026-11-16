@@ -103,7 +103,8 @@ function PostBoard({ tab }: { tab: BoardTab }) {
     pageSize: 9,
     sort: "newest",
     type: tab === "explore" ? (initialQuery.get("type") as PostListFilters["type"]) || undefined : undefined,
-    categoryId: tab === "explore" ? initialQuery.get("categoryId") || undefined : undefined
+    categoryId: tab === "explore" ? initialQuery.get("categoryId") || undefined : undefined,
+    areaId: tab === "explore" ? initialQuery.get("areaId") || undefined : undefined
   });
   const [searchDraft, setSearchDraft] = useState("");
   const [loading, setLoading] = useState(true);
@@ -147,6 +148,7 @@ function PostBoard({ tab }: { tab: BoardTab }) {
       <form onSubmit={search} className="posts-search"><Search /><input aria-label="Tìm kiếm bài đăng" value={searchDraft} onChange={(event) => setSearchDraft(event.target.value)} placeholder="Tìm theo tên đồ vật, từ khóa..." /><button type="submit">Tìm</button></form>
       <label><span className="sr-only">Loại bài</span><select aria-label="Loại bài" value={filters.type ?? ""} onChange={(event) => updateFilter("type", event.target.value as PostListFilters["type"])}><option value="">Tất cả loại</option><option value="LOST">Đồ bị mất</option><option value="FOUND">Đồ nhặt được</option></select></label>
       <label><span className="sr-only">Danh mục</span><select aria-label="Danh mục" value={filters.categoryId ?? ""} onChange={(event) => updateFilter("categoryId", event.target.value)}><option value="">Tất cả danh mục</option>{leafCategories.map((category) => <option value={category.id} key={category.id}>{category.name}</option>)}</select></label>
+      <label><span className="sr-only">Khu vực</span><select aria-label="Khu vực" value={filters.areaId ?? ""} onChange={(event) => updateFilter("areaId", event.target.value)}><option value="">Tất cả khu vực</option>{(catalog?.areas ?? []).map((area) => <option value={area.id} key={area.id}>{area.name}</option>)}</select></label>
       <label className="posts-sort"><SlidersHorizontal /><span className="sr-only">Sắp xếp</span><select aria-label="Sắp xếp" value={filters.sort} onChange={(event) => updateFilter("sort", event.target.value as PostListFilters["sort"])}><option value="newest">Mới đăng</option><option value="incident_newest">Mới xảy ra</option><option value="incident_oldest">Cũ nhất theo sự việc</option><option value="oldest">Cũ nhất</option></select></label>
     </div>}
 

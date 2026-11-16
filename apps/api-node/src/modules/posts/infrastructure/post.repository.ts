@@ -230,7 +230,8 @@ export function buildListWhere(filters: ListPostsQuery | ListOwnPostsQuery, owne
     }
   }
   if (filters.q) {
-    const q = `%${normalizePostText(filters.q)}%`;
+    const normalizedQ = normalizePostText(filters.q).replace(/[%_]/g, "\\$&");
+    const q = `%${normalizedQ}%`;
     if (ownerId || scope.allPrivate) {
       where.push("(p.title_normalized LIKE ? OR p.description_normalized LIKE ?)");
       values.push(q, q);
@@ -370,18 +371,21 @@ export function createPostRepository(pool: SqlExecutor) {
       lostFoundAt: Date;
       handoverPointId?: string | null;
       expiresAt: Date;
+      imageEmbedding?: number[] | null;
     }, queryable: Queryable = pool) {
       await sqlExecutor(queryable).execute(
         `INSERT INTO posts (
         id, user_id, type, visibility_mode, status, title, title_normalized,
         description, description_normalized, category_id, area_id, building_id,
-        room_text, custom_location, contact_info, lost_found_at, handover_point_id, expires_at
-      ) VALUES (?, ?, ?, ?, 'OPEN', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        room_text, custom_location, contact_info, lost_found_at, handover_point_id, expires_at,
+        image_embedding
+      ) VALUES (?, ?, ?, ?, 'OPEN', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           input.id, input.userId, input.type, input.visibilityMode, input.title, input.titleNormalized,
           input.description, input.descriptionNormalized, input.categoryId, input.areaId ?? null,
           input.buildingId ?? null, input.roomText ?? null, input.customLocation ?? null,
-          input.contactInfo, input.lostFoundAt, input.handoverPointId ?? null, input.expiresAt
+          input.contactInfo, input.lostFoundAt, input.handoverPointId ?? null, input.expiresAt,
+          input.imageEmbedding ? JSON.stringify(input.imageEmbedding) : null
         ]
       );
     },
@@ -474,6 +478,13 @@ export function createPostRepository(pool: SqlExecutor) {
         [postId, ownerId]
       );
       return rows[0] ? { id: rows[0].id, status: rows[0].status } : null;
+    },
+
+    async updateImageEmbedding(postId: string, embedding: number[], queryable: Queryable = pool) {
+      await sqlExecutor(queryable).execute(
+        "UPDATE posts SET image_embedding = ? WHERE id = ?",
+        [JSON.stringify(embedding), postId]
+      );
     },
 
     async countMedia(postId: string, queryable: Queryable = pool) {

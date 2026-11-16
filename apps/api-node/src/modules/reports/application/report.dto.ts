@@ -1,5 +1,5 @@
-export type ReportSourceType = "POST" | "CLAIM" | "MESSAGE" | "HANDOVER";
-export type ReportEntityType = "POST" | "CLAIM" | "CHAT" | "HANDOVER";
+export type ReportSourceType = "POST" | "USER" | "CLAIM" | "MESSAGE" | "HANDOVER";
+export type ReportEntityType = "POST" | "USER" | "CLAIM" | "CHAT" | "HANDOVER";
 export type ReportStatus = "PENDING" | "REVIEWED" | "DISMISSED" | "WITHDRAWN";
 
 export interface SubmitReportInput {
