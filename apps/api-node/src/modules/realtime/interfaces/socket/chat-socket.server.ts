@@ -70,9 +70,9 @@ export function createChatSocketServer(input: {
 
   function emitToPeer(roomId: string, targetUserId: string, event: string, data: unknown): boolean {
     let sent = false;
-    const rSet = socketsByRoomUser.get(roomUserKey(roomId, targetUserId));
-    if (rSet && rSet.size > 0) {
-      for (const s of rSet) {
+    const uSet = socketsByUser.get(targetUserId);
+    if (uSet && uSet.size > 0) {
+      for (const s of uSet) {
         if (s.connected) {
           s.emit(event, data);
           sent = true;
@@ -80,9 +80,9 @@ export function createChatSocketServer(input: {
       }
     }
     if (!sent) {
-      const uSet = socketsByUser.get(targetUserId);
-      if (uSet && uSet.size > 0) {
-        for (const s of uSet) {
+      const rSet = socketsByRoomUser.get(roomUserKey(roomId, targetUserId));
+      if (rSet && rSet.size > 0) {
+        for (const s of rSet) {
           if (s.connected) {
             s.emit(event, data);
             sent = true;
@@ -358,7 +358,7 @@ export function createChatSocketServer(input: {
         socket.emit("call.ended", { callId, roomId, reason: "ENDED" });
       });
 
-      // Relay WebRTC SDP offer
+      // Relay WebRTC SDP offer (support renegotiation from either peer)
       socket.on("call.offer", (payload: unknown) => {
         if (!session || !socket.connected) return;
         if (!payload || typeof payload !== "object") return;
@@ -367,12 +367,14 @@ export function createChatSocketServer(input: {
         if (!callId || !data.sdp) return;
 
         const call = callService.getCall(callId);
-        if (!call || call.callerId !== userId) return;
+        if (!call) return;
+        if (call.callerId !== userId && call.calleeId !== userId) return;
 
-        emitToPeer(roomId, call.calleeId, "call.offer", { callId, roomId, sdp: data.sdp });
+        const peerId = call.callerId === userId ? call.calleeId : call.callerId;
+        emitToPeer(roomId, peerId, "call.offer", { callId, roomId, sdp: data.sdp });
       });
 
-      // Relay WebRTC SDP answer
+      // Relay WebRTC SDP answer (support renegotiation from either peer)
       socket.on("call.answer", (payload: unknown) => {
         if (!session || !socket.connected) return;
         if (!payload || typeof payload !== "object") return;
@@ -381,9 +383,11 @@ export function createChatSocketServer(input: {
         if (!callId || !data.sdp) return;
 
         const call = callService.getCall(callId);
-        if (!call || call.calleeId !== userId) return;
+        if (!call) return;
+        if (call.callerId !== userId && call.calleeId !== userId) return;
 
-        emitToPeer(roomId, call.callerId, "call.answer", { callId, roomId, sdp: data.sdp });
+        const peerId = call.callerId === userId ? call.calleeId : call.callerId;
+        emitToPeer(roomId, peerId, "call.answer", { callId, roomId, sdp: data.sdp });
       });
 
       // Relay ICE candidates

@@ -4,6 +4,8 @@ import urllib.request
 import cv2
 import numpy as np
 import torch
+import torch.nn as nn
+import torch.nn.functional as F
 import torchvision.transforms as T
 from PIL import Image
 from fastapi import FastAPI, File, UploadFile, HTTPException, Form
@@ -22,16 +24,49 @@ app.add_middleware(
 )
 
 # -----------------------------------------------------------------------------
-# 1. Khởi tạo mô hình DINOv2 (Vision Backbone - Meta AI)
+# 1. Khoi tao mo hinh DINOv2 (Vision Backbone - Meta AI)
 # -----------------------------------------------------------------------------
 device = "cuda" if torch.cuda.is_available() else "cpu"
-print(f"🚀 AI Matching Service khởi động trên thiết bị: {device}")
+print(f"AI Matching Service khoi dong tren thiet bi: {device}")
 
-print("⚡ Đang nạp mô hình DINOv2 (dinov2_vits14)...")
+print("Dang nap mo hinh DINOv2 (dinov2_vits14)...")
 dinov2_model = torch.hub.load("facebookresearch/dinov2", "dinov2_vits14")
 dinov2_model.to(device)
 dinov2_model.eval()
-print("✅ DINOv2 nạp thành công.")
+print("DINOv2 nap thanh cong.")
+
+# -----------------------------------------------------------------------------
+# 1.1. Khoi tao Tang mang thich ung FPTU (FPTUProjectionHead - 256 chieu)
+# -----------------------------------------------------------------------------
+class FPTUProjectionHead(nn.Module):
+    def __init__(self, in_features=384, hidden_dim=512, out_features=256, dropout=0.2):
+        super().__init__()
+        self.network = nn.Sequential(
+            nn.Linear(in_features, hidden_dim),
+            nn.BatchNorm1d(hidden_dim),
+            nn.GELU(),
+            nn.Dropout(dropout),
+            nn.Linear(hidden_dim, out_features)
+        )
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        projected = self.network(x)
+        return F.normalize(projected, p=2, dim=-1)
+
+projection_head = FPTUProjectionHead().to(device)
+weights_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../models/fptu_matching_weights.pth"))
+projection_head_loaded = False
+
+if os.path.exists(weights_path):
+    try:
+        projection_head.load_state_dict(torch.load(weights_path, map_location=device))
+        projection_head.eval()
+        projection_head_loaded = True
+        print(f"FPTUProjectionHead nap thanh cong tu: {weights_path}")
+    except Exception as e:
+        print(f"Canh bao: Khong the nap fptu_matching_weights.pth: {e}")
+else:
+    print(f"Thong tin: Chua tim thay file trong so tai {weights_path}, su dung khoi tao mac dinh.")
 
 transform = T.Compose([
     T.Resize((224, 224)),
@@ -219,6 +254,8 @@ def health():
         "service": "lnfs-ai-matching-rag",
         "device": device,
         "dinov2_backbone": "dinov2_vits14",
+        "projection_head": "FPTUProjectionHead (Metric Learning 256d)",
+        "projection_head_loaded": projection_head_loaded,
         "rag_mouth": True,
         "easyocr_removed": True
     }
@@ -246,12 +283,15 @@ async def extract_features(
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Không thể đọc file ảnh: {str(e)}")
 
-    # 1. Trích xuất DINOv2 embedding (384 số float, L2 normalized) phục vụ 60% Visual Matching
+    # 1. Trích xuất DINOv2 + FPTUProjectionHead embedding (256 chiều, L2 normalized)
     try:
         tensor_img = transform(pil_img).unsqueeze(0).to(device)
         with torch.no_grad():
             feat = dinov2_model(tensor_img)
-            feat = feat / feat.norm(dim=-1, keepdim=True)
+            if projection_head is not None and projection_head_loaded:
+                feat = projection_head(feat)
+            else:
+                feat = feat / feat.norm(dim=-1, keepdim=True)
             embedding = feat.cpu().numpy().flatten().tolist()
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Lỗi trích xuất vector DINOv2: {str(e)}")

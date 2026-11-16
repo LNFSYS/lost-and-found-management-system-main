@@ -153,7 +153,7 @@ export function createServices(persistence: Persistence, config: typeof env = en
   });
   const claimService = createClaimUseCases({
     contactPhotos: createContactPhotoUseCases({ repository: persistence.contactPhotoRepository, claims: claimRepository, matching: matchingRepository,
-      imageAnalysis: createImageAnalysisUseCases({ postRepository, analyzer: localImageAnalyzer }),
+      imageAnalysis: createImageAnalysisUseCases({ postRepository, analyzer: createGeminiImageAnalyzer(config.gemini) }),
       authorizeTarget: postId => postService.getPost(postId), mediaStorage: claimMediaStorage, transaction, id, uploads: mediaUploads, logger: console }),
     claimRepository, matchingRepository, notificationRepository, custodyRequestRepository, warehouseRepository, notificationEmailQueue,
     realtimeNotifier: realtimeService,
@@ -162,7 +162,10 @@ export function createServices(persistence: Persistence, config: typeof env = en
     withTransaction: transaction, id, mediaStorage: claimMediaStorage,
     hashIdempotencyPayload: security.hashToken, logger: console, uploads: mediaUploads
   });
-  const geminiImageService = createImageAnalysisUseCases({ postRepository, analyzer: localImageAnalyzer });
+  const geminiImageService = createImageAnalysisUseCases({
+    postRepository,
+    analyzer: createGeminiImageAnalyzer(config.gemini)
+  });
   return {
     appointmentService, activityService,
     notificationService, notificationEmailWorker, notificationPushWorker, systemConfigService, adminUserService, adminReportingService,

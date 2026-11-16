@@ -64,6 +64,7 @@ notebooks/
 *.ipynb
 *.zip
 models/*.pth
+!models/fptu_matching_weights.pth
 scripts/agent7_*
 scripts/build_report6_*
 scripts/generate_notebook.py
