@@ -413,7 +413,12 @@ export function createPostUseCases(options: PostDependencies) {
 
         if (input.mediaKind === "ITEM" && options.imageAnalyzer && postRepository.updateImageEmbedding) {
           try {
-            const analysis = await options.imageAnalyzer.analyze([file], post.type, []);
+            const analysis = await options.imageAnalyzer.analyze(
+              [file],
+              post.type,
+              post.categoryName ? [post.categoryName] : [],
+              { title: post.title, description: post.description || "" }
+            );
             await withTransaction(async (connection) => {
               if (analysis.imageEmbedding && analysis.imageEmbedding.length > 0) {
                 await postRepository.updateImageEmbedding!(postId, analysis.imageEmbedding!, connection);

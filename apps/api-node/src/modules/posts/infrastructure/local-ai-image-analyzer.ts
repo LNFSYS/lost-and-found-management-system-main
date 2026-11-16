@@ -1,4 +1,4 @@
-import type { ImageAnalyzer, ImageAnalysis } from "../application/image-analyzer.port.js";
+import type { ImageAnalyzer, ImageAnalysis, ImageAnalyzerContext } from "../application/image-analyzer.port.js";
 import type { ImageUpload } from "../../../shared/domain/upload.js";
 import { AppError } from "../../../shared/domain/app-error.js";
 
@@ -15,9 +15,9 @@ export function createLocalAiImageAnalyzer(options: LocalAiAnalyzerOptions = {})
   const request: typeof fetch = options.request ?? ((...args) => fetch(...args));
 
   return {
-    model: "dinov2_vits14 + easyocr (local)",
+    model: "dinov2_vits14 + rag_mouth (local)",
 
-    async analyze(files: ImageUpload[], type: "LOST" | "FOUND", categoryNames: string[]): Promise<ImageAnalysis> {
+    async analyze(files: ImageUpload[], type: "LOST" | "FOUND", categoryNames: string[], context?: ImageAnalyzerContext): Promise<ImageAnalysis> {
       if (!files.length) {
         throw new AppError("bad_request", "Cần ít nhất một ảnh để phân tích");
       }
@@ -30,6 +30,9 @@ export function createLocalAiImageAnalyzer(options: LocalAiAnalyzerOptions = {})
         const formData = new FormData();
         const blob = new Blob([new Uint8Array(primaryFile.buffer)], { type: primaryFile.mimetype });
         formData.append("file", blob, "image.jpg");
+        if (context?.title) formData.append("context_title", context.title);
+        if (context?.description) formData.append("context_description", context.description);
+        if (categoryNames.length) formData.append("context_category", categoryNames[0]);
 
         const response = await request(`${serviceUrl}/api/extract-features`, {
           method: "POST",

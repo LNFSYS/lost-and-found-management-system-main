@@ -360,59 +360,10 @@ export function PostFormMediaPicker({
         Mẹo: Chọn góc chụp sáng rõ, bao quát toàn bộ đồ vật và các chi tiết đặc biệt (logo, tem, số hiệu, vết xước) để AI nhận dạng chính xác nhất.
       </Text>
 
-      {/* AI Vision Action Card */}
-      <View style={styles.aiActionSection}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Phân tích ảnh với AI Vision DINOv2 & OCR"
-          disabled={images.length === 0 || isAnalyzing || disabled}
-          onPress={handleAnalyzeImages}
-          style={({ pressed }) => [
-            styles.aiTriggerButton,
-            images.length === 0 && styles.aiTriggerButtonDisabled,
-            isAnalyzing && styles.aiTriggerButtonAnalyzing,
-            pressed && styles.aiTriggerButtonPressed,
-          ]}
-        >
-          <View style={styles.aiButtonLeft}>
-            <View style={styles.aiIconBadge}>
-              <MaterialCommunityIcons
-                name="creation"
-                size={22}
-                color={images.length === 0 ? colors.muted : "#FFFFFF"}
-              />
-            </View>
-            <View style={styles.aiButtonTextCol}>
-              <Text
-                style={[
-                  styles.aiButtonTitle,
-                  images.length === 0 && styles.aiButtonTitleDisabled,
-                ]}
-              >
-                Phân tích ảnh với AI (DINOv2 & OCR)
-              </Text>
-              <Text
-                style={[
-                  styles.aiButtonSubtitle,
-                  images.length === 0 && styles.aiButtonSubtitleDisabled,
-                ]}
-              >
-                Tự động tạo tiêu đề, mô tả & nhận diện đồ vật
-              </Text>
-            </View>
-          </View>
-
-          {isAnalyzing ? (
-            <ActivityIndicator size="small" color="#FFFFFF" />
-          ) : (
-            <MaterialCommunityIcons
-              name="chevron-right"
-              size={20}
-              color={images.length === 0 ? colors.muted : "#FFFFFF"}
-            />
-          )}
-        </Pressable>
-      </View>
+      {/* AI Vision - tự động chạy khi đăng bài */}
+      <Text style={[styles.tipText, { marginTop: 6, color: "#2563EB" }]}>
+        ℹ️ Ảnh sẽ được AI DINOv2 tự động trích xuất vector thị giác và so khớp thông minh ngay khi bạn nhấn Đăng bài.
+      </Text>
 
       {/* Analyzing Progress Card */}
       {isAnalyzing && (

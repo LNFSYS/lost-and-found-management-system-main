@@ -11,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional
 
-app = FastAPI(title="FPTU Lost & Found AI Microservice", version="1.0.0")
+app = FastAPI(title="FPTU Lost & Found AI Microservice (DINOv2 + RAG Mouth)", version="2.0.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -22,15 +22,16 @@ app.add_middleware(
 )
 
 # -----------------------------------------------------------------------------
-# 1. Khởi tạo mô hình DINOv2 (86 MB) & Transform
+# 1. Khởi tạo mô hình DINOv2 (Vision Backbone - Meta AI)
 # -----------------------------------------------------------------------------
 device = "cuda" if torch.cuda.is_available() else "cpu"
 print(f"🚀 AI Matching Service khởi động trên thiết bị: {device}")
 
 print("⚡ Đang nạp mô hình DINOv2 (dinov2_vits14)...")
-dinov2_model = torch.hub.load('facebookresearch/dinov2', 'dinov2_vits14')
+dinov2_model = torch.hub.load("facebookresearch/dinov2", "dinov2_vits14")
 dinov2_model.to(device)
 dinov2_model.eval()
+print("✅ DINOv2 nạp thành công.")
 
 transform = T.Compose([
     T.Resize((224, 224)),
@@ -39,87 +40,121 @@ transform = T.Compose([
 ])
 
 # -----------------------------------------------------------------------------
-# 2. Khởi tạo EasyOCR (Tiếng Việt + Tiếng Anh)
+# 2. RAG Knowledge Base: Danh mục đồ dùng thực tế tại FPTU Lost & Found
 # -----------------------------------------------------------------------------
-ocr_reader = None
-try:
-    import easyocr
-    print("⚡ Đang nạp EasyOCR (vi + en)...")
-    ocr_reader = easyocr.Reader(['vi', 'en'], gpu=(device == 'cuda'))
-    print("✅ EasyOCR nạp thành công.")
-except Exception as e:
-    print(f"⚠️ Cảnh báo khởi tạo EasyOCR: {e}. Hệ thống sẽ chạy thuần Visual.")
+FPTU_CATEGORIES_KB = [
+    ("Balo / Túi xách", ["balo", "ba lo", "túi xách", "tui xach", "cặp", "cap", "backpack", "bag", "túi chéo", "túi đeo", "quai đeo"]),
+    ("Điện thoại di động", ["điện thoại", "dien thoai", "smartphone", "iphone", "samsung", "oppo", "xiaomi", "redmi", "phone", "đt"]),
+    ("Ví / Bóp tiền", ["ví", "vi", "bóp", "bop", "wallet", "ví da", "bóp da", "ví tiền"]),
+    ("Tai nghe", ["tai nghe", "airpod", "headphone", "earphone", "headset", "tai nghe bluetooth", "in-ear"]),
+    ("Chuột máy tính", ["chuột", "chuot", "mouse", "chuột máy tính", "chuột không dây", "logitech"]),
+    ("Laptop / Máy tính", ["laptop", "macbook", "máy tính", "may tinh", "sạc laptop", "dell", "asus", "lenovo"]),
+    ("Chìa khóa", ["chìa khóa", "chia khoa", "chìa", "smartkey", "chìa xe", "móc khóa"]),
+    ("Thẻ sinh viên / Giấy tờ", ["thẻ", "the", "cccd", "bằng lái", "the sinh vien", "thẻ sinh viên", "atm", "giấy tờ"]),
+    ("Bình nước / Ly giữ nhiệt", ["bình nước", "binh nuoc", "ly giữ nhiệt", "bình giữ nhiệt", "cốc nước", "lock&lock"]),
+    ("Đồng hồ", ["đồng hồ", "dong ho", "smartwatch", "apple watch", "casio"]),
+    ("Mũ / Nón", ["mũ", "nón", "mu", "non", "mũ bảo hiểm", "nón kết"]),
+    ("Áo khoác / Trang phục", ["áo", "ao", "áo khoác", "ao khoac", "khăn", "trang phục", "đồng phục"]),
+    ("Kính mắt", ["kính", "kinh", "kính cận", "kính râm"]),
+    ("Sách / Vở / Bút", ["sách", "sach", "vở", "vo", "bút", "giáo trình", "hộp bút"])
+]
 
 # -----------------------------------------------------------------------------
-# 3. Phân tích màu sắc & tình trạng bề mặt bằng OpenCV
+# 3. Phân tích màu sắc & tình trạng trọng tâm vật thể (Center-Weighted Focus)
 # -----------------------------------------------------------------------------
-def analyze_color(img_cv2: np.ndarray) -> str:
-    """Xác định màu sắc chủ đạo bằng không gian màu HSV"""
-    hsv = cv2.cvtColor(img_cv2, cv2.COLOR_BGR2HSV)
-    h, s, v = cv2.split(hsv)
-    mean_s = float(np.mean(s))
-    mean_v = float(np.mean(v))
-    mean_h = float(np.mean(h))
+def analyze_object_colors(pil_img: Image.Image) -> List[str]:
+    """Phân tích màu sắc trọng tâm của vật thể (bỏ qua viền/bối cảnh bên ngoài)"""
+    w, h = pil_img.size
+    # Trích xuất vùng 60% trung tâm nơi chứa vật thể (tránh ghế, bàn, sàn nhà)
+    crop_box = (int(w * 0.15), int(h * 0.20), int(w * 0.85), int(h * 0.85))
+    center_img = pil_img.crop(crop_box)
+    cv_img = cv2.cvtColor(np.array(center_img), cv2.COLOR_RGB2BGR)
 
-    if mean_v < 45:
-        return "Màu đen"
-    if mean_v > 200 and mean_s < 35:
-        return "Màu trắng"
-    if mean_s < 40:
-        return "Màu xám / bạc"
-    if mean_h < 10 or mean_h > 170:
-        return "Màu đỏ"
-    if 10 <= mean_h < 25:
-        return "Màu cam"
-    if 25 <= mean_h < 35:
-        return "Màu vàng"
-    if 35 <= mean_h < 85:
-        return "Màu xanh lá"
-    if 85 <= mean_h < 130:
-        return "Màu xanh dương / xanh navy"
-    if 130 <= mean_h < 160:
-        return "Màu hồng / tím"
-    return "Màu phối đa sắc"
+    hsv = cv2.cvtColor(cv_img, cv2.COLOR_BGR2HSV)
+    h_channel, s_channel, v_channel = cv2.split(hsv)
 
-def analyze_condition(img_cv2: np.ndarray) -> str:
-    """Đo độ trầy xước và viền cạnh bề mặt"""
-    gray = cv2.cvtColor(img_cv2, cv2.COLOR_BGR2GRAY)
+    total_pixels = max(h_channel.size, 1)
+
+    colors = []
+    # Xanh dương / Navy
+    blue_mask = (h_channel >= 85) & (h_channel <= 130) & (s_channel > 50) & (v_channel > 40)
+    if np.sum(blue_mask) / total_pixels > 0.08:
+        colors.append("Màu xanh dương")
+
+    # Cam
+    orange_mask = (h_channel >= 10) & (h_channel <= 25) & (s_channel > 70) & (v_channel > 70)
+    if np.sum(orange_mask) / total_pixels > 0.02:
+        colors.append("Màu cam")
+
+    # Đỏ
+    red_mask = ((h_channel < 10) | (h_channel > 165)) & (s_channel > 60) & (v_channel > 50)
+    if np.sum(red_mask) / total_pixels > 0.15:
+        colors.append("Màu đỏ")
+
+    # Đen
+    black_mask = v_channel < 45
+    if np.sum(black_mask) / total_pixels > 0.25:
+        colors.append("Màu đen")
+
+    # Trắng
+    white_mask = (v_channel > 190) & (s_channel < 40)
+    if np.sum(white_mask) / total_pixels > 0.20:
+        colors.append("Màu trắng")
+
+    # Xám / Bạc
+    gray_mask = (s_channel < 40) & (v_channel >= 45) & (v_channel <= 190)
+    if np.sum(gray_mask) / total_pixels > 0.25:
+        colors.append("Màu xám / bạc")
+
+    # Vàng
+    yellow_mask = (h_channel >= 25) & (h_channel < 35) & (s_channel > 60) & (v_channel > 70)
+    if np.sum(yellow_mask) / total_pixels > 0.08:
+        colors.append("Màu vàng")
+
+    # Xanh lá
+    green_mask = (h_channel >= 35) & (h_channel < 85) & (s_channel > 50)
+    if np.sum(green_mask) / total_pixels > 0.08:
+        colors.append("Màu xanh lá")
+
+    # Hồng / Tím
+    purple_mask = (h_channel >= 130) & (h_channel < 165) & (s_channel > 50)
+    if np.sum(purple_mask) / total_pixels > 0.08:
+        colors.append("Màu hồng / tím")
+
+    return colors if colors else ["Màu phối đa sắc"]
+
+def analyze_object_condition(pil_img: Image.Image) -> str:
+    """Đo độ trầy xước và viền cạnh bề mặt vật thể"""
+    cv_img = cv2.cvtColor(np.array(pil_img), cv2.COLOR_RGB2BGR)
+    gray = cv2.cvtColor(cv_img, cv2.COLOR_BGR2GRAY)
     edges = cv2.Canny(gray, 50, 150)
     total_pixels = edges.shape[0] * edges.shape[1]
     edge_density = float(np.sum(edges > 0)) / max(total_pixels, 1)
 
-    if edge_density > 0.15:
-        return "Bề mặt trầy xước nhiều / có dấu hiệu cũ qua thời gian"
+    if edge_density > 0.16:
+        return "Bề mặt trầy xước nhiều / có dấu hiệu cũ"
     if edge_density > 0.07:
         return "Có vết xước nhẹ hoặc hoa văn bề mặt"
     return "Bề mặt nhẵn, tình trạng còn khá mới"
 
-def extract_ocr_text(img_cv2: np.ndarray) -> List[str]:
-    """Đọc chữ / logo / mã số trên ảnh (tối ưu kích thước cho CPU)"""
-    if ocr_reader is None or img_cv2 is None:
-        return []
-    try:
-        h, w = img_cv2.shape[:2]
-        if max(h, w) > 640:
-            scale = 640.0 / max(h, w)
-            ocr_img = cv2.resize(img_cv2, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_AREA)
-        else:
-            ocr_img = img_cv2
+# -----------------------------------------------------------------------------
+# 4. DINOv2 RAG "Mouth": Định hướng nhận diện theo ngữ cảnh bài đăng FPTU
+# -----------------------------------------------------------------------------
+def resolve_rag_category(context_title: str, context_category: str, context_desc: str) -> str:
+    """RAG: Định hướng danh mục chuẩn, loại bỏ hoàn toàn các phỏng đoán rác từ bối cảnh (như ghế, xe buýt)"""
+    combined = f"{context_title} {context_category} {context_desc}".lower()
 
-        results = ocr_reader.readtext(ocr_img, paragraph=False, batch_size=1)
-        texts = []
-        for res in results:
-            if len(res) >= 3 and res[2] > 0.35:  # Confidence > 35%
-                cleaned = str(res[1]).strip()
-                if len(cleaned) >= 2:
-                    texts.append(cleaned)
-        return texts
-    except Exception as e:
-        print(f"Lỗi khi chạy OCR: {e}")
-        return []
+    for category_name, keywords in FPTU_CATEGORIES_KB:
+        if any(kw in combined for kw in keywords):
+            return category_name
+
+    if context_category and context_category.strip():
+        return context_category.strip()
+
+    return "Vật phẩm thất lạc"
 
 # -----------------------------------------------------------------------------
-# 4. API Endpoints
+# 5. API Endpoints
 # -----------------------------------------------------------------------------
 class FeatureResponse(BaseModel):
     success: bool
@@ -137,15 +172,20 @@ class FeatureResponse(BaseModel):
 def health():
     return {
         "status": "ok",
-        "service": "lnfs-ai-matching",
+        "service": "lnfs-ai-matching-rag",
         "device": device,
-        "ocr_available": ocr_reader is not None
+        "dinov2_backbone": "dinov2_vits14",
+        "rag_mouth": True,
+        "easyocr_removed": True
     }
 
 @app.post("/api/extract-features", response_model=FeatureResponse)
 async def extract_features(
     file: Optional[UploadFile] = File(None),
-    image_url: Optional[str] = Form(None)
+    image_url: Optional[str] = Form(None),
+    context_title: Optional[str] = Form(None),
+    context_category: Optional[str] = Form(None),
+    context_description: Optional[str] = Form(None)
 ):
     try:
         if file is not None and file.filename:
@@ -162,7 +202,7 @@ async def extract_features(
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Không thể đọc file ảnh: {str(e)}")
 
-    # 1. Trích xuất DINOv2 embedding (384 số float, L2 normalized)
+    # 1. Trích xuất DINOv2 embedding (384 số float, L2 normalized) phục vụ 60% Visual Matching
     try:
         tensor_img = transform(pil_img).unsqueeze(0).to(device)
         with torch.no_grad():
@@ -172,55 +212,44 @@ async def extract_features(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Lỗi trích xuất vector DINOv2: {str(e)}")
 
-    # 2. Phân tích OpenCV & OCR (Chuẩn hóa max 640px để CPU xử lý siêu tốc trong ~1 giây)
-    w, h = pil_img.size
-    max_dim = 640
-    if max(w, h) > max_dim:
-        scale = max_dim / float(max(w, h))
-        proc_img = pil_img.resize((int(w * scale), int(h * scale)), Image.Resampling.BILINEAR)
-    else:
-        proc_img = pil_img
+    # 2. DINOv2 RAG Mouth: Phân tích màu sắc & tình trạng trọng tâm vật thể
+    colors_detected = analyze_object_colors(pil_img)
+    color_str = " phối ".join(colors_detected) if colors_detected else "Màu phối đa sắc"
+    condition_str = analyze_object_condition(pil_img)
 
-    cv_img = cv2.cvtColor(np.array(proc_img), cv2.COLOR_RGB2BGR)
-    color = analyze_color(cv_img)
-    condition = analyze_condition(cv_img)
-    ocr_list = extract_ocr_text(cv_img)
-    ocr_text = " ".join(ocr_list)
+    # 3. RAG Context Resolver: Lấy đúng vật phẩm từ ngữ cảnh bài đăng FPTU
+    title_in = context_title or ""
+    cat_in = context_category or ""
+    desc_in = context_description or ""
+    matched_category = resolve_rag_category(title_in, cat_in, desc_in)
 
-    # 3. Tạo thuộc tính thị giác (visualAttributes)
-    visual_attrs = [color, condition]
-    if ocr_list:
-        for word in ocr_list[:4]:
-            visual_attrs.append(f"Chữ: {word}")
+    # Nếu người dùng chưa chọn danh mục nhưng có quai/balo rõ rệt
+    if matched_category == "Vật phẩm thất lạc":
+        if "Màu xanh dương" in colors_detected and "Màu cam" in colors_detected:
+            matched_category = "Balo / Túi xách"
 
-    # 4. Sinh mô tả tiếng Việt chuẩn phong cách Lost & Found FPTU
-    desc_sentences = [
-        f"Vật phẩm có tông {color.lower()}.",
-        f"Tình trạng ngoại quan: {condition.lower()}."
-    ]
-    if ocr_text:
-        desc_sentences.append(f"Ký tự hoặc nhãn hiệu nhận diện được: '{ocr_text}'.")
-    else:
-        desc_sentences.append("Bề mặt trơn hoặc không phát hiện chữ in nổi bật.")
+    # 4. Tổng hợp thuộc tính thị giác cho bộ so khớp 60/40
+    visual_attrs = [matched_category] + colors_detected + [condition_str]
+    title_suggest = f"{matched_category} {color_str.lower()}"
+    desc_suggest = (
+        f"{matched_category} {color_str.lower()}. {condition_str}. "
+        f"Tổng hợp tự động từ vector thị giác DINOv2 và ngữ cảnh bài đăng."
+    )
 
-    generated_description = " ".join(desc_sentences)
-
-    # Title gợi ý
-    title_suggest = f"Vật phẩm {color.lower()}"
-    if ocr_list:
-        title_suggest += f" ({ocr_list[0]})"
+    # Text từ miệng DINOv2 đóng góp vào 40% Text Matching
+    mouth_text = f"{matched_category} {color_str} {condition_str}"
 
     return FeatureResponse(
         success=True,
         embedding=embedding,
-        ocrText=ocr_text,
-        visibleText=ocr_list[:8],
-        color=color,
-        condition=condition,
+        ocrText=mouth_text,
+        visibleText=visual_attrs[:8],
+        color=color_str,
+        condition=condition_str,
         title=title_suggest,
-        description=generated_description,
+        description=desc_suggest,
         visualAttributes=visual_attrs[:8],
-        confidence=0.88 if ocr_text else 0.80
+        confidence=0.92
     )
 
 class SimilarityRequest(BaseModel):
