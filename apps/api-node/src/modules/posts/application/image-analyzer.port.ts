@@ -9,6 +9,9 @@ export interface ImageAnalysis {
   confidence: number;
   warnings: string[];
   imageEmbedding?: number[] | null;
+  isSensitiveDocument?: boolean;
+  documentType?: string | null;
+  sensitiveReason?: string | null;
 }
 
 export interface ImageAnalyzerContext {

@@ -154,6 +154,47 @@ def resolve_rag_category(context_title: str, context_category: str, context_desc
     return "Vật phẩm thất lạc"
 
 # -----------------------------------------------------------------------------
+# 4.1. Nhận diện Giấy tờ tùy thân & Thông tin cá nhân nhạy cảm (PII Privacy Guard)
+# -----------------------------------------------------------------------------
+SENSITIVE_DOC_PATTERNS = {
+    "CCCD": ["cccd", "căn cước", "can cuoc", "cmnd", "chứng minh", "chung minh", "identity card", "id card"],
+    "STUDENT_CARD": ["thẻ sinh viên", "the sinh vien", "thẻ sv", "the sv", "thẻ fpt", "student card", "mssv"],
+    "DRIVER_LICENSE": ["gplx", "giấy phép lái xe", "giay phep lai xe", "bằng lái", "bang lai", "driver license"],
+    "BANK_CARD": ["thẻ ngân hàng", "the ngan hang", "thẻ atm", "the atm", "vietcombank", "tpbank", "techcombank", "mb bank", "mbbank", "bidv", "agribank", "vpbank", "visa", "mastercard"],
+    "PERSONAL_DOCUMENT": ["hộ chiếu", "passport", "cà vẹt", "ca vet", "đăng ký xe", "dang ky xe", "bảo hiểm y tế", "bhyt"]
+}
+
+def check_sensitive_document(context_title: str, context_category: str, context_desc: str, pil_img: Image.Image):
+    """
+    Kiểm tra xem vật phẩm có phải là Giấy tờ tùy thân / Thẻ cá nhân chứa thông tin bảo mật hay không.
+    Trả về: (is_sensitive: bool, document_type: Optional[str], sensitive_reason: Optional[str])
+    """
+    text_corpus = f"{context_title} {context_category} {context_desc}".lower()
+    
+    doc_name_map = {
+        "CCCD": "Căn cước công dân (CCCD / CMND)",
+        "STUDENT_CARD": "Thẻ sinh viên (Student ID Card)",
+        "DRIVER_LICENSE": "Giấy phép lái xe (GPLX)",
+        "BANK_CARD": "Thẻ ngân hàng (ATM / Visa / Mastercard)",
+        "PERSONAL_DOCUMENT": "Giấy tờ cá nhân bảo mật"
+    }
+
+    # 1. Kiểm tra qua từ khóa ngữ cảnh RAG
+    for doc_type, keywords in SENSITIVE_DOC_PATTERNS.items():
+        if any(kw in text_corpus for kw in keywords):
+            name = doc_name_map.get(doc_type, "Giấy tờ tùy thân bảo mật")
+            return True, doc_type, f"Phát hiện {name} chứa thông tin cá nhân bảo mật. Chuyển vào Kho lưu trữ bảo mật của Staff để bảo vệ quyền riêng tư."
+
+    # 2. Kiểm tra hình thái thẻ nhựa (Card Aspect Ratio ~1.4 - 1.7) kết hợp từ khóa Thẻ / Giấy tờ
+    w, h = pil_img.size
+    aspect = max(w, h) / max(min(w, h), 1)
+    is_card_aspect = 1.35 <= aspect <= 1.75
+    if is_card_aspect and any(k in text_corpus for k in ["thẻ", "the", "card", "giấy tờ", "giay to"]):
+        return True, "PERSONAL_DOCUMENT", "Phát hiện thẻ/giấy tờ tùy thân chứa thông tin cá nhân. Chuyển vào Kho lưu trữ bảo mật của Staff."
+
+    return False, None, None
+
+# -----------------------------------------------------------------------------
 # 5. API Endpoints
 # -----------------------------------------------------------------------------
 class FeatureResponse(BaseModel):
@@ -167,6 +208,9 @@ class FeatureResponse(BaseModel):
     description: str
     visualAttributes: List[str]
     confidence: float
+    is_sensitive_document: bool = False
+    document_type: Optional[str] = None
+    sensitive_reason: Optional[str] = None
 
 @app.get("/health")
 def health():
@@ -229,7 +273,10 @@ async def extract_features(
             matched_category = "Balo / Túi xách"
 
     # 4. Tổng hợp thuộc tính thị giác cho bộ so khớp 60/40
+    is_sensitive, doc_type, sens_reason = check_sensitive_document(title_in, cat_in, desc_in, pil_img)
     visual_attrs = [matched_category] + colors_detected + [condition_str]
+    if is_sensitive and doc_type:
+        visual_attrs.append(f"SENSITIVE_DOC:{doc_type}")
     title_suggest = f"{matched_category} {color_str.lower()}"
     desc_suggest = (
         f"{matched_category} {color_str.lower()}. {condition_str}. "
@@ -249,7 +296,10 @@ async def extract_features(
         title=title_suggest,
         description=desc_suggest,
         visualAttributes=visual_attrs[:8],
-        confidence=0.92
+        confidence=0.92,
+        is_sensitive_document=is_sensitive,
+        document_type=doc_type,
+        sensitive_reason=sens_reason
     )
 
 class SimilarityRequest(BaseModel):

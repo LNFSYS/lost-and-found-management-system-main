@@ -361,7 +361,7 @@ export function PostFormMediaPicker({
       </Text>
 
       {/* AI Vision - tự động chạy khi đăng bài */}
-      <Text style={[styles.tipText, { marginTop: 6, color: "#2563EB" }]}>
+      <Text style={[styles.instructionNote, { marginTop: 6, color: "#2563EB" }]}>
         ℹ️ Ảnh sẽ được AI DINOv2 tự động trích xuất vector thị giác và so khớp thông minh ngay khi bạn nhấn Đăng bài.
       </Text>
 

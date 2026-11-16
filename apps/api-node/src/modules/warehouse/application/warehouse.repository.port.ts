@@ -213,6 +213,7 @@ export interface WarehouseRepository {
     total: number;
     items: WarehouseItem[];
   }>;
+  listSensitiveDocuments(q?: string): Promise<any[]>;
   findItemById(itemId: string, db?: TransactionContext): Promise<WarehouseItem | null>;
   findItemByPostId(postId: string): Promise<{ id: string; status: WarehouseStatus; } | null>;
   lockItemForUpdate(itemId: string, connection: TransactionContext): Promise<WarehouseItemLock | null>;

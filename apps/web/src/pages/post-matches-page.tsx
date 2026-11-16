@@ -16,6 +16,7 @@ import {
   PackageCheck,
   RefreshCw,
   ScanSearch,
+  ShieldAlert,
   ShieldCheck,
   Sparkles,
   ThumbsDown,
@@ -651,6 +652,63 @@ export function PostMatchesPage() {
         </section>}
       </div>
     </header>
+
+    {data.isSensitiveDocument && (
+      <section className="sensitive-doc-alert" style={{
+        backgroundColor: "#eff6ff",
+        border: "1px solid #bfdbfe",
+        borderRadius: "12px",
+        padding: "1.25rem 1.5rem",
+        marginBottom: "1.5rem",
+        display: "flex",
+        gap: "1.25rem",
+        alignItems: "flex-start",
+        boxShadow: "0 1px 3px rgba(0,0,0,0.05)"
+      }}>
+        <div style={{
+          backgroundColor: "#2563eb",
+          color: "white",
+          borderRadius: "10px",
+          padding: "0.75rem",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          flexShrink: 0
+        }}>
+          <ShieldAlert size={28} />
+        </div>
+        <div style={{ flex: 1 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.35rem" }}>
+            <span style={{
+              backgroundColor: "#dbeafe",
+              color: "#1d4ed8",
+              fontSize: "0.75rem",
+              fontWeight: 700,
+              padding: "2px 8px",
+              borderRadius: "4px",
+              letterSpacing: "0.5px"
+            }}>
+              {data.documentType || "GIẤY TỜ CÁ NHÂN BẢO MẬT"}
+            </span>
+            <span style={{ color: "#64748b", fontSize: "0.82rem" }}>Chính sách bảo mật thông tin PII</span>
+          </div>
+          <h3 style={{ margin: "0 0 0.35rem 0", color: "#1e3a8a", fontSize: "1.1rem", fontWeight: 700 }}>
+            Hồ sơ đã được bảo vệ & chuyển vào Kho lưu trữ bảo mật của Staff
+          </h3>
+          <p style={{ margin: 0, color: "#1e40af", fontSize: "0.95rem", lineHeight: 1.5 }}>
+            {data.sensitiveReason || "Hệ thống AI DINOv2 phát hiện giấy tờ tùy thân chứa thông tin cá nhân/tài chính bảo mật. Để bảo vệ quyền riêng tư, bài đăng này không đối soát công khai trên Bảng tin mà đã được chuyển giao vào Khu vực Lưu trữ Giấy tờ cá nhân của Staff."}
+          </p>
+          <div style={{ marginTop: "1rem", display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
+            <Link to="/claims" className="primary-button" style={{ fontSize: "0.875rem", padding: "0.45rem 1rem", textDecoration: "none", borderRadius: "6px" }}>
+              Liên hệ Staff tại quầy DVSV
+            </Link>
+            <Link to="/my-posts" className="secondary-button" style={{ fontSize: "0.875rem", padding: "0.45rem 1rem", textDecoration: "none", borderRadius: "6px" }}>
+              Về bài đăng của tôi
+            </Link>
+          </div>
+        </div>
+      </section>
+    )}
 
     <section className="matching-method" aria-label="Phương pháp matching">
       <span><ScanSearch /></span>

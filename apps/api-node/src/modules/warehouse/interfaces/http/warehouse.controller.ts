@@ -34,6 +34,12 @@ export function createWarehouseController({ warehouseService, warehouseConversat
       response.json(await warehouseService.listItems(listWarehouseItemsQuerySchema.parse(request.query)));
     },
 
+    async listSensitiveDocuments(request: Request, response: Response) {
+      const q = typeof request.query.q === "string" ? request.query.q : undefined;
+      const items = await warehouseService.listSensitiveDocuments(q);
+      response.json({ success: true, items });
+    },
+
     async getItem(request: Request, response: Response) {
       response.json(await warehouseService.getItem(routeId(request), actorId(request)));
     },

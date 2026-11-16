@@ -11,6 +11,7 @@ import {
   ChevronRight,
   Clock3,
   ClipboardCheck,
+  CreditCard,
   FileText,
   Filter,
   History,
@@ -57,8 +58,9 @@ import { WarehouseImageGallery, WarehouseImageView } from "../components/warehou
 
 import { WarehouseDisposition } from "../components/warehouse-disposition";
 import { WarehouseConversationChat } from "../components/warehouse-conversation-chat";
+import { SensitiveDocumentsTab } from "../components/sensitive-documents-tab";
 
-type StaffTab = "custody" | "warehouse" | "dashboard" | "logs";
+type StaffTab = "custody" | "warehouse" | "sensitive_docs" | "dashboard" | "logs";
 type PendingAction = "" | "load" | "create" | "update" | "logs" | "custody" | "custody-action";
 
 const returnTextRules = {
@@ -2164,6 +2166,7 @@ export function StaffPage() {
   const tabItems: Array<{ key: StaffTab; label: string; icon: ReactNode; badge?: number }> = [
     { key: "custody", label: "Hàng đợi Bàn giao", icon: <ShieldCheck size={18} />, badge: custodyData?.counts.PENDING },
     { key: "warehouse", label: "Kho tài sản", icon: <Archive size={18} /> },
+    { key: "sensitive_docs", label: "Giấy tờ cá nhân", icon: <CreditCard size={18} /> },
     { key: "dashboard", label: "Tổng quan", icon: <FileText size={18} /> },
     { key: "logs", label: "Lịch sử hệ thống", icon: <History size={18} /> }
   ];
@@ -2242,6 +2245,10 @@ export function StaffPage() {
           onNotice={setNotice}
           onError={setError}
         />
+      )}
+
+      {activeTab === "sensitive_docs" && (
+        <SensitiveDocumentsTab />
       )}
 
       {activeTab === "dashboard" && (

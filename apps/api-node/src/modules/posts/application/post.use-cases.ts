@@ -21,6 +21,7 @@ import type {
 import type { MediaKind, PostRecord, PostRepository, PostStatus, StoredMediaRecord, VisibilityMode } from "./post.repository.port.js";
 import type { IllustrationUseCases } from "./illustration.use-cases.js";
 import type { ImageAnalyzer } from "./image-analyzer.port.js";
+import { detectSensitiveDocumentType, type SensitiveDetectionResult } from "../domain/sensitive-document-detector.js";
 
 function canManagePost(viewer: AccessTokenPayload | undefined, post: PostRecord | StoredMediaRecord) {
   return Boolean(viewer && viewer.sub === ("userId" in post ? post.userId : post.ownerId));
@@ -179,7 +180,8 @@ export function createPostUseCases(options: PostDependencies) {
   function serializeMatchingResult(
     source: PostRecord,
     payload: Awaited<ReturnType<typeof matchingService.getStoredResults>>,
-    viewer: AccessTokenPayload
+    viewer: AccessTokenPayload,
+    sensitiveInfo?: SensitiveDetectionResult
   ) {
     function visibleExplanation(candidate: PostRecord, explanation: MatchExplanation | null) {
       if (!explanation || candidate.visibilityMode !== "PRIVATE_DETAILS" || canSeePrivatePost(viewer, candidate)) {
@@ -194,11 +196,14 @@ export function createPostUseCases(options: PostDependencies) {
       calculatedAt: payload.calculatedAt,
       thresholds: payload.thresholds,
       weights: payload.weights,
-      total: payload.total,
+      total: sensitiveInfo?.isSensitive ? 0 : payload.total,
       page: payload.page,
       pageSize: payload.pageSize,
-      hasMore: payload.hasMore,
-      results: payload.results.map(({ match, candidate }) => ({
+      hasMore: sensitiveInfo?.isSensitive ? false : payload.hasMore,
+      isSensitiveDocument: sensitiveInfo?.isSensitive ?? false,
+      documentType: sensitiveInfo?.documentType ?? undefined,
+      sensitiveReason: sensitiveInfo?.sensitiveReason ?? undefined,
+      results: sensitiveInfo?.isSensitive ? [] : payload.results.map(({ match, candidate }) => ({
         matchId: match.id,
         candidate: serializePost(candidate, viewer),
         totalScore: match.totalScore,
@@ -334,12 +339,21 @@ export function createPostUseCases(options: PostDependencies) {
 
     async listPostMatches(postId: string, viewer: AccessTokenPayload, page = 1, pageSize = 20) {
       const source = await requireMatchAccess(postId, viewer);
+      const detection = detectSensitiveDocumentType(`${source.title} ${source.description || ""} ${source.categoryName || ""}`);
       const payload = await matchingService.getStoredResults(postId, undefined, viewer.sub, page, pageSize);
-      return serializeMatchingResult(source, payload, viewer);
+      return serializeMatchingResult(source, payload, viewer, detection.isSensitive ? detection : undefined);
     },
 
     async recalculatePostMatches(postId: string, viewer: AccessTokenPayload, page = 1, pageSize = 20) {
       const source = await requireMatchAccess(postId, viewer);
+      const detection = detectSensitiveDocumentType(`${source.title} ${source.description || ""} ${source.categoryName || ""}`);
+      if (detection.isSensitive) {
+        await withTransaction(async (connection) => {
+          await postRepository.updatePost(postId, { visibilityMode: "PRIVATE_DETAILS" }, connection);
+        });
+        const payload = await matchingService.getStoredResults(postId, undefined, viewer.sub, page, pageSize);
+        return serializeMatchingResult(source, payload, viewer, detection);
+      }
       const payload = await matchingService.runForPost(postId, viewer.sub, page, pageSize);
       return serializeMatchingResult(source, payload, viewer);
     },
@@ -425,6 +439,9 @@ export function createPostUseCases(options: PostDependencies) {
               }
               if (analysis.visualAttributes.length > 0 || analysis.visibleText.length > 0) {
                 await matchingRepository.replaceAnalysisTags(postId, analysis, connection);
+              }
+              if (analysis.isSensitiveDocument) {
+                await postRepository.updatePost(postId, { visibilityMode: "PRIVATE_DETAILS" }, connection);
               }
             });
             await refreshMatchingBestEffort(postId, "update");

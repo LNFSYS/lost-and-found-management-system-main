@@ -128,6 +128,9 @@ export interface PostMatchesResponse {
   pageSize: number;
   hasMore: boolean;
   results: MatchCandidateResult[];
+  isSensitiveDocument?: boolean;
+  documentType?: string;
+  sensitiveReason?: string;
 }
 
 export type JourneyImageKind = "POST" | "CLAIM" | "INTAKE" | "RETURN";

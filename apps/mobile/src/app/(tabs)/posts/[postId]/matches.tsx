@@ -521,6 +521,36 @@ export default function PostMatchesScreen() {
           </Card>
         ) : null}
 
+        {data?.isSensitiveDocument ? (
+          <View style={{
+            backgroundColor: "#eff6ff",
+            borderColor: "#bfdbfe",
+            borderWidth: 1,
+            borderRadius: 12,
+            padding: 16,
+            marginBottom: 16,
+            flexDirection: "row",
+            gap: 12
+          }}>
+            <MaterialCommunityIcons name="shield-alert-outline" size={28} color="#2563eb" />
+            <View style={{ flex: 1 }}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 4 }}>
+                <View style={{ backgroundColor: "#dbeafe", paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
+                  <Text style={{ fontSize: 11, fontWeight: "700", color: "#1d4ed8" }}>
+                    {data.documentType || "GIẤY TỜ CÁ NHÂN"}
+                  </Text>
+                </View>
+              </View>
+              <Text style={{ fontSize: 15, fontWeight: "700", color: "#1e3a8a", marginBottom: 4 }}>
+                Đã chuyển vào Kho Lưu trữ Staff
+              </Text>
+              <Text style={{ fontSize: 13, color: "#1e40af", lineHeight: 18 }}>
+                {data.sensitiveReason || "Hệ thống AI DINOv2 phát hiện giấy tờ tùy thân chứa thông tin cá nhân bảo mật. Bài đăng này không đối soát công khai mà đã được chuyển giao vào Kho lưu trữ bảo mật của Staff để bảo vệ quyền riêng tư."}
+              </Text>
+            </View>
+          </View>
+        ) : null}
+
         <View style={styles.resultsHeading}>
           <View><Text style={styles.sectionHeading}>Ứng viên phù hợp</Text><Text style={styles.resultCount}>{suggestions.length} gợi ý đạt ngưỡng tương đồng</Text></View>
           <MaterialCommunityIcons name="tune-variant" size={20} color={colors.muted} />

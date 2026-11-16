@@ -755,6 +755,53 @@ export function createWarehouseRepository(pool: SqlExecutor) {
       const [rows] = await pool.execute<ConfigRow[]>("SELECT config_value FROM config_entries WHERE config_key = ? LIMIT 1", [key]);
       const value = Number(rows[0]?.config_value);
       return Number.isInteger(value) && value > 0 && value <= 3650 ? value : fallback;
+    },
+
+    async listSensitiveDocuments(q?: string) {
+      let sql = `
+        SELECT 
+          p.id, p.user_id, u.full_name AS owner_name, u.email AS owner_email,
+          p.type, p.status, p.visibility_mode, p.title, p.description,
+          p.room_text, p.custom_location, p.created_at,
+          c.name AS category_name,
+          a.name AS area_name,
+          b.name AS building_name,
+          pm.id AS media_id, pm.secure_url AS media_url
+        FROM posts p
+        LEFT JOIN users u ON u.id = p.user_id
+        LEFT JOIN item_categories c ON c.id = p.category_id
+        LEFT JOIN campus_areas a ON a.id = p.area_id
+        LEFT JOIN campus_buildings b ON b.id = p.building_id
+        LEFT JOIN (
+          SELECT post_id, MIN(id) AS id, MIN(secure_url) AS secure_url
+          FROM post_media
+          GROUP BY post_id
+        ) pm ON pm.post_id = p.id
+        WHERE p.deleted_at IS NULL
+          AND (
+            p.visibility_mode = 'PRIVATE_DETAILS'
+            OR p.id IN (SELECT post_id FROM ai_tags WHERE tag LIKE 'SENSITIVE_DOC:%' OR tag = 'IS_SENSITIVE_DOCUMENT')
+            OR LOWER(p.title) LIKE '%cccd%'
+            OR LOWER(p.title) LIKE '%căn cước%'
+            OR LOWER(p.title) LIKE '%cmnd%'
+            OR LOWER(p.title) LIKE '%thẻ sinh viên%'
+            OR LOWER(p.title) LIKE '%the sinh vien%'
+            OR LOWER(p.title) LIKE '%thẻ sv%'
+            OR LOWER(p.title) LIKE '%gplx%'
+            OR LOWER(p.title) LIKE '%bằng lái%'
+            OR LOWER(p.title) LIKE '%thẻ ngân hàng%'
+            OR LOWER(p.title) LIKE '%thẻ atm%'
+          )
+      `;
+      const params: any[] = [];
+      if (q && q.trim()) {
+        sql += ` AND (LOWER(p.title) LIKE ? OR LOWER(p.description) LIKE ? OR LOWER(u.full_name) LIKE ?)`;
+        const search = `%${q.trim().toLowerCase()}%`;
+        params.push(search, search, search);
+      }
+      sql += ` ORDER BY p.created_at DESC LIMIT 100`;
+      const [rows] = await pool.execute<any[]>(sql, params);
+      return rows;
     }
   } satisfies WarehouseRepository;
 
