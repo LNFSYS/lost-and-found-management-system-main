@@ -124,6 +124,44 @@ export function createWarehouseUseCases(options: WarehouseDependencies) {
       };
     },
 
+    async listSensitiveDocuments(q?: string) {
+      const rows = await warehouseRepository.listSensitiveDocuments(q);
+      return rows.map((row: any) => {
+        const text = `${row.title} ${row.description || ""} ${row.category_name || ""}`;
+        let docType = "Giấy tờ tùy thân bảo mật";
+        const lower = text.toLowerCase();
+        if (lower.includes("cccd") || lower.includes("căn cước") || lower.includes("cmnd") || lower.includes("chứng minh")) {
+          docType = "Căn cước công dân (CCCD / CMND)";
+        } else if (lower.includes("thẻ sinh viên") || lower.includes("thẻ sv") || lower.includes("the sinh vien") || lower.includes("student card") || lower.includes("mssv")) {
+          docType = "Thẻ sinh viên (Student ID Card)";
+        } else if (lower.includes("gplx") || lower.includes("giấy phép lái xe") || lower.includes("bằng lái")) {
+          docType = "Giấy phép lái xe (GPLX)";
+        } else if (lower.includes("thẻ ngân hàng") || lower.includes("thẻ atm") || lower.includes("atm") || lower.includes("visa") || lower.includes("mastercard")) {
+          docType = "Thẻ ngân hàng (ATM / Visa / Mastercard)";
+        }
+        return {
+          id: row.id,
+          userId: row.user_id,
+          ownerName: row.owner_name || "Ẩn danh",
+          ownerEmail: row.owner_email || "",
+          type: row.type,
+          status: row.status,
+          visibilityMode: row.visibility_mode,
+          title: row.title,
+          description: row.description,
+          documentType: docType,
+          roomText: row.room_text,
+          customLocation: row.custom_location,
+          createdAt: row.created_at,
+          categoryName: row.category_name,
+          areaName: row.area_name,
+          buildingName: row.building_name,
+          mediaId: row.media_id,
+          mediaUrl: row.media_url ? (row.media_url.startsWith("http") ? row.media_url : `/api/posts/${row.id}/media/${row.media_id}`) : null
+        };
+      });
+    },
+
     async createItem(input: CreateWarehouseItemInput, actorId: string) {
       await staff(actorId);
       validateIntakeEvidence(input);
@@ -616,6 +654,19 @@ export function createWarehouseUseCases(options: WarehouseDependencies) {
     async listLogs(itemId: string) {
       if (!await warehouseRepository.findItemById(itemId)) throw new AppError("not_found", "Không tìm thấy vật phẩm trong kho");
       return warehouseRepository.listLogs(itemId);
+    },
+
+    async listAllLogs(query: { page: number; pageSize: number }, actorId: string) {
+      await staff(actorId);
+      const result = await warehouseRepository.listAllLogs(query);
+      return { ...result, page: query.page, pageSize: query.pageSize };
+    },
+
+    async getItem(itemId: string, actorId: string) {
+      await staff(actorId);
+      const item = await warehouseRepository.findItemById(itemId);
+      if (!item) throw new AppError("not_found", "Không tìm thấy vật phẩm trong kho");
+      return item;
     }
   };
   return warehouseService;

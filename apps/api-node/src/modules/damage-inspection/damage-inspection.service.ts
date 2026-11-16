@@ -79,10 +79,6 @@ export class DamageInspectionService {
   private session: ort.InferenceSession | null = null;
   private modelPath: string | null = null;
 
-  constructor() {
-    this.initModel().catch((err) => console.warn("[DamageInspection] Model load deferred:", err.message));
-  }
-
   private getPossiblePaths(): string[] {
     return [
       path.resolve(__dirname, "../../../../models/best.onnx"),

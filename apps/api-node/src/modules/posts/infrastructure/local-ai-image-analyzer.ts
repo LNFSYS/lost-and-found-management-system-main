@@ -55,6 +55,9 @@ export function createLocalAiImageAnalyzer(options: LocalAiAnalyzerOptions = {})
           description?: string;
           visualAttributes?: string[];
           confidence?: number;
+          is_sensitive_document?: boolean;
+          document_type?: string | null;
+          sensitive_reason?: string | null;
         };
 
         return {
@@ -65,7 +68,10 @@ export function createLocalAiImageAnalyzer(options: LocalAiAnalyzerOptions = {})
           visibleText: data.visibleText || [],
           confidence: data.confidence ?? 0.85,
           warnings: [],
-          imageEmbedding: data.embedding ?? null
+          imageEmbedding: data.embedding ?? null,
+          isSensitiveDocument: Boolean(data.is_sensitive_document),
+          documentType: data.document_type ?? null,
+          sensitiveReason: data.sensitive_reason ?? null
         };
       } catch (err: unknown) {
         clearTimeout(timeout);

@@ -641,6 +641,30 @@ export interface PostMatchesResponse {
   page: number;
   pageSize: number;
   hasMore: boolean;
+  isSensitiveDocument?: boolean;
+  documentType?: string;
+  sensitiveReason?: string;
+}
+
+export interface SensitiveDocumentItem {
+  id: string;
+  userId: string;
+  ownerName: string;
+  ownerEmail: string;
+  type: "LOST" | "FOUND";
+  status: string;
+  visibilityMode: string;
+  title: string;
+  description: string;
+  documentType: string;
+  roomText: string | null;
+  customLocation: string | null;
+  createdAt: string;
+  categoryName: string | null;
+  areaName: string | null;
+  buildingName: string | null;
+  mediaId: string | null;
+  mediaUrl: string | null;
 }
 export type ClaimStatus = "PENDING" | "CONVERSATION_OPEN" | "NEED_MORE_INFO" | "ACCEPTED" | "REJECTED" | "CANCELLED";
 export type FinderDecision = "PENDING" | "ACCEPTED" | "DECLINED";
@@ -1475,6 +1499,7 @@ export const api = {
   approveDisposition: (id: string) => raw<void>(`/staff/warehouse-approvals/${id}/approve`, { method: "POST" }),
   executeDisposition: (id: string, proofIds: string[]) => raw<void>(`/staff/warehouse-approvals/${id}/execute`, { method: "POST", body: JSON.stringify({ proofIds }) }),
   listWarehouseItems: (filters: WarehouseFilters = {}) => raw<WarehouseDashboard>(`/staff/warehouse-items${queryString(filters)}`),
+  listSensitiveDocuments: (q?: string) => raw<{ success: boolean; items: SensitiveDocumentItem[] }>(`/staff/sensitive-documents${q ? `?q=${encodeURIComponent(q)}` : ""}`),
   createWarehouseItem: (payload: CreateWarehouseItemPayload) => raw<WarehouseItem>("/staff/warehouse-items", { method: "POST", body: JSON.stringify(payload) }),
   updateWarehouseItem: (id: string, payload: UpdateWarehouseItemPayload) => raw<WarehouseItem>(`/staff/warehouse-items/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
   returnWarehouseItem: (id: string, payload: ReturnWarehouseItemPayload) => raw<WarehouseItem>(`/staff/warehouse-items/${id}/return`, { method: "POST", body: JSON.stringify(payload) }),
