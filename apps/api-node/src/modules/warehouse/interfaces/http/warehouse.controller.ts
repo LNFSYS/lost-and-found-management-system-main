@@ -103,8 +103,8 @@ export function createWarehouseController({ warehouseService, warehouseConversat
       }
       const input = warehouseConversationExtractionSchema.parse(body);
       const files = Array.isArray(request.files) ? request.files : [];
-      if (files.length && (input.mode !== "INTAKE" || input.intakeKind !== "WALK_IN")) {
-        throw new HttpError(400, "Chỉ chat tiếp nhận Walk-in tại quầy mới hỗ trợ đính kèm ảnh.");
+      if (files.length > 3) {
+        throw new HttpError(400, "Mỗi lượt chat chỉ được đính kèm tối đa 3 ảnh.");
       }
       const images = files.map(file => {
         const image = { buffer: file.buffer, size: file.size, mimetype: file.mimetype };

@@ -16,9 +16,6 @@ export function createWarehouseConversationUseCases(options: {
       if (!await warehouseRepository.isStaff(actorId)) throw new AppError("forbidden", "Chỉ Staff/Admin được thao tác kho");
       assertNoProfanity(input.messages);
       const images = input.images ?? [];
-      if (images.length && (input.mode !== "INTAKE" || input.intakeKind !== "WALK_IN")) {
-        throw new AppError("bad_request", "Chỉ được phân tích ảnh trong chat tiếp nhận Walk-in tại quầy.");
-      }
       if (images.length > 3) throw new AppError("bad_request", "Mỗi lượt chat chỉ được đính kèm tối đa 3 ảnh.");
       for (const image of images) {
         validateImageUpload(image);

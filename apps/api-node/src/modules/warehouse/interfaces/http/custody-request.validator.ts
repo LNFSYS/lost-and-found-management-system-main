@@ -12,6 +12,8 @@ export const custodyRequestIdParamSchema = z.object({ id: uuid });
 
 export const listCustodyRequestsQuerySchema = z.object({
   status: z.enum(["AWAITING_INTAKE", ...custodyRequestStatusSchema.options]).optional(),
+  handoverPointId: z.string().optional(),
+  q: z.string().optional(),
   page: z.coerce.number().int().min(1).max(999).default(1),
   pageSize: z.coerce.number().int().min(1).max(50).default(12)
 });

@@ -421,9 +421,42 @@ textarea {
 }
 
 .custody-modal.custody-modal--warehouse-return {
+  width: min(1180px, 95vw);
+  max-height: calc(100dvh - 36px);
   padding: 0;
   overflow: hidden;
-  border-radius: 8px;
+  border-radius: 14px;
+  display: flex;
+  flex-direction: column;
+}
+
+.warehouse-return-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
+  gap: 24px;
+  align-items: start;
+}
+
+.warehouse-return-left,
+.warehouse-return-right {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
+.warehouse-return-summary-card {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 16px;
+}
+
+@media (max-width: 900px) {
+  .warehouse-return-workspace {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+  }
 }
 
 .custody-modal--warehouse-return .custody-modal-actions {
@@ -2170,15 +2203,26 @@ textarea {
 }
 
 .admin-sidebar__account button {
-  width: 34px;
-  height: 34px;
+  width: 36px;
+  height: 36px;
   display: grid;
   place-items: center;
   padding: 0;
-  border-color: #e2e8ee;
-  border-radius: 6px;
-  color: #9c4b19;
-  background: #fff7f1;
+  border: 1px solid #e2e8f0;
+  border-radius: 9px;
+  color: #64748b;
+  background: #f8fafc;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.admin-sidebar__account button:hover {
+  border-color: #fecaca;
+  color: #ef4444;
+  background: #fef2f2;
+  transform: scale(1.06);
+  box-shadow: 0 2px 8px rgba(239, 68, 68, 0.15);
 }
 
 .admin-main {
@@ -2471,6 +2515,7 @@ textarea {
   border-top: 1px solid var(--line);
 }
 
+.warehouse-item-card .warehouse-image,
 .warehouse-item-card > .warehouse-image {
   width: 100%;
   max-width: none;
@@ -2540,12 +2585,12 @@ textarea {
 .warehouse-detail-modal {
   display: flex;
   flex-direction: column;
-  width: min(100%, 920px);
-  max-height: min(900px, calc(100dvh - 48px));
-  border-radius: 8px;
+  width: min(1180px, 95vw);
+  max-height: calc(100dvh - 36px);
+  border-radius: 14px;
   background: #fff;
   overflow: hidden;
-  box-shadow: var(--shadow-sm);
+  box-shadow: 0 25px 50px -12px rgba(15, 23, 42, 0.28);
 }
 
 .warehouse-detail-modal__header {
@@ -2573,6 +2618,25 @@ textarea {
   padding: 24px;
   overflow-y: auto;
   overscroll-behavior: contain;
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+  gap: 28px;
+  align-items: start;
+}
+
+.warehouse-detail-modal .warehouse-log-list {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 18px 20px;
+}
+
+@media (max-width: 900px) {
+  .warehouse-detail-modal__body {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 20px;
+    padding: 16px;
+  }
 }
 
 .warehouse-detail-modal .warehouse-selected-summary {
@@ -9422,7 +9486,20 @@ textarea {
 /* Custody Request Card */
 .custody-request-list {
   display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 16px;
+}
+
+@media (max-width: 1200px) {
+  .custody-request-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 700px) {
+  .custody-request-list {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .custody-request-card {
@@ -9586,25 +9663,70 @@ textarea {
 .ghost-button:hover { color: #0f172a; background: #f1f5f9; }
 
 /* Modals & Overlays */
+html:has(.custody-modal-overlay),
+body:has(.custody-modal-overlay) {
+  overflow: hidden !important;
+}
+
 .custody-modal-overlay {
   position: fixed;
   inset: 0;
   z-index: 1000;
   display: grid;
   place-items: center;
-  padding: 24px;
-  background: rgba(15, 23, 42, 0.45);
+  padding: 20px;
+  background: rgba(15, 23, 42, 0.55);
   backdrop-filter: blur(8px);
   animation: fadeIn 0.2s ease-out;
+  overflow-y: auto;
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
+}
+
+.custody-modal-overlay::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
 }
 
 .custody-modal {
-  width: min(100%, 540px);
-  padding: 28px;
-  border-radius: 16px;
+  width: min(100%, 560px);
+  padding: 24px 28px;
+  border-radius: 14px;
   background: #fff;
-  box-shadow: 0 24px 48px rgba(15, 23, 42, 0.22);
+  box-shadow: 0 25px 50px -12px rgba(15, 23, 42, 0.28);
   animation: modalPop 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 transparent;
+}
+
+.custody-modal,
+.warehouse-detail-modal {
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 transparent;
+}
+
+.custody-modal::-webkit-scrollbar,
+.custody-modal *::-webkit-scrollbar,
+.warehouse-detail-modal::-webkit-scrollbar,
+.warehouse-detail-modal *::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.custody-modal::-webkit-scrollbar-thumb,
+.custody-modal *::-webkit-scrollbar-thumb,
+.warehouse-detail-modal::-webkit-scrollbar-thumb,
+.warehouse-detail-modal *::-webkit-scrollbar-thumb {
+  background-color: #cbd5e1;
+  border-radius: 999px;
+}
+
+.custody-modal::-webkit-scrollbar-track,
+.custody-modal *::-webkit-scrollbar-track,
+.warehouse-detail-modal::-webkit-scrollbar-track,
+.warehouse-detail-modal *::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 .custody-modal.no-matches-dialog {
@@ -9840,9 +9962,12 @@ textarea {
 }
 
 .custody-modal--lg {
-  width: min(100%, 640px);
-  max-height: 90vh;
-  overflow-y: auto;
+  width: min(1180px, 95vw);
+  max-height: calc(100dvh - 36px);
+  padding: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 .custody-modal--wide {
@@ -9971,8 +10096,62 @@ textarea {
 
 
 /* Warehouse list controls share the width of the operational surface. */
-.warehouse-pagination { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 0; min-height: 60px; flex-wrap: wrap; }
-.warehouse-pagination span { font-size: 14px; }
+.warehouse-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 24px;
+  padding: 16px 4px 8px;
+  border-top: 1px solid #e2e8f0;
+  flex-wrap: wrap;
+  width: 100%;
+}
+.warehouse-pagination__info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.88rem;
+  color: #475569;
+}
+.warehouse-pagination__info strong {
+  color: #0f172a;
+}
+.warehouse-pagination__badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  color: #334155;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+.warehouse-pagination__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.warehouse-pagination__actions .secondary-button {
+  padding: 8px 14px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  border-radius: 8px;
+}
+
+.warehouse-item-card--interactive {
+  cursor: pointer;
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s ease, border-color 0.2s ease;
+}
+.warehouse-item-card--interactive:hover {
+  transform: translateY(-2px);
+  border-color: #93c5fd;
+  box-shadow: 0 10px 25px -5px rgba(37, 99, 235, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.05);
+}
+.warehouse-item-card--interactive:hover .warehouse-card-body h2 {
+  color: #2563eb;
+}
 .post-journey-link{width:max-content;max-width:100%;display:inline-flex;align-items:center;gap:8px;color:#0868b4;border:1px solid #d5e4ee;border-radius:9px;background:#f7fbfe;padding:10px 13px;margin-top:14px;font-size:13px;font-weight:750;text-decoration:none;transition:background .15s ease,border-color .15s ease,transform .15s ease}
 .post-journey-link:hover{border-color:#a9cbe0;background:#eff8fd;transform:translateY(-1px)}
 
