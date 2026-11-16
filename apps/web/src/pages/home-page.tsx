@@ -1,7 +1,8 @@
-import { ArrowDown, ArrowRight, CalendarCheck, Check, Clock3, Image, LoaderCircle, MapPin, MessageCircle, RotateCcw, ScanSearch, ShieldCheck, Sparkles } from "lucide-react";
+import { ArrowDown, ArrowRight, CalendarCheck, Check, Clock3, Image, LoaderCircle, MapPin, MessageCircle, PackageCheck, RotateCcw, ScanSearch, ShieldAlert, ShieldCheck, Sparkles, X } from "lucide-react";
 import { MotionConfig, motion, useReducedMotion } from "motion/react";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { AccessibleDialog } from "../components/accessible-dialog";
 import { StoryPostForm, type StoryPostCreatedEvent } from "../components/story-post-form";
 import { api, type ImageAnalysisResult, type PostMatchResult, type PostSummary } from "../services/api";
 import heroCampusImage from "../assets/fptu-da-nang-campus.jpg";
@@ -254,6 +255,13 @@ export function HomePage() {
   const [createdPost, setCreatedPost] = useState<StoryPostCreatedEvent["post"] | null>(null);
   const [suggestions, setSuggestions] = useState<PostMatchResult[]>([]);
   const [workflowError, setWorkflowError] = useState("");
+  const [sensitiveModal, setSensitiveModal] = useState<{
+    isOpen: boolean;
+    type: StorySide;
+    postId: string;
+    title: string;
+    documentType?: string;
+  } | null>(null);
   const workflowRequest = useRef(0);
   const scrollTimer = useRef<number | null>(null);
   const scrollRequest = useRef(0);
@@ -352,6 +360,21 @@ export function HomePage() {
   }
 
   async function handlePostCreated(event: StoryPostCreatedEvent) {
+    const isSensitive = Boolean(event.isSensitive)
+      || /cccd|căn cước|cmnd|thẻ sinh viên|the sinh vien|mssv|gplx|bằng lái|thẻ ngân hàng|the atm|atm/i.test(`${event.post.title}`);
+
+    if (isSensitive) {
+      setCreatedPost(event.post);
+      setSensitiveModal({
+        isOpen: true,
+        type: storySide,
+        postId: event.post.id,
+        title: event.post.title,
+        documentType: event.documentType || "GIẤY TỜ CÁ NHÂN BẢO MẬT (PII)"
+      });
+      return;
+    }
+
     const requestId = ++workflowRequest.current;
     setCreatedPost(event.post);
     setSuggestions([]);
@@ -565,5 +588,119 @@ export function HomePage() {
     </div>
 
     <section className="closing-story"><p className="story-index">Hành trình khép lại</p><h2>Một món đồ thất lạc.<br />Hai người xa lạ.<br /><em>Một cái kết đúng chủ.</em></h2><p>Hồ sơ của bạn đã sẵn sàng cho những luồng Lost &amp; Found tiếp theo.</p><div className="hero-actions"><button className="journey-button journey-button--orange" onClick={() => chooseStory("LOST")}>Xem luồng báo mất</button><button className="journey-button journey-button--ghost-light" onClick={() => chooseStory("FOUND")}>Xem luồng báo nhặt</button><Link className="profile-link" to="/profile">Quản lý hồ sơ <ArrowRight size={17} /></Link></div></section>
+
+    {sensitiveModal?.isOpen && (
+      <div className="custody-modal-overlay" onClick={() => setSensitiveModal(null)}>
+        <AccessibleDialog
+          className="custody-modal sensitive-doc-dialog"
+          aria-labelledby="home-sensitive-title"
+          aria-describedby="home-sensitive-desc"
+          onDismiss={() => setSensitiveModal(null)}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <header className="custody-modal__header">
+            <span className={`modal-badge ${sensitiveModal.type === "LOST" ? "modal-badge--blue" : "modal-badge--green"}`}>
+              {sensitiveModal.type === "LOST" ? <ShieldAlert size={24} /> : <PackageCheck size={24} />}
+            </span>
+            <div style={{ flex: 1 }}>
+              <span style={{
+                display: "inline-block",
+                backgroundColor: sensitiveModal.type === "LOST" ? "#dbeafe" : "#dcfce7",
+                color: sensitiveModal.type === "LOST" ? "#1d4ed8" : "#15803d",
+                fontSize: "0.75rem",
+                fontWeight: 700,
+                padding: "2px 8px",
+                borderRadius: "4px",
+                marginBottom: "4px"
+              }}>
+                {sensitiveModal.documentType || "GIẤY TỜ CÁ NHÂN BẢO MẬT (PII)"}
+              </span>
+              <h2 id="home-sensitive-title" style={{ margin: 0, fontSize: "1.15rem", fontWeight: 700 }}>
+                {sensitiveModal.type === "LOST"
+                  ? "Bảo mật thông tin giấy tờ cá nhân"
+                  : "Bàn giao giấy tờ tùy thân cho Phòng CTSV"}
+              </h2>
+            </div>
+            <button
+              type="button"
+              className="close-btn"
+              aria-label="Đóng thông báo"
+              onClick={() => setSensitiveModal(null)}
+            >
+              <X size={20} />
+            </button>
+          </header>
+
+          <div id="home-sensitive-desc" style={{ padding: "0.75rem 0 1rem", lineHeight: 1.6, color: "#334155", fontSize: "0.95rem" }}>
+            {sensitiveModal.type === "LOST" ? (
+              <>
+                <p style={{ margin: "0 0 0.75rem 0" }}>
+                  Vì đây là vật phẩm có <strong>thông tin cá nhân nhạy cảm</strong> (như CCCD, Thẻ sinh viên, Thẻ ngân hàng, GPLX...), để bảo vệ quyền riêng tư và tránh bị kẻ xấu lợi dụng thông tin, bài đăng đã được hệ thống đưa vào chế độ <strong>lưu trữ an toàn</strong>.
+                </p>
+                <div style={{ backgroundColor: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: "8px", padding: "0.85rem 1rem", color: "#1e40af" }}>
+                  <strong>Lưu ý quan trọng:</strong> Bạn vui lòng chú ý kiểm tra hộp thư email <strong>@fpt.edu.vn</strong> của mình để nhận được thông tin mới nhất từ Phòng Công tác sinh viên (CTSV) ngay khi có người nhặt được giao nộp.
+                </div>
+              </>
+            ) : (
+              <>
+                <p style={{ margin: "0 0 0.75rem 0" }}>
+                  Hệ thống ghi nhận bạn đã báo nhặt được <strong>giấy tờ tùy thân / vật phẩm chứa thông tin cá nhân</strong>. Để bảo vệ thông tin cho người làm mất và tuân thủ quy chế nhà trường:
+                </p>
+                <div style={{ backgroundColor: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: "8px", padding: "0.85rem 1rem", color: "#166534" }}>
+                  <strong>Hành động cần làm:</strong> Hãy hẹn lịch bàn giao đồ trực tiếp với <strong>Phòng Công tác sinh viên (CTSV)</strong> như thường lệ để nhà trường xử lý tiếp nhận vào két an toàn và hoàn trả cho chủ nhân.
+                </div>
+              </>
+            )}
+          </div>
+
+          <footer className="custody-modal-actions" style={{ display: "flex", gap: "0.75rem", justifyContent: "flex-end", flexWrap: "wrap" }}>
+            {sensitiveModal.type === "FOUND" ? (
+              <>
+                <button
+                  type="button"
+                  className="primary-button"
+                  onClick={() => {
+                    setSensitiveModal(null);
+                    navigate("/appointments");
+                  }}
+                >
+                  <PackageCheck size={18} /> Hẹn lịch bàn giao với CTSV
+                </button>
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={() => {
+                    setSensitiveModal(null);
+                    navigate("/my-posts");
+                  }}
+                >
+                  <Check size={18} /> Đã hiểu
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  className="primary-button"
+                  onClick={() => {
+                    setSensitiveModal(null);
+                    navigate("/my-posts");
+                  }}
+                >
+                  <Check size={18} /> Tôi đã hiểu, sẽ chú ý email
+                </button>
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={() => setSensitiveModal(null)}
+                >
+                  Đóng
+                </button>
+              </>
+            )}
+          </footer>
+        </AccessibleDialog>
+      </div>
+    )}
   </div></MotionConfig>;
 }

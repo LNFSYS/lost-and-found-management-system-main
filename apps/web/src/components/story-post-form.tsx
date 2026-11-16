@@ -31,6 +31,8 @@ const ALLOWED_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 export interface StoryPostCreatedEvent {
   post: CreatedPost;
   categoryId: string;
+  isSensitive?: boolean;
+  documentType?: string | null;
 }
 
 interface StoryPostFormProps {
@@ -287,8 +289,13 @@ export function StoryPostForm({
           mediaWarning = `Bài đã được tạo nhưng ${failedUploads}/${files.length} ảnh chưa tải lên thành công. Bạn có thể bổ sung ảnh ở trang bài đăng của tôi.`;
         }
       }
+
+      const isSensitive = Boolean(analysis?.isSensitiveDocument)
+        || /cccd|căn cước|cmnd|thẻ sinh viên|the sinh vien|mssv|gplx|bằng lái|thẻ ngân hàng|the atm|atm/i.test(`${post.title} ${draft.description}`);
+      const documentType = analysis?.documentType || (isSensitive ? "GIẤY TỜ CÁ NHÂN BẢO MẬT (PII)" : null);
+
       setCreated({ id: post.id, title: post.title, mediaWarning });
-      onPostCreated?.({ post, categoryId });
+      onPostCreated?.({ post, categoryId, isSensitive, documentType });
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Không thể tạo bài đăng. Vui lòng thử lại.");
     } finally {
