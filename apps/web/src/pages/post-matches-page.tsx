@@ -425,6 +425,7 @@ export function PostMatchesPage() {
   const emptyHeading = useRef<HTMLHeadingElement>(null);
   const pageHeading = useRef<HTMLHeadingElement>(null);
   const [noMatchesPopupPostId, setNoMatchesPopupPostId] = useState<string | null>(null);
+  const [sensitivePopupDismissed, setSensitivePopupDismissed] = useState(false);
   const [data, setData] = useState<PostMatchesResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [recalculating, setRecalculating] = useState(false);
@@ -462,7 +463,7 @@ export function PostMatchesPage() {
     return () => { active = false; };
   }, [postId, page]);
 
-  useEffect(() => { setPage(1); setNoMatchesPopupPostId(null); }, [postId]);
+  useEffect(() => { setPage(1); setNoMatchesPopupPostId(null); setSensitivePopupDismissed(false); }, [postId]);
 
   useEffect(() => {
     if (creationState?.createdPostId !== postId || handledCreation.current === postId
@@ -655,8 +656,8 @@ export function PostMatchesPage() {
 
     {data.isSensitiveDocument && (
       <section className="sensitive-doc-alert" style={{
-        backgroundColor: "#eff6ff",
-        border: "1px solid #bfdbfe",
+        backgroundColor: data.source.type === "LOST" ? "#eff6ff" : "#f0fdf4",
+        border: `1px solid ${data.source.type === "LOST" ? "#bfdbfe" : "#bbf7d0"}`,
         borderRadius: "12px",
         padding: "1.25rem 1.5rem",
         marginBottom: "1.5rem",
@@ -666,7 +667,7 @@ export function PostMatchesPage() {
         boxShadow: "0 1px 3px rgba(0,0,0,0.05)"
       }}>
         <div style={{
-          backgroundColor: "#2563eb",
+          backgroundColor: data.source.type === "LOST" ? "#2563eb" : "#16a34a",
           color: "white",
           borderRadius: "10px",
           padding: "0.75rem",
@@ -675,13 +676,13 @@ export function PostMatchesPage() {
           justifyContent: "center",
           flexShrink: 0
         }}>
-          <ShieldAlert size={28} />
+          {data.source.type === "LOST" ? <ShieldAlert size={28} /> : <PackageCheck size={28} />}
         </div>
         <div style={{ flex: 1 }}>
           <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.35rem" }}>
             <span style={{
-              backgroundColor: "#dbeafe",
-              color: "#1d4ed8",
+              backgroundColor: data.source.type === "LOST" ? "#dbeafe" : "#dcfce7",
+              color: data.source.type === "LOST" ? "#1d4ed8" : "#15803d",
               fontSize: "0.75rem",
               fontWeight: 700,
               padding: "2px 8px",
@@ -690,21 +691,41 @@ export function PostMatchesPage() {
             }}>
               {data.documentType || "GIẤY TỜ CÁ NHÂN BẢO MẬT"}
             </span>
-            <span style={{ color: "#64748b", fontSize: "0.82rem" }}>Chính sách bảo mật thông tin PII</span>
+            <span style={{ color: "#64748b", fontSize: "0.82rem" }}>Chính sách bảo vệ thông tin PII</span>
           </div>
-          <h3 style={{ margin: "0 0 0.35rem 0", color: "#1e3a8a", fontSize: "1.1rem", fontWeight: 700 }}>
-            Hồ sơ đã được bảo vệ & chuyển vào Kho lưu trữ bảo mật của Staff
+          <h3 style={{ margin: "0 0 0.35rem 0", color: data.source.type === "LOST" ? "#1e3a8a" : "#14532d", fontSize: "1.1rem", fontWeight: 700 }}>
+            {data.source.type === "LOST"
+              ? "Hồ sơ giấy tờ cá nhân đã được bảo vệ & lưu trữ an toàn"
+              : "Giấy tờ tùy thân nhặt được cần bàn giao cho Phòng CTSV"}
           </h3>
-          <p style={{ margin: 0, color: "#1e40af", fontSize: "0.95rem", lineHeight: 1.5 }}>
-            {data.sensitiveReason || "Hệ thống AI DINOv2 phát hiện giấy tờ tùy thân chứa thông tin cá nhân/tài chính bảo mật. Để bảo vệ quyền riêng tư, bài đăng này không đối soát công khai trên Bảng tin mà đã được chuyển giao vào Khu vực Lưu trữ Giấy tờ cá nhân của Staff."}
+          <p style={{ margin: 0, color: data.source.type === "LOST" ? "#1e40af" : "#166534", fontSize: "0.95rem", lineHeight: 1.5 }}>
+            {data.source.type === "LOST"
+              ? "Vì đây là vật phẩm có thông tin cá nhân nhạy cảm, bài đăng không đối soát công khai để bảo vệ quyền riêng tư của bạn. Bạn vui lòng chú ý hộp thư email (@fpt.edu.vn) để nhận được thông tin mới nhất từ Phòng Công tác sinh viên (CTSV) ngay khi có người nhặt được giao nộp."
+              : "Hệ thống ghi nhận bạn đã nhặt được giấy tờ tùy thân. Hãy hẹn lịch bàn giao đồ trực tiếp với Phòng Công tác sinh viên (CTSV) như thường lệ để nhà trường tiếp nhận vào két an toàn và hoàn trả cho chủ nhân."}
           </p>
           <div style={{ marginTop: "1rem", display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
-            <Link to="/claims" className="primary-button" style={{ fontSize: "0.875rem", padding: "0.45rem 1rem", textDecoration: "none", borderRadius: "6px" }}>
-              Liên hệ Staff tại quầy DVSV
-            </Link>
-            <Link to="/my-posts" className="secondary-button" style={{ fontSize: "0.875rem", padding: "0.45rem 1rem", textDecoration: "none", borderRadius: "6px" }}>
-              Về bài đăng của tôi
-            </Link>
+            {data.source.type === "FOUND" ? (
+              <button
+                type="button"
+                className="primary-button"
+                onClick={() => setCustodyModalOpen(true)}
+                style={{ fontSize: "0.875rem", padding: "0.45rem 1rem", borderRadius: "6px" }}
+              >
+                <PackageCheck size={16} /> Hẹn lịch bàn giao với CTSV
+              </button>
+            ) : (
+              <Link to="/my-posts" className="primary-button" style={{ fontSize: "0.875rem", padding: "0.45rem 1rem", textDecoration: "none", borderRadius: "6px" }}>
+                Về bài đăng của tôi
+              </Link>
+            )}
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={() => setSensitivePopupDismissed(false)}
+              style={{ fontSize: "0.875rem", padding: "0.45rem 1rem", borderRadius: "6px" }}
+            >
+              Xem lại thông báo
+            </button>
           </div>
         </div>
       </section>
@@ -737,6 +758,95 @@ export function PostMatchesPage() {
 
     {data.total > data.pageSize && <nav className="match-pagination" aria-label="Phân trang gợi ý matching"><button type="button" disabled={data.page <= 1 || loading} onClick={() => setPage(page - 1)}><ArrowLeft /> Trước</button><span>Trang {data.page} / {Math.ceil(data.total / data.pageSize)}</span><button type="button" disabled={!data.hasMore || loading} onClick={() => setPage(page + 1)}>Sau <ArrowRight /></button></nav>}
     <aside className="matching-safety-note"><ShieldCheck /><div><strong>Human verification required</strong><p>Điểm cao không tự động đổi trạng thái bài, chấp nhận claim hay cho phép nhận đồ.</p></div></aside>
+
+    {data.isSensitiveDocument && !sensitivePopupDismissed && <div className="custody-modal-overlay" onClick={() => setSensitivePopupDismissed(true)}>
+      <AccessibleDialog className="custody-modal sensitive-doc-dialog" aria-labelledby="sensitive-dialog-title" aria-describedby="sensitive-dialog-desc" onDismiss={() => setSensitivePopupDismissed(true)} onClick={(event) => event.stopPropagation()}>
+        <header className="custody-modal__header">
+          <span className={`modal-badge ${data.source.type === "LOST" ? "modal-badge--blue" : "modal-badge--green"}`}>
+            {data.source.type === "LOST" ? <ShieldAlert size={22} /> : <PackageCheck size={22} />}
+          </span>
+          <div style={{ flex: 1 }}>
+            <span style={{
+              display: "inline-block",
+              backgroundColor: data.source.type === "LOST" ? "#dbeafe" : "#dcfce7",
+              color: data.source.type === "LOST" ? "#1d4ed8" : "#15803d",
+              fontSize: "0.75rem",
+              fontWeight: 700,
+              padding: "2px 8px",
+              borderRadius: "4px",
+              marginBottom: "4px"
+            }}>
+              {data.documentType || "GIẤY TỜ CÁ NHÂN BẢO MẬT (PII)"}
+            </span>
+            <h2 id="sensitive-dialog-title" style={{ margin: 0, fontSize: "1.15rem", fontWeight: 700 }}>
+              {data.source.type === "LOST"
+                ? "Bảo mật thông tin giấy tờ cá nhân"
+                : "Bàn giao giấy tờ tùy thân cho Phòng CTSV"}
+            </h2>
+          </div>
+          <button type="button" className="close-btn" aria-label="Đóng thông báo" onClick={() => setSensitivePopupDismissed(true)}><X size={20} /></button>
+        </header>
+
+        <div id="sensitive-dialog-desc" style={{ padding: "0.75rem 0 1rem", lineHeight: 1.6, color: "#334155", fontSize: "0.95rem" }}>
+          {data.source.type === "LOST" ? (
+            <>
+              <p style={{ margin: "0 0 0.75rem 0" }}>
+                Vì đây là vật phẩm có <strong>thông tin cá nhân nhạy cảm</strong> (như CCCD, Thẻ sinh viên, Thẻ ngân hàng, GPLX...), để bảo vệ quyền riêng tư và tránh bị kẻ xấu lợi dụng thông tin, bài đăng đã được hệ thống đưa vào chế độ <strong>lưu trữ an toàn</strong>.
+              </p>
+              <div style={{ backgroundColor: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: "8px", padding: "0.85rem 1rem", color: "#1e40af" }}>
+                <strong>Lưu ý quan trọng:</strong> Bạn vui lòng chú ý kiểm tra hộp thư email <strong>@fpt.edu.vn</strong> của mình để nhận được thông tin mới nhất từ Phòng Công tác sinh viên (CTSV) ngay khi có người nhặt được giao nộp.
+              </div>
+            </>
+          ) : (
+            <>
+              <p style={{ margin: "0 0 0.75rem 0" }}>
+                Hệ thống ghi nhận bạn đã báo nhặt được <strong>giấy tờ tùy thân / vật phẩm chứa thông tin cá nhân</strong>. Để bảo vệ thông tin cho người làm mất và tuân thủ quy chế nhà trường:
+              </p>
+              <div style={{ backgroundColor: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: "8px", padding: "0.85rem 1rem", color: "#166534" }}>
+                <strong>Hành động cần làm:</strong> Hãy hẹn lịch bàn giao đồ trực tiếp với <strong>Phòng Công tác sinh viên (CTSV)</strong> như thường lệ để nhà trường xử lý tiếp nhận vào két an toàn và hoàn trả cho chủ nhân.
+              </div>
+            </>
+          )}
+        </div>
+
+        <footer className="custody-modal-actions" style={{ display: "flex", gap: "0.75rem", justifyContent: "flex-end", flexWrap: "wrap" }}>
+          {data.source.type === "FOUND" ? (
+            <>
+              <button
+                type="button"
+                className="primary-button"
+                onClick={() => {
+                  setSensitivePopupDismissed(true);
+                  setCustodyModalOpen(true);
+                }}
+              >
+                <PackageCheck size={18} /> Hẹn lịch bàn giao với CTSV
+              </button>
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => setSensitivePopupDismissed(true)}
+              >
+                <Check size={18} /> Đã hiểu
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                type="button"
+                className="primary-button"
+                onClick={() => setSensitivePopupDismissed(true)}
+              >
+                <Check size={18} /> Tôi đã hiểu, sẽ chú ý email
+              </button>
+              <Link className="secondary-button" to="/my-posts">
+                Về bài đăng của tôi
+              </Link>
+            </>
+          )}
+        </footer>
+      </AccessibleDialog>
+    </div>}
 
     {noMatchesPopupPostId === postId && <div className="custody-modal-overlay" onClick={() => setNoMatchesPopupPostId(null)}>
       <AccessibleDialog className="custody-modal no-matches-dialog" aria-labelledby="no-matches-title" aria-describedby="no-matches-message" onDismiss={() => setNoMatchesPopupPostId(null)} onClick={(event) => event.stopPropagation()}>
