@@ -160,11 +160,61 @@ async function main() {
           phoneNumber: "0901234567",
           roles: ["ADMIN", "STAFF"],
           status: "ACTIVE",
+          avatar: { hasAvatar: false, updatedAt: null },
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString()
         }
       })
     });
+  });
+
+  // Mock Admin Catalog with full structure
+  await page.route("**/api/admin/catalog", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        stats: { totalPosts: 142, processingPosts: 18, totalUsers: 520, returnedPosts: 96 },
+        categories: [
+          { id: "cat-01", name: "Thẻ sinh viên & Giấy tờ", isActive: true, parentId: null },
+          { id: "cat-02", name: "Thiết bị điện tử", isActive: true, parentId: null },
+          { id: "cat-03", name: "Ví tiền & Tài chính", isActive: true, parentId: null }
+        ],
+        areas: [{ id: "ar-01", name: "Khu giảng đường Alpha", isActive: true }],
+        buildings: [{ id: "bld-01", name: "Tòa nhà Alpha", areaId: "ar-01" }],
+        handoverPoints: [{ id: "hp-01", name: "Quầy DVSV Tầng 1 Alpha" }]
+      })
+    });
+  });
+
+  // Mock Admin Dashboard KPIs
+  await page.route("**/api/admin/dashboard/kpis*", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        filters: { from: "2026-10-18", to: "2026-11-16", days: 30, granularity: "day" },
+        scope: { role: "ADMIN", privateEvidenceIncluded: false },
+        totals: { posts: 142, claims: 85, appointments: 62, returns: 96 },
+        snapshot: { openPosts: 18, custodyItems: 12, unresolvedReports: 2 },
+        trends: [
+          { date: "2026-11-16", posts: 5, claims: 3, appointments: 2, returns: 4, custody: 1, reports: 0 },
+          { date: "2026-11-15", posts: 8, claims: 4, appointments: 3, returns: 5, custody: 2, reports: 1 }
+        ],
+        statusBreakdown: { posts: [], claims: [], appointments: [], custody: [], reports: [] }
+      })
+    });
+  });
+
+  // Mock Users, configs, reports
+  await page.route("**/api/admin/users*", async (route) => {
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ items: [], total: 0, page: 1, pageSize: 10 }) });
+  });
+  await page.route("**/api/admin/configs*", async (route) => {
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ items: [], total: 0, page: 1, pageSize: 10 }) });
+  });
+  await page.route("**/api/admin/reports*", async (route) => {
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ items: [], total: 0, page: 1, pageSize: 10 }) });
   });
 
   // Mock Radar Analytics
@@ -176,12 +226,12 @@ async function main() {
     });
   });
 
-  // Mock Notifications & General APIs
+  // Mock Notifications & Realtime
   await page.route("**/api/notifications*", async (route) => {
     await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ items: [], unreadCount: 0 }) });
   });
-  await page.route("**/api/admin/catalog", async (route) => {
-    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ categories: [], areas: [], buildings: [], handoverPoints: [] }) });
+  await page.route("**/api/realtime/**", async (route) => {
+    await route.fulfill({ status: 200, contentType: "application/json", body: "{}" });
   });
 
   console.log("\n📸 1. Capturing Campus Radar Dashboard...");
@@ -448,9 +498,20 @@ async function main() {
   await page.screenshot({ path: intakePath, fullPage: true });
   console.log(`Saved: ${intakePath}`);
 
+  console.log("\n📸 4. Capturing Privacy Policy Page (Sprint 6)...");
+  await page.goto(`http://localhost:${PORT}/privacy-policy`, { waitUntil: "networkidle" });
+  await page.waitForTimeout(1000);
+  const privacyPath = path.join(SCREENSHOT_DIR, "sprint6-privacy-policy.png");
+  await page.screenshot({ path: privacyPath, fullPage: true });
+  console.log(`Saved: ${privacyPath}`);
+
+  // Also ensure sprint6-handover-receipt.png is copied from sprint7-handover-receipt
+  fs.copyFileSync(handoverPath, path.join(SCREENSHOT_DIR, "sprint6-handover-receipt.png"));
+  console.log("Saved: sprint6-handover-receipt.png");
+
   await browser.close();
   server.close();
-  console.log("\n🎉 All 3 screenshots captured successfully!");
+  console.log("\n🎉 All 5 screenshots captured successfully!");
 }
 
 main().catch((err) => {
