@@ -162,7 +162,11 @@ export function createServices(persistence: Persistence, config: typeof env = en
     withTransaction: transaction, id, mediaStorage: claimMediaStorage,
     hashIdempotencyPayload: security.hashToken, logger: console, uploads: mediaUploads
   });
-  const geminiImageService = createImageAnalysisUseCases({ postRepository, analyzer: localImageAnalyzer });
+  const geminiAnalyzer = createGeminiImageAnalyzer(config.gemini);
+  const geminiImageService = createImageAnalysisUseCases({
+    postRepository,
+    analyzer: config.gemini.apiKey ? geminiAnalyzer : localImageAnalyzer
+  });
   return {
     appointmentService, activityService,
     notificationService, notificationEmailWorker, notificationPushWorker, systemConfigService, adminUserService, adminReportingService,

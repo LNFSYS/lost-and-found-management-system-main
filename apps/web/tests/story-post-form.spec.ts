@@ -202,7 +202,7 @@ for (const type of ["LOST", "FOUND"] as const) {
           return Math.abs(uploadRect.top - actionsRect.top) < 1 && Math.abs(uploadRect.bottom - actionsRect.bottom) < 1;
         })).toBe(true);
       }
-      await expect(form.locator(".story-image-analysis-actions p")).toHaveText("Chụp nhiều góc giúp đọc rõ hãng, model, chữ, phụ kiện và dấu hiệu riêng. Ảnh được phân tích nội bộ qua mô hình DINOv2 và EasyOCR của hệ thống.");
+      await expect(form.locator(".story-image-analysis-actions p")).toHaveText("Chụp nhiều góc giúp đọc rõ hãng, model, chữ, phụ kiện và dấu hiệu riêng. Ảnh chỉ được gửi tới Gemini khi bạn chủ động phân tích.");
       const analysisHint = form.locator(".story-image-analysis-hint");
       await expect(analysisHint).toBeInViewport({ ratio: 1 });
       await expect(analysisHint).toHaveText("Hãy dùng chức năng phân tích ảnh để tự động điền thông tin nhanh hơn.");
