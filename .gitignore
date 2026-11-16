@@ -61,6 +61,8 @@ GEMINI.md
 # Local helper scripts & benchmarks (keep local, do not push)
 notebooks/
 *.ipynb
+*.zip
+models/*.pth
 scripts/agent7_*
 scripts/build_report6_*
 scripts/generate_notebook.py
