@@ -524,6 +524,9 @@ export interface ImageAnalysisResult {
   model: string;
   imageCount: number;
   imageEmbedding?: number[] | null;
+  isSensitiveDocument?: boolean;
+  documentType?: string | null;
+  sensitiveReason?: string | null;
 }
 export interface PostSummary {
   id: string;
