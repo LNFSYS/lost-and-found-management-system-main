@@ -32,6 +32,10 @@ const ClaimHistoryPage=lazy(async()=>({default:(await import("./pages/claim-hist
 const AdminPage = lazy(async () => ({ default: (await import("./pages/admin-page")).AdminPage }));
 const StaffPage = lazy(async () => ({ default: (await import("./pages/staff-page")).StaffPage }));
 const ReportsPage = lazy(async () => ({ default: (await import("./pages/reports-page")).ReportsPage }));
+const PrivacyPolicyPage = lazy(async () => {
+  const module = await import("./pages/privacy-policy-page");
+  return { default: module.PrivacyPolicyPage };
+});
 
 function AdminHome() {
   const { user } = useAuth();
@@ -55,6 +59,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
             <Route path="/register" element={<RegisterPage />} />
             <Route path="/forgot-password" element={<ForgotPasswordPage />} />
             <Route path="/reset-password" element={<ResetPasswordPage />} />
+            <Route path="/privacy-policy" element={<Suspense fallback={<p role="status">Đang tải...</p>}><PrivacyPolicyPage /></Suspense>} />
             <Route element={<RouteGuard roles={["STAFF", "ADMIN"]} />}>
               <Route element={<AdminLayout />}>
                 <Route path="/admin" element={<AdminHome />} />

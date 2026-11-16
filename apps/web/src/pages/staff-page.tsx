@@ -24,6 +24,7 @@ import {
   Package,
   PackageCheck,
   Plus,
+  Printer,
   RefreshCw,
   Save,
   Search,
@@ -33,6 +34,17 @@ import {
   X,
   XCircle
 } from "lucide-react";
+import { useAuth } from "../context/auth-context";
+import {
+  HandoverReceiptModal,
+  type HandoverReceiptItem,
+  type HandoverRecipientInfo
+} from "../components/handover-receipt-modal";
+import {
+  IntakeReceiptModal,
+  type IntakeReceiptItem,
+  type IntakeFinderInfo
+} from "../components/intake-receipt-modal";
 import {
   api,
   ApiError,
@@ -612,7 +624,16 @@ function CustodyQueueTab({
     return custodyData.items;
   }, [custodyData]);
 
+  const { user } = useAuth();
   const [createdWalkInItem, setCreatedWalkInItem] = useState<WarehouseItem | null>(null);
+  const [custodyIntakeSuccess, setCustodyIntakeSuccess] = useState<{
+    request: CustodyRequest;
+    createdItem?: WarehouseItem | null;
+  } | null>(null);
+  const [intakeReceiptModalData, setIntakeReceiptModalData] = useState<{
+    item: IntakeReceiptItem;
+    finder?: IntakeFinderInfo;
+  } | null>(null);
 
   function submitCustodyFilters(event: FormEvent) {
     event.preventDefault();
@@ -885,6 +906,29 @@ function CustodyQueueTab({
                     </>
                   )}
 
+                  {request.status === "INTAKED" && (
+                    <button
+                      type="button"
+                      className="secondary-button custody-action-btn"
+                      onClick={() => {
+                        setIntakeReceiptModalData({
+                          item: {
+                            id: request.warehouseItemId || request.id,
+                            itemName: request.post?.title || "Vật phẩm tiếp nhận",
+                            handoverPoint: request.handoverPoint,
+                            receivedAt: request.confirmedHandoverAt || request.updatedAt
+                          },
+                          finder: {
+                            name: request.requester.fullName,
+                            sourceType: "Yêu cầu bàn giao trực tuyến (Custody Request)"
+                          }
+                        });
+                      }}
+                    >
+                      <Printer size={15} /> In phiếu tiếp nhận kho
+                    </button>
+                  )}
+
                   {!["PENDING", "ACCEPTED"].includes(request.status) && (
                     <button
                       type="button"
@@ -956,7 +1000,101 @@ function CustodyQueueTab({
             </div>
 
             <div className="custody-modal-actions">
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => {
+                  setIntakeReceiptModalData({
+                    item: {
+                      id: createdWalkInItem.id,
+                      itemName: createdWalkInItem.itemName,
+                      category: createdWalkInItem.category,
+                      description: createdWalkInItem.description,
+                      conditionNotes: createdWalkInItem.conditionNotes,
+                      storageCode: createdWalkInItem.storageCode,
+                      handoverPoint: createdWalkInItem.handoverPoint,
+                      location: createdWalkInItem.location,
+                      receivedQuantity: createdWalkInItem.receivedQuantity,
+                      accessories: createdWalkInItem.accessories,
+                      receivedAt: createdWalkInItem.receivedAt
+                    },
+                    finder: {
+                      name: createdWalkInItem.finder.userName ?? createdWalkInItem.finder.name ?? "Tiếp nhận Walk-in",
+                      contact: createdWalkInItem.finder.contact ?? "Tại quầy DVSV",
+                      sourceType: "Tiếp nhận trực tiếp tại quầy (Walk-in)"
+                    }
+                  });
+                  setCreatedWalkInItem(null);
+                }}
+              >
+                <Printer size={16} /> In phiếu tiếp nhận kho
+              </button>
               <button type="button" className="primary-button primary-button--success" onClick={() => setCreatedWalkInItem(null)}>
+                <CheckCircle2 size={16} /> Đã hiểu & Đóng
+              </button>
+            </div>
+          </AccessibleDialog>
+        </div>
+      )}
+
+      {/* Online Custody Intake Success Modal */}
+      {custodyIntakeSuccess && (
+        <div className="custody-modal-overlay" onClick={() => setCustodyIntakeSuccess(null)}>
+          <AccessibleDialog className="custody-modal custody-modal--success" aria-label="Đã tiếp nhận yêu cầu bàn giao" onDismiss={() => setCustodyIntakeSuccess(null)} onClick={(e) => e.stopPropagation()}>
+            <div className="custody-modal__header">
+              <span className="modal-badge modal-badge--green"><CheckCircle2 size={24} /></span>
+              <div>
+                <h3>Tiếp nhận yêu cầu bàn giao thành công!</h3>
+                <p>Hồ sơ đã được chuyển sang trạng thái <strong>Đã tiếp nhận</strong>.</p>
+              </div>
+              <button type="button" className="close-btn" onClick={() => setCustodyIntakeSuccess(null)}><X size={18} /></button>
+            </div>
+
+            <div className="walkin-success-card">
+              <div className="success-code-banner">
+                <span className="code-label">MÃ YÊU CẦU TIẾP NHẬN</span>
+                <strong className="code-value">{custodyIntakeSuccess.createdItem?.storageCode || custodyIntakeSuccess.request.id.slice(0, 8).toUpperCase()}</strong>
+              </div>
+
+              <div className="success-info-grid">
+                <div><strong>Tên vật phẩm:</strong> {custodyIntakeSuccess.createdItem?.itemName || custodyIntakeSuccess.request.post?.title || "Vật phẩm tiếp nhận"}</div>
+                <div><strong>Người bàn giao:</strong> {custodyIntakeSuccess.request.requester.fullName}</div>
+                <div><strong>Điểm bàn giao:</strong> {custodyIntakeSuccess.request.handoverPoint?.name ?? "Điểm DVSV"}</div>
+                <div><strong>Thời gian nhận:</strong> {formatDateTime(custodyIntakeSuccess.createdItem?.receivedAt || custodyIntakeSuccess.request.confirmedHandoverAt || new Date().toISOString())}</div>
+              </div>
+            </div>
+
+            <div className="custody-modal-actions">
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => {
+                  const req = custodyIntakeSuccess.request;
+                  const item = custodyIntakeSuccess.createdItem;
+                  setIntakeReceiptModalData({
+                    item: {
+                      id: item?.id || req.warehouseItemId || req.id,
+                      itemName: item?.itemName || req.post?.title || "Vật phẩm tiếp nhận",
+                      category: item?.category,
+                      conditionNotes: item?.conditionNotes,
+                      storageCode: item?.storageCode,
+                      handoverPoint: item?.handoverPoint || req.handoverPoint,
+                      location: item?.location,
+                      receivedQuantity: item?.receivedQuantity,
+                      accessories: item?.accessories,
+                      receivedAt: item?.receivedAt || req.confirmedHandoverAt || new Date().toISOString()
+                    },
+                    finder: {
+                      name: req.requester.fullName,
+                      sourceType: "Yêu cầu bàn giao trực tuyến (Custody Request)"
+                    }
+                  });
+                  setCustodyIntakeSuccess(null);
+                }}
+              >
+                <Printer size={16} /> In phiếu tiếp nhận kho
+              </button>
+              <button type="button" className="primary-button primary-button--success" onClick={() => setCustodyIntakeSuccess(null)}>
                 <CheckCircle2 size={16} /> Đã hiểu & Đóng
               </button>
             </div>
@@ -1012,11 +1150,25 @@ function CustodyQueueTab({
         />
       )}
 
-      {intakeModal && <WarehouseIntakeDialog request={intakeModal} catalog={catalog} onClose={() => setIntakeModal(null)} onReceived={async () => {
+      {intakeModal && <WarehouseIntakeDialog request={intakeModal} catalog={catalog} onClose={() => setIntakeModal(null)} onReceived={async item => {
+        const finishedReq = intakeModal;
         setIntakeModal(null);
         onNotice("Đã tiếp nhận thực tế. Vật phẩm ở trạng thái Đã tiếp nhận, chưa lưu kho.");
+        setCustodyIntakeSuccess({ request: finishedReq, createdItem: item ?? null });
         await onRefreshCustody();
       }} />}
+
+      {intakeReceiptModalData && (
+        <IntakeReceiptModal
+          item={intakeReceiptModalData.item}
+          finder={intakeReceiptModalData.finder}
+          staff={{
+            fullName: user?.fullName || "Cán bộ Phòng Dịch vụ Sinh viên",
+            title: "Cán bộ tiếp nhận kho DVSV"
+          }}
+          onClose={() => setIntakeReceiptModalData(null)}
+        />
+      )}
     </>
   );
 }
@@ -1080,6 +1232,23 @@ function WarehouseInventoryTab({
     return () => { active = false; };
   }, [selectedItemId]);
   const [updateModalOpen, setUpdateModalOpen] = useState(false);
+  const { user } = useAuth();
+  const [returnSuccessReceipt, setReturnSuccessReceipt] = useState<{
+    item: WarehouseItem;
+    recipient: HandoverRecipientInfo;
+    note?: string;
+    handoverDate: string;
+  } | null>(null);
+  const [handoverReceiptModalData, setHandoverReceiptModalData] = useState<{
+    item: HandoverReceiptItem;
+    recipient: HandoverRecipientInfo;
+    note?: string;
+    handoverDate?: string;
+  } | null>(null);
+  const [intakeReceiptModalData, setIntakeReceiptModalData] = useState<{
+    item: IntakeReceiptItem;
+    finder?: IntakeFinderInfo;
+  } | null>(null);
   const [returnTargetItem, setReturnTargetItem] = useState<WarehouseItem | null>(null);
   const [returnRecipients, setReturnRecipients] = useState<Array<{ claimId: string; recipientId: string; fullName: string; description: string | null; verified: boolean }>>([]);
   const [claimReviewsLoading, setClaimReviewsLoading] = useState(false);
@@ -1371,6 +1540,21 @@ function WarehouseInventoryTab({
       if (sequence !== returnSequence.current || returnItemId.current !== itemId) return;
       onNotice("Đã hoàn tất trả hàng cho chủ sở hữu!");
       setPendingAction("");
+      const returnedItemSnapshot: WarehouseItem = {
+        ...returnTargetItem,
+        status: "RETURNED",
+        returnedAt: new Date().toISOString()
+      };
+      setReturnSuccessReceipt({
+        item: returnedItemSnapshot,
+        recipient: {
+          fullName: clean(returnForm.receiverName) ?? "",
+          phoneNumber: clean(returnForm.receiverPhone) ?? "",
+          identityNumber: clean(returnForm.receiverIdentity) ?? ""
+        },
+        handoverDate: new Date().toISOString(),
+        note: clean(returnForm.note) ?? undefined
+      });
       closeReturnModal();
       const detailsSequence = logsSequence.current;
       await onRefresh();
@@ -1518,6 +1702,25 @@ function WarehouseInventoryTab({
                       <UserCheck size={16} /> Trả cho chủ sở hữu
                     </button>
                   )}
+                  {item.status === "RETURNED" && (
+                    <button
+                      type="button"
+                      className="secondary-button warehouse-select-button"
+                      onClick={() => {
+                        setHandoverReceiptModalData({
+                          item,
+                          recipient: {
+                            fullName: "Chủ sở hữu nhận lại",
+                            phoneNumber: "Đã xác minh tại quầy",
+                            identityNumber: "Đã lưu hồ sơ mật"
+                          },
+                          handoverDate: item.returnedAt || item.updatedAt
+                        });
+                      }}
+                    >
+                      <Printer size={16} /> In biên bản bàn giao
+                    </button>
+                  )}
                 </div>
               </article>
             ))}
@@ -1596,7 +1799,51 @@ function WarehouseInventoryTab({
                   >
                     <Save size={16} /> Cập nhật trạng thái
                   </button>
-
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={() => {
+                      setIntakeReceiptModalData({
+                        item: selectedItem,
+                        finder: {
+                          name: selectedItem.finder.userName ?? selectedItem.finder.name ?? "Tiếp nhận Walk-in",
+                          contact: selectedItem.finder.contact ?? "Chưa cung cấp",
+                          sourceType: "Hồ sơ tiếp nhận kho DVSV"
+                        }
+                      });
+                    }}
+                  >
+                    <Printer size={16} /> In phiếu tiếp nhận kho
+                  </button>
+                  {selectedItem.status === "RETURNED" && (
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      onClick={() => {
+                        const returnLog = logs.find(l => l.toStatus === "RETURNED" || l.action === "RETURNED");
+                        let recName = "Chủ sở hữu nhận lại";
+                        let recPhone = "Đã xác minh tại quầy";
+                        if (returnLog?.note) {
+                          const matchName = /Recipient name:\s*([^\n]+)/i.exec(returnLog.note);
+                          const matchPhone = /Recipient phone:\s*([^\n]+)/i.exec(returnLog.note);
+                          if (matchName?.[1]) recName = matchName[1].trim();
+                          if (matchPhone?.[1]) recPhone = matchPhone[1].trim();
+                        }
+                        setHandoverReceiptModalData({
+                          item: selectedItem,
+                          recipient: {
+                            fullName: recName,
+                            phoneNumber: recPhone,
+                            identityNumber: "Đã đối chiếu thẻ SV/CCCD"
+                          },
+                          handoverDate: selectedItem.returnedAt || returnLog?.createdAt || selectedItem.updatedAt,
+                          note: returnLog ? parseStorageLogNote(returnLog.note || "").cleanNote : undefined
+                        });
+                      }}
+                    >
+                      <Printer size={16} /> In biên bản bàn giao
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -2051,6 +2298,89 @@ function WarehouseInventoryTab({
             <span style={{ marginTop: 8, fontSize: "0.82rem", color: "#f8fafc", fontWeight: 500, textShadow: "0 1px 3px rgba(0,0,0,0.8)" }}>Ảnh bằng chứng bàn giao vật phẩm</span>
           </AccessibleDialog>
         </div>
+      )}
+
+      {/* Return Item Success Modal */}
+      {returnSuccessReceipt && (
+        <div className="custody-modal-overlay" onClick={() => setReturnSuccessReceipt(null)}>
+          <AccessibleDialog
+            className="custody-modal custody-modal--success"
+            aria-label="Hoàn tất trả hàng cho chủ sở hữu"
+            onDismiss={() => setReturnSuccessReceipt(null)}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="custody-modal__header">
+              <span className="modal-badge modal-badge--green"><CheckCircle2 size={24} /></span>
+              <div>
+                <h3>Hoàn tất trả hàng thành công!</h3>
+                <p>Hồ sơ đã được cập nhật sang trạng thái <strong>Đã trả</strong>.</p>
+              </div>
+              <button type="button" className="close-btn" onClick={() => setReturnSuccessReceipt(null)}><X size={18} /></button>
+            </div>
+
+            <div className="walkin-success-card">
+              <div className="success-code-banner">
+                <span className="code-label">MÃ LƯU KHO / HỒ SƠ</span>
+                <strong className="code-value">{returnSuccessReceipt.item.storageCode || returnSuccessReceipt.item.id.slice(0, 8).toUpperCase()}</strong>
+              </div>
+
+              <div className="success-info-grid">
+                <div><strong>Tên tài sản:</strong> {returnSuccessReceipt.item.itemName}</div>
+                <div><strong>Người nhận:</strong> {returnSuccessReceipt.recipient.fullName}</div>
+                <div><strong>MSSV / CCCD:</strong> {returnSuccessReceipt.recipient.identityNumber}</div>
+                <div><strong>Số điện thoại:</strong> {returnSuccessReceipt.recipient.phoneNumber}</div>
+                <div><strong>Thời gian giao:</strong> {formatDateTime(returnSuccessReceipt.handoverDate)}</div>
+              </div>
+            </div>
+
+            <div className="custody-modal-actions">
+              <button
+                type="button"
+                className="primary-button"
+                onClick={() => {
+                  setHandoverReceiptModalData(returnSuccessReceipt);
+                  setReturnSuccessReceipt(null);
+                }}
+              >
+                <Printer size={16} /> In biên bản bàn giao
+              </button>
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => setReturnSuccessReceipt(null)}
+              >
+                <CheckCircle2 size={16} /> Đã hiểu & Đóng
+              </button>
+            </div>
+          </AccessibleDialog>
+        </div>
+      )}
+
+      {handoverReceiptModalData && (
+        <HandoverReceiptModal
+          item={handoverReceiptModalData.item}
+          recipient={handoverReceiptModalData.recipient}
+          staff={{
+            fullName: user?.fullName || "Cán bộ Phòng Dịch vụ Sinh viên",
+            title: "Cán bộ Phòng Dịch vụ Sinh viên (DVSV)"
+          }}
+          handoverDate={handoverReceiptModalData.handoverDate}
+          note={handoverReceiptModalData.note}
+          onClose={() => setHandoverReceiptModalData(null)}
+        />
+      )}
+
+      {intakeReceiptModalData && (
+        <IntakeReceiptModal
+          item={intakeReceiptModalData.item}
+          finder={intakeReceiptModalData.finder}
+          staff={{
+            fullName: user?.fullName || "Cán bộ Phòng Dịch vụ Sinh viên",
+            title: "Cán bộ tiếp nhận kho DVSV"
+          }}
+          intakeDate={intakeReceiptModalData.item.receivedAt}
+          onClose={() => setIntakeReceiptModalData(null)}
+        />
       )}
     </>
   );

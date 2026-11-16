@@ -7,6 +7,7 @@ import {
   scoreMatchCandidates,
   type MatchingConfig
 } from "../domain/matching.engine.js";
+import { resolveSensitivityMatchingWindow } from "../domain/matching-window.js";
 import type { MatchFeedbackValue, MatchingRefreshJob, MatchingRepository } from "./matching.repository.port.js";
 
 function isUnitInterval(value: number) {
@@ -134,11 +135,11 @@ export function createMatchingUseCases(options: MatchingDependencies) {
     async runForPost(postId: string, viewerId?: string, page = 1, pageSize = 20, job?: MatchingRefreshJob) {
       const source = await matchingRepository.findCandidate(postId);
       if (!source) throw new AppError("conflict", "Bài đăng phải đang mở hoặc đã có gợi ý để tính matching");
-      const [config, candidateLimit, candidateWindowDays] = await Promise.all([
+      const [config, candidateLimit] = await Promise.all([
         loadConfig(),
-        matchingRepository.getConfigNumber("matching.candidate_limit", 500),
-        matchingRepository.getConfigNumber("matching.candidate_window_days", 120)
+        matchingRepository.getConfigNumber("matching.candidate_limit", 500)
       ]);
+      const candidateWindowDays = resolveSensitivityMatchingWindow(source);
       const candidates = await matchingRepository.listOppositeCandidates(source, candidateLimit, candidateWindowDays);
       const matches = scoreMatchCandidates(source, candidates, config)
         .filter((match) => match.totalScore >= config.weakThreshold);

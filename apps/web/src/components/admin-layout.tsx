@@ -1,10 +1,11 @@
-import { FileText, FolderTree, Globe2, Handshake, History, MapPinned, Power, Settings2, ShieldCheck, UsersRound, Warehouse } from "lucide-react";
+import { FileText, FolderTree, Globe2, Handshake, History, MapPinned, Power, Radar, Settings2, ShieldCheck, UsersRound, Warehouse } from "lucide-react";
 import { Link, NavLink, Outlet, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../context/auth-context";
 import { useNetworkStatus } from "../hooks/use-network-status";
 
 export const adminTabs = [
   { id: "operations", label: "Vận hành", icon: ShieldCheck },
+  { id: "radar", label: "Radar Điểm nóng", icon: Radar },
   { id: "moderation", label: "Moderation", icon: FileText },
   { id: "users", label: "Người dùng", icon: UsersRound },
   { id: "configs", label: "Cấu hình", icon: Settings2 },
