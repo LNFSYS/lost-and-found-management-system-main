@@ -27,9 +27,10 @@ import {
   UsersRound,
   X
 } from "lucide-react";
-import { useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { selectedAdminTab, type AdminTab } from "../components/admin-layout";
 import { CampusRadarDashboard } from "../components/campus-radar-dashboard";
+import { useAuth } from "../context/auth-context";
 import { api, type AdminAccessRole, type AdminArea, type AdminBuilding, type AdminCatalog, type AdminCategory, type AdminDashboardKpis, type AdminHandoverPoint, type AdminHandoverPointPayload, type AdminModerationReport, type AdminModerationReportDetail, type AdminReportEntityType, type AdminReportStatus, type AdminUser, type AdminUserStatus, type ConfigHistoryEntry, type ConfigValueType, type ModerationActionType, type SystemConfig } from "../services/api";
 
 type PendingAction = "" | "load" | "users" | "user" | "user-toggle" | "configs" | "config" | "config-history" | "reports" | "review" | "kpis" | "export" | "category" | "area" | "building" | "handover" | "toggle" | "delete";
@@ -159,8 +160,14 @@ function HandoverMapPicker({ imageUrl, x, y, onChange }: { imageUrl: string; x: 
 }
 
 export function AdminPage() {
+  const { user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
-  const activeTab = selectedAdminTab(searchParams.get("tab"));
+  const navigate = useNavigate();
+  const requestedTab = selectedAdminTab(searchParams.get("tab"));
+  const activeTab = !user?.roles.includes("ADMIN") && requestedTab === "users" ? "operations" : requestedTab;
+  useEffect(() => {
+    if (!user?.roles.includes("ADMIN") && requestedTab === "users") navigate("/admin/staff", { replace: true });
+  }, [navigate, requestedTab, user]);
   function setActiveTab(tab: AdminTab) {
     setSearchParams(previous => { const next = new URLSearchParams(previous); next.set("tab", tab); return next; });
   }

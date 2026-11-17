@@ -1,5 +1,5 @@
-import { FileText, FolderTree, Globe2, Handshake, History, MapPinned, Power, Radar, Settings2, ShieldCheck, UsersRound, Warehouse } from "lucide-react";
-import { Link, NavLink, Outlet, useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import { FileText, FolderTree, Handshake, History, MapPinned, Power, Radar, Settings2, ShieldCheck, UsersRound, Warehouse } from "lucide-react";
+import { NavLink, Outlet, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../context/auth-context";
 import { useNetworkStatus } from "../hooks/use-network-status";
 
@@ -25,7 +25,11 @@ export function AdminLayout() {
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams] = useSearchParams();
-  const isAdmin = user?.roles.includes("ADMIN");
+  const isAdmin = Boolean(user?.roles.includes("ADMIN"));
+  const isStaff = Boolean(user?.roles.includes("STAFF"));
+  const tabsForUser = isAdmin || isStaff
+    ? adminTabs.filter(tab => isAdmin || tab.id !== "users")
+    : [];
   const activeTab = location.pathname === "/admin" ? selectedAdminTab(searchParams.get("tab")) : null;
 
   return <div className="admin-console">
@@ -35,11 +39,11 @@ export function AdminLayout() {
         <span><strong>LNFS Admin</strong><small>Trung tâm quản trị</small></span>
       </div>
       <nav className="admin-tabs" aria-label="Chức năng quản trị">
-        {isAdmin && adminTabs.map(tab => <button key={tab.id} type="button" className={activeTab === tab.id ? "active" : ""} aria-current={activeTab === tab.id ? "page" : undefined} onClick={() => navigate(`/admin?tab=${tab.id}`)}>
+        <NavLink to="/admin/staff"><Warehouse size={18} /><span>Khu vực nội bộ</span></NavLink>
+        {tabsForUser.map(tab => <button key={tab.id} type="button" className={activeTab === tab.id ? "active" : ""} aria-current={activeTab === tab.id ? "page" : undefined} onClick={() => navigate(`/admin?tab=${tab.id}`)}>
           <tab.icon size={18} /><span>{tab.label}</span>
         </button>)}
-        <NavLink to="/admin/staff"><Warehouse size={18} /><span>Khu vực nội bộ</span></NavLink>
-        {isAdmin&&<NavLink to="/admin/audit"><History size={18}/><span>Nhật ký hệ thống</span></NavLink>}
+        {isAdmin && <NavLink to="/admin/audit"><History size={18}/><span>Nhật ký hệ thống</span></NavLink>}
       </nav>
       <div className="admin-sidebar__account">
         <span>{user?.fullName.slice(0, 1).toUpperCase()}</span>
@@ -50,7 +54,6 @@ export function AdminLayout() {
     <main className="admin-main">
       <header className="admin-workspace-bar">
         <span><ShieldCheck size={17} /> {isAdmin ? "Quản trị" : "Nội bộ"}</span>
-        <Link className="secondary-button" to="/home"><Globe2 size={18} /> Giao diện người dùng</Link>
       </header>
       {!online && <div className="offline-banner" role="status">Bạn đang offline. Thao tác gửi mới cần kết nối mạng.</div>}
       <Outlet />
