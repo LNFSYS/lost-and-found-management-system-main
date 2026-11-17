@@ -127,10 +127,10 @@ h3 {
 .auth-aside {
   position: relative;
   overflow: hidden;
-  padding: 40px 48px;
+  padding: 56px;
   display: flex;
   flex-direction: column;
-  justify-content: center;
+  justify-content: flex-start;
   color: #fff;
   background:
     linear-gradient(135deg, rgba(11, 99, 182, 0.97), rgba(18, 62, 109, 0.98)),
@@ -190,7 +190,7 @@ h3 {
 }
 
 .auth-aside > p {
-  margin: 34px 0 0;
+  margin: auto 0 0;
   color: #bddbf4;
   font-size: 0.78rem;
   font-weight: 800;
@@ -229,11 +229,9 @@ h3 {
 
 .auth-panel {
   min-height: 100dvh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  display: grid;
+  place-items: center;
   padding: 24px;
-  overflow-y: auto;
 }
 
 .auth-card {
@@ -249,6 +247,38 @@ h3 {
   margin: 0 0 6px;
   font-size: 1.85rem;
   line-height: 1.2;
+}
+
+.auth-page:has(.otp-field):has(.auth-privacy-ref) .auth-panel {
+  padding-block: 16px;
+}
+
+.auth-page:has(.otp-field):has(.auth-privacy-ref) .auth-card {
+  padding: 20px 28px;
+}
+
+.auth-page:has(.otp-field):has(.auth-privacy-ref) .form-stack {
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.auth-page:has(.otp-field):has(.auth-privacy-ref) .input-field,
+.auth-page:has(.otp-field):has(.auth-privacy-ref) .otp-field {
+  gap: 5px;
+}
+
+.auth-page:has(.otp-field):has(.auth-privacy-ref) input,
+.auth-page:has(.otp-field):has(.auth-privacy-ref) select {
+  min-height: 42px;
+}
+
+.auth-page:has(.otp-field):has(.auth-privacy-ref) .otp-field__input {
+  min-height: 48px;
+}
+
+.auth-page:has(.otp-field):has(.auth-privacy-ref) .form-links,
+.auth-page:has(.otp-field):has(.auth-privacy-ref) .auth-privacy-ref {
+  margin-top: 12px;
 }
 
 .form-stack {

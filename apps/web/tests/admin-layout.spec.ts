@@ -146,6 +146,24 @@ test("Staff uses the same workspace without Admin permissions and retains legacy
   await expect(page).toHaveURL(/\/login$/);
 });
 
+test("Staff can open catalog tabs without requesting Admin-only users", async ({ page }) => {
+  const adminRequests = await prepareWorkspace(page, ["USER", "STAFF"]);
+  await page.goto("/admin");
+  await expect(page.getByRole("heading", { name: "Bảng quản trị" })).toBeVisible();
+  await expect(page.getByRole("alert")).toHaveCount(0);
+
+  for (const tab of ["Danh mục", "Khu vực", "Điểm bàn giao"]) {
+    await page.locator(".admin-sidebar").getByRole("button", { name: tab, exact: true }).click();
+    await expect(page.getByRole("alert")).toHaveCount(0);
+  }
+
+  await page.getByRole("button", { name: "Làm mới" }).click();
+  await expect(page.getByRole("alert")).toHaveCount(0);
+  expect(adminRequests).toContain("/api/admin/catalog");
+  expect(adminRequests).not.toContain("/api/admin/users");
+  await expect(page.locator(".admin-sidebar").getByRole("button", { name: "Người dùng" })).toHaveCount(0);
+});
+
 test("ordinary users cannot enter either administration route or see its switch", async ({ page }) => {
   const adminRequests = await prepareWorkspace(page, ["USER", "STUDENT"]);
   for (const path of ["/admin", "/admin/staff", "/staff"]) {

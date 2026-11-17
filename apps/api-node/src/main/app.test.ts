@@ -7,7 +7,7 @@ import type { AdminUserRecord } from "../modules/admin/application/admin-user.re
 import type { SystemConfigRecord } from "../modules/system-config/application/system-config.repository.port.js";
 import type { Role } from "../shared/domain/auth.js";
 import { env } from "../shared/infrastructure/config/env.js";
-import { adminReportingService, adminUserService, authService, claimRepository, reportService, returnFeedbackService, systemConfigService, testServices } from "../test/use-case-fixtures.js";
+import { adminCatalogService, adminReportingService, adminUserService, authService, claimRepository, reportService, returnFeedbackService, systemConfigService, testServices } from "../test/use-case-fixtures.js";
 import { createApp } from "./app.js";
 import { pool } from "./database.js";
 
@@ -158,6 +158,37 @@ test("admin config routes require authentication", async () => {
     assert.equal(response.status, 401);
     assert.match(response.headers.get("content-type") ?? "", /application\/json/);
   });
+});
+
+test("Staff can access catalog management but not user management", async () => {
+  const originalValidateAccessSession = authService.validateAccessSession;
+  const originalGetCatalog = adminCatalogService.getCatalog;
+  const originalCreateCategory = adminCatalogService.createCategory;
+  authService.validateAccessSession = async () => true;
+  adminCatalogService.getCatalog = async () => ({
+    stats: { totalPosts: 0, processingPosts: 0, totalUsers: 0, returnedPosts: 0 },
+    categories: [], areas: [], buildings: [], handoverPoints: []
+  });
+  adminCatalogService.createCategory = async input => ({
+    id: userId, name: input.name, icon: null, parentId: null, parentName: null,
+    isActive: true, sortOrder: 0, childCount: 0, createdAt: "2026-09-02T00:00:00.000Z"
+  });
+  try {
+    await withServer(async () => undefined, async baseUrl => {
+      const staffHeaders = jsonHeaders(["USER", "STAFF"]);
+      assert.equal((await fetch(`${baseUrl}/api/admin/catalog`, { headers: staffHeaders })).status, 200);
+      assert.equal((await fetch(`${baseUrl}/api/admin/categories`, {
+        method: "POST", headers: staffHeaders, body: JSON.stringify({ name: "Balo" })
+      })).status, 201);
+      assert.equal((await fetch(`${baseUrl}/api/admin/users`, { headers: staffHeaders })).status, 403);
+      assert.equal((await fetch(`${baseUrl}/api/admin/catalog`, { headers: jsonHeaders(["USER"]) })).status, 403);
+      assert.equal((await fetch(`${baseUrl}/api/admin/catalog`)).status, 401);
+    });
+  } finally {
+    authService.validateAccessSession = originalValidateAccessSession;
+    adminCatalogService.getCatalog = originalGetCatalog;
+    adminCatalogService.createCategory = originalCreateCategory;
+  }
 });
 
 test("claim, room and private evidence routes require authentication", async () => {
