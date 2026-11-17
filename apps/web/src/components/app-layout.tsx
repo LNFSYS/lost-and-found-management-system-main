@@ -1,6 +1,6 @@
-import { CalendarDays, Files, FileUser, Home, LayoutDashboard, LogOut, MessageCircle, ShieldCheck, UserRound } from "lucide-react";
+import { CalendarDays, Files, FileUser, Home, LayoutDashboard, LogOut, Menu, X, MessageCircle, ShieldCheck, UserRound } from "lucide-react";
 import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useAuth } from "../context/auth-context";
 import { useNetworkStatus } from "../hooks/use-network-status";
 import { NotificationCenter } from "./notification-center";
@@ -9,6 +9,14 @@ export function AppLayout() {
   const { user, logout } = useAuth();
   const { online } = useNetworkStatus();
   const location = useLocation();
+  const [menuOpen, setMenuOpen] = useState(false);
+  useEffect(() => { setMenuOpen(false); }, [location.pathname]);
+  useEffect(() => {
+    if (!menuOpen) return;
+    const close = (event: KeyboardEvent) => { if (event.key === "Escape") setMenuOpen(false); };
+    window.addEventListener("keydown", close);
+    return () => window.removeEventListener("keydown", close);
+  }, [menuOpen]);
   const navigation=useRef<HTMLElement>(null);
   useEffect(()=>{
     const nav=navigation.current;const active=nav?.querySelector<HTMLElement>(".active");
@@ -22,18 +30,20 @@ export function AppLayout() {
   const viewingOwnMatch = /^\/posts\/[^/]+\/matches$/.test(location.pathname);
   const viewingChat = /^\/claims(?:\/[^/]+)?\/?$/.test(location.pathname);
   return <div className={`app-shell${viewingChat ? " app-shell--chat" : ""}`}>
-    <header className="topbar">
+    <header className={`topbar${menuOpen ? " topbar--menu-open" : ""}`}>
       <Link className="brand" to="/home"><span className="brand-mark"><i>F</i><i>P</i><i>T</i></span><span>Lost &amp; Found<small>FPTU Đà Nẵng</small></span></Link>
       <nav ref={navigation} aria-label="Điều hướng chính">
         <NavLink to="/home"><Home size={18} /> Trang chủ</NavLink>
         <NavLink to="/posts" end><Files size={18} /> Bài đăng</NavLink>
-        <NavLink to="/my-posts" className={({ isActive }) => isActive || viewingOwnMatch ? "active" : undefined}><FileUser size={18} /> Bài của tôi</NavLink>
+        <NavLink to="/my-posts" className={({ isActive }: { isActive: boolean }) => isActive || viewingOwnMatch ? "active" : undefined}><FileUser size={18} /> Bài của tôi</NavLink>
         <NavLink to="/profile"><UserRound size={18} /> Hồ sơ</NavLink>
         {hasAdminWorkspace && <NavLink to={isAdmin ? "/admin" : "/admin/staff"} title="Chuyển sang quản trị"><LayoutDashboard size={18} /> Quản trị</NavLink>}
         <NavLink to="/claims"><MessageCircle size={18} /> Trao đổi riêng</NavLink>
         <NavLink to="/appointments"><CalendarDays size={18} /> Lịch hẹn</NavLink>
+        <button className="mobile-session-action icon-text-button" onClick={() => { setMenuOpen(false); void logout().catch(() => undefined); }}><LogOut size={18} /> Đăng xuất</button>
       </nav>
       <div className="topbar-actions">
+        <button className="mobile-menu-toggle" type="button" aria-label={menuOpen ? "Đóng menu" : "Mở menu"} aria-expanded={menuOpen} onClick={() => setMenuOpen(open => !open)}>{menuOpen ? <X size={22} /> : <Menu size={22} />}</button>
         {user ? (
           <>
             <NotificationCenter />

@@ -58,6 +58,31 @@ async function prepareWorkspace(page: Page, roles: string[] = ["USER", "ADMIN"])
   return adminRequests;
 }
 
+for (const width of [1920, 1536, 1280, 390]) {
+  test(`staff intake fits the workspace at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await prepareWorkspace(page);
+    await page.goto('/admin/staff');
+    await expect(page.locator('.staff-hero')).toBeVisible();
+    const outside = await page.locator('.staff-page-container, .staff-hero, .staff-page-container button, .staff-page-container select').evaluateAll(elements => elements.filter(element => {
+      const bounds = element.getBoundingClientRect();
+      return bounds.width > 0 && (bounds.left < 0 || bounds.right > document.documentElement.clientWidth + 1);
+    }).map(element => element.className));
+    expect(outside).toEqual([]);
+  });
+  test(`admin controls stay within the visible viewport at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await prepareWorkspace(page);
+    await page.goto('/admin');
+    await expect(page.locator('.admin-export-panel')).toBeVisible();
+    const outside = await page.locator('.admin-page, .admin-stat, .admin-export-panel, .admin-reporting-filters button, .admin-hero button').evaluateAll(elements => elements.filter(element => {
+      const bounds = element.getBoundingClientRect();
+      return bounds.left < 0 || bounds.right > document.documentElement.clientWidth + 1;
+    }).map(element => element.className));
+    expect(outside).toEqual([]);
+  });
+}
+
 for (const width of [1440, 390]) {
   test(`internal workspace is inside administration with two-way user navigation at ${width}px`, async ({ page }) => {
     await page.setViewportSize({ width, height: 900 });
@@ -81,7 +106,8 @@ for (const width of [1440, 390]) {
     await expect(page.getByRole("button", { name: "Danh mục", exact: true })).toHaveAttribute("aria-current", "page");
     await page.reload();
     await expect(page.getByRole("button", { name: "Danh mục", exact: true })).toHaveAttribute("aria-current", "page");
-    await page.getByRole("link", { name: "Giao diện người dùng" }).click();
+    await expect(page.getByRole("link", { name: "Giao diện người dùng" })).toHaveCount(0);
+    await page.goto("/home");
     await expect(page).toHaveURL(/\/home$/);
     await expect(page.getByRole("heading", { name: /Đồ thất lạc/ })).toBeVisible();
     await expect(page.getByRole("navigation", { name: "Điều hướng chính" })).toBeVisible();
@@ -104,10 +130,15 @@ test("Staff uses the same workspace without Admin permissions and retains legacy
   await expect(page).toHaveURL(/\/admin\/staff\?custodyRequestId=fixture#queue$/);
   await expect(page.getByRole("heading", { name: "Tiếp nhận & Quản lý Custody" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Người dùng", exact: true })).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Cấu hình", exact: true })).toHaveCount(0);
-  await page.getByRole("link", { name: "Giao diện người dùng" }).click();
+  await expect(page.getByRole("button", { name: "Cấu hình", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Vận hành", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Moderation", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Khu vực", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Điểm bàn giao", exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Giao diện người dùng" })).toHaveCount(0);
+  await page.goto("/home");
   await page.getByRole("link", { name: "Quản trị", exact: true }).click();
-  await expect(page).toHaveURL(/\/admin\/staff$/);
+  await expect(page).toHaveURL(/\/admin/);
   await page.goto("/admin?tab=users");
   await expect(page).toHaveURL(/\/admin\/staff$/);
   expect(adminRequests).toEqual([]);
