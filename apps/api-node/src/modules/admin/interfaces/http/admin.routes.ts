@@ -16,7 +16,13 @@ export function createAdminRoutes({ adminCatalogController, adminReportingContro
   const adminRoutes = Router();
   const handoverMapUpload = multer({
     storage: multer.memoryStorage(),
-    limits: { fileSize: 2 * 1024 * 1024, files: 1 }
+    limits: { fileSize: 2 * 1024 * 1024, files: 1, fields: 10, fieldSize: 1024 * 1024, parts: 20 },
+    fileFilter: (_req, file, cb) => {
+      if (!["image/jpeg", "image/png", "image/webp"].includes(file.mimetype)) {
+        return cb(new HttpError(400, "Định dạng ảnh bản đồ không hợp lệ. Chỉ chấp nhận JPEG, PNG hoặc WEBP."));
+      }
+      cb(null, true);
+    }
   });
   function uploadHandoverMap(request: Request, response: Response, next: NextFunction) {
     handoverMapUpload.single("file")(request, response, (error: unknown) => {

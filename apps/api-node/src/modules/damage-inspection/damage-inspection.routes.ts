@@ -6,7 +6,13 @@ export function createDamageInspectionRoutes() {
   const router = Router();
   const upload = multer({
     storage: multer.memoryStorage(),
-    limits: { fileSize: 15 * 1024 * 1024 } // 15MB
+    limits: { fileSize: 15 * 1024 * 1024, files: 1, fields: 10, fieldSize: 1024 * 1024, parts: 20 },
+    fileFilter: (_req, file, cb) => {
+      if (!["image/jpeg", "image/png", "image/webp"].includes(file.mimetype)) {
+        return cb(new Error("Định dạng file không được hỗ trợ. Chỉ chấp nhận JPEG, PNG hoặc WEBP."));
+      }
+      cb(null, true);
+    }
   });
 
   router.get("/status", async (_req: Request, res: Response) => {

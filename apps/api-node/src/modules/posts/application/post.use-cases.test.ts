@@ -208,3 +208,125 @@ test("private post media blocks anonymous and unrelated viewers before file look
     postRepository.findMedia = originalFindMedia;
   }
 });
+
+test("hidden post is inaccessible to unauthenticated or other users (404), but visible to owner and staff", async () => {
+  const originalFindById = postRepository.findById;
+  const hiddenPost = post({ status: "HIDDEN", userId: "owner-id" });
+  postRepository.findById = async () => hiddenPost;
+  try {
+    // Unauthenticated
+    await assert.rejects(
+      postService.getPost("11111111-1111-4111-8111-111111111111", undefined),
+      (error: unknown) => error instanceof Error && "code" in error && error.code === "not_found"
+    );
+    // Other user
+    await assert.rejects(
+      postService.getPost("11111111-1111-4111-8111-111111111111", viewer("other-user")),
+      (error: unknown) => error instanceof Error && "code" in error && error.code === "not_found"
+    );
+    // Owner
+    const ownerView = await postService.getPost("11111111-1111-4111-8111-111111111111", viewer("owner-id"));
+    assert.equal(ownerView.id, hiddenPost.id);
+    // Staff
+    const staffView = await postService.getPost("11111111-1111-4111-8111-111111111111", viewer("staff-user", ["STAFF"]));
+    assert.equal(staffView.id, hiddenPost.id);
+  } finally {
+    postRepository.findById = originalFindById;
+  }
+});
+
+test("private details post is inaccessible to unauthenticated or other users (404)", async () => {
+  const originalFindById = postRepository.findById;
+  const privatePost = post({ visibilityMode: "PRIVATE_DETAILS", userId: "owner-id" });
+  postRepository.findById = async () => privatePost;
+  try {
+    // Unauthenticated
+    await assert.rejects(
+      postService.getPost("11111111-1111-4111-8111-111111111111", undefined),
+      (error: unknown) => error instanceof Error && "code" in error && error.code === "not_found"
+    );
+    // Other user
+    await assert.rejects(
+      postService.getPost("11111111-1111-4111-8111-111111111111", viewer("other-user")),
+      (error: unknown) => error instanceof Error && "code" in error && error.code === "not_found"
+    );
+    // Owner
+    const ownerView = await postService.getPost("11111111-1111-4111-8111-111111111111", viewer("owner-id"));
+    assert.equal(ownerView.id, privatePost.id);
+  } finally {
+    postRepository.findById = originalFindById;
+  }
+});
+
+test("matching suggestions mask candidate phone and email from regular viewers", async () => {
+  const source = post();
+  const candidateWithContact = post({
+    id: "33333333-3333-4333-8333-333333333333",
+    userId: "finder-contact",
+    description: "Nhặt được đồ, gọi 0987654321 hoặc mail finder@fpt.edu.vn",
+    contactInfo: "0987654321"
+  });
+  const explanation = {
+    tier: "SUGGESTION" as const,
+    summary: "Trùng khớp SĐT 0987654321 trong nội dung",
+    reasons: ["Liên hệ qua 0987654321"],
+    matchedTokens: ["0987654321"],
+    matchedImageTags: [],
+    matchedOcrTokens: ["finder@fpt.edu.vn"],
+    locationReason: "Tại khuôn viên",
+    categoryReason: "Cùng danh mục",
+    daysDiff: 1,
+    penalties: []
+  };
+  const stored = {
+    matcherVersion: "rule-v2-explainable",
+    calculatedAt: "2026-09-01T09:00:00.000Z",
+    thresholds: { weak: 0.45, suggestion: 0.6, notification: 0.75, highConfidence: 0.85 },
+    weights: { text: 0.3, category: 0.2, location: 0.15, time: 0.1, image: 0.15, ocr: 0.1 },
+    results: [{
+      match: {
+        id: "match-leak-check",
+        lostPostId: source.id,
+        foundPostId: candidateWithContact.id,
+        isNotified: false,
+        createdAt: "2026-09-01T09:00:00.000Z",
+        totalScore: 0.8,
+        scoreTier: "SUGGESTION" as const,
+        textScore: 0.8,
+        categoryScore: 0.8,
+        locationScore: 0.8,
+        timeScore: 0.8,
+        imageScore: 0.8,
+        ocrScore: 0.8,
+        explanation,
+        matcherVersion: "v2",
+        updatedAt: "2026-09-01T09:00:00.000Z",
+        feedback: null
+      },
+      candidate: candidateWithContact
+    }],
+    total: 1,
+    page: 1,
+    pageSize: 20,
+    hasMore: false
+  };
+
+  const originalFindVisibleById = postRepository.findVisibleById;
+  const originalGetStoredResults = matchingService.getStoredResults;
+  postRepository.findVisibleById = async () => source;
+  matchingService.getStoredResults = async () => stored;
+
+  try {
+    const ownerResult = await postService.listPostMatches(source.id, viewer(source.userId));
+    const serialized = JSON.stringify(ownerResult);
+    // Plain phone and email must NOT appear in response
+    assert.equal(serialized.includes("0987654321"), false);
+    assert.equal(serialized.includes("finder@fpt.edu.vn"), false);
+    assert.equal(ownerResult.results[0].candidate.contactInfo, null);
+    assert.ok(ownerResult.results[0].candidate.description?.includes("098***321"));
+    assert.ok(ownerResult.results[0].candidate.description?.includes("fi***@fpt.edu.vn"));
+  } finally {
+    postRepository.findVisibleById = originalFindVisibleById;
+    matchingService.getStoredResults = originalGetStoredResults;
+  }
+});

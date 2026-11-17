@@ -7,7 +7,8 @@ import type { TransactionContext } from "../../../shared/application/transaction
 import { sqlExecutor, type SqlExecutor } from "../../../shared/infrastructure/transaction-context.js";
 import { claimantIdSql, finderIdSql } from "../../../shared/infrastructure/claim-identity-sql.js";
 
-import type { RowDataPacket } from "mysql2";
+import type { RowDataPacket, ResultSetHeader } from "mysql2";
+import { AppError } from "../../../shared/domain/app-error.js";
 import { randomUUID } from "node:crypto";
 
 import type { PoolConnection } from "mysql2/promise";
@@ -394,7 +395,10 @@ export function createWarehouseRepository(pool: SqlExecutor) {
           "INSERT INTO return_appointments (id,claim_id,post_id,proposer_id,status,proposed_at) SELECT ?,c.id,COALESCE(c.source_found_post_id,c.post_id),?,'ACCEPTED',? FROM claims c WHERE c.id = ?",
           [appointmentId,input.actorId,input.completedAt,input.claimId]
         );
-        await executor.execute("UPDATE return_appointments SET status = 'COMPLETED', completed_at = ?, custody_authorized_at = ?, custody_authorized_by = ? WHERE id = ?", [input.completedAt,input.completedAt,input.actorId,appointmentId]);
+        const [r] = await executor.execute<ResultSetHeader>("UPDATE return_appointments SET status = 'COMPLETED', completed_at = ?, custody_authorized_at = ?, custody_authorized_by = ? WHERE id = ? AND status <> 'COMPLETED'", [input.completedAt,input.completedAt,input.actorId,appointmentId]);
+        if (r.affectedRows === 0) {
+          throw new AppError("conflict", "Lịch hẹn đã được hoàn tất trước đó");
+        }
       }
       await executor.execute("INSERT INTO warehouse_completed_returns (id,warehouse_item_id,claim_id,appointment_id,recipient_id,recipient_name,recipient_phone,recipient_identity,authorized_by,proof_ids,completed_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
         [input.id,input.itemId,input.claimId,appointmentId,input.recipientId,input.receiverName,input.receiverPhone,input.receiverIdentity,input.actorId,JSON.stringify(input.proofIds),input.completedAt]);
