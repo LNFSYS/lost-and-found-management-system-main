@@ -69,11 +69,11 @@ export async function exerciseHttpRuntime(pool: Pool) {
     await request("/auth/activity", 200, tokens.owner);
 
     const catalog = await (await request("/posts/catalog", 200, tokens.owner)).json();
-    const categoryId = catalog.categories.find((item: { parentId: string | null }) => item.parentId)?.id;
+    const categoryId = catalog.categories.find((item: { name: string }) => item.name === "Ví / bóp")?.id;
     const areaId = catalog.areas[0]?.id;
     const handoverPointId = catalog.handoverPoints[0]?.id;
-    assert.ok(categoryId && areaId && handoverPointId, "migrated catalog seed must be available");
-    const postBody = { title: "Black wallet with student card", description: "Black leather wallet with student card SE123456 inside", categoryId, areaId, contactInfo: "fixture@example.invalid", lostFoundAt: new Date(Date.now() - 60_000).toISOString(), analysisSignals: { visualAttributes: ["black wallet"], visibleText: ["SE123456"], confidence: 0.95 } };
+    assert.ok(categoryId && areaId && handoverPointId, "migrated catalog seed must include a standard wallet category");
+    const postBody = { title: "Black wallet with zipper", description: "Black leather wallet with a silver zipper", categoryId, areaId, contactInfo: "fixture@example.invalid", lostFoundAt: new Date(Date.now() - 60_000).toISOString(), analysisSignals: { visualAttributes: ["black wallet"], visibleText: ["ZIPPER"], confidence: 0.95 } };
     const found = await (await request("/posts", 201, tokens.finder, "POST", { ...postBody, type: "FOUND", visibilityMode: "PRIVATE_DETAILS" })).json();
     const lost = await (await request("/posts", 201, tokens.owner, "POST", { ...postBody, type: "LOST" })).json();
     const board = await (await request("/posts", 200, tokens.outsider)).json();
