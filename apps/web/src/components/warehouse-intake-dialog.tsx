@@ -451,7 +451,7 @@ export function WarehouseIntakeDialog({ request, catalog, onClose, onReceived }:
                 <span className="intake-card__icon"><Bot size={16} /></span>
                 Trợ lý AI đối chiếu tại quầy
               </h4>
-              <WarehouseConversationChat mode="INTAKE" intakeKind={request ? "CUSTODY_REQUEST" : "WALK_IN"} onExtraction={applyConversationExtraction} disabled={Boolean(busy) || loading} allowImages={true} />
+              <WarehouseConversationChat mode="INTAKE" intakeKind={request ? "CUSTODY_REQUEST" : "WALK_IN"} onExtraction={applyConversationExtraction} onImagesSelected={files => void upload(files)} disabled={Boolean(busy) || loading} allowImages={true} />
             </section>
           </div>
 

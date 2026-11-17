@@ -1751,9 +1751,17 @@ function WarehouseInventoryTab({
           <div ref={detailsModalRef} tabIndex={-1} className="warehouse-detail-modal" role="dialog" aria-modal="true" aria-labelledby="warehouse-detail-title" onClick={event => event.stopPropagation()}>
             <header className="warehouse-detail-modal__header">
               <span className="panel-icon-badge"><History size={18} /></span>
-              <div>
+              <div style={{ flex: 1, minWidth: 0 }}>
                 <h2 id="warehouse-detail-title">Chi tiết vật phẩm kho</h2>
               </div>
+              <button
+                type="button"
+                className="primary-button update-trigger-btn header-update-btn"
+                style={{ padding: "6px 14px", fontSize: "0.82rem", display: "inline-flex", alignItems: "center", gap: "6px", whiteSpace: "nowrap" }}
+                onClick={() => setUpdateModalOpen(true)}
+              >
+                <Save size={15} /> Cập nhật trạng thái
+              </button>
               <button type="button" className="close-btn" aria-label="Đóng chi tiết" title="Đóng chi tiết" onClick={closeDetails}><X size={20} /></button>
             </header>
 

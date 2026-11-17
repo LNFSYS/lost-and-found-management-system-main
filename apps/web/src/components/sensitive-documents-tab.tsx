@@ -77,7 +77,9 @@ export function SensitiveDocumentsTab() {
     <div className="sensitive-docs-tab" style={{ padding: "1.5rem 0" }}>
       {/* Tab Header Banner */}
       <div style={{
-        background: "linear-gradient(135deg, #1e3a8a 0%, #1e40af 100%)",
+        background: "linear-gradient(135deg, #091e3a 0%, #0f172a 100%)",
+        border: "1px solid #1e293b",
+        borderLeft: "4px solid #38bdf8",
         color: "white",
         borderRadius: "12px",
         padding: "1.5rem 2rem",
@@ -85,19 +87,19 @@ export function SensitiveDocumentsTab() {
         display: "flex",
         justifyContent: "space-between",
         alignItems: "center",
-        boxShadow: "0 4px 6px -1px rgba(0,0,0,0.1)"
+        boxShadow: "0 10px 25px -5px rgba(15, 23, 42, 0.3)"
       }}>
         <div>
           <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.5rem" }}>
-            <ShieldAlert size={20} style={{ color: "#93c5fd" }} />
-            <span style={{ fontSize: "0.85rem", letterSpacing: "1px", textTransform: "uppercase", color: "#93c5fd", fontWeight: 700 }}>
+            <ShieldAlert size={20} style={{ color: "#38bdf8" }} />
+            <span style={{ fontSize: "0.85rem", letterSpacing: "1px", textTransform: "uppercase", color: "#38bdf8", fontWeight: 700 }}>
               PII Vault • Lưu trữ bảo mật thông tin cá nhân
             </span>
           </div>
-          <h2 style={{ margin: "0 0 0.5rem 0", fontSize: "1.5rem", fontWeight: 700 }}>
+          <h2 style={{ margin: "0 0 0.5rem 0", fontSize: "1.5rem", fontWeight: 700, color: "#f8fafc" }}>
             Kho Lưu trữ Giấy tờ & Thẻ cá nhân
           </h2>
-          <p style={{ margin: 0, fontSize: "0.95rem", color: "#bfdbfe", maxWidth: "700px", lineHeight: 1.5 }}>
+          <p style={{ margin: 0, fontSize: "0.92rem", color: "#94a3b8", maxWidth: "700px", lineHeight: 1.5 }}>
             Khu vực dành riêng cho Staff quản lý CCCD, Thẻ sinh viên, Thẻ ngân hàng, GPLX được nhặt trên campus.
             Hệ thống AI DINOv2 tự động ẩn các bài này khỏi Bảng tin chung để bảo vệ dữ liệu cá nhân của sinh viên.
           </p>

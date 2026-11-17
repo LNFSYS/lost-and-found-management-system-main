@@ -135,17 +135,27 @@ function ItemJourney({ postId }: { postId: string | undefined }) {
           </div>
           <span className="item-journey-history__count">{journey.total} sự kiện</span>
         </header>
-        {!journey.results.length ? <p className="item-journey-empty"><Activity /> Chưa có cập nhật hành trình.</p> : <ol className="workflow-timeline item-journey-timeline">
-          {journey.results.map((event, index) => {
+        {(() => {
+          let seenMessageSent = false;
+          const displayResults = journey.results.filter(event => {
+            if (event.action === "MESSAGE_SENT") {
+              if (seenMessageSent) return false;
+              seenMessageSent = true;
+            }
+            return true;
+          });
+          if (!displayResults.length) return <p className="item-journey-empty"><Activity /> Chưa có cập nhật hành trình.</p>;
+          return <ol className="workflow-timeline item-journey-timeline">
+          {displayResults.map((event, index) => {
             const presentation = sourcePresentation[event.source] ?? { icon: Sparkles, tone: "other" };
             const EventIcon = presentation.icon;
-            const latest = !journey.hasMore && index === journey.results.length - 1;
+            const latest = !journey.hasMore && index === displayResults.length - 1;
             const row = Math.floor(index / timelineColumns);
             const offset = index % timelineColumns;
             const reverseRow = row % 2 === 1;
             const column = reverseRow ? timelineColumns - offset : offset + 1;
             const connector = offset === timelineColumns - 1 ? ArrowDown : reverseRow ? ArrowLeft : ArrowRight;
-            const hasConnector = timelineColumns > 1 && index < journey.results.length - 1;
+            const hasConnector = timelineColumns > 1 && index < displayResults.length - 1;
             const ConnectorIcon = connector;
             const title = journeyEventTitle(event);
             return <li
@@ -204,7 +214,8 @@ function ItemJourney({ postId }: { postId: string | undefined }) {
               {hasConnector && <span className={`item-journey-connector item-journey-connector--${offset === timelineColumns - 1 ? "down" : reverseRow ? "left" : "right"}`} aria-hidden="true"><ConnectorIcon size={15} /></span>}
             </li>;
           })}
-        </ol>}
+        </ol>;
+        })()}
         {journey.hasMore && <button className="item-journey-more" disabled={loading} onClick={() => setPage((value) => value + 1)}>
           {loading ? "Đang tải..." : "Xem thêm sự kiện"}
         </button>}
