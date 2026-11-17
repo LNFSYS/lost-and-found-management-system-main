@@ -14,7 +14,13 @@ export function createClaimRoutes({ claimController, auth }: {
   const claimRoutes = Router();
   const evidenceUpload = multer({
     storage: multer.memoryStorage(),
-    limits: { fileSize: mediaPolicy.maxBytes, files: 1 }
+    limits: { fileSize: mediaPolicy.maxBytes, files: 1, fields: 10, fieldSize: 1024 * 1024, parts: 20 },
+    fileFilter: (_req, file, cb) => {
+      if (!mediaPolicy.allowedMimeTypes.includes(file.mimetype as any)) {
+        return cb(new HttpError(400, "Định dạng tệp ảnh minh chứng không được hỗ trợ. Chỉ chấp nhận JPEG, PNG hoặc WEBP."));
+      }
+      cb(null, true);
+    }
   });
   const claimCreateLimit = rateLimit({
     windowMs: 15 * 60_000,

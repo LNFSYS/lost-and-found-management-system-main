@@ -22,6 +22,34 @@ async function openHome(page: Page) {
   await expect(page.getByRole("heading", { level: 1, name: /Đồ thất lạc/i })).toBeVisible();
 }
 
+for (const width of [320, 375, 390, 440]) test(`mobile content bounds at ${width}`, async ({ page }) => {
+  await page.setViewportSize({ width, height: 844 });
+  await openHome(page);
+  await page.screenshot({ path: `../../test-results/home/mobile-bounds-${width}.png` });
+  const outside = await page.locator('.hero-grid *, .topbar .brand, .topbar-actions, .story-section input, .story-section button').evaluateAll(elements => elements.filter(element => {
+    const rect = element.getBoundingClientRect();
+    return rect.width > 0 && (rect.left < -1 || rect.right > innerWidth + 1);
+  }).map(element => element.className));
+  expect(outside).toEqual([]);
+});
+
+test("mobile navigation opens and closes without clipping controls", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openHome(page);
+  const toggle = page.getByRole('button', { name: 'Mở menu' });
+  await expect(toggle).toBeVisible();
+  await expect(page.locator('.topbar nav')).toBeHidden();
+  await toggle.click();
+  await expect(page.locator('.mobile-session-action')).toBeVisible();
+  const clipped = await page.locator('.topbar nav a, .mobile-session-action, .hero-copy').evaluateAll(elements => elements.some(element => {
+    const rect = element.getBoundingClientRect();
+    return rect.left < 0 || rect.right > innerWidth + 1;
+  }));
+  expect(clipped).toBe(false);
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.topbar nav')).toBeHidden();
+});
+
 test("renders the protected storytelling home with a campus hero image", async ({ page }) => {
   await openHome(page);
   await expect(page.locator(".story-thread-layer")).toHaveCount(0);

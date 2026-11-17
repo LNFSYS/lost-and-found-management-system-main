@@ -85,3 +85,32 @@ test("matching notifications lock active cross-owner pairs above the threshold u
   assert.match(query, /LIMIT 100 FOR UPDATE$/);
   assert.deepEqual(values, ["found", "found", 0.6]);
 });
+
+test("listOppositeCandidates applies dynamic candidateWindowDays to SQL filters", async () => {
+  const candidate = {
+    id: "post-1",
+    userId: "user-1",
+    type: "LOST" as const,
+    status: "OPEN" as const,
+    visibilityMode: "PUBLIC" as const,
+    title: "Mất ví",
+    text: "Mất ví da màu nâu",
+    imageText: "",
+    ocrText: "",
+    categoryId: "cat-1",
+    parentCategoryId: null,
+    areaId: "area-1",
+    buildingId: "bldg-1",
+    roomText: null,
+    customLocation: null,
+    lostFoundAt: "2026-10-10T12:00:00.000Z"
+  };
+
+  const s1Result = await captureQuery(() => matchingRepository.listOppositeCandidates(candidate, 50, 180));
+  assert.match(s1Result.query, /ABS\(DATEDIFF\(p\.lost_found_at, \?\)\) <= \?/);
+  assert.match(s1Result.query, /DATE_SUB\(UTC_TIMESTAMP\(\), INTERVAL \? DAY\)/);
+  assert.ok(s1Result.values?.includes(180));
+
+  const s0Result = await captureQuery(() => matchingRepository.listOppositeCandidates(candidate, 50, 90));
+  assert.ok(s0Result.values?.includes(90));
+});

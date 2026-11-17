@@ -28,6 +28,7 @@ interface MatchCandidateRow extends RowDataPacket {
   title_normalized: string;
   description_normalized: string;
   category_id: string | null;
+  category_name?: string | null;
   parent_category_id: string | null;
   area_id: string | null;
   building_id: string | null;
@@ -130,6 +131,7 @@ function mapCandidate(row: MatchCandidateRow): MatchCandidate {
     imageText: row.image_tag_text ?? "",
     ocrText: row.ocr_tag_text ?? "",
     categoryId: row.category_id,
+    categoryName: row.category_name ?? null,
     parentCategoryId: row.parent_category_id,
     areaId: row.area_id,
     buildingId: row.building_id,
@@ -179,6 +181,7 @@ function mapFeedback(row: FeedbackRow) {
 const candidateSelect = `SELECT
   p.id, p.user_id, p.type, p.status, p.visibility_mode, p.title,
   p.title_normalized, p.description_normalized, p.category_id,
+  c.name AS category_name,
   c.parent_id AS parent_category_id, p.area_id, p.building_id,
   p.room_text, p.custom_location, p.lost_found_at,
   p.image_embedding,
@@ -267,6 +270,10 @@ export function createMatchingRepository(pool: SqlExecutor, withTransaction: Sql
            p.category_id = ? OR c.parent_id = ? OR p.area_id = ? OR p.building_id = ?
            OR (p.lost_found_at IS NOT NULL AND ? IS NOT NULL AND ABS(DATEDIFF(p.lost_found_at, ?)) <= ?)
          )
+         AND (
+           (p.lost_found_at IS NOT NULL AND ? IS NOT NULL AND ABS(DATEDIFF(p.lost_found_at, ?)) <= ?)
+           OR (p.created_at >= DATE_SUB(UTC_TIMESTAMP(), INTERVAL ? DAY))
+         )
        ORDER BY
          (p.category_id = ?) DESC,
          (c.parent_id = ?) DESC,
@@ -275,9 +282,11 @@ export function createMatchingRepository(pool: SqlExecutor, withTransaction: Sql
          p.created_at DESC
        LIMIT ${limit}`,
         [
-          oppositeType, source.id, source.categoryId, source.parentCategoryId,
-          source.areaId, source.buildingId, source.lostFoundAt, source.lostFoundAt,
-          windowDays, source.categoryId, source.parentCategoryId, source.buildingId,
+          oppositeType, source.id,
+          source.categoryId, source.parentCategoryId, source.areaId, source.buildingId,
+          source.lostFoundAt, source.lostFoundAt, windowDays,
+          source.lostFoundAt, source.lostFoundAt, windowDays, windowDays,
+          source.categoryId, source.parentCategoryId, source.buildingId,
           source.lostFoundAt
         ]
       );

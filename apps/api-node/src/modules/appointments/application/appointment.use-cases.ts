@@ -99,7 +99,12 @@ export function createAppointmentUseCases(options: {
         if (!context.eligible || !await repo.assertSafe(context, tx)) throw new AppError("conflict", "Chưa đủ điều kiện đặt lịch hoặc vật phẩm đang do kho/tranh chấp xử lý");
         if (!Number.isFinite(date.getTime()) || date.getTime() < now().getTime() + 60_000 || date.getTime() > now().getTime() + 90 * 86_400_000)
           throw new AppError("invalid_input", "Lịch hẹn phải sau hiện tại ít nhất 1 phút và trong 90 ngày");
-        if (input.handoverPointId && !await repo.pointExists(input.handoverPointId, tx)) throw new AppError("invalid_input", "Điểm hẹn không còn hoạt động");
+        if (input.handoverPointId) {
+          if (!await repo.pointExists(input.handoverPointId, tx)) throw new AppError("invalid_input", "Điểm hẹn không còn hoạt động");
+          if (repo.checkSlotAvailability && !await repo.checkSlotAvailability(input.handoverPointId, date, tx)) {
+            throw new AppError("conflict", "Khung giờ tại điểm hẹn này đã có người đặt trước. Vui lòng chọn khung giờ khác.");
+          }
+        }
         if (await repo.active(input.claimId, tx)) throw new AppError("conflict", "Cuộc trao đổi đã có lịch hẹn đang hoạt động");
         const id = options.id();
         await repo.create({ id, claimId: input.claimId, handoverPointId: input.handoverPointId ?? null,

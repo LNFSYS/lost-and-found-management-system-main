@@ -43,6 +43,7 @@ export interface PostRepository {
   }>;
   findVisibleById(postId: string): Promise<PostRecord | null>;
   findVisibleByIds(postIds: string[]): Promise<PostRecord[]>;
+  findById(postId: string): Promise<PostRecord | null>;
   findOwnedById(postId: string, ownerId: string, queryable?: TransactionContext): Promise<PostRecord | null>;
   findOwnedByIdForUpdate(postId: string, ownerId: string, queryable: TransactionContext): Promise<PostRecord | null>;
   createPost(input: {

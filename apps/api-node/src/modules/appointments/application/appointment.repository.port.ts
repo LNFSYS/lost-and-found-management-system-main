@@ -25,6 +25,7 @@ export interface AppointmentRepository {
   create(input: { id: string; claimId: string; postId: string; proposerId: string; proposedAt: Date; handoverPointId: string | null; customLocation: string | null }, tx: TransactionContext): Promise<void>;
   active(claimId: string, tx: TransactionContext): Promise<boolean>;
   pointExists(id: string, tx: TransactionContext): Promise<boolean>;
+  checkSlotAvailability?(handoverPointId: string, proposedAt: Date, tx: TransactionContext): Promise<boolean>;
   update(appointment: Appointment, now: Date, tx: TransactionContext): Promise<void>;
   event(input: { id: string; appointmentId: string; actorId: string | null; action: string; key?: string; hash?: string; note?: string }, tx: TransactionContext): Promise<void>;
   dueReminders(now: Date, leadMinutes: number): Promise<string[]>;

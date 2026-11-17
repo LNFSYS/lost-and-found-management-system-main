@@ -13,6 +13,7 @@ export interface MatchCandidate {
   imageText: string;
   ocrText: string;
   categoryId: string | null;
+  categoryName?: string | null;
   parentCategoryId: string | null;
   areaId: string | null;
   buildingId: string | null;

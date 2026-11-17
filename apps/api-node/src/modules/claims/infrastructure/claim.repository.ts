@@ -598,8 +598,11 @@ export function createClaimRepository(pool: SqlExecutor) {
       note?: string;
       acceptedAt?: boolean;
       rejectedAt?: boolean;
+      expectedCurrentStatus?: ClaimStatus[];
     }, queryable: Queryable) {
-      await sqlExecutor(queryable).execute(
+      const allowed = input.expectedCurrentStatus ?? ["PENDING", "CONVERSATION_OPEN", "NEED_MORE_INFO"];
+      const placeholders = allowed.map(() => "?").join(", ");
+      const [result] = await sqlExecutor(queryable).execute<ResultSetHeader>(
         `UPDATE claims SET status = ?, finder_decision = ?,
           more_info_request = ?,
           rejection_reason = ?,
@@ -607,14 +610,18 @@ export function createClaimRepository(pool: SqlExecutor) {
           rejected_at = CASE WHEN ? THEN UTC_TIMESTAMP() WHEN ? THEN NULL ELSE rejected_at END,
           cancelled_at = NULL,
           updated_at = UTC_TIMESTAMP()
-       WHERE id = ?`,
+       WHERE id = ? AND status IN (${placeholders})`,
         [input.status, input.finderDecision,
         input.status === "NEED_MORE_INFO" ? input.note ?? null : null,
         input.status === "REJECTED" ? input.note ?? null : null,
         input.acceptedAt ? 1 : 0, input.status !== "ACCEPTED" ? 1 : 0,
         input.rejectedAt ? 1 : 0, input.status !== "REJECTED" ? 1 : 0,
-        input.claimId]
+        input.claimId,
+        ...allowed]
       );
+      if (result.affectedRows === 0) {
+        throw new AppError("conflict", "Yêu cầu đã được xử lý hoặc thay đổi trạng thái trước đó");
+      }
     },
 
     async updateFinderParticipant(claimId: string, userId: string, status: ConsentStatus, queryable: Queryable) {

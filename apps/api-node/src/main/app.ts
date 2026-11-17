@@ -22,7 +22,7 @@ export function createApp({ services = defaultServices, checkReadiness = async (
   if (trustProxy) {
     app.set("trust proxy", trustProxy);
   }
-  const { appointmentRoutes, activityRoutes, adminRoutes, handoverRoutes, authRoutes, claimRoutes, notificationRoutes, postRoutes, realtimeRoutes, returnRoutes, reportRoutes, adminConfigRoutes, configRoutes, staffRoutes } = createHttpRoutes(services);
+  const { appointmentRoutes, activityRoutes, adminRoutes, handoverRoutes, authRoutes, claimRoutes, notificationRoutes, postRoutes, realtimeRoutes, returnRoutes, reportRoutes, adminConfigRoutes, configRoutes, staffRoutes, radarRoutes } = createHttpRoutes(services);
   const allowedOrigins = parseAllowedOrigins(env.frontendUrl);
   app.disable("x-powered-by");
   app.use(helmet());
@@ -54,6 +54,7 @@ export function createApp({ services = defaultServices, checkReadiness = async (
   app.use("/api/notifications", notificationRoutes);
   app.use("/api/realtime", realtimeRoutes);
   app.use("/api/staff", staffRoutes);
+  app.use("/api/radar", radarRoutes);
   app.use("/api/handover-points", handoverRoutes);
   app.use("/api/admin/configs", adminConfigRoutes);
   app.use("/api/admin", adminRoutes);

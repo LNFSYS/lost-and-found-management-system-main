@@ -218,3 +218,59 @@ for (const viewer of ["owner", "staff", "admin"]) {
     assert.deepEqual(next.results,[]);
   });
 }
+
+test("runForPost dynamically resolves matching window days based on item sensitivity (S0 vs S1/S2)", async () => {
+  const capturedWindows: number[] = [];
+
+  const createServiceForSource = (candidate: Record<string, unknown>) => {
+    return createMatchingUseCases({
+      matchingRepository: {
+        getConfigNumber: async (_key: string, fallback: number) => fallback,
+        findCandidate: async () => candidate,
+        listOppositeCandidates: async (_source: unknown, _limit: number, candidateWindowDays: number) => {
+          capturedWindows.push(candidateWindowDays);
+          return [];
+        },
+        persistForSource: async () => true,
+        listForPost: async () => [],
+        lockUnnotifiedMatches: async () => []
+      } as unknown as MatchingRepository,
+      postRepository: {
+        findVisibleById: async () => ({ id: "post-1", userId: "user-1" }),
+        findVisibleByIds: async () => []
+      } as never,
+      idFactory: () => "fixture",
+      delivery: {
+        transaction: async (work: any) => work({}),
+        notifications: { create: async () => ({}) } as never,
+        emails: { enqueue: async () => {} } as never
+      }
+    });
+  };
+
+  // Case 1: Sensitive item (S1/S2) -> 180 days
+  const sensitiveService = createServiceForSource({
+    id: "post-sensitive",
+    userId: "user-1",
+    type: "LOST",
+    title: "Rơi CCCD mang tên Lê Văn B",
+    text: "cccd",
+    imageText: "",
+    ocrText: ""
+  });
+  await sensitiveService.runForPost("post-sensitive");
+  assert.equal(capturedWindows[0], 180);
+
+  // Case 2: Standard item (S0) -> 90 days
+  const standardService = createServiceForSource({
+    id: "post-standard",
+    userId: "user-2",
+    type: "LOST",
+    title: "Rơi áo khoác gió Uniqlo",
+    text: "ao khoac gio mau den",
+    imageText: "",
+    ocrText: ""
+  });
+  await standardService.runForPost("post-standard");
+  assert.equal(capturedWindows[1], 90);
+});

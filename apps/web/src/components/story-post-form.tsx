@@ -409,16 +409,20 @@ export function StoryPostForm({
       </div>
       <label className="story-field">
         <span>Thời điểm {type === "LOST" ? "phát hiện bị mất" : "nhặt được"}</span>
-        <span className="story-field__icon"><Clock3 /></span>
-        <input type="datetime-local" required max={localDateTimeValue()} value={draft.lostFoundAt} onChange={(event) => updateDraft("lostFoundAt", event.target.value)} />
+        <div className="story-field__control">
+          <input type="datetime-local" required max={localDateTimeValue()} value={draft.lostFoundAt} onChange={(event) => updateDraft("lostFoundAt", event.target.value)} />
+          <span className="story-field__icon"><Clock3 /></span>
+        </div>
       </label>
       <label className="story-field">
         <span>Khu vực</span>
-        <span className="story-field__icon"><MapPin /></span>
-        <select value={areaId} onChange={(event) => { setAreaId(event.target.value); updateDraft("buildingId", ""); }} disabled={!catalog}>
-          <option value="">Chọn khu vực</option>
-          {catalog?.areas.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
-        </select>
+        <div className="story-field__control">
+          <select value={areaId} onChange={(event) => { setAreaId(event.target.value); updateDraft("buildingId", ""); }} disabled={!catalog}>
+            <option value="">Chọn khu vực</option>
+            {catalog?.areas.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+          </select>
+          <span className="story-field__icon"><MapPin /></span>
+        </div>
       </label>
       <label className="story-field">
         <span>Tòa nhà / địa điểm</span>

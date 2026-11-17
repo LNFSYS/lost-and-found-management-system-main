@@ -17,6 +17,7 @@ import {
   MapPinned,
   PencilLine,
   Plus,
+  Radar,
   RefreshCw,
   Settings2,
   ShieldCheck,
@@ -26,8 +27,10 @@ import {
   UsersRound,
   X
 } from "lucide-react";
-import { useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { selectedAdminTab, type AdminTab } from "../components/admin-layout";
+import { CampusRadarDashboard } from "../components/campus-radar-dashboard";
+import { useAuth } from "../context/auth-context";
 import { api, type AdminAccessRole, type AdminArea, type AdminBuilding, type AdminCatalog, type AdminCategory, type AdminDashboardKpis, type AdminHandoverPoint, type AdminHandoverPointPayload, type AdminModerationReport, type AdminModerationReportDetail, type AdminReportEntityType, type AdminReportStatus, type AdminUser, type AdminUserStatus, type ConfigHistoryEntry, type ConfigValueType, type ModerationActionType, type SystemConfig } from "../services/api";
 
 type PendingAction = "" | "load" | "users" | "user" | "user-toggle" | "configs" | "config" | "config-history" | "reports" | "review" | "kpis" | "export" | "category" | "area" | "building" | "handover" | "toggle" | "delete";
@@ -157,8 +160,15 @@ function HandoverMapPicker({ imageUrl, x, y, onChange }: { imageUrl: string; x: 
 }
 
 export function AdminPage() {
+  const { user } = useAuth();
+  const isAdmin = user?.roles.includes("ADMIN") ?? false;
   const [searchParams, setSearchParams] = useSearchParams();
-  const activeTab = selectedAdminTab(searchParams.get("tab"));
+  const navigate = useNavigate();
+  const requestedTab = selectedAdminTab(searchParams.get("tab"));
+  const activeTab = !isAdmin && requestedTab === "users" ? "operations" : requestedTab;
+  useEffect(() => {
+    if (!isAdmin && requestedTab === "users") navigate("/admin/staff", { replace: true });
+  }, [isAdmin, navigate, requestedTab]);
   function setActiveTab(tab: AdminTab) {
     setSearchParams(previous => { const next = new URLSearchParams(previous); next.set("tab", tab); return next; });
   }
@@ -270,14 +280,18 @@ export function AdminPage() {
     }
   }
 
-  useEffect(() => {
-    void Promise.all([
+  function refreshAdminData() {
+    return Promise.all([
       loadCatalog(),
-      loadUsers(emptyUserFilters, true),
-      loadConfigs(emptyConfigFilters, true),
-      loadReports(emptyReportFilters, true),
-      loadKpis(emptyKpiFilters, true)
+      ...(isAdmin ? [loadUsers(userFilters, true)] : []),
+      loadConfigs(configFilters, true),
+      loadReports(reportFilters, true),
+      loadKpis(kpiFilters, true)
     ]).finally(() => setPendingAction(""));
+  }
+
+  useEffect(() => {
+    void refreshAdminData();
   }, []);
 
   const mainCategories = useMemo(() => catalog?.categories.filter((category) => !category.parentId) ?? [], [catalog]);
@@ -729,7 +743,7 @@ export function AdminPage() {
         <p className="eyebrow">ADMIN OPERATIONS</p>
         <h1>Bảng quản trị</h1>
       </div>
-      <button type="button" className="secondary-button" onClick={() => void Promise.all([loadCatalog(), loadUsers(userFilters, true), loadConfigs(configFilters, true), loadReports(reportFilters, true), loadKpis(kpiFilters, true)]).finally(() => setPendingAction(""))} disabled={pendingAction === "load"}><RefreshCw size={17} /> Làm mới</button>
+      <button type="button" className="secondary-button" onClick={() => void refreshAdminData()} disabled={pendingAction === "load"}><RefreshCw size={17} /> Làm mới</button>
     </header>
 
     <div className="admin-stats" aria-label="Thống kê nhanh">
@@ -753,6 +767,16 @@ export function AdminPage() {
           <label className="input-field"><span>Đến ngày</span><input type="date" value={kpiFilters.to} onChange={(event) => setKpiFilters({ ...kpiFilters, to: event.target.value })} required /></label>
           <button className="secondary-button" disabled={pendingAction === "kpis"}><Filter size={17} /> Lọc KPI</button>
         </form>
+
+        <div className="admin-operations-radar-banner">
+          <div>
+            <p className="eyebrow" style={{ color: "var(--fpt-blue)", margin: 0 }}>CAMPUS RADAR ANALYTICS</p>
+            <strong>Radar Điểm nóng Thất lạc & Phân tích Đột biến Tòa nhà</strong>
+          </div>
+          <button type="button" className="secondary-button" onClick={() => setActiveTab("radar")}>
+            <Radar size={16} /> Mở Radar Điểm nóng
+          </button>
+        </div>
 
         <div className="admin-kpi-metrics">
           <article><BarChart3 size={18} /><strong>{kpis?.totals.posts ?? 0}</strong><span>Bài đăng</span></article>
@@ -811,6 +835,8 @@ export function AdminPage() {
       </aside>
 
     </div>}
+
+    {activeTab === "radar" && <CampusRadarDashboard />}
 
     {activeTab === "moderation" && <div className="admin-operations-layout admin-moderation-layout">
       <section className="admin-panel admin-panel--list admin-reports-panel">

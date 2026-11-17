@@ -335,6 +335,7 @@ export interface ClaimRepository {
     note?: string;
     acceptedAt?: boolean;
     rejectedAt?: boolean;
+    expectedCurrentStatus?: ClaimStatus[];
   }, queryable: TransactionContext): Promise<void>;
   updateFinderParticipant(claimId: string, userId: string, status: ConsentStatus, queryable: TransactionContext): Promise<void>;
   findById(claimId: string, queryable?: TransactionContext): Promise<any | null>;

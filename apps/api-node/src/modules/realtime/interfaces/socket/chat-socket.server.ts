@@ -256,7 +256,7 @@ export function createChatSocketServer(input: {
     if (input.callSocketService) {
       const callService = input.callSocketService;
 
-      socket.on("call.initiate", (payload: unknown) => {
+      socket.on("call.initiate", async (payload: unknown) => {
         if (!session || !socket.connected) return;
         if (!payload || typeof payload !== "object") return;
         const data = payload as Record<string, unknown>;
@@ -265,6 +265,20 @@ export function createChatSocketServer(input: {
         const calleeId = typeof data.calleeId === "string" ? data.calleeId : null;
         const targetRoomId = (typeof data.roomId === "string" && data.roomId) ? data.roomId : roomId;
         const callId = `call_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+
+        if (targetRoomId && targetRoomId !== "global") {
+          try {
+            await bounded(() => input.authorizeRoom(userId, targetRoomId));
+          } catch {
+            socket.emit("call.ended", {
+              callId,
+              roomId: targetRoomId,
+              reason: "ERROR",
+              error: "Bạn không có quyền tham gia phòng trao đổi này."
+            });
+            return;
+          }
+        }
 
         if (!calleeId || calleeId === userId) {
           socket.emit("call.ended", {

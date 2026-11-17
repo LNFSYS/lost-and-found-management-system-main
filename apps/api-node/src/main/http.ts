@@ -1,3 +1,4 @@
+import express, { Router } from "express";
 import jwt from "jsonwebtoken";
 import { createAppointmentRoutes } from "../modules/appointments/interfaces/http/appointment.routes.js";
 import { createActivityRoutes } from "../modules/activity/interfaces/http/activity.routes.js";
@@ -26,6 +27,8 @@ import { createSystemConfigController } from "../modules/system-config/interface
 import { createStaffRoutes } from "../modules/warehouse/interfaces/http/staff.routes.js";
 import { createWarehouseController } from "../modules/warehouse/interfaces/http/warehouse.controller.js";
 import { createCustodyRequestController } from "../modules/warehouse/interfaces/http/custody-request.controller.js";
+import { createRadarController } from "../modules/radar/interfaces/http/radar.controller.js";
+import { createRadarRoutes } from "../modules/radar/interfaces/http/radar.routes.js";
 import type { AccessTokenPayload } from "../shared/domain/auth.js";
 import { env } from "../shared/infrastructure/config/env.js";
 import { refreshCookieOptions } from "../shared/interfaces/http/auth-cookie.js";
@@ -47,6 +50,7 @@ export function createHttpRoutes(services: ApplicationServices) {
   const systemConfigController = createSystemConfigController({ systemConfigService: services.systemConfigService });
   const warehouseController = createWarehouseController({ warehouseService: services.warehouseService, warehouseConversationService: services.warehouseConversationService });
   const custodyRequestController = createCustodyRequestController({ custodyRequestService: services.custodyRequestService });
+  const radarController = services.radarService ? createRadarController({ radarService: services.radarService }) : null;
   return {
     appointmentRoutes: createAppointmentRoutes(services.appointmentService,auth),
     activityRoutes: createActivityRoutes(services.activityService,auth),
@@ -62,5 +66,6 @@ export function createHttpRoutes(services: ApplicationServices) {
     adminConfigRoutes: createAdminConfigRoutes({ systemConfigController, auth }),
     configRoutes: createConfigRoutes({ systemConfigController }),
     staffRoutes: createStaffRoutes({ warehouseController, custodyRequestController, auth }),
+    radarRoutes: radarController ? createRadarRoutes({ radarController, auth }) : Router(),
   };
 }

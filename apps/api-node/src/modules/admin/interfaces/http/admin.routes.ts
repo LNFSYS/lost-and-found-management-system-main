@@ -16,7 +16,13 @@ export function createAdminRoutes({ adminCatalogController, adminReportingContro
   const adminRoutes = Router();
   const handoverMapUpload = multer({
     storage: multer.memoryStorage(),
-    limits: { fileSize: 2 * 1024 * 1024, files: 1 }
+    limits: { fileSize: 2 * 1024 * 1024, files: 1, fields: 10, fieldSize: 1024 * 1024, parts: 20 },
+    fileFilter: (_req, file, cb) => {
+      if (!["image/jpeg", "image/png", "image/webp"].includes(file.mimetype)) {
+        return cb(new HttpError(400, "Định dạng ảnh bản đồ không hợp lệ. Chỉ chấp nhận JPEG, PNG hoặc WEBP."));
+      }
+      cb(null, true);
+    }
   });
   function uploadHandoverMap(request: Request, response: Response, next: NextFunction) {
     handoverMapUpload.single("file")(request, response, (error: unknown) => {
@@ -29,20 +35,21 @@ export function createAdminRoutes({ adminCatalogController, adminReportingContro
       next(error);
     });
   }
-  adminRoutes.use(requireAuth, requireAnyRole("ADMIN"));
+  const requireAdmin = requireAnyRole("ADMIN");
+  adminRoutes.use(requireAuth, requireAnyRole("ADMIN", "STAFF"));
   adminRoutes.get("/catalog", (req, res, next) => adminCatalogController.getCatalog(req, res).catch(next));
   adminRoutes.get("/reports", (req, res, next) => adminReportingController.listReports(req, res).catch(next));
   adminRoutes.get("/reports/:id", (req, res, next) => adminReportingController.getReportDetail(req, res).catch(next));
   adminRoutes.patch("/reports/:id/review", (req, res, next) => adminReportingController.reviewReport(req, res).catch(next));
   adminRoutes.get("/dashboard/kpis", (req, res, next) => adminReportingController.getDashboardKpis(req, res).catch(next));
   adminRoutes.post("/statistics/export", (req, res, next) => adminReportingController.exportStatistics(req, res).catch(next));
-  adminRoutes.get("/users", (req, res, next) => adminUserController.listUsers(req, res).catch(next));
-  adminRoutes.post("/users", (req, res, next) => adminUserController.createUser(req, res).catch(next));
-  adminRoutes.get("/users/:id", (req, res, next) => adminUserController.getUser(req, res).catch(next));
-  adminRoutes.patch("/users/:id", (req, res, next) => adminUserController.updateUser(req, res).catch(next));
-  adminRoutes.patch("/users/:id/role", (req, res, next) => adminUserController.changeRole(req, res).catch(next));
-  adminRoutes.patch("/users/:id/status", (req, res, next) => adminUserController.changeStatus(req, res).catch(next));
-  adminRoutes.delete("/users/:id", (req, res, next) => adminUserController.deleteUser(req, res).catch(next));
+  adminRoutes.get("/users", requireAdmin, (req, res, next) => adminUserController.listUsers(req, res).catch(next));
+  adminRoutes.post("/users", requireAdmin, (req, res, next) => adminUserController.createUser(req, res).catch(next));
+  adminRoutes.get("/users/:id", requireAdmin, (req, res, next) => adminUserController.getUser(req, res).catch(next));
+  adminRoutes.patch("/users/:id", requireAdmin, (req, res, next) => adminUserController.updateUser(req, res).catch(next));
+  adminRoutes.patch("/users/:id/role", requireAdmin, (req, res, next) => adminUserController.changeRole(req, res).catch(next));
+  adminRoutes.patch("/users/:id/status", requireAdmin, (req, res, next) => adminUserController.changeStatus(req, res).catch(next));
+  adminRoutes.delete("/users/:id", requireAdmin, (req, res, next) => adminUserController.deleteUser(req, res).catch(next));
   adminRoutes.post("/categories", (req, res, next) => adminCatalogController.createCategory(req, res).catch(next));
   adminRoutes.patch("/categories/:id", (req, res, next) => adminCatalogController.updateCategory(req, res).catch(next));
   adminRoutes.delete("/categories/:id", (req, res, next) => adminCatalogController.deleteCategory(req, res).catch(next));

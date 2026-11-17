@@ -212,6 +212,52 @@ export interface AdminStatisticsExportResponse {
   format: "CSV" | "JSON";
   content: string;
 }
+export interface RadarTopCategory {
+  categoryId: string;
+  categoryName: string;
+  lostCount: number;
+}
+export interface RadarHotspot {
+  buildingId: string | null;
+  buildingName: string | null;
+  areaName: string | null;
+  incidentCount: number;
+  commonCategories: string | null;
+}
+export interface RadarAlert {
+  id: string;
+  eventId: string;
+  severity: "WATCH" | "WARNING" | "CRITICAL";
+  status: "OPEN" | "ACKNOWLEDGED" | "RESOLVED" | "DISMISSED";
+  observedCount: number;
+  expectedMean: number;
+  zScore: number;
+  windowStart: string;
+  windowEnd: string;
+  lastDetectedAt: string;
+  createdAt: string;
+  sourceReference: string | null;
+  eventType: string | null;
+  buildingName: string | null;
+  areaName: string | null;
+  categoryName: string | null;
+}
+export interface RadarAnalytics {
+  from: string;
+  to: string;
+  categories: RadarTopCategory[];
+  hotspots: RadarHotspot[];
+  alerts: RadarAlert[];
+}
+export interface RadarAnalyticsFilters {
+  from?: string;
+  to?: string;
+}
+export interface RadarAcknowledgeResponse {
+  success: boolean;
+  id: string;
+  status: string;
+}
 export interface ReturnFeedbackRecord {
   id: string;
   appointmentId: string;
@@ -1475,6 +1521,15 @@ export const api = {
   withdrawMyReport: (id: string) => raw<UserReport>(`/reports/mine/${id}/withdraw`, { method: "POST" }),
   getAdminDashboardKpis: (filters: AdminKpiFilters = {}) => raw<AdminDashboardKpis>(`/admin/dashboard/kpis${queryString(filters)}`),
   exportAdminStatistics: (payload: AdminStatisticsExportPayload) => raw<AdminStatisticsExportResponse>("/admin/statistics/export", { method: "POST", body: JSON.stringify(payload) }),
+  getRadarAnalytics: (filtersOrFrom?: RadarAnalyticsFilters | string, to?: string) => {
+    const filters: RadarAnalyticsFilters =
+      typeof filtersOrFrom === "string"
+        ? { from: filtersOrFrom, to }
+        : (filtersOrFrom ?? {});
+    return raw<RadarAnalytics>(`/radar/analytics${queryString(filters)}`);
+  },
+  acknowledgeRadarAlert: (id: string) =>
+    raw<RadarAcknowledgeResponse>(`/radar/alerts/${id}/acknowledge`, { method: "POST" }),
   listSystemConfigs: (filters: SystemConfigFilters = {}) => raw<SystemConfigListResponse>(`/admin/configs${queryString(filters)}`),
   getSystemConfig: (id: string) => raw<SystemConfig>(`/admin/configs/${id}`),
   createSystemConfig: (payload: Required<Pick<SystemConfigPayload, "configKey" | "configValue" | "valueType">> & SystemConfigPayload) => raw<SystemConfig>("/admin/configs", { method: "POST", body: JSON.stringify(payload) }),
