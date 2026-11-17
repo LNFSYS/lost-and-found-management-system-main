@@ -161,13 +161,14 @@ function HandoverMapPicker({ imageUrl, x, y, onChange }: { imageUrl: string; x: 
 
 export function AdminPage() {
   const { user } = useAuth();
+  const isAdmin = user?.roles.includes("ADMIN") ?? false;
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const requestedTab = selectedAdminTab(searchParams.get("tab"));
-  const activeTab = !user?.roles.includes("ADMIN") && requestedTab === "users" ? "operations" : requestedTab;
+  const activeTab = !isAdmin && requestedTab === "users" ? "operations" : requestedTab;
   useEffect(() => {
-    if (!user?.roles.includes("ADMIN") && requestedTab === "users") navigate("/admin/staff", { replace: true });
-  }, [navigate, requestedTab, user]);
+    if (!isAdmin && requestedTab === "users") navigate("/admin/staff", { replace: true });
+  }, [isAdmin, navigate, requestedTab]);
   function setActiveTab(tab: AdminTab) {
     setSearchParams(previous => { const next = new URLSearchParams(previous); next.set("tab", tab); return next; });
   }
@@ -279,14 +280,18 @@ export function AdminPage() {
     }
   }
 
-  useEffect(() => {
-    void Promise.all([
+  function refreshAdminData() {
+    return Promise.all([
       loadCatalog(),
-      loadUsers(emptyUserFilters, true),
-      loadConfigs(emptyConfigFilters, true),
-      loadReports(emptyReportFilters, true),
-      loadKpis(emptyKpiFilters, true)
+      ...(isAdmin ? [loadUsers(userFilters, true)] : []),
+      loadConfigs(configFilters, true),
+      loadReports(reportFilters, true),
+      loadKpis(kpiFilters, true)
     ]).finally(() => setPendingAction(""));
+  }
+
+  useEffect(() => {
+    void refreshAdminData();
   }, []);
 
   const mainCategories = useMemo(() => catalog?.categories.filter((category) => !category.parentId) ?? [], [catalog]);
@@ -738,7 +743,7 @@ export function AdminPage() {
         <p className="eyebrow">ADMIN OPERATIONS</p>
         <h1>Bảng quản trị</h1>
       </div>
-      <button type="button" className="secondary-button" onClick={() => void Promise.all([loadCatalog(), loadUsers(userFilters, true), loadConfigs(configFilters, true), loadReports(reportFilters, true), loadKpis(kpiFilters, true)]).finally(() => setPendingAction(""))} disabled={pendingAction === "load"}><RefreshCw size={17} /> Làm mới</button>
+      <button type="button" className="secondary-button" onClick={() => void refreshAdminData()} disabled={pendingAction === "load"}><RefreshCw size={17} /> Làm mới</button>
     </header>
 
     <div className="admin-stats" aria-label="Thống kê nhanh">
