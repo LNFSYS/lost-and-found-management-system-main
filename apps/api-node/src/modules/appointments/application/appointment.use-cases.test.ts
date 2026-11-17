@@ -94,3 +94,18 @@ test("Failed proposal transaction does not publish realtime notifications", asyn
   await assert.rejects(f.service.create("finder",{claimId:"claim",proposedAt:"2026-10-07T00:30:00Z",customLocation:"Library entrance",requestKey:randomUUID()}),/Controlled transaction failure/);
   assert.deepEqual(deliveries,[]);assert.deepEqual(f.emails,[]);
 });
+
+test("Proposal rejects overlapping time slot when handover point slot is already booked", async () => {
+  const f = fixture();
+  f.repo.checkSlotAvailability = async () => false;
+  const input = {
+    claimId: "claim",
+    proposedAt: "2026-10-07T00:30:00Z",
+    handoverPointId: "desk-alpha",
+    requestKey: randomUUID()
+  };
+  await assert.rejects(
+    f.service.create("finder", input),
+    (error: unknown) => error instanceof Error && "code" in error && error.code === "conflict"
+  );
+});

@@ -12,13 +12,21 @@ export function createPostRoutes({ postController, auth }: {
 }) {
   const { optionalAuth, requireAuth } = auth;
   const postRoutes = Router();
+  const imageFileFilter: multer.Options["fileFilter"] = (_req, file, cb) => {
+    if (!mediaPolicy.allowedMimeTypes.includes(file.mimetype as any)) {
+      return cb(new HttpError(400, "Định dạng tệp ảnh không được hỗ trợ. Chỉ chấp nhận JPEG, PNG hoặc WEBP."));
+    }
+    cb(null, true);
+  };
   const mediaUpload = multer({
     storage: multer.memoryStorage(),
-    limits: { fileSize: mediaPolicy.maxBytes, files: 1 }
+    limits: { fileSize: mediaPolicy.maxBytes, files: 1, fields: 10, fieldSize: 1024 * 1024, parts: 20 },
+    fileFilter: imageFileFilter
   });
   const analysisUpload = multer({
     storage: multer.memoryStorage(),
-    limits: { fileSize: mediaPolicy.maxBytes, files: 5 }
+    limits: { fileSize: mediaPolicy.maxBytes, files: 5, fields: 10, fieldSize: 1024 * 1024, parts: 20 },
+    fileFilter: imageFileFilter
   });
   const imageAnalysisLimit = rateLimit({
     windowMs: 15 * 60_000,

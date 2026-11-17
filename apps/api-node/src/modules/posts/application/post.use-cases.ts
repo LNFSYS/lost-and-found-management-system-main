@@ -5,7 +5,7 @@ import type { TransactionRunner } from "../../../shared/application/transaction.
 import { AppError } from "../../../shared/domain/app-error.js";
 import type { AccessTokenPayload } from "../../../shared/domain/auth.js";
 import { mediaPolicy, validateImageUpload } from "../../../shared/domain/media.js";
-import { normalizeVietnameseText as normalizePostText } from "../../../shared/domain/text.js";
+import { maskContactInfo, normalizeVietnameseText as normalizePostText } from "../../../shared/domain/text.js";
 import type { ImageUpload } from "../../../shared/domain/upload.js";
 import type { MatchingRepository, MatchingUseCases } from "../../matching/application/index.js";
 import { redactPrivateMatchExplanation, type MatchExplanation } from "../../matching/application/index.js";
@@ -177,6 +177,35 @@ export function createPostUseCases(options: PostDependencies) {
     }
   }
 
+  function maskMatchExplanation(explanation: MatchExplanation | null): MatchExplanation | null {
+    if (!explanation) return null;
+    return {
+      ...explanation,
+      summary: maskContactInfo(explanation.summary) ?? explanation.summary,
+      reasons: explanation.reasons.map((r) => maskContactInfo(r) ?? r),
+      locationReason: maskContactInfo(explanation.locationReason) ?? explanation.locationReason,
+      matchedTokens: explanation.matchedTokens.map((t) => maskContactInfo(t) ?? t),
+      matchedOcrTokens: explanation.matchedOcrTokens.map((t) => maskContactInfo(t) ?? t),
+      aiVisualAnalysis: explanation.aiVisualAnalysis
+        ? {
+            ...explanation.aiVisualAnalysis,
+            sourceSummary: explanation.aiVisualAnalysis.sourceSummary
+              ? {
+                  ...explanation.aiVisualAnalysis.sourceSummary,
+                  ocrText: maskContactInfo(explanation.aiVisualAnalysis.sourceSummary.ocrText) ?? null
+                }
+              : undefined,
+            candidateSummary: explanation.aiVisualAnalysis.candidateSummary
+              ? {
+                  ...explanation.aiVisualAnalysis.candidateSummary,
+                  ocrText: maskContactInfo(explanation.aiVisualAnalysis.candidateSummary.ocrText) ?? null
+                }
+              : undefined
+          }
+        : undefined
+    };
+  }
+
   function serializeMatchingResult(
     source: PostRecord,
     payload: Awaited<ReturnType<typeof matchingService.getStoredResults>>,
@@ -184,10 +213,16 @@ export function createPostUseCases(options: PostDependencies) {
     sensitiveInfo?: SensitiveDetectionResult
   ) {
     function visibleExplanation(candidate: PostRecord, explanation: MatchExplanation | null) {
-      if (!explanation || candidate.visibilityMode !== "PRIVATE_DETAILS" || canSeePrivatePost(viewer, candidate)) {
-        return explanation;
+      if (!explanation) return null;
+      let exp = explanation;
+      const seesPrivate = canSeePrivatePost(viewer, candidate);
+      if (candidate.visibilityMode === "PRIVATE_DETAILS" && !seesPrivate) {
+        exp = redactPrivateMatchExplanation(exp);
       }
-      return redactPrivateMatchExplanation(explanation);
+      if (!seesPrivate) {
+        exp = maskMatchExplanation(exp)!;
+      }
+      return exp;
     }
 
     return {
@@ -203,24 +238,34 @@ export function createPostUseCases(options: PostDependencies) {
       isSensitiveDocument: sensitiveInfo?.isSensitive ?? false,
       documentType: sensitiveInfo?.documentType ?? undefined,
       sensitiveReason: sensitiveInfo?.sensitiveReason ?? undefined,
-      results: sensitiveInfo?.isSensitive ? [] : payload.results.map(({ match, candidate }) => ({
-        matchId: match.id,
-        candidate: serializePost(candidate, viewer),
-        totalScore: match.totalScore,
-        scoreTier: match.scoreTier,
-        scores: {
-          text: match.textScore,
-          category: match.categoryScore,
-          location: match.locationScore,
-          time: match.timeScore,
-          image: match.imageScore,
-          ocr: match.ocrScore
-        },
-        explanation: visibleExplanation(candidate, match.explanation),
-        matcherVersion: match.matcherVersion,
-        calculatedAt: match.updatedAt,
-        feedback: match.feedback
-      }))
+      results: sensitiveInfo?.isSensitive ? [] : payload.results.map(({ match, candidate }) => {
+        const seesPrivate = canSeePrivatePost(viewer, candidate);
+        const serializedCandidate = serializePost(candidate, viewer);
+        if (!seesPrivate) {
+          serializedCandidate.contactInfo = null;
+          if (serializedCandidate.description) {
+            serializedCandidate.description = maskContactInfo(serializedCandidate.description);
+          }
+        }
+        return {
+          matchId: match.id,
+          candidate: serializedCandidate,
+          totalScore: match.totalScore,
+          scoreTier: match.scoreTier,
+          scores: {
+            text: match.textScore,
+            category: match.categoryScore,
+            location: match.locationScore,
+            time: match.timeScore,
+            image: match.imageScore,
+            ocr: match.ocrScore
+          },
+          explanation: visibleExplanation(candidate, match.explanation),
+          matcherVersion: match.matcherVersion,
+          calculatedAt: match.updatedAt,
+          feedback: match.feedback
+        };
+      })
     };
   }
 
@@ -248,8 +293,16 @@ export function createPostUseCases(options: PostDependencies) {
     },
 
     async getPost(postId: string, viewer?: AccessTokenPayload) {
-      const post = await postRepository.findVisibleById(postId);
+      const post = await postRepository.findById(postId);
       if (!post) throw new AppError("not_found", "Không tìm thấy bài đăng");
+      const isOwner = Boolean(viewer && viewer.sub === post.userId);
+      const isReviewer = canReview(viewer);
+      if (post.status === "HIDDEN" && !isOwner && !isReviewer) {
+        throw new AppError("not_found", "Không tìm thấy bài đăng");
+      }
+      if (post.visibilityMode === "PRIVATE_DETAILS" && !isOwner && !isReviewer) {
+        throw new AppError("not_found", "Không tìm thấy bài đăng");
+      }
       return serializePost(post, viewer);
     },
 

@@ -14,10 +14,16 @@ export function createAuthRoutes({ authController, auth }: {
   const authRoutes = Router();
   const avatarUpload = multer({
     storage: multer.memoryStorage(),
-    limits: { fileSize: avatarMediaPolicy.maxBytes, files: 1 }
+    limits: { fileSize: avatarMediaPolicy.maxBytes, files: 1, fields: 10, fieldSize: 1024 * 1024, parts: 20 },
+    fileFilter: (_req, file, cb) => {
+      if (!avatarMediaPolicy.allowedMimeTypes.includes(file.mimetype as any)) {
+        return cb(new HttpError(400, "Định dạng ảnh đại diện không hợp lệ. Chỉ chấp nhận JPEG, PNG hoặc WEBP."));
+      }
+      cb(null, true);
+    }
   });
   const otpLimit = rateLimit({ windowMs: 10 * 60_000, limit: 5, standardHeaders: true, legacyHeaders: false, message: { message: "Bạn đã yêu cầu quá nhiều mã OTP. Vui lòng thử lại sau." } });
-  const loginLimit = rateLimit({ windowMs: 15 * 60_000, limit: 20, standardHeaders: true, legacyHeaders: false, skipSuccessfulRequests: true, message: { message: "Bạn đã thử đăng nhập quá nhiều lần. Vui lòng thử lại sau." } });
+  const loginLimit = rateLimit({ windowMs: 15 * 60_000, limit: 10, standardHeaders: true, legacyHeaders: false, skipSuccessfulRequests: true, message: { message: "Bạn đã thử đăng nhập quá nhiều lần. Vui lòng thử lại sau." } });
   const sensitiveLimit = rateLimit({ windowMs: 15 * 60_000, limit: 10, standardHeaders: true, legacyHeaders: false, message: { message: "Quá nhiều yêu cầu. Vui lòng thử lại sau." } });
   // Separate cold starts/401 recovery from credential mutations; keep an IP abuse ceiling.
   const refreshLimit = rateLimit({ windowMs: 60_000, limit: 120, standardHeaders: true, legacyHeaders: false, message: { message: "Khôi phục phiên đang bị giới hạn. Vui lòng thử lại sau." } });

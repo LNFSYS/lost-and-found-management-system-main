@@ -1,7 +1,13 @@
 import { z } from "zod";
 
 const email = z.string().trim().email().max(255);
-const password = z.string().min(8, "Mật khẩu tối thiểu 8 ký tự").max(72);
+const weakPasswords = new Set(["12345678", "123456789", "87654321", "abcdefgh", "00000000"]);
+const password = z
+  .string()
+  .min(8, "Mật khẩu tối thiểu 8 ký tự")
+  .max(72)
+  .refine((val) => /[A-Za-z]/.test(val) && /[\d\W_]/.test(val), "Mật khẩu phải chứa ít nhất một chữ cái và một chữ số hoặc ký tự đặc biệt")
+  .refine((val) => !weakPasswords.has(val.toLowerCase()), "Mật khẩu quá đơn giản, vui lòng chọn mật khẩu khác");
 const otp = z.string().trim().regex(/^\d{6}$/, "OTP gồm 6 chữ số");
 
 export const requestOtpSchema = z.object({ email });

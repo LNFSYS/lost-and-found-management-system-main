@@ -23,13 +23,21 @@ export function createStaffRoutes({ warehouseController, custodyRequestControlle
   staffRoutes.use(requireAuth, requireAnyRole("STAFF", "ADMIN"));
 
   // Warehouse items
+  const imageFileFilter: multer.Options["fileFilter"] = (_req, file, cb) => {
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.mimetype)) {
+      return cb(new HttpError(400, "Định dạng tệp ảnh không hợp lệ. Chỉ chấp nhận JPEG, PNG hoặc WEBP."));
+    }
+    cb(null, true);
+  };
   const proofUpload = multer({
     storage: multer.memoryStorage(),
-    limits: { fileSize: 5 * 1024 * 1024, files: 1 }
+    limits: { fileSize: 5 * 1024 * 1024, files: 1, fields: 10, fieldSize: 1024 * 1024, parts: 20 },
+    fileFilter: imageFileFilter
   });
   const conversationUpload = multer({
     storage: multer.memoryStorage(),
-    limits: { fileSize: 5 * 1024 * 1024, files: 3 }
+    limits: { fileSize: 5 * 1024 * 1024, files: 3, fields: 10, fieldSize: 1024 * 1024, parts: 20 },
+    fileFilter: imageFileFilter
   }).array("images", 3);
 
   function uploadProofMiddleware(request: Request, response: Response, next: NextFunction) {

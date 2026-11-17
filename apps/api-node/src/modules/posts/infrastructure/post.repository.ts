@@ -190,12 +190,19 @@ export function buildListWhere(filters: ListPostsQuery | ListOwnPostsQuery, owne
     }
   } else {
     if (filters.status) {
-      where.push("p.status = ?");
-      values.push(filters.status);
+      if (!scope.allPrivate && (filters.status as string) === "HIDDEN") {
+        where.push("1 = 0");
+      } else {
+        where.push("p.status = ?");
+        values.push(filters.status);
+      }
     } else {
       where.push("p.status IN ('OPEN', 'MATCHED')");
     }
-    if (ownerId || scope.allPrivate) {
+    if (!scope.allPrivate) {
+      where.push("p.status <> 'HIDDEN'");
+    }
+    if (scope.allPrivate) {
       // The application has authorized unrestricted private-row filtering.
     } else if (scope.privateOwnerId) {
       where.push("(p.visibility_mode = 'PUBLIC' OR p.user_id = ?)");
@@ -325,6 +332,10 @@ export function createPostRepository(pool: SqlExecutor) {
 
     findVisibleById(postId: string) {
       return findPost("p.id = ? AND p.deleted_at IS NULL AND p.status <> 'HIDDEN'", [postId]);
+    },
+
+    findById(postId: string) {
+      return findPost("p.id = ? AND p.deleted_at IS NULL", [postId]);
     },
 
     async findVisibleByIds(postIds: string[]) {

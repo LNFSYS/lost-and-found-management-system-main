@@ -24,9 +24,17 @@ export const listAdminUsersQuerySchema = z.object({
   pageSize: z.coerce.number().int().min(1).max(100).default(20)
 });
 
+const weakPasswords = new Set(["12345678", "123456789", "87654321", "abcdefgh", "00000000"]);
+const adminPassword = z
+  .string()
+  .min(8, "Mật khẩu tối thiểu 8 ký tự")
+  .max(72)
+  .refine((val) => /[A-Za-z]/.test(val) && /[\d\W_]/.test(val), "Mật khẩu phải chứa ít nhất một chữ cái và một chữ số hoặc ký tự đặc biệt")
+  .refine((val) => !weakPasswords.has(val.toLowerCase()), "Mật khẩu quá đơn giản, vui lòng chọn mật khẩu khác");
+
 export const createAdminUserSchema = z.object({
   email,
-  password: z.string().min(8, "Mat khau toi thieu 8 ky tu").max(72),
+  password: adminPassword,
   fullName: z.string().trim().min(2).max(160),
   studentCode: nullableText(40),
   phoneNumber: nullableText(30),

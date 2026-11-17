@@ -1,4 +1,5 @@
 import type { RowDataPacket, ResultSetHeader } from "mysql2";
+import { AppError } from "../../../shared/domain/app-error.js";
 import type { TransactionContext } from "../../../shared/application/transaction.js";
 import { sqlExecutor, type SqlExecutor } from "../../../shared/infrastructure/transaction-context.js";
 import { claimantIdSql, finderIdSql } from "../../../shared/infrastructure/claim-identity-sql.js";
@@ -99,11 +100,35 @@ export function createAppointmentRepository(pool: SqlExecutor): AppointmentRepos
     async pointExists(id, tx) {
       const [rows] = await sqlExecutor(tx).execute<RowDataPacket[]>("SELECT id FROM handover_points WHERE id=? AND is_active=TRUE FOR SHARE", [id]); return rows.length > 0;
     },
+    async checkSlotAvailability(handoverPointId, proposedAt, tx) {
+      const db = sqlExecutor(tx);
+      const [points] = await db.execute<RowDataPacket[]>(
+        "SELECT id FROM handover_points WHERE id=? AND is_active=TRUE FOR UPDATE",
+        [handoverPointId]
+      );
+      if (!points.length) return false;
+      const [conflicts] = await db.execute<RowDataPacket[]>(
+        `SELECT id FROM return_appointments
+         WHERE handover_point_id = ?
+           AND status IN ('PENDING', 'ACCEPTED', 'RESCHEDULED')
+           AND ABS(TIMESTAMPDIFF(MINUTE, proposed_at, ?)) < 15
+         LIMIT 1 FOR UPDATE`,
+        [handoverPointId, proposedAt]
+      );
+      return conflicts.length === 0;
+    },
     async update(a, time, tx) {
       const db = sqlExecutor(tx);
-      await db.execute(`UPDATE return_appointments SET status=?,accepted_at=IF(?='ACCEPTED',COALESCE(accepted_at,?),accepted_at),
+      const isCompleting = a.status === "COMPLETED";
+      const [updateResult] = await db.execute<ResultSetHeader>(
+        `UPDATE return_appointments SET status=?,accepted_at=IF(?='ACCEPTED',COALESCE(accepted_at,?),accepted_at),
         finder_confirmed_at=IF(?='CONFIRMED',COALESCE(finder_confirmed_at,?),NULL),owner_confirmed_at=IF(?='CONFIRMED',COALESCE(owner_confirmed_at,?),NULL),
-        completed_at=?,updated_at=? WHERE id=?`, [a.status,a.status,time,a.finderResponse,time,a.ownerResponse,time,a.completedAt ? new Date(a.completedAt) : null,time,a.id]);
+        completed_at=?,updated_at=? WHERE id=?${isCompleting ? " AND status = 'ACCEPTED' AND (completed_at IS NULL OR status <> 'COMPLETED')" : ""}`,
+        [a.status,a.status,time,a.finderResponse,time,a.ownerResponse,time,a.completedAt ? new Date(a.completedAt) : null,time,a.id]
+      );
+      if (isCompleting && updateResult.affectedRows === 0) {
+        throw new AppError("conflict", "Lịch hẹn đã được hoàn tất trước đó");
+      }
       await db.execute("UPDATE return_appointment_workflows SET version=?,finder_response=?,owner_response=?,no_show_user_id=? WHERE appointment_id=?", [a.version,a.finderResponse,a.ownerResponse,a.noShowUserId,a.id]);
       if (a.status === "COMPLETED") await db.execute(`UPDATE posts p JOIN claims c ON p.id IN (c.post_id,c.lost_post_id,c.source_found_post_id)
         SET p.status='RESOLVED',p.resolved_at=?,p.updated_at=? WHERE c.id=? AND p.deleted_at IS NULL`, [time,time,a.claimId]);
