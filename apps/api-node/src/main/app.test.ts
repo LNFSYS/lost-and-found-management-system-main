@@ -402,9 +402,11 @@ test("admin HTTP routes enforce roles and expose user/config CRUD contracts", as
       assert.equal(staffResponse.status, 403);
 
       const staffReportResponse = await fetch(`${baseUrl}/api/admin/reports`, { headers: jsonHeaders(["USER", "STAFF"]) });
-      assert.equal(staffReportResponse.status, 403);
+      assert.equal(staffReportResponse.status, 200);
       const staffReportDetailResponse = await fetch(`${baseUrl}/api/admin/reports/${reportId}`, { headers: jsonHeaders(["USER", "STAFF"]) });
-      assert.equal(staffReportDetailResponse.status, 403);
+      assert.equal(staffReportDetailResponse.status, 200);
+      const staffConfigResponse = await fetch(`${baseUrl}/api/admin/configs?page=1&pageSize=20`, { headers: jsonHeaders(["USER", "STAFF"]) });
+      assert.equal(staffConfigResponse.status, 200);
 
       const usersResponse = await fetch(`${baseUrl}/api/admin/users?page=1&pageSize=20`, { headers: jsonHeaders() });
       assert.equal(usersResponse.status, 200);

@@ -8,11 +8,12 @@ const maxChatImages = 3;
 const maxChatImageBytes = 5 * 1024 * 1024;
 const allowedImageTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
 
-export function WarehouseConversationChat({ mode, intakeKind, warehouseItemId, onExtraction, disabled = false, allowImages = true }: {
+export function WarehouseConversationChat({ mode, intakeKind, warehouseItemId, onExtraction, onImagesSelected, disabled = false, allowImages = true }: {
   mode: WarehouseConversationMode;
   intakeKind?: "WALK_IN" | "CUSTODY_REQUEST";
   warehouseItemId?: string;
   onExtraction: (result: WarehouseConversationExtraction) => void;
+  onImagesSelected?: (files: File[]) => void;
   disabled?: boolean;
   allowImages?: boolean;
 }) {
@@ -55,6 +56,7 @@ export function WarehouseConversationChat({ mode, intakeKind, warehouseItemId, o
       return { file, previewUrl };
     });
     setAttachments(previous => [...previous, ...next]);
+    if (next.length) onImagesSelected?.(next.map(item => item.file));
   }
 
   function removeImage(image: AttachedImage) {
@@ -142,7 +144,7 @@ export function WarehouseConversationChat({ mode, intakeKind, warehouseItemId, o
           <img src={image.previewUrl} alt={`Ảnh đính kèm ${index + 1}`} />
           <button type="button" aria-label={`Xóa ảnh đính kèm ${index + 1}`} disabled={disabled || busy} onClick={() => removeImage(image)}><X size={14} /></button>
         </div>)}
-        <small>{mode === "RETURN" ? "Ảnh đính kèm dùng để AI trích xuất thông tin người nhận; vui lòng kiểm tra trực tiếp." : "Ảnh chỉ dùng để gợi ý tình trạng; vẫn cần tải ảnh chứng minh ở biểu mẫu."}</small>
+        <small>{mode === "RETURN" ? "Ảnh đính kèm dùng để AI trích xuất thông tin người nhận; vui lòng kiểm tra trực tiếp." : "Ảnh đính kèm được tự động lưu vào ảnh tiếp nhận của hồ sơ kho."}</small>
       </div>}
       <div className="warehouse-ai-chat__composer">
         {allowImages && <><input ref={fileInput} className="warehouse-ai-chat__file-input" type="file" accept="image/jpeg,image/png,image/webp" multiple disabled={disabled || busy || attachments.length >= maxChatImages} onChange={event => { selectImages(event.currentTarget.files); event.currentTarget.value = ""; }} />

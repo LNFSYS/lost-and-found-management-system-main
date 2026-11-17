@@ -1,5 +1,4 @@
 import * as ort from "onnxruntime-node";
-import Jimp from "jimp";
 import sharp from "sharp";
 import fs from "node:fs";
 import path from "node:path";
@@ -151,43 +150,36 @@ export class DamageInspectionService {
       );
     }
 
-    // 1. Read & preprocess image (supports JPEG, PNG, WEBP)
-    let originalImage: Jimp;
+    // 1. Decode and resize with Sharp. It supports JPEG, PNG and WebP without
+    // loading the legacy Jimp dependency tree.
+    let origW: number;
+    let origH: number;
+    let resizedPixels: Buffer;
     try {
-      const isWebP =
-        imageBuffer.length > 12 &&
-        imageBuffer.toString("ascii", 0, 4) === "RIFF" &&
-        imageBuffer.toString("ascii", 8, 12) === "WEBP";
-
-      if (isWebP) {
-        const pngBuffer = await sharp(imageBuffer).png().toBuffer();
-        originalImage = await Jimp.read(pngBuffer);
-      } else {
-        originalImage = await Jimp.read(imageBuffer);
+      const decoder = sharp(imageBuffer, { failOn: "error" });
+      const metadata = await decoder.metadata();
+      if (!metadata.width || !metadata.height) {
+        throw new Error("Missing dimensions");
       }
+      origW = metadata.width;
+      origH = metadata.height;
+      resizedPixels = await decoder
+        .resize(640, 640, { fit: "fill" })
+        .ensureAlpha()
+        .raw()
+        .toBuffer();
     } catch {
-      try {
-        const pngBuffer = await sharp(imageBuffer).png().toBuffer();
-        originalImage = await Jimp.read(pngBuffer);
-      } catch (err: any) {
-        throw new Error(
-          "Định dạng ảnh không được hỗ trợ. Vui lòng sử dụng file ảnh JPEG, PNG hoặc WEBP."
-        );
-      }
+      throw new Error("Định dạng ảnh không được hỗ trợ. Vui lòng sử dụng file ảnh JPEG, PNG hoặc WEBP.");
     }
-    const origW = originalImage.bitmap.width;
-    const origH = originalImage.bitmap.height;
 
-    const resizedImage = originalImage.clone().resize(640, 640);
     const float32Data = new Float32Array(3 * 640 * 640);
 
     for (let y = 0; y < 640; y++) {
       for (let x = 0; x < 640; x++) {
-        const pixelColor = resizedImage.getPixelColor(x, y);
-        const rgba = Jimp.intToRGBA(pixelColor);
-        float32Data[0 * 640 * 640 + y * 640 + x] = rgba.r / 255.0;
-        float32Data[1 * 640 * 640 + y * 640 + x] = rgba.g / 255.0;
-        float32Data[2 * 640 * 640 + y * 640 + x] = rgba.b / 255.0;
+        const offset = (y * 640 + x) * 4;
+        float32Data[0 * 640 * 640 + y * 640 + x] = resizedPixels[offset] / 255.0;
+        float32Data[1 * 640 * 640 + y * 640 + x] = resizedPixels[offset + 1] / 255.0;
+        float32Data[2 * 640 * 640 + y * 640 + x] = resizedPixels[offset + 2] / 255.0;
       }
     }
 
@@ -248,28 +240,21 @@ export class DamageInspectionService {
     const finalDetections = this.nms(candidateBoxes, 0.45);
     console.info(`[DamageInspection] Image (${origW}x${origH}) -> Raw candidates: ${candidateBoxes.length}, Detected after NMS: ${finalDetections.length}`);
 
-    // 5. Draw bounding boxes onto annotated image
-    const annotatedImage = originalImage.clone();
-    const RED_COLOR = Jimp.rgbaToInt(239, 68, 68, 255);
-    const GREEN_COLOR = Jimp.rgbaToInt(16, 185, 129, 255);
-
-    finalDetections.forEach((det) => {
-      const [x1, y1, x2, y2] = det.bbox;
-      const boxColor = det.class_name === "crack" ? RED_COLOR : GREEN_COLOR;
-
-      for (let t = 0; t < 3; t++) {
-        for (let x = x1; x <= x2; x++) {
-          annotatedImage.setPixelColor(boxColor, x, Math.min(origH - 1, y1 + t));
-          annotatedImage.setPixelColor(boxColor, x, Math.max(0, y2 - t));
-        }
-        for (let y = y1; y <= y2; y++) {
-          annotatedImage.setPixelColor(boxColor, Math.min(origW - 1, x1 + t), y);
-          annotatedImage.setPixelColor(boxColor, Math.max(0, x2 - t), y);
-        }
-      }
-    });
-
-    const base64Annotated = await annotatedImage.getBase64Async(Jimp.MIME_JPEG);
+    // 5. Draw bounding boxes as an SVG overlay and return a compact JPEG data URL.
+    const boxes = finalDetections
+      .map(({ bbox: [x1, y1, x2, y2], class_name }) => {
+        const color = class_name === "crack" ? "#ef4444" : "#10b981";
+        return `<rect x="${x1}" y="${y1}" width="${Math.max(1, x2 - x1)}" height="${Math.max(1, y2 - y1)}" fill="none" stroke="${color}" stroke-width="3"/>`;
+      })
+      .join("");
+    const overlay = Buffer.from(
+      `<svg width="${origW}" height="${origH}" xmlns="http://www.w3.org/2000/svg">${boxes}</svg>`
+    );
+    const annotated = await sharp(imageBuffer)
+      .composite([{ input: overlay }])
+      .jpeg({ quality: 85 })
+      .toBuffer();
+    const base64Annotated = `data:image/jpeg;base64,${annotated.toString("base64")}`;
 
     // 6. Calculate Damage Score & Severity
     const numDefects = finalDetections.length;
