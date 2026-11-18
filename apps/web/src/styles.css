@@ -553,6 +553,8 @@ textarea {
 /* Shell */
 .app-shell {
   min-height: 100vh;
+  display: flex;
+  flex-direction: column;
   background: var(--canvas);
 }
 
@@ -1008,6 +1010,7 @@ textarea {
   overflow-x: clip;
   margin: 0;
   padding: 0;
+  flex: 1 0 auto;
 }
 
 .offline-banner {
@@ -10913,4 +10916,110 @@ body:has(.custody-modal-overlay) {
 
 .claim-message--call.call-missed .claim-call-title {
   color: #b91c1c;
+}
+
+/* ── Global App Footer (Used in AppLayout) ────────────────────────────── */
+.app-footer {
+  background: #ffffff;
+  border-top: 1px solid var(--line, #d9e3ee);
+  padding: 32px 56px 28px;
+  margin-top: auto;
+  width: 100%;
+}
+
+.app-footer__content {
+  max-width: 1240px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+
+.app-footer__brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.app-footer__brand strong {
+  display: block;
+  font-family: var(--font-display, "Space Grotesk", sans-serif);
+  font-size: 0.95rem;
+  color: var(--ink, #17283d);
+}
+
+.app-footer__brand small {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--muted, #66788d);
+}
+
+.app-footer__links {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.app-footer__link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ink-soft, #344b63);
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-decoration: none;
+  transition: color 0.15s ease;
+}
+
+.app-footer__link:hover {
+  color: var(--fpt-blue, #0b63b6);
+}
+
+.app-footer__legal {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-align: right;
+  font-size: 0.73rem;
+  color: var(--muted, #66788d);
+}
+
+/* ── Auth Legal Reference Link (Login / Register) ────────────────────── */
+.auth-privacy-ref {
+  margin-top: 18px;
+  text-align: center;
+  font-size: 0.78rem;
+  color: var(--muted, #66788d);
+  line-height: 1.5;
+}
+
+.auth-privacy-ref a {
+  color: var(--fpt-blue, #0b63b6);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  transition: color 0.15s ease;
+}
+
+.auth-privacy-ref a:hover {
+  color: var(--fpt-orange, #f47b20);
+}
+
+@media (max-width: 768px) {
+  .app-footer {
+    padding: 24px 20px;
+  }
+
+  .app-footer__content {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16px;
+  }
+
+  .app-footer__legal {
+    text-align: left;
+  }
 }
