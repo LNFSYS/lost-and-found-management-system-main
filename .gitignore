@@ -1,4 +1,8 @@
 node_modules/
+**/.venv/
+**/__pycache__/
+outputs/
+.tmp-docx-review/
 apps/mobile/.expo/
 dist/
 apps/api-node/uploads/
@@ -46,7 +50,6 @@ scripts/test_cases_list.json
 scripts/fe_sections.txt
 scripts/doc_report1.md
 scripts/__pycache__/
-**/__pycache__/
 1OmW28lweeiC2y9oyZytMkd3YX_OQt59CcrZsp2rKPww.md
 WEBRTC_CALL_REVIEW.md
 

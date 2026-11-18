@@ -1,0 +1,21 @@
+[Unit]
+Description=LNFS Florence-2 local API
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=lnfs-ai
+Group=lnfs-ai
+WorkingDirectory=/opt/lnfs-florence2
+EnvironmentFile=/etc/lnfs/florence2.env
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/bin/bash /opt/lnfs-florence2/scripts/start_vps.sh
+Restart=on-failure
+RestartSec=10
+TimeoutStartSec=600
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
