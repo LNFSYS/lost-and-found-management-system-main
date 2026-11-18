@@ -19,7 +19,8 @@ const session = {
 const catalog = {
   categories: [
     { id: "category-parent", name: "Electronics", parentId: null },
-    { id: "category-phone", name: "Phone", parentId: "category-parent" }
+    { id: "category-phone", name: "Phone", parentId: "category-parent" },
+    { id: "category-mouse", name: "Chuột / bàn phím", parentId: "category-parent" }
   ],
   areas: [{ id: "area-alpha", name: "Alpha" }],
   buildings: [{ id: "building-alpha", areaId: "area-alpha", name: "Alpha Hall" }],
@@ -119,4 +120,77 @@ test("offline post creation clearly stays unsent", async ({ page, context }) => 
   await expect(page.locator(".story-form-message.is-warning")).toBeVisible();
   await expect(page.locator(".story-post-form button[type=submit]")).toBeDisabled();
   await context.setOffline(false);
+});
+
+for (const side of ["LOST", "FOUND"] as const) {
+  test(`${side} fills empty categories and preserves manual fields`, async ({ page }) => {
+    if (side === "FOUND") await page.setViewportSize({ width: 390, height: 844 });
+    await mockSessionAndPosts(page);
+    let calls = 0;
+    await page.route("**/api/posts/analyze-image", route => {
+      calls += 1;
+      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({
+        title: "Báo mất Chuột / bàn phím", description: "Có thể là chuột. Vui lòng kiểm tra.",
+        suggestedCategory: catalog.categories[2], categoryCandidates: [{ name: "Chuột / bàn phím", score: 0.84 }],
+        confidence: 0.84, confidenceCalibrated: false, requiresConfirmation: true,
+        visualAttributes: [], visibleText: [], warnings: [], assistedBy: "MobileNetV3-Small",
+        model: "mobilenetv3-small-lnfs-v1:test", imageCount: 1
+      }) });
+    });
+    await page.goto("/home");
+    if (side === "FOUND") await page.locator(".choice-panel--found").click();
+    const form = page.locator(`.story-post-form--${side.toLowerCase()}`);
+    await form.locator('input[type="file"]').setInputFiles("tests/fixtures/appointment-item.png");
+    await form.locator('input[maxlength="255"]').first().fill("Tên tôi đã nhập");
+    await form.getByRole("button", { name: /Phân tích 1 ảnh/ }).click();
+    await expect(form.locator(".story-analysis-result")).toContainText("Chuột / bàn phím");
+    await expect(form.locator('input[maxlength="255"]').first()).toHaveValue("Tên tôi đã nhập");
+    await expect(form.locator(`#${side}-main-category`)).toHaveValue("category-parent");
+    await expect(form.locator(`#${side}-category`)).toHaveValue("category-mouse");
+    await form.getByRole("button", { name: /Bỏ gợi ý/ }).click();
+    await expect(form.locator(`#${side}-main-category`)).toHaveValue("");
+    await expect(form.locator(`#${side}-category`)).toHaveValue("");
+    await form.getByRole("button", { name: /Phân tích 1 ảnh/ }).click();
+    await expect(form.locator(`#${side}-category`)).toHaveValue("category-mouse");
+    await form.getByRole("button", { name: /Dùng gợi ý cho ô trống/ }).click();
+    await expect(form.locator('input[maxlength="255"]').first()).toHaveValue("Tên tôi đã nhập");
+    await expect(form.locator(`#${side}-main-category`)).toHaveValue("category-parent");
+    await expect(form.locator(`#${side}-category`)).toHaveValue("category-mouse");
+    if (side === "FOUND") {
+      const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+      expect(overflow).toBeLessThanOrEqual(1);
+    }
+    expect(calls).toBe(2);
+  });
+}
+
+test("Gemini analysis requires explicit confirmation and stays separate from local analysis", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await mockSessionAndPosts(page);
+  let requests = 0;
+  let body = "";
+  await page.route("**/api/posts/analyze-image", route => {
+    requests += 1;
+    body = route.request().postDataBuffer()?.toString("utf8") ?? "";
+    return route.fulfill({ status: 200, json: {
+      title: "Bình nước", description: "Bình nước trong ảnh, cần người dùng kiểm tra.",
+      suggestedCategory: null, visualAttributes: [], visibleText: [], confidence: 0.5,
+      warnings: [], assistedBy: "Gemini image understanding", model: "fixture", imageCount: 1
+    } });
+  });
+  await page.goto("/home");
+  const form = page.locator(".story-post-form--lost");
+  await form.locator('input[type="file"]').setInputFiles("tests/fixtures/appointment-item.png");
+  const gemini = form.getByRole("button", { name: "Phân tích bằng Gemini" });
+  page.once("dialog", dialog => dialog.dismiss());
+  await gemini.click();
+  expect(requests).toBe(0);
+  page.once("dialog", dialog => dialog.accept());
+  await gemini.click();
+  await expect(form.locator(".story-analysis-result")).toContainText("Bình nước");
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(1);
+  expect(requests).toBe(1);
+  expect(body).toContain('name="provider"');
+  expect(body).toContain("gemini");
+  expect(body).toContain('name="externalConsent"');
 });

@@ -19,9 +19,11 @@ import {
   illustrationSchema
 } from "./post.validator.js";
 
-export function createPostController({ postService, geminiImageService, illustrations }: {
+export function createPostController({ postService, geminiImageService, florenceImageService, externalGeminiImageService, illustrations }: {
   postService: PostUseCases;
   geminiImageService: ImageAnalysisUseCases;
+  florenceImageService?: ImageAnalysisUseCases;
+  externalGeminiImageService?: ImageAnalysisUseCases;
   illustrations: IllustrationUseCases;
 }) {
   function routeId(request: Request) {
@@ -57,7 +59,13 @@ export function createPostController({ postService, geminiImageService, illustra
       const files = uploadedAnalysisFiles(request);
       if (!files.length) throw new HttpError(400, "Cần gửi ít nhất một ảnh vật phẩm với field name là files.");
       const input = analyzePostImageSchema.parse(request.body);
-      response.json(await geminiImageService.analyzePostImages(files, input.type));
+      if (input.provider === "florence" && !florenceImageService) throw new HttpError(503, "Florence-2 chưa được bật trên máy chủ.");
+      if (input.provider === "gemini" && input.externalConsent !== "true") throw new HttpError(400, "Cần xác nhận trước khi gửi ảnh tới Gemini.");
+      if (input.provider === "gemini" && !externalGeminiImageService) throw new HttpError(503, "Gemini chưa được cấu hình trên máy chủ.");
+      response.setHeader("Cache-Control", "private, no-store");
+      const service = input.provider === "florence" ? florenceImageService!
+        : input.provider === "gemini" ? externalGeminiImageService! : geminiImageService;
+      response.json(await service.analyzePostImages(files, input.type));
     },
 
     async getFormCatalog(_request: Request, response: Response) {

@@ -8,6 +8,8 @@ export interface ImageAnalysis {
   visibleText: string[];
   confidence: number;
   warnings: string[];
+  categoryCandidates?: { name: string; score: number }[];
+  modelVersion?: string;
   imageEmbedding?: number[] | null;
   isSensitiveDocument?: boolean;
   documentType?: string | null;

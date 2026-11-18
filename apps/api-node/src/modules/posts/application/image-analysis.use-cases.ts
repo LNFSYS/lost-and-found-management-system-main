@@ -27,6 +27,9 @@ export interface PostImageAnalysisResult {
   assistedBy: string;
   model: string;
   imageCount: number;
+  categoryCandidates?: { name: string; score: number }[];
+  requiresConfirmation?: boolean;
+  confidenceCalibrated?: boolean;
   imageEmbedding?: number[] | null;
 }
 
@@ -57,9 +60,13 @@ export function createImageAnalysisUseCases({ postRepository, analyzer }: { post
         visibleText: result.visibleText,
         confidence: result.confidence,
         warnings: result.warnings,
-        assistedBy: analyzer.model.includes("local") ? "DINOv2 + EasyOCR AI (local)" : "Gemini image understanding",
-        model: analyzer.model,
+        assistedBy: analyzer.model.startsWith("florence") ? "Florence-2 (gợi ý)"
+          : analyzer.model.startsWith("mobilenetv3") ? "MobileNetV3-Small (gợi ý)" : "Gemini image understanding",
+        model: result.modelVersion ?? analyzer.model,
         imageCount: files.length,
+        categoryCandidates: result.categoryCandidates,
+        requiresConfirmation: Boolean(result.categoryCandidates),
+        confidenceCalibrated: result.categoryCandidates ? false : undefined,
         imageEmbedding: result.imageEmbedding ?? null
       };
     }

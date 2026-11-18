@@ -21,7 +21,10 @@ import { createIllustrationUseCases } from "../modules/posts/application/illustr
 import { createCloudflareIllustrationModel } from "../modules/posts/infrastructure/cloudflare-illustration-model.js";
 import { createPostUseCases } from "../modules/posts/application/post.use-cases.js";
 import { createGeminiImageAnalyzer } from "../modules/posts/infrastructure/gemini-image-analyzer.js";
+import { AppError } from "../shared/domain/app-error.js";
 import { createLocalAiImageAnalyzer } from "../modules/posts/infrastructure/local-ai-image-analyzer.js";
+import { createFlorenceImageAnalyzer } from "../modules/posts/infrastructure/florence-image-analyzer.js";
+import { createMobileNetDescriptionAnalyzer } from "../modules/posts/infrastructure/mobilenet-description-analyzer.js";
 import { createRealtimeUseCases } from "../modules/realtime/application/realtime.use-cases.js";
 import { createChatSocketUseCases } from "../modules/realtime/application/chat-socket.use-cases.js";
 import { createCallSocketUseCases } from "../modules/realtime/application/call-socket.use-cases.js";
@@ -165,20 +168,37 @@ export function createServices(persistence: Persistence, config: typeof env = en
   });
   const geminiImageService = createImageAnalysisUseCases({
     postRepository,
-    analyzer: createGeminiImageAnalyzer(config.gemini)
+    analyzer: process.env.AI_DESCRIPTION_ENABLED === "true"
+      ? createMobileNetDescriptionAnalyzer({
+        url: process.env.AI_DESCRIPTION_URL || "http://127.0.0.1:5001",
+        key: process.env.AI_DESCRIPTION_API_KEY || "",
+        timeoutMs: 15_000
+      })
+      : { model: "local-disabled", analyze: async () => { throw new AppError("unavailable", "AI phân tích ảnh nội bộ chưa được bật. Bạn có thể nhập thủ công hoặc chọn Gemini."); } }
   });
+  const florenceImageService = process.env.FLORENCE_ENABLED === "true"
+    ? createImageAnalysisUseCases({ postRepository, analyzer: createFlorenceImageAnalyzer({
+        url: process.env.FLORENCE_URL || "http://127.0.0.1:8000",
+        key: process.env.FLORENCE_API_KEY || ""
+      }) })
+    : undefined;
+  const externalGeminiImageService = config.gemini.apiKey
+    ? createImageAnalysisUseCases({ postRepository, analyzer: createGeminiImageAnalyzer(config.gemini) })
+    : undefined;
   const radarService = createRadarUseCases({ radarRepository: persistence.radarRepository, idFactory: id });
   return {
     appointmentService, activityService,
     notificationService, notificationEmailWorker, notificationPushWorker, systemConfigService, adminUserService, adminReportingService,
     adminCatalogService, warehouseService, warehouseConversationService, custodyRequestService, returnFeedbackService, matchingService,
-    postService, claimService, realtimeService, chatSocketService, callSocketService, reportService, authService, geminiImageService, illustrations,
+    postService, claimService, realtimeService, chatSocketService, callSocketService, reportService, authService, geminiImageService, florenceImageService, externalGeminiImageService, illustrations,
     radarService
   };
 }
 type CreatedApplicationServices = ReturnType<typeof createServices>;
-export type ApplicationServices = Omit<CreatedApplicationServices, "warehouseConversationService" | "callSocketService"> & {
+export type ApplicationServices = Omit<CreatedApplicationServices, "warehouseConversationService" | "callSocketService" | "florenceImageService" | "externalGeminiImageService"> & {
   warehouseConversationService?: CreatedApplicationServices["warehouseConversationService"];
   callSocketService?: CreatedApplicationServices["callSocketService"];
+  florenceImageService?: CreatedApplicationServices["florenceImageService"];
+  externalGeminiImageService?: CreatedApplicationServices["externalGeminiImageService"];
   radarService?: CreatedApplicationServices["radarService"];
 };

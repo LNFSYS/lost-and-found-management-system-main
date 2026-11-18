@@ -98,6 +98,7 @@ export function StoryPostForm({
   const [error, setError] = useState("");
   const [created, setCreated] = useState<{ id: string; title: string; mediaWarning?: string } | null>(null);
   const [analysis, setAnalysis] = useState<ImageAnalysisResult | null>(null);
+  const [autoCategoryId, setAutoCategoryId] = useState<string | null>(null);
   const [files, setFiles] = useState<File[]>([]);
   const [areaId, setAreaId] = useState("");
   const [mainCategoryId, setMainCategoryId] = useState("");
@@ -124,6 +125,7 @@ export function StoryPostForm({
   useEffect(() => {
     setCreated(null);
     setAnalysis(null);
+    setAutoCategoryId(null);
     setError("");
     setFiles([]);
     setIllustrationId(null);
@@ -154,6 +156,7 @@ export function StoryPostForm({
   function resetDraft() {
     setCreated(null);
     setAnalysis(null);
+    setAutoCategoryId(null);
     setError("");
     setFiles([]);
     setIllustrationId(null);
@@ -189,6 +192,7 @@ export function StoryPostForm({
       setError("Tổng dung lượng ảnh dùng để phân tích không được vượt quá 14 MB.");
       return;
     }
+    clearAutoCategory();
     setAnalysis(null);
     onAnalysisReset?.();
     setFiles(combined);
@@ -196,14 +200,16 @@ export function StoryPostForm({
 
   function removeFile(index: number) {
     setError("");
+    clearAutoCategory();
     setAnalysis(null);
     onAnalysisReset?.();
     setFiles((current) => current.filter((_, fileIndex) => fileIndex !== index));
   }
 
-  async function analyzeImage() {
+  async function analyzeImage(provider: "default" | "florence" | "gemini" = "default") {
     if (!files.length || analyzing) return;
     setError("");
+    if (provider === "gemini" && !window.confirm("Ảnh sẽ được gửi tới Google Gemini. Không gửi giấy tờ, thẻ hoặc ảnh có dữ liệu cá nhân. Bạn xác nhận tiếp tục?")) return;
     if (!online) {
       setError("Bạn đang offline. Phân tích ảnh cần kết nối mạng và chưa được gửi.");
       return;
@@ -211,16 +217,12 @@ export function StoryPostForm({
     setAnalyzing(true);
     onAnalysisStart?.(files);
     try {
-      const result = await api.analyzePostImage(type, files);
+      const result = await api.analyzePostImage(type, files, provider);
       setAnalysis(result);
-      setDraft((current) => ({
-        ...current,
-        title: result.title,
-        description: result.description
-      }));
-      if (result.suggestedCategory?.parentId) {
+      if (!mainCategoryId && !categoryId && result.suggestedCategory?.parentId) {
         setMainCategoryId(result.suggestedCategory.parentId);
         setCategoryId(result.suggestedCategory.id);
+        setAutoCategoryId(result.suggestedCategory.id);
       }
       onAnalysisComplete?.(result);
     } catch (reason) {
@@ -230,6 +232,29 @@ export function StoryPostForm({
     } finally {
       setAnalyzing(false);
     }
+  }
+
+  function clearAutoCategory() {
+    if (autoCategoryId && categoryId === autoCategoryId) {
+      setMainCategoryId("");
+      setCategoryId("");
+    }
+    setAutoCategoryId(null);
+  }
+
+  function applyAnalysis() {
+    if (!analysis) return;
+    setDraft(current => ({
+      ...current,
+      title: current.title.trim() || analysis.title,
+      description: current.description.trim() || analysis.description
+    }));
+    if (!mainCategoryId && !categoryId && analysis.suggestedCategory?.parentId) {
+      setMainCategoryId(analysis.suggestedCategory.parentId);
+      setCategoryId(analysis.suggestedCategory.id);
+    }
+    setAutoCategoryId(null);
+    setAnalysis(null);
   }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -372,10 +397,18 @@ export function StoryPostForm({
         </div>}
       </div>
       <div className="story-image-analysis-actions">
-        <button className="story-analyze-button" type="button" disabled={!online || !files.length || analyzing} onClick={analyzeImage}>
+        <button className="story-analyze-button" type="button" disabled={!online || !files.length || analyzing} onClick={() => analyzeImage()}>
           {analyzing ? <><LoaderCircle className="is-spinning" /> Đang phân tích {files.length} ảnh...</> : <><Sparkles /> Phân tích {files.length || "các"} ảnh</>}
         </button>
-        <p>Chụp nhiều góc giúp đọc rõ hãng, model, chữ, phụ kiện và dấu hiệu riêng. Ảnh chỉ được gửi tới Gemini khi bạn chủ động phân tích.</p>
+        {import.meta.env.VITE_FLORENCE_ENABLED === "true" && <button className="story-analyze-button" type="button"
+          disabled={!online || files.length !== 1 || analyzing} onClick={() => analyzeImage("florence")}>
+          <Sparkles /> Thử Florence-2 (1 ảnh)
+        </button>}
+        <button className="story-analyze-button" type="button" disabled={!online || !files.length || analyzing}
+          onClick={() => analyzeImage("gemini")}>
+          <Sparkles /> Phân tích bằng Gemini
+        </button>
+        <p>Ảnh chỉ được gửi đi phân tích khi bạn chủ động chọn. Hãy kiểm tra gợi ý trước khi dùng.</p>
       </div>
       <div className="story-image-analysis-copy">
         <p className="story-image-analysis-hint">Hãy dùng chức năng phân tích ảnh để tự động điền thông tin nhanh hơn.</p>
@@ -386,10 +419,17 @@ export function StoryPostForm({
     {analysis && <div className="story-analysis-result" role="status">
       <span><Sparkles /></span>
       <div>
-        <strong>Đã tổng hợp {analysis.imageCount || files.length} ảnh · độ tin cậy {Math.round(analysis.confidence * 100)}%</strong>
-        <p>Bạn có thể sửa mọi trường. Vị trí và thời gian không được suy đoán từ ảnh.</p>
+        <strong>Gợi ý từ {analysis.imageCount || files.length} ảnh {analysis.confidenceCalibrated === false ? "· điểm dự đoán chưa hiệu chuẩn" : ""}</strong>
+        <p>{analysis.title}</p>
+        <p>{analysis.description}</p>
+        {analysis.categoryCandidates && <p>Danh mục có thể phù hợp: {analysis.categoryCandidates.map(item => item.name).join(", ")}. Hãy kiểm tra và sửa nếu cần.</p>}
+        <p>Vị trí và thời gian không được suy đoán từ ảnh.</p>
         {analysis.visualAttributes.length > 0 && <div>{analysis.visualAttributes.slice(0, 5).map((attribute) => <small key={attribute}>{attribute}</small>)}</div>}
         {analysis.warnings.map((warning) => <em key={warning}>{warning}</em>)}
+        <div className="story-analysis-result__actions">
+          <button type="button" onClick={applyAnalysis}><Check size={16} /> Dùng gợi ý cho ô trống</button>
+          <button type="button" onClick={() => { clearAutoCategory(); setAnalysis(null); }}><X size={16} /> Bỏ gợi ý</button>
+        </div>
       </div>
     </div>}
 
@@ -400,14 +440,14 @@ export function StoryPostForm({
       </label>
       <div className="story-field">
         <label htmlFor={`${type}-main-category`}>Nhóm chính</label>
-        <select id={`${type}-main-category`} value={mainCategoryId} required disabled={!catalog} onChange={(event) => { setMainCategoryId(event.target.value); setCategoryId(""); }}>
+        <select id={`${type}-main-category`} value={mainCategoryId} required disabled={!catalog} onChange={(event) => { setAutoCategoryId(null); setMainCategoryId(event.target.value); setCategoryId(""); }}>
           <option value="">Chọn nhóm vật phẩm</option>
           {mainCategoryOptions.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
         </select>
       </div>
       <div className="story-field">
         <label htmlFor={`${type}-category`}>Danh mục cụ thể</label>
-        <select id={`${type}-category`} value={categoryId} required disabled={!mainCategoryId || categoryOptions.length === 0} onChange={(event) => setCategoryId(event.target.value)}>
+        <select id={`${type}-category`} value={categoryId} required disabled={!mainCategoryId || categoryOptions.length === 0} onChange={(event) => { setAutoCategoryId(null); setCategoryId(event.target.value); }}>
           <option value="">{!mainCategoryId ? "Chọn nhóm chính trước" : categoryOptions.length === 0 ? "Nhóm chưa có danh mục cụ thể" : "Chọn loại vật phẩm"}</option>
           {categoryOptions.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
         </select>

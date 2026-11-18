@@ -569,6 +569,9 @@ export interface ImageAnalysisResult {
   assistedBy: string;
   model: string;
   imageCount: number;
+  categoryCandidates?: { name: string; score: number }[];
+  requiresConfirmation?: boolean;
+  confidenceCalibrated?: boolean;
   imageEmbedding?: number[] | null;
   isSensitiveDocument?: boolean;
   documentType?: string | null;
@@ -1389,9 +1392,11 @@ export const api = {
   deletePost: (postId: string) => raw<void>(`/posts/${postId}`, { method: "DELETE" }),
   getPostMedia: (path: string) => mediaBlob(path),
   createPost: (payload: CreatePostPayload) => raw<CreatedPost>("/posts", { method: "POST", body: JSON.stringify(payload) }),
-  analyzePostImage: (type: "LOST" | "FOUND", files: File[]) => {
+  analyzePostImage: (type: "LOST" | "FOUND", files: File[], provider: "default" | "florence" | "gemini" = "default") => {
     const form = new FormData();
     form.append("type", type);
+    form.append("provider", provider);
+    if (provider === "gemini") form.append("externalConsent", "true");
     files.forEach((file) => form.append("files", file));
     return raw<ImageAnalysisResult>("/posts/analyze-image", { method: "POST", body: form });
   },

@@ -7329,6 +7329,12 @@ textarea {
   line-height: 1.55;
 }
 
+.story-image-analysis-actions .story-analyze-button {
+  min-width: 0;
+  white-space: normal;
+  text-align: center;
+}
+
 .story-image-analysis-copy .story-image-analysis-hint {
   color: var(--ink);
   font-size: 0.78rem;
@@ -7432,6 +7438,18 @@ textarea {
   background: #def2e3;
   font-size: 0.63rem;
   font-weight: 800;
+}
+
+.story-analysis-result__actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 7px 10px;
+  border: 1px solid #a9c8b2;
+  border-radius: 4px;
+  background: #fff;
+  color: #174b31;
+  cursor: pointer;
 }
 
 .story-form-message.is-warning {
