@@ -4740,6 +4740,21 @@ textarea {
   font-weight: 700;
 }
 
+@media (max-width: 640px) {
+  .processing-stats {
+    grid-template-columns: 1fr;
+    gap: 8px;
+    margin-top: 16px;
+  }
+  .processing-stats span {
+    min-height: auto;
+    padding: 12px 14px;
+  }
+  .processing-stats strong {
+    font-size: 1.25rem;
+  }
+}
+
 .scan-board {
   border-color: rgba(210, 229, 247, 0.32);
   background:
@@ -5848,11 +5863,7 @@ textarea {
 }
 
 @media (max-width: 680px) {
-  .claims-page { width: min(620px, calc(100% - 28px)); padding-top: 22px; }
   .claims-heading { align-items: flex-start; flex-direction: column; gap: 13px; }
-  .claims-layout { display: block; min-height: 0; }
-  .claims-sidebar { border-right: 0; border-bottom: 1px solid #dbe7ef; }
-  .claim-list { max-height: 210px; overflow-y: auto; }
   .claim-welcome { min-height: 300px; }
   .claim-decision { margin-left: 14px; margin-right: 14px; }
   .claim-room__header { padding: 18px 14px; }
@@ -9284,12 +9295,8 @@ textarea {
 .claim-image-draft button { width: 32px; height: 32px; padding: 5px; border: 0; color: #ac3f38; background: transparent; cursor: pointer; }
 .evidence-panel--uploading { box-shadow: inset 3px 0 #176fbd; }
 .evidence-upload-compact input:focus { outline: 2px solid #176fbd; outline-offset: 3px; }
+.claim-back-button { display: none; }
 .mobile-conversation-toggle { display: none; }
-@media (max-width: 720px) {
-  .mobile-conversation-toggle { width: 100%; min-height: 40px; display: flex; align-items: center; gap: 8px; padding: 8px 12px; border: 0; border-bottom: 1px solid #d5e1ea; background: #f6fafd; color: #235d86; font: inherit; font-size: .8rem; cursor: pointer; }
-  .mobile-conversation-toggle svg { width: 18px; height: 18px; }
-  .claims-page--focused .claims-sidebar { display: none; }
-}
 @media (max-width: 760px) {
   .claim-chat-review .review-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .claim-chat-header { padding: 10px 12px; }
@@ -9562,54 +9569,191 @@ textarea {
   .claim-workspace-state { grid-column: 2; min-height: calc(100vh - 74px); }
 }
 
-@media (max-width: 720px) {
-  .claims-layout { display: block; min-height: 0; }
-  .claims-sidebar { max-height: 360px; border-right: 0; border-bottom: 1px solid #d9e3e9; }
-  .claim-list { max-height: 220px; }
-  .claim-list-item { min-height: 116px; }
-  .claim-chat { min-height: 680px; }
-  .claim-inspector { display: block; border-top: 1px solid #d9e3e9; }
-  .claim-chat-header { padding-inline: 12px; }
-  .claim-chat-topbar { flex-wrap: wrap; gap: 8px; }
-  .claim-header-actions { flex-wrap: wrap; gap: 6px; margin-left: auto; }
-  .claim-toggle-context-btn span { display: none; }
-  .claim-toggle-context-btn { padding: 6px 8px; }
-  .claim-chat-identity { min-width: 0; flex: 1 1 auto; }
-  .claim-chat-item-tag { max-width: 190px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .claim-private-banner { margin-inline: 12px; }
-  .claim-messages { padding-inline: 14px; padding-bottom: 60px; }
-  .claim-message { max-width: 88%; }
-  .chat-question-panel { margin: 0 0 25px; }
-  .claim-message-form { padding-inline: 12px; padding-bottom: calc(14px + env(safe-area-inset-bottom, 0px)); }
-  .claim-message-form > .input-row { grid-template-columns: 36px minmax(0, 1fr) auto; }
-  .claim-message-form--draft > .input-row { grid-template-columns: minmax(0, 1fr) auto; }
-  .claim-workspace-state { min-height: 360px; }
-  .decision-modal-backdrop, .evidence-modal-backdrop { padding: 10px; }
-  .decision-modal > footer { display: grid; grid-template-columns: 1fr 1fr; }
-
-  .claims-page--focused {
-    height: calc(100dvh - 60px);
-    max-height: calc(100dvh - 60px);
+@media (max-width: 768px) {
+  .app-shell--chat {
+    height: 100dvh;
+    max-height: 100dvh;
+    min-height: 0;
     display: flex;
     flex-direction: column;
     overflow: hidden;
   }
+  .app-shell--chat > .topbar,
+  .app-shell--chat > .offline-banner {
+    flex-shrink: 0;
+  }
+  .app-shell--chat > .workspace {
+    min-height: 0;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .claims-page {
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    height: 100%;
+    max-height: 100%;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: #fff;
+  }
+
+  /* ── Mobile View 1: List Only (/claims) ─────────────────────── */
+  .claims-page--list-only .claims-layout {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+  }
+  .claims-page--list-only .claims-sidebar {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    max-height: none;
+    width: 100%;
+    height: 100%;
+    border: 0;
+    background: #fff;
+    overflow: hidden;
+  }
+  .claims-page--list-only .claims-sidebar > header {
+    min-height: 52px;
+    padding: 12px 16px;
+    border-bottom: 1px solid #e2eaf0;
+    flex-shrink: 0;
+  }
+  .claims-page--list-only .conversation-search {
+    padding: 10px 14px;
+    flex-shrink: 0;
+  }
+  .claims-page--list-only .conversation-filters {
+    padding: 6px 14px 10px;
+    flex-shrink: 0;
+  }
+  .claims-page--list-only .claim-list {
+    flex: 1;
+    min-height: 0;
+    max-height: none;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .claims-page--list-only .claim-list-item {
+    min-height: 76px;
+    padding: 12px 14px;
+  }
+  .claims-page--list-only .claim-workspace-state,
+  .claims-page--list-only .claim-chat,
+  .claims-page--list-only .claim-inspector {
+    display: none !important;
+  }
+
+  /* ── Mobile View 2: Focused Chat (/claims/:id) ──────────────── */
   .claims-page--focused .claims-layout {
     display: flex;
     flex-direction: column;
     flex: 1;
     min-height: 0;
+    width: 100%;
+    height: 100%;
     overflow: hidden;
+  }
+  .claims-page--focused .claims-sidebar {
+    display: none !important;
+  }
+  .claims-page--focused .claim-workspace-state {
+    display: none !important;
+  }
+  .claims-page--focused .claim-inspector {
+    display: none !important;
   }
   .claims-page--focused .claim-chat {
     display: flex;
     flex-direction: column;
     flex: 1;
     min-height: 0;
+    width: 100%;
+    height: 100%;
     overflow: hidden;
   }
   .claims-page--focused .claim-chat-header {
     flex-shrink: 0;
+    padding: 8px 12px;
+    background: #fff;
+    border-bottom: 1px solid #dce5ea;
+  }
+  .claims-page--focused .claim-chat-topbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: nowrap;
+  }
+  .claims-page--focused .claim-chat-identity {
+    min-width: 0;
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .claims-page--focused .claim-chat-name-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  .claims-page--focused .claim-chat-name {
+    font-size: 0.92rem;
+  }
+  .claims-page--focused .claim-chat-item-tag {
+    max-width: 160px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .claims-page--focused .claim-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+    margin-left: auto;
+  }
+  .claims-page--focused .claim-toggle-context-btn span {
+    display: none;
+  }
+  .claims-page--focused .claim-toggle-context-btn {
+    padding: 6px 8px;
+  }
+  .claims-page--focused .claim-back-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 8px;
+    border-radius: 6px;
+    border: 1px solid #d0dee8;
+    background: #f0f5fa;
+    color: #17283d;
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    flex-shrink: 0;
+    text-decoration: none;
+    line-height: 1;
+    transition: background 0.15s ease;
+  }
+  .claims-page--focused .claim-back-button:hover {
+    background: #e2ecf5;
+  }
+  .claims-page--focused .claim-back-button svg {
+    width: 16px;
+    height: 16px;
   }
   .claims-page--focused .claim-chat-scroll {
     flex: 1;
@@ -9617,14 +9761,33 @@ textarea {
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
   }
+  .claims-page--focused .claim-private-banner {
+    margin-inline: 12px;
+  }
   .claims-page--focused .claim-messages {
+    padding-inline: 12px;
     padding-bottom: 20px;
+  }
+  .claims-page--focused .claim-message {
+    max-width: 88%;
   }
   .claims-page--focused .claim-message-form {
     flex-shrink: 0;
     background: #fff;
     border-top: 1px solid #dfe7ec;
+    padding-inline: 12px;
+    padding-bottom: calc(14px + env(safe-area-inset-bottom, 0px));
   }
+  .claims-page--focused .claim-message-form > .input-row {
+    grid-template-columns: 36px minmax(0, 1fr) auto;
+  }
+  .claims-page--focused .claim-message-form--draft > .input-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .chat-question-panel { margin: 0 0 25px; }
+  .decision-modal-backdrop, .evidence-modal-backdrop { padding: 10px; }
+  .decision-modal > footer { display: grid; grid-template-columns: 1fr 1fr; }
 }
 @media (min-width: 1121px) {
   .app-shell--chat { height: 100dvh; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }

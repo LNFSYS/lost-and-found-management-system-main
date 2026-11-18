@@ -1,4 +1,4 @@
-import { AlertTriangle, ChevronDown, ChevronUp, Clock3, FileCheck2, FileWarning, Image, LockKeyhole, MessageCircle, Phone, PhoneOff, Plus, RefreshCw, Search, Send, ShieldCheck, Video, VideoOff, X } from "lucide-react";
+import { AlertTriangle, ArrowLeft, ChevronDown, ChevronUp, Clock3, FileCheck2, FileWarning, Image, LockKeyhole, MessageCircle, Phone, PhoneOff, Plus, RefreshCw, Search, Send, ShieldCheck, Video, VideoOff, X } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import type { Socket } from "socket.io-client";
@@ -270,7 +270,27 @@ function DirectMessageDraft({ postId, sourceFoundPostId, viewer, onClaimCreated 
   return <>
     <section className="claim-chat">
       <header className="claim-chat-header">
-        <div><strong>{counterpartName(draftClaim, viewer?.id)}</strong><span><i /> Đang hoạt động</span><small>{claimTitle(draftClaim)}</small></div>
+        <div className="claim-chat-topbar">
+          <button
+            type="button"
+            className="claim-back-button"
+            title="Quay lại danh sách cuộc trò chuyện"
+            aria-label="Quay lại danh sách cuộc trò chuyện"
+            onClick={() => navigate("/claims")}
+          >
+            <ArrowLeft size={16} />
+            <span>Quay lại</span>
+          </button>
+          <div className="claim-chat-identity">
+            <div className="claim-chat-info">
+              <div className="claim-chat-name-row">
+                <strong className="claim-chat-name">{counterpartName(draftClaim, viewer?.id)}</strong>
+                <span className="claim-chat-status is-active"><i /> Đang hoạt động</span>
+              </div>
+              <div className="claim-chat-item-tag"><small>{claimTitle(draftClaim)}</small></div>
+            </div>
+          </div>
+        </div>
       </header>
       <div className="claim-chat-scroll">
         {post.type === "LOST" && <LostContactPhotoGate key={post.id} postId={post.id} disabled={sending} onReady={(id, questions) => void openContact(id, questions)} />}
@@ -327,7 +347,6 @@ export function ClaimsPage() {
   const [filter, setFilter] = useState<ConversationFilter>("ALL");
   const [attachmentMenu, setAttachmentMenu] = useState(false);
   const attachmentMenuRef = useRef<HTMLDivElement>(null);
-  const [showMobileConversations, setShowMobileConversations] = useState(false);
 
   useEffect(() => {
     if (!attachmentMenu) return;
@@ -626,7 +645,6 @@ export function ClaimsPage() {
     setChatFile(null); setEvidenceUploadRequest(0);
     setCheckedQuestions(null);
     setQuestionsExpanded(true);
-    setShowMobileConversations(false);
     pendingImage.current = null; pendingQuestion.current = null; sendInFlight.current = false;
     setReplyingToQuestion(null);
     setShowVerificationModal(false);
@@ -984,10 +1002,9 @@ export function ClaimsPage() {
     : claim && location.state?.claimId === claim.id && location.state?.contactQuestions?.length
       ? location.state.contactQuestions : [];
 
-  const mobileConversationToggle = (claimId || composePostId) && <button type="button" className="mobile-conversation-toggle" aria-expanded={showMobileConversations} onClick={() => setShowMobileConversations(value => !value)}><MessageCircle /><span>Cuộc trò chuyện ({claims.length})</span></button>;
-  const pageClass = `claims-page ${(claimId || composePostId) && !showMobileConversations ? "claims-page--focused" : ""}`;
+  const hasActiveChat = Boolean(claimId || composePostId);
+  const pageClass = `claims-page ${hasActiveChat ? "claims-page--focused" : "claims-page--list-only"}`;
   if (!claimId && composePostId) return <main className={pageClass}>
-    {mobileConversationToggle}
     {error && <div className="claim-alert"><AlertTriangle /> {error}</div>}
     <section className="claims-layout">
       <aside className="claims-sidebar">
@@ -1002,7 +1019,6 @@ export function ClaimsPage() {
   </main>;
 
   return <main className={pageClass}>
-    {mobileConversationToggle}
     {error && <div className="claim-alert"><AlertTriangle /> {error}</div>}
     {loading && !claimId ? <div className="claim-loading"><RefreshCw /><span>Đang tải conversations...</span></div> : <section className="claims-layout">
       <aside className="claims-sidebar">
@@ -1019,6 +1035,16 @@ export function ClaimsPage() {
             <section className="claim-chat">
               <header className="claim-chat-header">
                 <div className="claim-chat-topbar">
+                  <button
+                    type="button"
+                    className="claim-back-button"
+                    title="Quay lại danh sách cuộc trò chuyện"
+                    aria-label="Quay lại danh sách cuộc trò chuyện"
+                    onClick={() => navigate("/claims")}
+                  >
+                    <ArrowLeft size={16} />
+                    <span>Quay lại</span>
+                  </button>
                   <div className="claim-chat-identity">
                     <div className="claim-chat-avatar">
                       {counterpartName(claim, user?.id).charAt(0).toUpperCase()}

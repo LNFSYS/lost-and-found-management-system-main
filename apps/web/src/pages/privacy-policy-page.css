@@ -1046,8 +1046,38 @@
 }
 
 @media (max-width: 768px) {
+  .privacy-topbar {
+    padding: 8px 12px;
+    min-height: 54px;
+    gap: 8px;
+  }
+
+  .privacy-topbar__brand-wrap {
+    gap: 8px;
+    min-width: 0;
+  }
+
+  .privacy-topbar__brand-wrap .brand-text small {
+    display: none;
+  }
+
+  .privacy-topbar__brand-wrap .brand-text strong {
+    font-size: 0.9rem;
+    white-space: nowrap;
+  }
+
   .privacy-topbar__brand-wrap .privacy-doc-badge {
     display: none;
+  }
+
+  .privacy-topbar__nav {
+    gap: 6px;
+    margin-left: auto;
+  }
+
+  .privacy-nav-btn {
+    padding: 6px 10px;
+    font-size: 0.78rem;
   }
 
   .privacy-section {
@@ -1056,5 +1086,23 @@
 
   .privacy-quick-bar {
     padding: 12px 20px;
+  }
+}
+
+@media (max-width: 480px) {
+  .privacy-topbar {
+    padding: 6px 10px;
+  }
+
+  /* Hide print PDF on small phone screens to prevent action button overflow */
+  .privacy-topbar__nav button[title*="PDF"],
+  .privacy-topbar__nav button[title*="In"] {
+    display: none;
+  }
+
+  .privacy-nav-btn {
+    padding: 5px 8px;
+    font-size: 0.74rem;
+    gap: 4px;
   }
 }
