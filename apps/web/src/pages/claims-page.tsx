@@ -48,6 +48,11 @@ function mergeMessages(current: ClaimMessage[], incoming: ClaimMessage[]) {
   return [...messages.values()].sort((left, right) => left.createdAt.localeCompare(right.createdAt) || left.id.localeCompare(right.id));
 }
 
+function isMobileViewport(): boolean {
+  if (typeof window === "undefined") return false;
+  return window.innerWidth <= 768 || (typeof window.matchMedia === "function" && window.matchMedia("(max-width: 768px)").matches);
+}
+
 function claimTitle(claim: ClaimRecord) {
   return claim.item?.title ?? claim.posts.found.title;
 }
@@ -69,7 +74,7 @@ function ClaimList({ claims, selectedId, userId, onSelect }: { claims: ClaimReco
   if (!claims.length) return <div className="claim-list-empty"><MessageCircle /><strong>Không có conversation phù hợp</strong></div>;
   return <div className="claim-list">{claims.map((claim) => {
     const status = conversationStatus(claim);
-    return <button className={`claim-list-item ${selectedId === claim.id ? "active" : ""}`} key={claim.id} onClick={() => onSelect(claim.id)}>
+    return <button type="button" className={`claim-list-item ${selectedId === claim.id ? "active" : ""}`} key={claim.id} onClick={() => onSelect(claim.id)}>
       <span className={`conversation-avatar conversation-avatar--${status.tone}`}>{counterpartName(claim, userId).slice(0, 1).toUpperCase()}</span>
       <span className="conversation-copy">
         <span className="conversation-person"><strong>{counterpartName(claim, userId)}</strong><time>{formatTime(claim.conversation?.lastMessageAt ?? claim.updatedAt)}</time></span>
@@ -434,7 +439,7 @@ export function ClaimsPage() {
       setClaims(sortedClaims);
       setClaimPage(result.page);
       setClaimHasMore(result.hasMore);
-      if (!claimId && !composePostId && sortedClaims[0]) navigate(`/claims/${sortedClaims[0].id}`, { replace: true });
+      if (!isMobileViewport() && !claimId && !composePostId && sortedClaims[0]) navigate(`/claims/${sortedClaims[0].id}`, { replace: true });
     }).catch((failure: Error) => { if (active && requestId === claimListRequest.current) setError(failure.message); }).finally(() => {
       if (active && requestId === claimListRequest.current) setLoading(false);
     });
@@ -603,7 +608,7 @@ export function ClaimsPage() {
         setClaims(sortedClaims);
         setClaimPage(result.page);
         setClaimHasMore(result.hasMore);
-        if (!claimId && !composePostId && sortedClaims[0]) navigate(`/claims/${sortedClaims[0].id}`, { replace: true });
+        if (!isMobileViewport() && !claimId && !composePostId && sortedClaims[0]) navigate(`/claims/${sortedClaims[0].id}`, { replace: true });
       }).catch((failure: Error) => {
         if (active && requestId === claimListRequest.current) setError(failure.message);
       }).finally(() => {
