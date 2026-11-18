@@ -3,6 +3,7 @@ import { MotionConfig, motion, useReducedMotion } from "motion/react";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { AccessibleDialog } from "../components/accessible-dialog";
+import { ScanningItemsModal } from "../components/scanning-items-modal";
 import { StoryPostForm, type StoryPostCreatedEvent } from "../components/story-post-form";
 import { api, type ImageAnalysisResult, type PostMatchResult, type PostSummary } from "../services/api";
 import heroCampusImage from "../assets/fptu-da-nang-campus.jpg";
@@ -255,6 +256,7 @@ export function HomePage() {
   const [createdPost, setCreatedPost] = useState<StoryPostCreatedEvent["post"] | null>(null);
   const [suggestions, setSuggestions] = useState<PostMatchResult[]>([]);
   const [workflowError, setWorkflowError] = useState("");
+  const [isScanningModalOpen, setIsScanningModalOpen] = useState(false);
   const [sensitiveModal, setSensitiveModal] = useState<{
     isOpen: boolean;
     type: StorySide;
@@ -317,6 +319,7 @@ export function HomePage() {
     setCreatedPost(null);
     setSuggestions([]);
     setWorkflowError("");
+    setIsScanningModalOpen(false);
     setWorkflowSession((current) => current + 1);
   }
 
@@ -363,18 +366,6 @@ export function HomePage() {
     const isSensitive = Boolean(event.isSensitive)
       || /cccd|căn cước|cmnd|thẻ sinh viên|the sinh vien|mssv|gplx|bằng lái|thẻ ngân hàng|the atm|atm/i.test(`${event.post.title}`);
 
-    if (isSensitive) {
-      setCreatedPost(event.post);
-      setSensitiveModal({
-        isOpen: true,
-        type: storySide,
-        postId: event.post.id,
-        title: event.post.title,
-        documentType: event.documentType || "GIẤY TỜ CÁ NHÂN BẢO MẬT (PII)"
-      });
-      return;
-    }
-
     const requestId = ++workflowRequest.current;
     setCreatedPost(event.post);
     setSuggestions([]);
@@ -384,20 +375,36 @@ export function HomePage() {
 
     try {
       const [response] = await Promise.all([
-        api.getPostMatches(event.post.id),
+        api.getPostMatches(event.post.id).catch(() => ({ results: [] })),
         wait(1600)
       ]);
       if (requestId !== workflowRequest.current) return;
       const items = response.results;
       setSuggestions(items);
       setWorkflowPhase(items.length ? "results" : "no-results");
+
+      // Đã quét xong: tự động đóng pop up quét vật phẩm
+      setIsScanningModalOpen(false);
+
+      if (isSensitive) {
+        setSensitiveModal({
+          isOpen: true,
+          type: storySide,
+          postId: event.post.id,
+          title: event.post.title,
+          documentType: event.documentType || "GIẤY TỜ CÁ NHÂN BẢO MẬT (PII)"
+        });
+        return;
+      }
+
       window.setTimeout(() => {
         if (requestId === workflowRequest.current) navigate(`/posts/${event.post.id}/matches`, {
           state: { createdPostId: event.post.id }
         });
-      }, 650);
+      }, 500);
     } catch (reason) {
       if (requestId !== workflowRequest.current) return;
+      setIsScanningModalOpen(false);
       setWorkflowError(reason instanceof Error ? reason.message : "Không thể tải gợi ý lúc này.");
       setWorkflowPhase("no-results");
     }
@@ -476,6 +483,8 @@ export function HomePage() {
             onAnalysisComplete={completeImageAnalysis}
             onAnalysisError={failImageAnalysis}
             onAnalysisReset={resetImageAnalysis}
+            onPostSubmitStart={() => setIsScanningModalOpen(true)}
+            onPostSubmitError={() => setIsScanningModalOpen(false)}
             onPostCreated={handlePostCreated}
             onSessionReset={resetWorkflow}
           />
@@ -702,5 +711,7 @@ export function HomePage() {
         </AccessibleDialog>
       </div>
     )}
+
+    <ScanningItemsModal isOpen={isScanningModalOpen} type={storySide} />
   </div></MotionConfig>;
 }

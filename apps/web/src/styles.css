@@ -10348,6 +10348,15 @@ body:has(.custody-modal-overlay) {
   100% { opacity: 1; transform: scale(1) translateY(0); }
 }
 
+@keyframes scanning-shimmer {
+  0% { transform: translateX(-120%); }
+  100% { transform: translateX(250%); }
+}
+
+.scanning-status-progress {
+  animation: scanning-shimmer 1.5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
 .custody-modal__header {
   display: flex;
   align-items: flex-start;
