@@ -14,6 +14,7 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useAuth } from "../context/auth-context";
 import { useNetworkStatus } from "../hooks/use-network-status";
 import { LostIllustrationPanel } from "./lost-illustration-panel";
+import { ScanningItemsModal } from "./scanning-items-modal";
 import {
   api,
   type CreatedPost,
@@ -41,7 +42,9 @@ interface StoryPostFormProps {
   onAnalysisComplete?: (analysis: ImageAnalysisResult) => void;
   onAnalysisError?: (message: string) => void;
   onAnalysisReset?: () => void;
-  onPostCreated?: (event: StoryPostCreatedEvent) => void;
+  onPostSubmitStart?: () => void;
+  onPostSubmitError?: (message: string) => void;
+  onPostCreated?: (event: StoryPostCreatedEvent) => Promise<void> | void;
   onSessionReset?: () => void;
 }
 
@@ -82,6 +85,8 @@ export function StoryPostForm({
   onAnalysisComplete,
   onAnalysisError,
   onAnalysisReset,
+  onPostSubmitStart,
+  onPostSubmitError,
   onPostCreated,
   onSessionReset
 }: StoryPostFormProps) {
@@ -250,6 +255,7 @@ export function StoryPostForm({
     }
 
     setSubmitting(true);
+    onPostSubmitStart?.();
     try {
       const post = await api.createPost({
         type,
@@ -294,10 +300,14 @@ export function StoryPostForm({
         || /cccd|căn cước|cmnd|thẻ sinh viên|the sinh vien|mssv|gplx|bằng lái|thẻ ngân hàng|the atm|atm/i.test(`${post.title} ${draft.description}`);
       const documentType = analysis?.documentType || (isSensitive ? "GIẤY TỜ CÁ NHÂN BẢO MẬT (PII)" : null);
 
+      if (onPostCreated) {
+        await onPostCreated({ post, categoryId, isSensitive, documentType });
+      }
       setCreated({ id: post.id, title: post.title, mediaWarning });
-      onPostCreated?.({ post, categoryId, isSensitive, documentType });
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Không thể tạo bài đăng. Vui lòng thử lại.");
+      const message = reason instanceof Error ? reason.message : "Không thể tạo bài đăng. Vui lòng thử lại.";
+      setError(message);
+      onPostSubmitError?.(message);
     } finally {
       setSubmitting(false);
     }
@@ -371,15 +381,10 @@ export function StoryPostForm({
           </figure>)}
         </div>}
       </div>
-      <div className="story-image-analysis-actions">
-        <button className="story-analyze-button" type="button" disabled={!online || !files.length || analyzing} onClick={analyzeImage}>
-          {analyzing ? <><LoaderCircle className="is-spinning" /> Đang phân tích {files.length} ảnh...</> : <><Sparkles /> Phân tích {files.length || "các"} ảnh</>}
-        </button>
-        <p>Chụp nhiều góc giúp đọc rõ hãng, model, chữ, phụ kiện và dấu hiệu riêng. Ảnh chỉ được gửi tới Gemini khi bạn chủ động phân tích.</p>
-      </div>
       <div className="story-image-analysis-copy">
-        <p className="story-image-analysis-hint">Hãy dùng chức năng phân tích ảnh để tự động điền thông tin nhanh hơn.</p>
-        <p className="story-image-analysis-note"><strong>Lưu ý:</strong> Thông tin điền sẵn từ ảnh chỉ mang tính tham khảo, không đảm bảo chính xác 100%. Vui lòng kiểm tra kỹ và chỉnh sửa trước khi đăng.</p>
+        <p className="story-image-analysis-hint">
+          Tải lên tối đa 5 ảnh rõ nét. Hệ thống AI DINOv2 sẽ tự động trích xuất vector thị giác và so khớp thông minh ngay khi bạn đăng bài.
+        </p>
       </div>
     </div>
 
@@ -475,5 +480,6 @@ export function StoryPostForm({
         {submitting ? <><LoaderCircle className="is-spinning" /> Đang đăng...</> : <>Đăng bài {type} <ChevronRight /></>}
       </button>
     </div>
+    {!onPostSubmitStart && <ScanningItemsModal isOpen={submitting} type={type} />}
   </form>;
 }

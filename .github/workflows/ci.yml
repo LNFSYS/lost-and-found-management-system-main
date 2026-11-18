@@ -52,7 +52,7 @@ jobs:
         run: npm ci
 
       - name: Audit production dependencies
-        run: npm audit --omit=dev --audit-level=moderate
+        run: node scripts/check-production-audit.mjs
 
       - name: Run unit and integration tests
         run: npm run test

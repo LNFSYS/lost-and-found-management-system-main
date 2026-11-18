@@ -44,8 +44,32 @@ const initialState: CallState = {
 };
 
 const iceServers: RTCIceServer[] = [
+  // 1. STUN Servers (ưu tiên kết nối trực tiếp P2P tốc độ cao khi cùng mạng hoặc NAT đơn giản)
   { urls: "stun:stun.l.google.com:19302" },
   { urls: "stun:stun1.l.google.com:19302" },
+  { urls: "stun:stun.relay.metered.ca:80" },
+
+  // 2. TURN Relay Servers (trung chuyển âm thanh & video khi khác mạng, 4G, hoặc sau tường lửa/Symmetric NAT)
+  {
+    urls: "turn:global.relay.metered.ca:80",
+    username: "305f34e3ab6f4c59dcb3c02a",
+    credential: "4tgkFu6U/cgUBy4h"
+  },
+  {
+    urls: "turn:global.relay.metered.ca:80?transport=tcp",
+    username: "305f34e3ab6f4c59dcb3c02a",
+    credential: "4tgkFu6U/cgUBy4h"
+  },
+  {
+    urls: "turn:global.relay.metered.ca:443",
+    username: "305f34e3ab6f4c59dcb3c02a",
+    credential: "4tgkFu6U/cgUBy4h"
+  },
+  {
+    urls: "turns:global.relay.metered.ca:443?transport=tcp",
+    username: "305f34e3ab6f4c59dcb3c02a",
+    credential: "4tgkFu6U/cgUBy4h"
+  }
 ];
 
 interface CallSocket {
@@ -187,7 +211,10 @@ export function useWebRTCCall({ roomId, userId, calleeId, socket, onCallEnded }:
   }, []);
 
   const createPeerConnection = useCallback((currentCallId: string) => {
-    const pc = new RTCPeerConnection({ iceServers });
+    const pc = new RTCPeerConnection({
+      iceServers,
+      iceCandidatePoolSize: 10
+    });
 
     const remoteStream = new MediaStream();
     remoteStreamRef.current = remoteStream;
@@ -231,11 +258,23 @@ export function useWebRTCCall({ roomId, userId, calleeId, socket, onCallEnded }:
     };
 
     pc.oniceconnectionstatechange = () => {
-      if (pc.iceConnectionState === "failed" || pc.iceConnectionState === "disconnected") {
-        if (stateRef.current.status === "CONNECTED") {
+      console.log(`[WebRTC] ICE Connection State: ${pc.iceConnectionState}`);
+      if (pc.iceConnectionState === "failed") {
+        if (typeof pc.restartIce === "function") {
+          console.warn("[WebRTC] ICE failed, attempting restartIce...");
+          pc.restartIce();
+        } else if (stateRef.current.status === "CONNECTED") {
           socket?.emit("call.end", { callId: currentCallId });
           endCallState("DISCONNECTED");
         }
+      }
+    };
+
+    pc.onconnectionstatechange = () => {
+      console.log(`[WebRTC] Connection State: ${pc.connectionState}`);
+      if (pc.connectionState === "failed" && stateRef.current.status === "CONNECTED") {
+        socket?.emit("call.end", { callId: currentCallId });
+        endCallState("DISCONNECTED");
       }
     };
 

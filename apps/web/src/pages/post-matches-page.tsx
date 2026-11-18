@@ -303,7 +303,7 @@ function MatchCandidateCard({
               <strong>{percentage(result.scores.time)}</strong>
             </div>
             <div className="match-score-row">
-              <span>OCR / Ký tự chữ<small>chữ đọc từ ảnh</small></span>
+              <span>OCR / chữ<small>chữ đọc từ ảnh</small></span>
               <i><b style={{ width: percentage(result.scores.ocr) }} /></i>
               <strong>{percentage(result.scores.ocr)}</strong>
             </div>
