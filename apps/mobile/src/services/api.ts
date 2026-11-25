@@ -1077,7 +1077,7 @@ export const postService = {
     for (const file of files) {
       await appendFileToFormData(formData, "files", file);
     }
-    return api.post<ImageAnalysisResult>("/posts/analyze-image", formData).then((res) => res.data);
+    return api.post<ImageAnalysisResult>("/posts/analyze-image", formData, { timeout: 45_000 }).then((res) => res.data);
   },
   uploadPostMedia: async (postId: string, file: MobileImageFile, mediaKind: "ITEM" | "EVIDENCE" = "ITEM"): Promise<{ id: string; url: string }> => {
     const formData = new FormData();

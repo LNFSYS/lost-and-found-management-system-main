@@ -5,6 +5,7 @@ import { router } from "expo-router";
 
 import { colors, radii, spacing } from "@/constants/theme";
 import { warehouseStaffLabel } from "@/constants/labels";
+import { useAuth } from "@/context/auth-context";
 import type { MobileImageFile, StaffCustodyStatus, WarehouseItemStatus } from "@/services/api";
 
 type StaffSection = "dashboard" | "custody" | "warehouse" | "logs";
@@ -17,12 +18,17 @@ const navigation: { key: StaffSection; title: string; icon: "view-dashboard-outl
 ];
 
 export function StaffNavigation({ active }: { active: StaffSection }) {
+  const { logout } = useAuth();
   return (
     <View style={styles.navigationWrap}>
       <View style={styles.brandRow}>
         <View style={styles.brandIcon}><MaterialCommunityIcons name="warehouse" size={21} color={colors.primary} /></View>
         <View style={styles.brandCopy}><Text style={styles.eyebrow}>FPTU LOST & FOUND</Text><Text style={styles.brandTitle}>Vận hành kho</Text></View>
         <View style={styles.staffTag}><Text style={styles.staffTagText}>{warehouseStaffLabel.toLocaleUpperCase("vi-VN")}</Text></View>
+        <Pressable accessibilityRole="button" accessibilityLabel="Đăng xuất" onPress={() => void logout()} style={styles.logoutButton}>
+          <MaterialCommunityIcons name="logout" size={16} color={colors.danger} />
+          <Text style={styles.logoutText}>Thoát</Text>
+        </Pressable>
       </View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.navigation}>
         {navigation.map((item) => {
@@ -99,6 +105,8 @@ const styles = StyleSheet.create({
   brandTitle: { color: colors.ink, fontSize: 16, fontWeight: "900" },
   staffTag: { minHeight: 28, justifyContent: "center", paddingHorizontal: 10, borderRadius: radii.pill, backgroundColor: colors.successSoft },
   staffTagText: { color: colors.success, fontSize: 10, fontWeight: "900", letterSpacing: 0.5 },
+  logoutButton: { minHeight: 36, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 4, paddingHorizontal: spacing.sm, borderWidth: 1, borderColor: colors.dangerSoft, borderRadius: radii.pill, backgroundColor: colors.surface },
+  logoutText: { color: colors.danger, fontSize: 11, fontWeight: "800" },
   navigation: { gap: spacing.xs, paddingRight: spacing.md },
   navItem: { minHeight: 42, flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: spacing.md, borderRadius: radii.pill, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
   navItemSelected: { borderColor: colors.primary, backgroundColor: colors.primary },
