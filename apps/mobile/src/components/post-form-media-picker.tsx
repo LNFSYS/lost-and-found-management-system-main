@@ -22,6 +22,7 @@ import {
 
 export const MAX_IMAGE_COUNT = 5;
 export const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB limit matching server policy
+const MAX_ANALYSIS_TOTAL_BYTES = 14 * 1024 * 1024; // Must match the API image-analysis limit
 
 export interface ApplyAiDraftPayload {
   title: string;
@@ -224,6 +225,15 @@ export function PostFormMediaPicker({
       return;
     }
 
+    const knownTotalSize = images.reduce((total, image) => total + (image.size ?? 0), 0);
+    if (knownTotalSize > MAX_ANALYSIS_TOTAL_BYTES) {
+      Alert.alert(
+        "Tổng dung lượng ảnh quá lớn",
+        "Tổng dung lượng ảnh phân tích không được vượt quá 14 MB. Hãy chọn ít ảnh hơn hoặc ảnh có dung lượng nhỏ hơn."
+      );
+      return;
+    }
+
     setAiError(null);
     setAnalysisStepIndex(0);
     setIsAnalyzing(true);
@@ -399,9 +409,9 @@ export function PostFormMediaPicker({
                 <MaterialCommunityIcons name="creation" size={18} color="#7C3AED" />
               </View>
               <View>
-                <Text style={styles.aiResultHeaderTitle}>Gợi ý từ AI Vision (DINOv2)</Text>
+                <Text style={styles.aiResultHeaderTitle}>Gợi ý nhận diện từ AI</Text>
                 <Text style={styles.aiModelTag}>
-                  Mô hình: {aiResult.model || "dinov2_vits14 + easyocr"}
+                  Mô hình: {aiResult.model || "Gemini"}
                 </Text>
               </View>
             </View>
