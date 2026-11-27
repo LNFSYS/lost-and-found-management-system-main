@@ -16,6 +16,85 @@ import {
 } from "lucide-react";
 import { api, type SensitiveDocumentItem } from "../services/api";
 
+function SensitiveDocThumbnail({
+  mediaUrl,
+  title,
+  onPreview
+}: {
+  mediaUrl: string;
+  title: string;
+  onPreview: (blobUrl: string) => void;
+}) {
+  const [source, setSource] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    let objectUrl = "";
+    if (mediaUrl.startsWith("http")) {
+      setSource(mediaUrl);
+      return;
+    }
+    api.getPostMedia(mediaUrl)
+      .then((blob) => {
+        objectUrl = URL.createObjectURL(blob);
+        if (active) setSource(objectUrl);
+      })
+      .catch(() => {
+        if (active) setSource("");
+      });
+    return () => {
+      active = false;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [mediaUrl]);
+
+  return (
+    <div
+      style={{
+        width: "80px",
+        height: "80px",
+        borderRadius: "8px",
+        overflow: "hidden",
+        position: "relative",
+        flexShrink: 0,
+        cursor: "pointer",
+        border: "1px solid #e2e8f0"
+      }}
+      onClick={() => { if (source) onPreview(source); }}
+      title="Click để phóng to ảnh"
+    >
+      {source ? (
+        <img
+          src={source}
+          alt={title}
+          style={{ width: "100%", height: "100%", objectFit: "cover" }}
+        />
+      ) : (
+        <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "#f8fafc", fontSize: "0.7rem", color: "#94a3b8" }}>
+          {source === "" ? "Lỗi tải ảnh" : "Đang tải..."}
+        </div>
+      )}
+      <div style={{
+        position: "absolute",
+        bottom: 0,
+        left: 0,
+        right: 0,
+        background: "rgba(0,0,0,0.5)",
+        color: "white",
+        textAlign: "center",
+        fontSize: "0.65rem",
+        padding: "2px 0",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: "2px"
+      }}>
+        <Eye size={10} /> Phóng to
+      </div>
+    </div>
+  );
+}
+
 export function SensitiveDocumentsTab() {
   const [items, setItems] = useState<SensitiveDocumentItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -85,6 +164,8 @@ export function SensitiveDocumentsTab() {
         padding: "1.5rem 2rem",
         marginBottom: "1.5rem",
         display: "flex",
+        flexWrap: "wrap",
+        gap: "1rem",
         justifyContent: "space-between",
         alignItems: "center",
         boxShadow: "0 10px 25px -5px rgba(15, 23, 42, 0.3)"
@@ -167,8 +248,8 @@ export function SensitiveDocumentsTab() {
         </div>
 
         {/* Search Input */}
-        <form onSubmit={handleSearchSubmit} style={{ display: "flex", gap: "0.5rem" }}>
-          <div style={{ position: "relative", minWidth: "260px" }}>
+        <form onSubmit={handleSearchSubmit} style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", width: "min(100%, 360px)" }}>
+          <div style={{ position: "relative", flex: 1, minWidth: "min(100%, 200px)" }}>
             <Search size={16} style={{ position: "absolute", left: "10px", top: "50%", transform: "translateY(-50%)", color: "#94a3b8" }} />
             <input
               type="text"
@@ -237,7 +318,7 @@ export function SensitiveDocumentsTab() {
       {!loading && filteredItems.length > 0 && (
         <div style={{
           display: "grid",
-          gridTemplateColumns: "repeat(auto-fill, minmax(360px, 1fr))",
+          gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 300px), 1fr))",
           gap: "1.25rem"
         }}>
           {filteredItems.map((item) => {
@@ -246,6 +327,7 @@ export function SensitiveDocumentsTab() {
               <div
                 key={item.id}
                 style={{
+                  minWidth: 0,
                   backgroundColor: "#ffffff",
                   borderRadius: "12px",
                   border: "1px solid #e2e8f0",
@@ -285,43 +367,11 @@ export function SensitiveDocumentsTab() {
                   {/* Thumbnail & Title */}
                   <div style={{ display: "flex", gap: "1rem", marginBottom: "0.75rem" }}>
                     {item.mediaUrl ? (
-                      <div
-                        style={{
-                          width: "80px",
-                          height: "80px",
-                          borderRadius: "8px",
-                          overflow: "hidden",
-                          position: "relative",
-                          flexShrink: 0,
-                          cursor: "pointer",
-                          border: "1px solid #e2e8f0"
-                        }}
-                        onClick={() => setPreviewImage({ url: item.mediaUrl!, title: item.title })}
-                        title="Click để phóng to ảnh"
-                      >
-                        <img
-                          src={item.mediaUrl}
-                          alt={item.title}
-                          style={{ width: "100%", height: "100%", objectFit: "cover" }}
-                        />
-                        <div style={{
-                          position: "absolute",
-                          bottom: 0,
-                          left: 0,
-                          right: 0,
-                          background: "rgba(0,0,0,0.5)",
-                          color: "white",
-                          textAlign: "center",
-                          fontSize: "0.65rem",
-                          padding: "2px 0",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          gap: "2px"
-                        }}>
-                          <Eye size={10} /> Phóng to
-                        </div>
-                      </div>
+                      <SensitiveDocThumbnail
+                        mediaUrl={item.mediaUrl}
+                        title={item.title}
+                        onPreview={(blobUrl) => setPreviewImage({ url: blobUrl, title: item.title })}
+                      />
                     ) : (
                       <div style={{
                         width: "80px",

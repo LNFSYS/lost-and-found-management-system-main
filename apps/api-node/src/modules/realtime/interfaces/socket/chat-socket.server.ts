@@ -125,15 +125,19 @@ export function createChatSocketServer(input: {
     }
   }
 
-  async function authorize(session: AccessTokenPayload, roomId: string) {
+  async function validateSession(session: AccessTokenPayload) {
     if (!Number.isFinite(session.exp) || session.exp! * 1000 <= Date.now()) throw socketAuthError("UNAUTHENTICATED");
     let valid: boolean;
     try { valid = await bounded(() => input.validateAccessSession(session)); }
     catch { throw socketAuthError("UNAUTHENTICATED"); }
     if (!valid) throw socketAuthError("UNAUTHENTICATED");
+    if (session.exp! * 1000 <= Date.now()) throw socketAuthError("UNAUTHENTICATED");
+  }
+
+  async function authorize(session: AccessTokenPayload, roomId: string) {
+    await validateSession(session);
     try { await bounded(() => input.authorizeRoom(session.sub, roomId)); }
     catch { throw socketAuthError("FORBIDDEN"); }
-    if (session.exp! * 1000 <= Date.now()) throw socketAuthError("UNAUTHENTICATED");
   }
 
   socketServer.use((socket, next) => {
@@ -158,6 +162,8 @@ export function createChatSocketServer(input: {
         if (!parsedRoomId.success) throw socketAuthError("INVALID_REQUEST");
         await authorize(session, parsedRoomId.data);
         resolvedRoomId = parsedRoomId.data;
+      } else {
+        await validateSession(session);
       }
       if (stopped || socket.conn.readyState !== "open") throw socketAuthError("UNAUTHENTICATED");
 
@@ -266,18 +272,14 @@ export function createChatSocketServer(input: {
         const targetRoomId = (typeof data.roomId === "string" && data.roomId) ? data.roomId : roomId;
         const callId = `call_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
 
-        if (targetRoomId && targetRoomId !== "global") {
-          try {
-            await bounded(() => input.authorizeRoom(userId, targetRoomId));
-          } catch {
-            socket.emit("call.ended", {
-              callId,
-              roomId: targetRoomId,
-              reason: "ERROR",
-              error: "Bạn không có quyền tham gia phòng trao đổi này."
-            });
-            return;
-          }
+        if (!targetRoomId || targetRoomId === "global" || !roomIdSchema.safeParse(targetRoomId).success) {
+          socket.emit("call.ended", {
+            callId,
+            roomId: targetRoomId || "global",
+            reason: "ERROR",
+            error: "Cuộc gọi chỉ có thể thực hiện trong phòng trao đổi hợp lệ."
+          });
+          return;
         }
 
         if (!calleeId || calleeId === userId) {
@@ -288,6 +290,19 @@ export function createChatSocketServer(input: {
             error: calleeId === userId
               ? "Cả hai cửa sổ đang đăng nhập cùng một tài khoản. Vui lòng mở tab Ẩn danh (Incognito) hoặc trình duyệt khác để đăng nhập tài khoản thứ 2."
               : "Không tìm thấy người nhận cuộc gọi."
+          });
+          return;
+        }
+
+        try {
+          await bounded(() => input.authorizeRoom(userId, targetRoomId));
+          await bounded(() => input.authorizeRoom(calleeId, targetRoomId));
+        } catch {
+          socket.emit("call.ended", {
+            callId,
+            roomId: targetRoomId,
+            reason: "ERROR",
+            error: "Bạn hoặc đối phương không có quyền tham gia phòng trao đổi này."
           });
           return;
         }
@@ -335,11 +350,15 @@ export function createChatSocketServer(input: {
         const callId = typeof data.callId === "string" ? data.callId : null;
         if (!callId) return;
 
-        const call = callService.acceptCall(callId);
-        if (!call) return;
+        const call = callService.getCall(callId);
+        if (!call || call.status !== "RINGING") return;
+        if (call.calleeId !== userId) return;
 
-        emitToPeer(roomId, call.callerId, "call.accepted", { callId, roomId });
-        socket.emit("call.accepted", { callId, roomId });
+        const acceptedCall = callService.acceptCall(callId);
+        if (!acceptedCall) return;
+
+        emitToPeer(acceptedCall.roomId, acceptedCall.callerId, "call.accepted", { callId, roomId: acceptedCall.roomId });
+        socket.emit("call.accepted", { callId, roomId: acceptedCall.roomId });
       });
 
       socket.on("call.decline", (payload: unknown) => {
@@ -349,12 +368,16 @@ export function createChatSocketServer(input: {
         const callId = typeof data.callId === "string" ? data.callId : null;
         if (!callId) return;
 
-        const call = callService.endCall(callId, "DECLINED");
+        const call = callService.getCall(callId);
         if (!call) return;
+        if (call.callerId !== userId && call.calleeId !== userId) return;
 
-        const peerId = call.callerId === userId ? call.calleeId : call.callerId;
-        emitToPeer(roomId, peerId, "call.ended", { callId, roomId, reason: "DECLINED" });
-        socket.emit("call.ended", { callId, roomId, reason: "DECLINED" });
+        const endedCall = callService.endCall(callId, "DECLINED");
+        if (!endedCall) return;
+
+        const peerId = endedCall.callerId === userId ? endedCall.calleeId : endedCall.callerId;
+        emitToPeer(endedCall.roomId, peerId, "call.ended", { callId, roomId: endedCall.roomId, reason: "DECLINED" });
+        socket.emit("call.ended", { callId, roomId: endedCall.roomId, reason: "DECLINED" });
       });
 
       socket.on("call.end", (payload: unknown) => {
@@ -364,12 +387,16 @@ export function createChatSocketServer(input: {
         const callId = typeof data.callId === "string" ? data.callId : null;
         if (!callId) return;
 
-        const call = callService.endCall(callId, "ENDED");
+        const call = callService.getCall(callId);
         if (!call) return;
+        if (call.callerId !== userId && call.calleeId !== userId) return;
 
-        const peerId = call.callerId === userId ? call.calleeId : call.callerId;
-        emitToPeer(roomId, peerId, "call.ended", { callId, roomId, reason: "ENDED" });
-        socket.emit("call.ended", { callId, roomId, reason: "ENDED" });
+        const endedCall = callService.endCall(callId, "ENDED");
+        if (!endedCall) return;
+
+        const peerId = endedCall.callerId === userId ? endedCall.calleeId : endedCall.callerId;
+        emitToPeer(endedCall.roomId, peerId, "call.ended", { callId, roomId: endedCall.roomId, reason: "ENDED" });
+        socket.emit("call.ended", { callId, roomId: endedCall.roomId, reason: "ENDED" });
       });
 
       // Relay WebRTC SDP offer (support renegotiation from either peer)
@@ -385,7 +412,7 @@ export function createChatSocketServer(input: {
         if (call.callerId !== userId && call.calleeId !== userId) return;
 
         const peerId = call.callerId === userId ? call.calleeId : call.callerId;
-        emitToPeer(roomId, peerId, "call.offer", { callId, roomId, sdp: data.sdp });
+        emitToPeer(call.roomId, peerId, "call.offer", { callId, roomId: call.roomId, sdp: data.sdp });
       });
 
       // Relay WebRTC SDP answer (support renegotiation from either peer)
@@ -401,7 +428,7 @@ export function createChatSocketServer(input: {
         if (call.callerId !== userId && call.calleeId !== userId) return;
 
         const peerId = call.callerId === userId ? call.calleeId : call.callerId;
-        emitToPeer(roomId, peerId, "call.answer", { callId, roomId, sdp: data.sdp });
+        emitToPeer(call.roomId, peerId, "call.answer", { callId, roomId: call.roomId, sdp: data.sdp });
       });
 
       // Relay ICE candidates
@@ -414,9 +441,10 @@ export function createChatSocketServer(input: {
 
         const call = callService.getCall(callId);
         if (!call) return;
+        if (call.callerId !== userId && call.calleeId !== userId) return;
 
         const peerId = call.callerId === userId ? call.calleeId : call.callerId;
-        emitToPeer(roomId, peerId, "call.ice-candidate", { callId, roomId, candidate: data.candidate });
+        emitToPeer(call.roomId, peerId, "call.ice-candidate", { callId, roomId: call.roomId, candidate: data.candidate });
       });
 
       // Media toggle (mute/unmute mic, camera on/off)
@@ -431,23 +459,23 @@ export function createChatSocketServer(input: {
 
         const call = callService.getCall(callId);
         if (!call || call.status !== "CONNECTED") return;
+        if (call.callerId !== userId && call.calleeId !== userId) return;
 
         const peerId = call.callerId === userId ? call.calleeId : call.callerId;
-        emitToPeer(roomId, peerId, "call.media-toggled", { callId, roomId, userId, mediaType, enabled: Boolean(data.enabled) });
+        emitToPeer(call.roomId, peerId, "call.media-toggled", { callId, roomId: call.roomId, userId, mediaType, enabled: Boolean(data.enabled) });
       });
     }
 
     scheduleExpiry();
     if (!socket.connected) return;
-    if (roomFromMap) {
-      validationTimer = setInterval(() => {
-        if (!session || checkingSession) return;
-        checkingSession = true;
-        void authorize(session, roomFromMap).catch(error => {
-          disconnectWithError(error instanceof Error && error.message === "FORBIDDEN" ? "FORBIDDEN" : "UNAUTHENTICATED");
-        }).finally(() => { checkingSession = false; });
-      }, 25_000);
-    }
+    validationTimer = setInterval(() => {
+      if (!session || checkingSession) return;
+      checkingSession = true;
+      const check = roomFromMap ? authorize(session, roomFromMap) : validateSession(session);
+      void check.catch(error => {
+        disconnectWithError(error instanceof Error && error.message === "FORBIDDEN" ? "FORBIDDEN" : "UNAUTHENTICATED");
+      }).finally(() => { checkingSession = false; });
+    }, 25_000);
 
     socket.emit("ready", { roomId });
   });

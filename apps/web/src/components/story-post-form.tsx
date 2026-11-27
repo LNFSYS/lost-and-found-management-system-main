@@ -108,6 +108,13 @@ export function StoryPostForm({
   const [mainCategoryId, setMainCategoryId] = useState("");
   const [categoryId, setCategoryId] = useState("");
   const [draft, setDraft] = useState<DraftState>(() => newDraft(defaultContact));
+  const [sensitiveConfirmed, setSensitiveConfirmed] = useState(false);
+  const [showSensitiveConfirm, setShowSensitiveConfirm] = useState(false);
+
+  const isSensitiveCandidate = useMemo(() => {
+    return files.some((f) => /cccd|cmnd|the[-_ ]?sv|student|atm|gplx|passport|can[-_ ]?cuoc/i.test(f.name))
+      || /cccd|cmnd|căn cước|can cuoc|thẻ sinh viên|the sv|mssv|gplx|thẻ ngân hàng|the atm|passport/i.test(`${draft.title} ${draft.description}`);
+  }, [files, draft.title, draft.description]);
 
   useEffect(() => {
     let active = true;
@@ -161,6 +168,8 @@ export function StoryPostForm({
     setAnalysis(null);
     setError("");
     setFiles([]);
+    setSensitiveConfirmed(false);
+    setShowSensitiveConfirm(false);
     setIllustrationId(null);
     setIllustrationDraftId(null);
     setAreaId("");
@@ -211,6 +220,11 @@ export function StoryPostForm({
     setError("");
     if (!online) {
       setError("Bạn đang offline. Phân tích ảnh cần kết nối mạng và chưa được gửi.");
+      return;
+    }
+    if (isSensitiveCandidate && !sensitiveConfirmed) {
+      setShowSensitiveConfirm(true);
+      setError("Ảnh hoặc bài đăng có thể chứa giấy tờ tùy thân. Vui lòng xác nhận bạn đã che mờ các thông tin định danh cá nhân nhạy cảm trước khi gửi phân tích AI.");
       return;
     }
     setAnalyzing(true);
@@ -387,8 +401,30 @@ export function StoryPostForm({
         </button>
         <p>Chụp nhiều góc giúp đọc rõ hãng, model, chữ, phụ kiện và dấu hiệu riêng. Ảnh được phân tích trực tiếp qua Google Gemini API để tự động trích xuất tên, mô tả và danh mục.</p>
       </div>
+      {(isSensitiveCandidate || showSensitiveConfirm) && (
+        <div style={{ backgroundColor: "#fef3c7", border: "1px solid #fde68a", borderRadius: "8px", padding: "0.75rem 1rem", marginTop: "0.75rem" }}>
+          <p style={{ margin: "0 0 0.5rem 0", color: "#92400e", fontSize: "0.875rem", fontWeight: 600 }}>
+            Cảnh báo bảo mật thông tin cá nhân (S1/S2):
+          </p>
+          <label style={{ display: "flex", alignItems: "flex-start", gap: "0.5rem", fontSize: "0.85rem", color: "#78350f", cursor: "pointer" }}>
+            <input
+              type="checkbox"
+              checked={sensitiveConfirmed}
+              onChange={(e) => {
+                setSensitiveConfirmed(e.target.checked);
+                if (e.target.checked) setError("");
+              }}
+              style={{ marginTop: "2px" }}
+            />
+            <span>Tôi xác nhận đã che mờ các số định danh cá nhân (số CCCD, MSSV, số thẻ ATM) trên ảnh giấy tờ trước khi gửi AI.</span>
+          </label>
+        </div>
+      )}
       <div className="story-image-analysis-copy">
         <p className="story-image-analysis-hint">Hãy dùng chức năng phân tích ảnh bằng Gemini AI để tự động điền thông tin nhanh hơn.</p>
+        <p className="story-image-analysis-warning" style={{ color: "#92400e", backgroundColor: "#fffbeb", border: "1px solid #fef3c7", padding: "0.5rem 0.75rem", borderRadius: "6px", fontSize: "0.85rem", marginTop: "0.5rem" }}>
+          <strong>Lưu ý bảo mật (S1/S2):</strong> Nếu ảnh chụp chứa giấy tờ tùy thân (CCCD, Thẻ sinh viên, Thẻ ngân hàng, GPLX...), vui lòng che mờ hoặc ẩn các số định danh nhạy cảm trước khi gửi phân tích AI nhằm bảo vệ quyền riêng tư.
+        </p>
         <p className="story-image-analysis-note"><strong>Lưu ý:</strong> Thông tin điền sẵn từ Gemini AI chỉ mang tính tham khảo, không đảm bảo chính xác 100%. Vui lòng kiểm tra kỹ và chỉnh sửa trước khi đăng.</p>
       </div>
     </div>

@@ -319,12 +319,16 @@ export function createPostUseCases(options: PostDependencies) {
       }
       await ensureBusinessRefs(input);
       const postId = id();
+      const sensitiveDetection = detectSensitiveDocumentType(`${input.title} ${input.description || ""}`);
+      const visibilityMode: VisibilityMode = input.type === "FOUND"
+        ? (input.visibilityMode ?? (sensitiveDetection.isSensitive ? "PRIVATE_DETAILS" : "PUBLIC"))
+        : (sensitiveDetection.isSensitive ? "PRIVATE_DETAILS" : "PUBLIC");
       const post = await withTransaction(async (connection) => {
         await postRepository.createPost({
           id: postId,
           userId: ownerId,
           type: input.type,
-          visibilityMode: input.type === "FOUND" ? input.visibilityMode ?? "PUBLIC" : "PUBLIC",
+          visibilityMode,
           title: input.title,
           titleNormalized: normalizePostText(input.title),
           description: input.description,
@@ -362,6 +366,9 @@ export function createPostUseCases(options: PostDependencies) {
         const current = await postRepository.findOwnedByIdForUpdate(postId, ownerId, connection);
         if (!current) throw new AppError("not_found", "Không tìm thấy bài đăng của bạn");
         assertPostUpdateAllowed(current, input);
+        if (input.status === "CLOSED" && await postRepository.hasDeletionBlockers(postId, connection)) {
+          throw new AppError("conflict", "Không thể đóng bài đang có bàn giao, vật phẩm trong kho, claim, lịch hẹn, tranh chấp hoặc legal hold chưa kết thúc");
+        }
         await ensureBusinessRefs(mergeForValidation(current, input));
         await postRepository.updatePost(postId, {
           title: input.title,
@@ -535,6 +542,9 @@ export function createPostUseCases(options: PostDependencies) {
       const secureUrl = await withTransaction(async (connection) => {
         const media = await postRepository.findMedia(postId, mediaId, connection, true);
         if (!media || media.ownerId !== ownerId) throw new AppError("not_found", "Không tìm thấy media");
+        if (media.postDeletedAt || ["RESOLVED", "CLOSED", "EXPIRED", "HIDDEN"].includes(media.postStatus)) {
+          throw new AppError("conflict", "Bài đăng đã kết thúc hoặc bị ẩn, không thể xóa ảnh");
+        }
         const deleted = await postRepository.deleteMedia(postId, mediaId, connection);
         if (!deleted) throw new AppError("not_found", "Không tìm thấy media");
         return media.secureUrl;

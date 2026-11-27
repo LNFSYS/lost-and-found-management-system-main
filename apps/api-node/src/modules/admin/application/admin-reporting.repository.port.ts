@@ -128,6 +128,7 @@ export interface AdminReportingRepository {
   findPostOwnerTarget(postId: string, connection?: TransactionContext, forUpdate?: boolean): Promise<ModerationTargetRecord | null>;
   hidePost(postId: string, connection: TransactionContext): Promise<boolean>;
   deletePost(postId: string, connection: TransactionContext): Promise<boolean>;
+  hasDeletionBlockers(postId: string, connection: TransactionContext): Promise<boolean>;
   setUserStatus(userId: string, status: "ACTIVE" | "DISABLED", connection: TransactionContext): Promise<boolean>;
   lockActiveAdmins(connection: TransactionContext): Promise<number>;
   revokeRefreshTokens(userId: string, connection: TransactionContext): Promise<void>;

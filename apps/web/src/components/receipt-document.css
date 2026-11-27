@@ -408,6 +408,152 @@
   line-height: 1.3;
 }
 
+/* Responsive Overrides for Mobile (320px - 768px) */
+@media (max-width: 768px) {
+  .receipt-modal-overlay {
+    padding: 10px 8px;
+    max-width: 100vw;
+    overflow-x: hidden;
+  }
+
+  .receipt-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+    padding: 10px 12px;
+    margin-bottom: 12px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+
+  .receipt-toolbar__info {
+    justify-content: space-between;
+    font-size: 0.82rem;
+    width: 100%;
+  }
+
+  .receipt-toolbar__actions {
+    display: flex;
+    width: 100%;
+    gap: 8px;
+  }
+
+  .receipt-btn-print,
+  .receipt-btn-close {
+    flex: 1 1 0;
+    min-height: 40px;
+    justify-content: center;
+    font-size: 0.82rem;
+    padding: 8px 10px;
+    box-sizing: border-box;
+  }
+
+  .receipt-printable-container {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    overflow-x: auto;
+  }
+
+  .receipt-paper {
+    width: 100%;
+    max-width: 100%;
+    min-height: auto;
+    padding: 16px 12px;
+    font-size: 10.5pt;
+    box-sizing: border-box;
+    overflow-wrap: break-word;
+    word-break: break-word;
+  }
+
+  .receipt-header {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .receipt-header-left,
+  .receipt-header-right {
+    width: 100%;
+  }
+
+  .receipt-org-title,
+  .receipt-dept-title,
+  .receipt-national-title,
+  .receipt-national-motto {
+    font-size: 10pt;
+  }
+
+  .receipt-header-divider,
+  .receipt-national-divider {
+    margin: 4px auto;
+  }
+
+  .receipt-title-block {
+    margin: 12px 0 10px 0;
+  }
+
+  .receipt-title {
+    font-size: 13pt;
+  }
+
+  .receipt-subtitle {
+    font-size: 10pt;
+  }
+
+  .receipt-info-grid {
+    grid-template-columns: 1fr;
+    gap: 6px;
+    font-size: 10pt;
+  }
+
+  .receipt-table {
+    display: block;
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    font-size: 9.5pt;
+  }
+
+  .receipt-table th,
+  .receipt-table td {
+    padding: 4px 6px;
+  }
+
+  .receipt-table-label {
+    width: auto;
+  }
+
+  .receipt-terms {
+    font-size: 10pt;
+  }
+
+  .receipt-terms p {
+    text-indent: 16px;
+  }
+
+  .receipt-signatures {
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+
+  .receipt-signature-role {
+    font-size: 10pt;
+  }
+
+  .receipt-signature-guide {
+    font-size: 9pt;
+  }
+
+  .receipt-signature-space {
+    height: 48px;
+  }
+
+  .receipt-signature-name {
+    font-size: 10pt;
+  }
+}
+
 /* Print Media Specific Overrides */
 @media print {
   /* Hide all regular web app markup */

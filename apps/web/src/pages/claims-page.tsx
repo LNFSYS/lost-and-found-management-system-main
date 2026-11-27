@@ -1,4 +1,4 @@
-import { AlertTriangle, ArrowLeft, ChevronDown, ChevronUp, Clock3, FileCheck2, FileWarning, Image, LockKeyhole, MessageCircle, Phone, PhoneOff, Plus, RefreshCw, Search, Send, ShieldCheck, Video, VideoOff, X } from "lucide-react";
+import { AlertTriangle, ArrowLeft, ChevronDown, ChevronUp, Clock3, FileCheck2, FileWarning, Image, Info, LockKeyhole, MessageCircle, MoreVertical, Phone, PhoneOff, Plus, RefreshCw, Search, Send, ShieldCheck, Video, VideoOff, X } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import type { Socket } from "socket.io-client";
@@ -353,14 +353,24 @@ export function ClaimsPage() {
   const [attachmentMenu, setAttachmentMenu] = useState(false);
   const attachmentMenuRef = useRef<HTMLDivElement>(null);
 
+  const [headerMenuOpen, setHeaderMenuOpen] = useState(false);
+  const headerMenuRef = useRef<HTMLDivElement>(null);
+  const [mobileInspectorOpen, setMobileInspectorOpen] = useState(false);
+
   useEffect(() => {
-    if (!attachmentMenu) return;
+    if (!attachmentMenu && !headerMenuOpen) return;
     function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") setAttachmentMenu(false);
+      if (event.key === "Escape") {
+        setAttachmentMenu(false);
+        setHeaderMenuOpen(false);
+      }
     }
     function handleClickOutside(event: MouseEvent) {
       if (attachmentMenuRef.current && !attachmentMenuRef.current.contains(event.target as Node)) {
         setAttachmentMenu(false);
+      }
+      if (headerMenuRef.current && !headerMenuRef.current.contains(event.target as Node)) {
+        setHeaderMenuOpen(false);
       }
     }
     document.addEventListener("keydown", handleKeyDown);
@@ -369,7 +379,7 @@ export function ClaimsPage() {
       document.removeEventListener("keydown", handleKeyDown);
       document.removeEventListener("mousedown", handleClickOutside);
     };
-  }, [attachmentMenu]);
+  }, [attachmentMenu, headerMenuOpen]);
   const [chatFile, setChatFile] = useState<File | null>(null);
   const [chatPreview, setChatPreview] = useState("");
   const [checkedQuestions, setCheckedQuestions] = useState<{ claimId: string; questions: string[] } | null>(null);
@@ -995,8 +1005,11 @@ export function ClaimsPage() {
 
   function jumpTo(sectionId: string) {
     setAttachmentMenu(false);
+    setMobileInspectorOpen(true);
     setEvidenceUploadRequest(value => value + 1);
-    document.getElementById(sectionId)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    setTimeout(() => {
+      document.getElementById(sectionId)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 100);
   }
 
   const sensitiveDocument = /thẻ|giấy|cccd|cmnd|bằng lái|ngân hàng/i.test(claim?.item?.categoryName ?? "");
@@ -1108,34 +1121,100 @@ export function ClaimsPage() {
                         </button>
                       </div>
                     )}
-                    {(showLostOwnerSafetyNote || Boolean(verification) || Boolean(verificationError)) && (
+                    {(Boolean(verification) || Boolean(verificationError)) && (
                       <button
                         type="button"
                         className={`claim-toggle-context-btn ${contextCollapsed ? "is-collapsed" : ""}`}
                         onClick={() => setContextCollapsed(v => !v)}
-                        title={contextCollapsed ? "Mở thông tin xác minh & an toàn" : "Thu gọn thông tin xác minh & an toàn"}
+                        title={contextCollapsed ? "Mở thông tin xác minh" : "Thu gọn thông tin xác minh"}
                       >
-                        <ShieldCheck size={15} />
+                        <ShieldCheck size={16} />
                         <span>{contextCollapsed ? "Xem xác minh" : "Thu gọn"}</span>
                         {contextCollapsed ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
                       </button>
                     )}
-                    <Link className="claim-action-icon-btn" to={`/reports?targetType=CLAIM&targetId=${claim.id}`} title="Báo cáo claim"><FileWarning size={16} /></Link>
-                    {claim.claimantId === user?.id && ["PENDING", "CONVERSATION_OPEN", "NEED_MORE_INFO"].includes(claim.status) && (
-                      <button type="button" className="claim-action-icon-btn claim-close-button" disabled={withdrawing} onClick={() => void withdraw()} title="Đóng claim"><X size={16} /></button>
-                    )}
+                    <div className="claim-desktop-actions">
+                      <button
+                        type="button"
+                        className="claim-action-icon-btn claim-inspector-btn"
+                        onClick={() => setMobileInspectorOpen(v => !v)}
+                        title="Thông tin & Bằng chứng"
+                      >
+                        <Info size={16} />
+                      </button>
+                      <Link className="claim-action-icon-btn" to={`/reports?targetType=CLAIM&targetId=${claim.id}`} title="Báo cáo claim"><FileWarning size={16} /></Link>
+                      {claim.claimantId === user?.id && ["PENDING", "CONVERSATION_OPEN", "NEED_MORE_INFO"].includes(claim.status) && (
+                        <button type="button" className="claim-action-icon-btn claim-close-button" disabled={withdrawing} onClick={() => void withdraw()} title="Đóng claim"><X size={16} /></button>
+                      )}
+                    </div>
+                    <div className="claim-mobile-menu-container" ref={headerMenuRef}>
+                      <button
+                        type="button"
+                        className="claim-action-icon-btn claim-more-btn"
+                        onClick={() => setHeaderMenuOpen(v => !v)}
+                        aria-expanded={headerMenuOpen}
+                        title="Thao tác khác"
+                      >
+                        <MoreVertical size={18} />
+                      </button>
+                      {headerMenuOpen && (
+                        <div className="claim-header-dropdown-menu">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setHeaderMenuOpen(false);
+                              setMobileInspectorOpen(true);
+                            }}
+                          >
+                            <Info size={16} />
+                            <span>Thông tin & Bằng chứng</span>
+                          </button>
+                          <Link
+                            to={`/claims/${claim.id}/history`}
+                            onClick={() => setHeaderMenuOpen(false)}
+                          >
+                            <Clock3 size={16} />
+                            <span>Lịch sử xác minh</span>
+                          </Link>
+                          <Link
+                            to={`/reports?targetType=CLAIM&targetId=${claim.id}`}
+                            onClick={() => setHeaderMenuOpen(false)}
+                          >
+                            <FileWarning size={16} />
+                            <span>Báo cáo claim</span>
+                          </Link>
+                          {claim.claimantId === user?.id && ["PENDING", "CONVERSATION_OPEN", "NEED_MORE_INFO"].includes(claim.status) && (
+                            <button
+                              type="button"
+                              className="danger-text"
+                              disabled={withdrawing}
+                              onClick={() => {
+                                setHeaderMenuOpen(false);
+                                void withdraw();
+                              }}
+                            >
+                              <X size={16} />
+                              <span>Đóng claim</span>
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
 
+                {showLostOwnerSafetyNote && (
+                  <aside className="claim-lost-safety-note" aria-label="Lưu ý tránh lừa đảo">
+                    <AlertTriangle aria-hidden="true" />
+                    <div>
+                      <strong>Hãy xin ảnh vật phẩm trước khi hẹn nhận đồ</strong>
+                      <p>Yêu cầu người liên hệ gửi ảnh hiện tại và đối chiếu đặc điểm riêng của món đồ. Không chuyển tiền hoặc cung cấp thông tin nhạy cảm; ảnh tương đồng chưa chứng minh họ đang giữ đồ.</p>
+                    </div>
+                  </aside>
+                )}
+
                 {!contextCollapsed && (
-                  <div className={`claim-chat-context${showLostOwnerSafetyNote ? " claim-chat-context--with-safety" : ""}`}>
-                    {showLostOwnerSafetyNote && <aside className="claim-lost-safety-note" aria-label="Lưu ý tránh lừa đảo">
-                      <AlertTriangle aria-hidden="true" />
-                      <div>
-                        <strong>Hãy xin ảnh vật phẩm trước khi hẹn nhận đồ</strong>
-                        <p>Yêu cầu người liên hệ gửi ảnh hiện tại và đối chiếu đặc điểm riêng của món đồ. Không chuyển tiền hoặc cung cấp thông tin nhạy cảm; ảnh tương đồng chưa chứng minh họ đang giữ đồ.</p>
-                      </div>
-                    </aside>}
+                  <div className="claim-chat-context">
                     <div className="claim-chat-review">
                       <ClaimVerificationPanel key={`review:${claim.id}`} claim={claim} verification={verification} loading={verificationLoading} loadError={verificationError} onRetry={() => void loadVerification(claim.id, true)} onVerificationChange={value => { if (isCurrentRoom(claim.id, displayedGeneration)) setVerification(value); }} onClaimChange={value => { if (isCurrentRoom(claim.id, displayedGeneration)) applyClaimUpdate(value); }} onDecisionMessage={(message) => { if (isCurrentRoom(claim.id, displayedGeneration)) setMessages((current) => mergeMessages(current, [message])); }} />
                       <Link className="claim-history-link" to={`/claims/${claim.id}/history`}><Clock3 size={15} /> Lịch sử claim và xác minh</Link>
@@ -1194,7 +1273,11 @@ export function ClaimsPage() {
               </>}
             </section>
 
-            <aside className="claim-inspector">
+            <aside className={`claim-inspector${mobileInspectorOpen ? " claim-inspector--mobile-open" : ""}`}>
+              <div className="claim-inspector-mobile-header">
+                <h3>Thông tin & Bằng chứng</h3>
+                <button type="button" onClick={() => setMobileInspectorOpen(false)} aria-label="Đóng"><X size={18} /></button>
+              </div>
               <ClaimItemPanel claim={claim} />
               <ClaimEvidencePanel key={`evidence:${claim.id}`} claimId={claim.id} evidence={evidence} sensitiveDocument={sensitiveDocument} canUpload={Boolean(claim.canSend)} uploadRequest={evidenceUploadRequest} onEvidenceAdded={(item) => { if (isCurrentRoom(claim.id, displayedGeneration)) setEvidence((current) => current.some(value => value.id === item.id) ? current : [...current, item]); }} />
             </aside>

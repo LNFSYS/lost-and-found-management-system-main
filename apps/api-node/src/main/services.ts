@@ -33,6 +33,7 @@ import { createWarehouseConversationUseCases } from "../modules/warehouse/applic
 import { createGeminiWarehouseConversationAnalyzer } from "../modules/warehouse/infrastructure/gemini-warehouse-conversation-analyzer.js";
 import { createCustodyRequestUseCases } from "../modules/warehouse/application/custody-request.use-cases.js";
 import { createRadarUseCases } from "../modules/radar/application/index.js";
+import { damageInspectionService } from "../modules/damage-inspection/infrastructure/onnx-damage-inspection.service.js";
 import { env } from "../shared/infrastructure/config/env.js";
 import { createCloudinaryPrivateMediaStorage } from "../shared/infrastructure/cloudinary-private-media-storage.js";
 import { createPrivateMediaStorage } from "../shared/infrastructure/private-media-storage.js";
@@ -99,7 +100,7 @@ export function createServices(persistence: Persistence, config: typeof env = en
     repository: adminReportingRepository, auditRepository: adminAuditRepository,
     transaction, idFactory: id, clock: () => new Date()
   });
-  const adminCatalogService = createAdminCatalogUseCases({ adminCatalogRepository, id });
+  const adminCatalogService = createAdminCatalogUseCases({ adminCatalogRepository, auditRepository: adminAuditRepository, id });
   const authService = createAuthUseCases({
     authRepository, userRepository, avatarStorage, security,
     policy: config, emailService, withTransaction: transaction, logger: console, uploads: mediaUploads
@@ -122,7 +123,7 @@ export function createServices(persistence: Persistence, config: typeof env = en
   });
   const activityService = createActivityUseCases({ repository:persistence.activityRepository,audit:adminAuditRepository,transaction,id,
     media: { post:postMediaStorage,claim:claimMediaStorage,warehouse:proofStorage } });
-  const warehouseService = createWarehouseUseCases({ warehouseRepository, custodyRequestRepository, proofStorage, sourceMediaStorage: postMediaStorage, contactMediaStorage: claimMediaStorage, ...custodyDelivery, withTransaction: transaction, id, uploads: mediaUploads, logger: console });
+  const warehouseService = createWarehouseUseCases({ warehouseRepository, custodyRequestRepository, proofStorage, sourceMediaStorage: postMediaStorage, contactMediaStorage: claimMediaStorage, ...custodyDelivery, withTransaction: transaction, id, uploads: mediaUploads, logger: console, adminAuditRepository });
   const warehouseConversationService = createWarehouseConversationUseCases({ warehouseRepository, analyzer: createGeminiWarehouseConversationAnalyzer(config.gemini) });
   const custodyRequestService = createCustodyRequestUseCases({ custodyRequestRepository, warehouseRepository, ...custodyDelivery, withTransaction: transaction, id, scheduleRepository: systemConfigRepository });
   const returnFeedbackService = createReturnFeedbackUseCases({
@@ -173,12 +174,13 @@ export function createServices(persistence: Persistence, config: typeof env = en
     notificationService, notificationEmailWorker, notificationPushWorker, systemConfigService, adminUserService, adminReportingService,
     adminCatalogService, warehouseService, warehouseConversationService, custodyRequestService, returnFeedbackService, matchingService,
     postService, claimService, realtimeService, chatSocketService, callSocketService, reportService, authService, geminiImageService, illustrations,
-    radarService
+    radarService, damageInspectionService
   };
 }
 type CreatedApplicationServices = ReturnType<typeof createServices>;
-export type ApplicationServices = Omit<CreatedApplicationServices, "warehouseConversationService" | "callSocketService"> & {
+export type ApplicationServices = Omit<CreatedApplicationServices, "warehouseConversationService" | "callSocketService" | "damageInspectionService"> & {
   warehouseConversationService?: CreatedApplicationServices["warehouseConversationService"];
   callSocketService?: CreatedApplicationServices["callSocketService"];
   radarService?: CreatedApplicationServices["radarService"];
+  damageInspectionService?: CreatedApplicationServices["damageInspectionService"];
 };

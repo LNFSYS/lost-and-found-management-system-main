@@ -1658,6 +1658,18 @@ function WarehouseInventoryTab({
               </select>
             </label>
 
+            <label className="input-field warehouse-overdue-filter" style={{ display: "flex", flexDirection: "row", alignItems: "center", gap: "8px", alignSelf: "center", margin: "0", padding: "8px 12px", background: filters.overdue ? "#fef2f2" : "#f8fafc", border: `1px solid ${filters.overdue ? "#fecaca" : "#cbd5e1"}`, borderRadius: "8px", cursor: "pointer", userSelect: "none" }}>
+              <input
+                type="checkbox"
+                checked={filters.overdue}
+                onChange={(event) => updateFilter("overdue", event.target.checked)}
+                style={{ width: "18px", height: "18px", margin: 0, accentColor: "#dc2626" }}
+              />
+              <span style={{ fontSize: "0.85rem", fontWeight: 700, color: filters.overdue ? "#dc2626" : "#475569", whiteSpace: "nowrap" }}>
+                Quá hạn (Overdue)
+              </span>
+            </label>
+
             <button type="submit" className="secondary-button search-btn">
               <Filter size={16} /> Lọc
             </button>

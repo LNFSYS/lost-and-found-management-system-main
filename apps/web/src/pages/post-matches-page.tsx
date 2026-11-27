@@ -23,7 +23,7 @@ import {
   ThumbsUp,
   X
 } from "lucide-react";
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { AccessibleDialog } from "../components/accessible-dialog";
 import { CustodyIntakeScheduleHint } from "../components/custody-intake-schedule-hint";
@@ -480,16 +480,24 @@ export function PostMatchesPage() {
     navigate(`${location.pathname}${location.search}${location.hash}`, { replace: true, state: remainingState });
   }, [creationState, postId, page, loading, error, data, user?.id, location.pathname, location.search, location.hash, navigate]);
 
-  useEffect(() => {
-    let active = true;
+  const checkCustody = useCallback(async () => {
+    if (data?.source.type !== "FOUND" || !data.source.canEdit) return;
     setCustodyChecked(false);
     setPhysicalCustody(false);
     setKeepItemConfirmed(false);
-    if (data?.source.type === "FOUND" && data.source.canEdit) void api.getMyCustodyRequestByPost(postId)
-      .then(result => { if (active) { setPhysicalCustody(Boolean(result.warehouseItem) || result.request?.status === "INTAKED"); setCustodyChecked(true); } })
-      .catch(() => { if (active) setCustodyError("Chưa xác minh được nơi đang giữ vật phẩm. Vui lòng thử lại."); });
-    return () => { active = false; };
-  }, [postId, data?.source.id, data?.source.type]);
+    try {
+      const result = await api.getMyCustodyRequestByPost(postId);
+      setPhysicalCustody(Boolean(result.warehouseItem) || result.request?.status === "INTAKED");
+      setCustodyChecked(true);
+      setCustodyError("");
+    } catch {
+      setCustodyError("Chưa xác minh được nơi đang giữ vật phẩm. Vui lòng thử lại.");
+    }
+  }, [postId, data?.source.id, data?.source.type, data?.source.canEdit]);
+
+  useEffect(() => {
+    void checkCustody();
+  }, [checkCustody]);
 
   async function recalculate() {
     setRecalculating(true);
@@ -649,7 +657,19 @@ export function PostMatchesPage() {
           <CustodyIntakeScheduleHint className="found-item-choice__hours" />
           {keepItemConfirmed && <p className="found-item-choice__status" role="status">Vật phẩm vẫn do bạn giữ; bài FOUND tiếp tục mở và các kết quả matching không thay đổi.</p>}
           {custodyNotice && <p className="found-item-choice__status" role="status">{custodyNotice}</p>}
-          {custodyError && <p className="found-item-choice__error" role="alert">{custodyError}</p>}
+          {custodyError && (
+            <div className="found-item-choice__error" role="alert" style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
+              <span>{custodyError}</span>
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => void checkCustody()}
+                style={{ fontSize: "0.8rem", padding: "0.2rem 0.5rem", cursor: "pointer" }}
+              >
+                Thử lại
+              </button>
+            </div>
+          )}
         </section>}
       </div>
     </header>
@@ -708,7 +728,8 @@ export function PostMatchesPage() {
               <button
                 type="button"
                 className="primary-button"
-                onClick={() => setCustodyModalOpen(true)}
+                disabled={loadingCustodyOptions}
+                onClick={() => void openCustodyModal()}
                 style={{ fontSize: "0.875rem", padding: "0.45rem 1rem", borderRadius: "6px" }}
               >
                 <PackageCheck size={16} /> Hẹn lịch bàn giao với CTSV
@@ -815,9 +836,10 @@ export function PostMatchesPage() {
               <button
                 type="button"
                 className="primary-button"
+                disabled={loadingCustodyOptions}
                 onClick={() => {
                   setSensitivePopupDismissed(true);
-                  setCustodyModalOpen(true);
+                  void openCustodyModal();
                 }}
               >
                 <PackageCheck size={18} /> Hẹn lịch bàn giao với CTSV

@@ -39,7 +39,7 @@ const PrivacyPolicyPage = lazy(async () => {
 
 function AdminHome() {
   const { user } = useAuth();
-  return (user?.roles.includes("ADMIN") || user?.roles.includes("STAFF"))
+  return user?.roles.includes("ADMIN")
     ? <Suspense fallback={<p role="status">Đang tải...</p>}><AdminPage /></Suspense>
     : <Navigate to="/admin/staff" replace />;
 }
