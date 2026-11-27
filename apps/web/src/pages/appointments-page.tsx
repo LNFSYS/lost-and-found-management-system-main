@@ -7,6 +7,16 @@ import { api } from "../services/api";
 import { appointmentStatus, displayTime, eventLabel, responseLabel, type Appointment, type AppointmentAction } from "../services/workflow-types";
 import "./workflow-pages.css";
 
+function formatLocalDatetimeInput(date: Date = new Date(Date.now() + 60000)) {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const year = date.getFullYear();
+  const month = pad(date.getMonth() + 1);
+  const day = pad(date.getDate());
+  const hours = pad(date.getHours());
+  const minutes = pad(date.getMinutes());
+  return `${year}-${month}-${day}T${hours}:${minutes}`;
+}
+
 function AppointmentImage({ appointment }: { appointment: Appointment }) {
   const path = appointment.itemImageUrl ?? null;
   const [image, setImage] = useState<{ path: string; source: string } | null>(null);
@@ -155,7 +165,7 @@ export function AppointmentWorkspace({ claimId, appointmentId, embedded = false,
     </>:<>
       {!canPropose && <p role="status">Vật phẩm đang chuyển sang kho. Lịch hẹn trực tiếp chỉ được xem; việc tiếp nhận và trả đồ sẽ do Staff xử lý.</p>}
       {claimId&&canPropose&&!items.some(a=>["PENDING","ACCEPTED","RESCHEDULED"].includes(a.status))&&<form className="workflow-proposal" onSubmit={e=>void create(e)}><h2>Đề xuất lịch mới</h2>
-        <label>Thời gian hẹn<input required type="datetime-local" min={new Date(Date.now() + 60000).toISOString().slice(0, 16)} value={date} disabled={busy} onChange={e=>setDate(e.target.value)}/></label>
+        <label>Thời gian hẹn<input required type="datetime-local" min={formatLocalDatetimeInput()} value={date} disabled={busy} onChange={e=>setDate(e.target.value)}/></label>
         <fieldset className="appointment-location-choice" disabled={busy}><legend>Địa điểm</legend>
           <label><input type="radio" name="appointment-location" checked={locationMode==="point"} onChange={()=>setLocationMode("point")}/> Điểm bàn giao</label>
           <label><input type="radio" name="appointment-location" checked={locationMode==="custom"} onChange={()=>setLocationMode("custom")}/> Địa điểm riêng</label>

@@ -266,18 +266,18 @@
   .item-journey-overview,.item-journey-history{padding:16px 14px}
   .item-journey-facts{grid-template-columns:repeat(2,minmax(0,1fr))}
   .workflow-timeline.item-journey-timeline{display:block;padding-left:28px;margin-top:16px}
-  .workflow-timeline.item-journey-timeline>li{display:block;height:190px;margin-bottom:12px;padding:0}
+  .workflow-timeline.item-journey-timeline>li{display:block;min-height:190px;height:auto;margin-bottom:12px;padding:0}
   .workflow-timeline.item-journey-timeline>li::before{display:block;left:-28px;top:20px}
   .workflow-timeline.item-journey-timeline>li:not(:last-child)::after{display:block;left:-23px;top:34px;bottom:-2px}
   .item-journey-connector{display:none}
-  .item-journey-event{height:100%;min-height:0;padding:10px}
+  .item-journey-event{height:auto;min-height:100%;padding:10px}
   .item-journey-event__body{gap:6px}
   .journey-images{flex-wrap:nowrap;overflow-x:auto}
   .journey-photo{flex:0 0 76px}
 }
 @media(max-width:480px){
   .item-journey-facts{grid-template-columns:minmax(0,1fr)}
-  .item-journey-event{grid-template-rows:42px 36px minmax(0,1fr)}
+  .item-journey-event{grid-template-rows:auto auto minmax(0,1fr)}
   .item-journey-event__meta{gap:4px}
   .workflow-timeline .journey-photo time{margin:0}
 }

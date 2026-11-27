@@ -3,6 +3,7 @@ import { createServer } from "node:http";
 import test, { type TestContext } from "node:test";
 import { io, type Socket } from "socket.io-client";
 import { createChatSocketUseCases, type ChatMessageRecord } from "../../application/chat-socket.use-cases.js";
+import { createCallSocketUseCases } from "../../application/call-socket.use-cases.js";
 import { createChatSocketServer } from "./chat-socket.server.js";
 
 const roomId = "11111111-1111-4111-8111-111111111111";
@@ -16,9 +17,11 @@ function event<T>(client: Socket, name: string): Promise<T> {
 async function startSocket(t: TestContext, options: Partial<Pick<Dependencies, "verifyAccessToken" | "validateAccessSession" | "authorizeRoom" | "validationTimeoutMs">> = {}) {
   const server = createServer();
   const hub = createChatSocketUseCases();
+  const callHub = createCallSocketUseCases();
   const origins: Array<string | undefined> = [];
   const adapter = createChatSocketServer({
     server, chatSocketService: hub,
+    callSocketService: callHub,
     isOriginAllowed(origin) { origins.push(origin); return origin === "https://app.example.invalid"; },
     verifyAccessToken: () => ({ sub: userId, email: "user@example.invalid", roles: ["USER"], sessionVersion: 1, exp: Math.floor(Date.now() / 1000) + 60 }),
     validateAccessSession: async () => true,
@@ -174,4 +177,30 @@ test("Socket.IO shutdown rejects pending authentication and leaves HTTP shutdown
   fixture.stop(); fixture.stop(); release();
   assert.equal(fixture.server.listening, true);
   assert.deepEqual(fixture.hub.stats(), { connections: 0, rooms: 0 });
+});
+
+test("Socket.IO validates access session even when connecting to global roomId", { timeout: 5000 }, async t => {
+  let sessionValid = false;
+  const fixture = await startSocket(t, {
+    validateAccessSession: async () => sessionValid
+  });
+  const client = fixture.connect({ room: "global" });
+  const errorPromise = event<{ message: string }>(client, "connect_error");
+  client.connect();
+  const error = await errorPromise;
+  assert.equal(error.message, "UNAUTHENTICATED");
+});
+
+test("Socket.IO rejects call.initiate when targetRoomId is global", { timeout: 5000 }, async t => {
+  const fixture = await startSocket(t);
+  const client = fixture.connect({ room: "global" });
+  const ready = event(client, "ready");
+  client.connect();
+  await ready;
+
+  const endedPromise = event<{ reason: string; error?: string }>(client, "call.ended");
+  client.emit("call.initiate", { callType: "VOICE", calleeId: "other-user-id", roomId: "global" });
+  const ended = await endedPromise;
+  assert.equal(ended.reason, "ERROR");
+  assert.equal(ended.error, "Cuộc gọi chỉ có thể thực hiện trong phòng trao đổi hợp lệ.");
 });

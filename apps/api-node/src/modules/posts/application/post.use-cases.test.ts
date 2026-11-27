@@ -330,3 +330,52 @@ test("matching suggestions mask candidate phone and email from regular viewers",
     matchingService.getStoredResults = originalGetStoredResults;
   }
 });
+
+test("creating LOST post with sensitive document keywords defaults to PRIVATE_DETAILS", async () => {
+  let createdInput: any = null;
+  const originalCreatePost = postRepository.createPost;
+  const originalFindOwnedById = postRepository.findOwnedById;
+  const originalFindActiveArea = postRepository.findActiveArea;
+  const originalFindActiveCategory = postRepository.findActiveCategory;
+  postRepository.createPost = async (input: any) => {
+    createdInput = input;
+  };
+  postRepository.findOwnedById = async (id: string, userId: string) => post({ id, userId, visibilityMode: createdInput?.visibilityMode ?? "PUBLIC" });
+  postRepository.findActiveArea = async () => "area-1";
+  postRepository.findActiveCategory = async () => "cat-1";
+
+  try {
+    await postService.createPost("owner-id", {
+      type: "LOST",
+      title: "Rơi CCCD tại sảnh Delta",
+      description: "Đánh rơi thẻ căn cước công dân",
+      categoryId: "cat-1",
+      areaId: "area-1",
+      contactInfo: "0900000000",
+      lostFoundAt: new Date()
+    }, viewer("owner-id"));
+    assert.equal(createdInput?.visibilityMode, "PRIVATE_DETAILS");
+  } finally {
+    postRepository.createPost = originalCreatePost;
+    postRepository.findOwnedById = originalFindOwnedById;
+    postRepository.findActiveArea = originalFindActiveArea;
+    postRepository.findActiveCategory = originalFindActiveCategory;
+  }
+});
+
+test("closing post fails when post has active deletion blockers", async () => {
+  const originalFindOwnedByIdForUpdate = postRepository.findOwnedByIdForUpdate;
+  const originalHasDeletionBlockers = postRepository.hasDeletionBlockers;
+  postRepository.findOwnedByIdForUpdate = async () => post({ status: "OPEN", userId: "owner-id" });
+  postRepository.hasDeletionBlockers = async () => true;
+
+  try {
+    await assert.rejects(
+      () => postService.updatePost("11111111-1111-4111-8111-111111111111", "owner-id", { status: "CLOSED" }, viewer("owner-id")),
+      (error: unknown) => error instanceof Error && (error as { code?: string }).code === "conflict"
+    );
+  } finally {
+    postRepository.findOwnedByIdForUpdate = originalFindOwnedByIdForUpdate;
+    postRepository.hasDeletionBlockers = originalHasDeletionBlockers;
+  }
+});

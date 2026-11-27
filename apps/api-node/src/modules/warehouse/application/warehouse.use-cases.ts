@@ -28,6 +28,8 @@ function ensureNotFuture(value: Date) {
   if (!Number.isFinite(value.getTime()) || value.getTime() > Date.now()) throw new AppError("bad_request", "Thời gian tiếp nhận không được ở tương lai");
 }
 
+import type { AdminAuditRepository } from "../../admin/application/index.js";
+
 export interface WarehouseDependencies extends CustodyNotifications {
   uploads?: MediaUploads;
   logger?: Logger;
@@ -37,6 +39,7 @@ export interface WarehouseDependencies extends CustodyNotifications {
   sourceMediaStorage?: PrivateMediaStorage;
   contactMediaStorage?: PrivateMediaStorage;
   withTransaction: TransactionRunner;
+  adminAuditRepository?: AdminAuditRepository;
   id: () => string;
 }
 export function createWarehouseUseCases(options: WarehouseDependencies) {
@@ -124,7 +127,23 @@ export function createWarehouseUseCases(options: WarehouseDependencies) {
       };
     },
 
-    async listSensitiveDocuments(q?: string) {
+    async listSensitiveDocuments(q?: string, actorId?: string) {
+      if (actorId && options.adminAuditRepository) {
+        try {
+          await options.adminAuditRepository.record({
+            id: id(),
+            actorId,
+            action: "STAFF_SENSITIVE_DOCUMENTS_ACCESSED",
+            targetType: "SENSITIVE_DOCUMENTS",
+            targetId: null,
+            beforeState: null,
+            afterState: { query: q ?? null },
+            reason: null
+          });
+        } catch {
+          // ignore audit failure
+        }
+      }
       const rows = await warehouseRepository.listSensitiveDocuments(q);
       return rows.map((row: any) => {
         const text = `${row.title} ${row.description || ""} ${row.category_name || ""}`;
@@ -157,7 +176,7 @@ export function createWarehouseUseCases(options: WarehouseDependencies) {
           areaName: row.area_name,
           buildingName: row.building_name,
           mediaId: row.media_id,
-          mediaUrl: row.media_url ? (row.media_url.startsWith("http") ? row.media_url : `/api/posts/${row.id}/media/${row.media_id}`) : null
+          mediaUrl: row.media_id ? `/api/posts/${row.id}/media/${row.media_id}` : null
         };
       });
     },

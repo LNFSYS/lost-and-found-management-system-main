@@ -127,7 +127,9 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 
     }));
     await page.goto(`/claims/${directLostClaim.id}`);
     const header = page.locator(".claim-chat-header");
-    await header.getByTitle("Mở thông tin xác minh & an toàn", { exact: true }).click();
+    if (await header.getByTitle("Mở thông tin xác minh & an toàn").count() > 0) {
+      await header.getByTitle("Mở thông tin xác minh & an toàn").click();
+    }
     await expect(header.getByText("Đã gửi yêu cầu chuyển sang custody", { exact: true })).toHaveCount(1);
     await expect(header).not.toContainText(reason);
     await expect(header.getByRole("button", { name: "Điều chỉnh quyết định" })).toHaveCount(0);

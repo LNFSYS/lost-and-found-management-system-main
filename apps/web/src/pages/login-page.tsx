@@ -28,9 +28,11 @@ export function LoginPage() {
     setPending(true);
     try {
       const user = await login(email, password);
-      const destination = user.roles.some((role) => role === "ADMIN" || role === "STAFF")
+      const destination = user.roles.includes("ADMIN")
         ? "/admin"
-        : (routeState?.from ?? "/home");
+        : user.roles.includes("STAFF")
+          ? "/admin/staff"
+          : (routeState?.from ?? "/home");
       navigate(destination, { replace: true });
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Không thể đăng nhập");

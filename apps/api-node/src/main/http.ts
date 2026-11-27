@@ -29,6 +29,9 @@ import { createWarehouseController } from "../modules/warehouse/interfaces/http/
 import { createCustodyRequestController } from "../modules/warehouse/interfaces/http/custody-request.controller.js";
 import { createRadarController } from "../modules/radar/interfaces/http/radar.controller.js";
 import { createRadarRoutes } from "../modules/radar/interfaces/http/radar.routes.js";
+import { createDamageInspectionController } from "../modules/damage-inspection/interfaces/http/damage-inspection.controller.js";
+import { createDamageInspectionRoutes } from "../modules/damage-inspection/interfaces/http/damage-inspection.routes.js";
+import { damageInspectionService as defaultDamageInspectionService } from "../modules/damage-inspection/infrastructure/onnx-damage-inspection.service.js";
 import type { AccessTokenPayload } from "../shared/domain/auth.js";
 import { env } from "../shared/infrastructure/config/env.js";
 import { refreshCookieOptions } from "../shared/interfaces/http/auth-cookie.js";
@@ -51,6 +54,7 @@ export function createHttpRoutes(services: ApplicationServices) {
   const warehouseController = createWarehouseController({ warehouseService: services.warehouseService, warehouseConversationService: services.warehouseConversationService });
   const custodyRequestController = createCustodyRequestController({ custodyRequestService: services.custodyRequestService });
   const radarController = services.radarService ? createRadarController({ radarService: services.radarService }) : null;
+  const damageInspectionController = createDamageInspectionController({ service: services.damageInspectionService ?? defaultDamageInspectionService });
   return {
     appointmentRoutes: createAppointmentRoutes(services.appointmentService,auth),
     activityRoutes: createActivityRoutes(services.activityService,auth),
@@ -67,5 +71,6 @@ export function createHttpRoutes(services: ApplicationServices) {
     configRoutes: createConfigRoutes({ systemConfigController }),
     staffRoutes: createStaffRoutes({ warehouseController, custodyRequestController, auth }),
     radarRoutes: radarController ? createRadarRoutes({ radarController, auth }) : Router(),
+    damageInspectionRoutes: createDamageInspectionRoutes({ controller: damageInspectionController, auth }),
   };
 }

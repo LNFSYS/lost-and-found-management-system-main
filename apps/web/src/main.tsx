@@ -1,6 +1,6 @@
 import React, { lazy, Suspense } from "react";
 import ReactDOM from "react-dom/client";
-import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes, useLocation, useSearchParams } from "react-router-dom";
 import { AppLayout } from "./components/app-layout";
 import { AdminLayout } from "./components/admin-layout";
 import { RouteGuard } from "./components/route-guard";
@@ -39,9 +39,13 @@ const PrivacyPolicyPage = lazy(async () => {
 
 function AdminHome() {
   const { user } = useAuth();
-  return (user?.roles.includes("ADMIN") || user?.roles.includes("STAFF"))
-    ? <Suspense fallback={<p role="status">Đang tải...</p>}><AdminPage /></Suspense>
-    : <Navigate to="/admin/staff" replace />;
+  const [searchParams] = useSearchParams();
+  const requestedTab = searchParams.get("tab");
+  const isAdmin = user?.roles.includes("ADMIN");
+  if (!isAdmin && requestedTab === "users") {
+    return <Navigate to="/admin/staff" replace />;
+  }
+  return <Suspense fallback={<p role="status">Đang tải...</p>}><AdminPage /></Suspense>;
 }
 
 function StaffRedirect() {

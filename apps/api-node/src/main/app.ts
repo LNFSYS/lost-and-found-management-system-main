@@ -9,7 +9,6 @@ import { pool } from "./database.js";
 import { createHttpRoutes } from "./http.js";
 import { services as defaultServices } from "./runtime.js";
 import type { ApplicationServices } from "./services.js";
-import { createDamageInspectionRoutes } from "../modules/damage-inspection/damage-inspection.routes.js";
 
 interface AppDependencies {
   services?: ApplicationServices;
@@ -22,7 +21,7 @@ export function createApp({ services = defaultServices, checkReadiness = async (
   if (trustProxy) {
     app.set("trust proxy", trustProxy);
   }
-  const { appointmentRoutes, activityRoutes, adminRoutes, handoverRoutes, authRoutes, claimRoutes, notificationRoutes, postRoutes, realtimeRoutes, returnRoutes, reportRoutes, adminConfigRoutes, configRoutes, staffRoutes, radarRoutes } = createHttpRoutes(services);
+  const { appointmentRoutes, activityRoutes, adminRoutes, handoverRoutes, authRoutes, claimRoutes, notificationRoutes, postRoutes, realtimeRoutes, returnRoutes, reportRoutes, adminConfigRoutes, configRoutes, staffRoutes, radarRoutes, damageInspectionRoutes } = createHttpRoutes(services);
   const allowedOrigins = parseAllowedOrigins(env.frontendUrl);
   app.disable("x-powered-by");
   app.use(helmet());
@@ -58,7 +57,7 @@ export function createApp({ services = defaultServices, checkReadiness = async (
   app.use("/api/handover-points", handoverRoutes);
   app.use("/api/admin/configs", adminConfigRoutes);
   app.use("/api/admin", adminRoutes);
-  app.use("/api/damage-inspection", createDamageInspectionRoutes());
+  app.use("/api/damage-inspection", damageInspectionRoutes);
   app.use("/api", (_request, response) => response.status(404).json({ message: "Không tìm thấy endpoint" }));
   app.use(errorHandler);
   return app;

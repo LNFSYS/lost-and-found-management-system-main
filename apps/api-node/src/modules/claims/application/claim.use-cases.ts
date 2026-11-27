@@ -845,7 +845,8 @@ export function createClaimUseCases(options: ClaimDependencies) {
             finderDecision,
             note: input.reason,
             acceptedAt: input.decision === "VERIFY_FOR_MEETUP",
-            rejectedAt: input.decision === "DECLINE"
+            rejectedAt: input.decision === "DECLINE",
+            expectedCurrentStatus: isCorrection ? ["ACCEPTED", "REJECTED"] : undefined
           }, connection);
         }
         if (input.decision === "ESCALATE_TO_CUSTODY") {

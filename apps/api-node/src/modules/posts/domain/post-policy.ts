@@ -23,7 +23,7 @@ export function assertPostUpdateAllowed(current: Pick<PostRecord, "status">, inp
 }
 
 export function ensureWritableStatus(post: Pick<PostRecord, "status">) {
-  if (post.status === "RESOLVED" || post.status === "CLOSED" || post.status === "EXPIRED") {
+  if (post.status === "RESOLVED" || post.status === "CLOSED" || post.status === "EXPIRED" || post.status === "HIDDEN") {
     throw new AppError("conflict", "Bài đăng đã kết thúc, không thể cập nhật nội dung");
   }
 }

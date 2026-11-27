@@ -773,6 +773,23 @@ function CustodyQueueTab({
           </button>
         </form>
 
+        <div className="warehouse-status-chips" style={{ display: "flex", gap: "8px", flexWrap: "wrap", margin: "12px 0 16px" }}>
+          <button
+            type="button"
+            className={`chip ${custodyFilters.status === "AWAITING_INTAKE" ? "chip--active" : ""}`}
+            onClick={() => updateCustodyFilter("status", "AWAITING_INTAKE")}
+          >
+            Chờ tiếp nhận ({(custodyData?.counts.PENDING ?? 0) + (custodyData?.counts.ACCEPTED ?? 0)})
+          </button>
+          <button
+            type="button"
+            className={`chip ${custodyFilters.status === "INTAKED" ? "chip--active" : ""}`}
+            onClick={() => updateCustodyFilter("status", "INTAKED")}
+          >
+            Đã tiếp nhận ({custodyData?.counts.INTAKED ?? 0})
+          </button>
+        </div>
+
         <div className="custody-request-list warehouse-item-list">
           {filteredRequests.map((request) => {
             const statusCfg = custodyStatusLabels[request.status];
@@ -879,7 +896,7 @@ function CustodyQueueTab({
                         onClick={() => setIntakeModal(request)}
                         disabled={Boolean(pendingAction)}
                       >
-                        <PackageCheck size={16} /> Tiếp nhận
+                        <PackageCheck size={16} /> Tiếp nhận vật phẩm
                       </button>
                     </>
                   )}
@@ -901,7 +918,7 @@ function CustodyQueueTab({
                         onClick={() => setIntakeModal(request)}
                         disabled={Boolean(pendingAction)}
                       >
-                        <PackageCheck size={16} /> Tiếp nhận
+                        <PackageCheck size={16} /> Tiếp nhận vật phẩm
                       </button>
                     </>
                   )}
@@ -1658,6 +1675,18 @@ function WarehouseInventoryTab({
               </select>
             </label>
 
+            <label className="input-field warehouse-overdue-filter" style={{ display: "flex", flexDirection: "row", alignItems: "center", gap: "8px", alignSelf: "center", margin: "0", padding: "8px 12px", background: filters.overdue ? "#fef2f2" : "#f8fafc", border: `1px solid ${filters.overdue ? "#fecaca" : "#cbd5e1"}`, borderRadius: "8px", cursor: "pointer", userSelect: "none" }}>
+              <input
+                type="checkbox"
+                checked={filters.overdue}
+                onChange={(event) => updateFilter("overdue", event.target.checked)}
+                style={{ width: "18px", height: "18px", margin: 0, accentColor: "#dc2626" }}
+              />
+              <span style={{ fontSize: "0.85rem", fontWeight: 700, color: filters.overdue ? "#dc2626" : "#475569", whiteSpace: "nowrap" }}>
+                Quá hạn (Overdue)
+              </span>
+            </label>
+
             <button type="submit" className="secondary-button search-btn">
               <Filter size={16} /> Lọc
             </button>
@@ -1754,14 +1783,6 @@ function WarehouseInventoryTab({
               <div style={{ flex: 1, minWidth: 0 }}>
                 <h2 id="warehouse-detail-title">Chi tiết vật phẩm kho</h2>
               </div>
-              <button
-                type="button"
-                className="primary-button update-trigger-btn header-update-btn"
-                style={{ padding: "6px 14px", fontSize: "0.82rem", display: "inline-flex", alignItems: "center", gap: "6px", whiteSpace: "nowrap" }}
-                onClick={() => setUpdateModalOpen(true)}
-              >
-                <Save size={15} /> Cập nhật trạng thái
-              </button>
               <button type="button" className="close-btn" aria-label="Đóng chi tiết" title="Đóng chi tiết" onClick={closeDetails}><X size={20} /></button>
             </header>
 
@@ -1800,13 +1821,6 @@ function WarehouseInventoryTab({
                 </dl>
 
                 <div className="summary-action-bar">
-                  <button
-                    type="button"
-                    className="primary-button update-trigger-btn"
-                    onClick={() => setUpdateModalOpen(true)}
-                  >
-                    <Save size={16} /> Cập nhật trạng thái
-                  </button>
                   <button
                     type="button"
                     className="secondary-button"
@@ -1852,6 +1866,13 @@ function WarehouseInventoryTab({
                       <Printer size={16} /> In biên bản bàn giao
                     </button>
                   )}
+                  <button
+                    type="button"
+                    className="primary-button update-trigger-btn"
+                    onClick={() => setUpdateModalOpen(true)}
+                  >
+                    <Save size={16} /> Cập nhật trạng thái
+                  </button>
                 </div>
               </div>
 
@@ -2312,7 +2333,7 @@ function WarehouseInventoryTab({
       {returnSuccessReceipt && (
         <div className="custody-modal-overlay" onClick={() => setReturnSuccessReceipt(null)}>
           <AccessibleDialog
-            className="custody-modal custody-modal--success"
+            className="return-receipt-modal custody-modal--success"
             aria-label="Hoàn tất trả hàng cho chủ sở hữu"
             onDismiss={() => setReturnSuccessReceipt(null)}
             onClick={(e) => e.stopPropagation()}
@@ -2502,7 +2523,7 @@ export function StaffPage() {
   }
 
   const tabItems: Array<{ key: StaffTab; label: string; icon: ReactNode; badge?: number }> = [
-    { key: "custody", label: "Hàng đợi Bàn giao", icon: <ShieldCheck size={18} />, badge: custodyData?.counts.PENDING },
+    { key: "custody", label: "Hàng đợi Custody", icon: <ShieldCheck size={18} />, badge: custodyData?.counts.PENDING },
     { key: "warehouse", label: "Kho tài sản", icon: <Archive size={18} /> },
     { key: "sensitive_docs", label: "Giấy tờ cá nhân", icon: <CreditCard size={18} /> },
     { key: "dashboard", label: "Tổng quan", icon: <FileText size={18} /> },
@@ -2517,9 +2538,9 @@ export function StaffPage() {
           <span className="hero-eyebrow">
             <ShieldCheck size={14} /> KHU VỰC NHÂN VIÊN & DỊCH VỤ KHO
           </span>
-          <h1>Tiếp nhận & Hàng đợi Bàn giao</h1>
+          <h1>Tiếp nhận & Quản lý Custody</h1>
           <p className="hero-subtitle">
-            Hàng đợi bàn giao tài sản từ người nhặt, quản lý lưu trữ kho và bàn giao tài sản tại campus.
+            Hàng đợi tiếp nhận tài sản từ người nhặt, quản lý lưu trữ kho và bàn giao tài sản tại campus.
           </p>
         </div>
         <div className="staff-hero__actions">

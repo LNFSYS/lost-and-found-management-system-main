@@ -260,7 +260,7 @@ export function WarehouseIntakeDialog({ request, catalog, onClose, onReceived }:
           <div className="intake-workspace-left">
             {loading && <p role="status">Đang tải thông tin bài gốc...</p>}
             {context && (
-              <section className="intake-card intake-card--source">
+              <section className="intake-card intake-card--source intake-source">
                 <h4 className="intake-card__title">
                   <span className="intake-card__icon"><Info size={16} /></span>
                   Thông tin bài đăng gốc
@@ -373,7 +373,7 @@ export function WarehouseIntakeDialog({ request, catalog, onClose, onReceived }:
                 </button>
                 <button type="button" className="secondary-button" disabled={Boolean(busy) || !photos.length} onClick={() => void analyze()}>
                   <ScanLine size={16} />
-                  Gợi ý danh mục (AI)
+                  Phân tích ảnh
                 </button>
               </div>
               {fieldError("intakeImageIds")}

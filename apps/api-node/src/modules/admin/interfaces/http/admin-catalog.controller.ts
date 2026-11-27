@@ -26,41 +26,41 @@ export function createAdminCatalogController({ adminCatalogService }: {
     },
 
     async createCategory(request: Request, response: Response) {
-      response.status(201).json(await adminCatalogService.createCategory(createCategorySchema.parse(request.body)));
+      response.status(201).json(await adminCatalogService.createCategory(createCategorySchema.parse(request.body), request.auth?.sub));
     },
 
     async updateCategory(request: Request, response: Response) {
-      response.json(await adminCatalogService.updateCategory(routeId(request), updateCategorySchema.parse(request.body)));
+      response.json(await adminCatalogService.updateCategory(routeId(request), updateCategorySchema.parse(request.body), request.auth?.sub));
     },
 
     async deleteCategory(request: Request, response: Response) {
-      await adminCatalogService.deleteCategory(routeId(request));
+      await adminCatalogService.deleteCategory(routeId(request), request.auth?.sub);
       response.status(204).send();
     },
 
     async createArea(request: Request, response: Response) {
-      response.status(201).json(await adminCatalogService.createArea(createAreaSchema.parse(request.body)));
+      response.status(201).json(await adminCatalogService.createArea(createAreaSchema.parse(request.body), request.auth?.sub));
     },
 
     async updateArea(request: Request, response: Response) {
-      response.json(await adminCatalogService.updateArea(routeId(request), updateAreaSchema.parse(request.body)));
+      response.json(await adminCatalogService.updateArea(routeId(request), updateAreaSchema.parse(request.body), request.auth?.sub));
     },
 
     async deleteArea(request: Request, response: Response) {
-      await adminCatalogService.deleteArea(routeId(request));
+      await adminCatalogService.deleteArea(routeId(request), request.auth?.sub);
       response.status(204).send();
     },
 
     async createBuilding(request: Request, response: Response) {
-      response.status(201).json(await adminCatalogService.createBuilding(createBuildingSchema.parse(request.body)));
+      response.status(201).json(await adminCatalogService.createBuilding(createBuildingSchema.parse(request.body), request.auth?.sub));
     },
 
     async updateBuilding(request: Request, response: Response) {
-      response.json(await adminCatalogService.updateBuilding(routeId(request), updateBuildingSchema.parse(request.body)));
+      response.json(await adminCatalogService.updateBuilding(routeId(request), updateBuildingSchema.parse(request.body), request.auth?.sub));
     },
 
     async deleteBuilding(request: Request, response: Response) {
-      await adminCatalogService.deleteBuilding(routeId(request));
+      await adminCatalogService.deleteBuilding(routeId(request), request.auth?.sub);
       response.status(204).send();
     },
 
@@ -76,18 +76,18 @@ export function createAdminCatalogController({ adminCatalogService }: {
     },
 
     async updateHandoverPoint(request: Request, response: Response) {
-      response.json(await adminCatalogService.updateHandoverPoint(routeId(request), updateHandoverPointSchema.parse(request.body)));
+      response.json(await adminCatalogService.updateHandoverPoint(routeId(request), updateHandoverPointSchema.parse(request.body), request.auth?.sub));
     },
 
     async uploadHandoverMapImage(request: Request, response: Response) {
       if (!request.file) throw new HttpError(400, "Cần chọn một ảnh bản đồ");
       const image = validateImageUpload(request.file);
       const dataUrl = `data:${image.mimeType};base64,${request.file.buffer.toString("base64")}`;
-      response.json(await adminCatalogService.updateHandoverMapImage(routeId(request), dataUrl));
+      response.json(await adminCatalogService.updateHandoverMapImage(routeId(request), dataUrl, request.auth?.sub));
     },
 
     async deleteHandoverPoint(request: Request, response: Response) {
-      await adminCatalogService.deleteHandoverPoint(routeId(request));
+      await adminCatalogService.deleteHandoverPoint(routeId(request), request.auth?.sub);
       response.status(204).send();
     }
   };
