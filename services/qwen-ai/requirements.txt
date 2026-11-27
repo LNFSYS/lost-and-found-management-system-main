@@ -1,0 +1,17 @@
+# Install torch/torchvision from the CUDA index first (see README).
+torch==2.8.0
+torchvision==0.23.0
+transformers==4.57.6
+lm-format-enforcer==0.11.3
+accelerate==1.12.0
+bitsandbytes==0.49.2
+safetensors>=0.6.2,<1
+huggingface-hub>=0.34,<1
+fastapi>=0.115.12,<1
+uvicorn>=0.34,<1
+python-multipart>=0.0.22,<1
+pillow>=12.1.1,<13
+python-dotenv>=1.1,<2
+httpx>=0.28,<1
+pytest>=8,<10
+filelock>=3.20,<5

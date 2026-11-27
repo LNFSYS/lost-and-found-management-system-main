@@ -1,0 +1,23 @@
+{
+  "status": "success",
+  "model": "Qwen/Qwen3-VL-2B-Instruct",
+  "data": {
+    "category": "wallet",
+    "object_name": "Ví màu đen",
+    "colors": ["đen"],
+    "primary_color": "đen",
+    "secondary_colors": [],
+    "shape": "hình chữ nhật",
+    "pattern": null,
+    "material": null,
+    "brand": null,
+    "visible_text": [],
+    "distinctive_features": ["khóa kéo"],
+    "caption": "Ví màu đen hình chữ nhật có khóa kéo."
+  },
+  "elapsed_seconds": 0.0,
+  "inference_seconds": 0.0,
+  "warnings": [],
+  "confidence": null,
+  "confidence_source": "unavailable"
+}

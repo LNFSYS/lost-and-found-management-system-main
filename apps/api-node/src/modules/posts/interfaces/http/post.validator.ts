@@ -154,7 +154,8 @@ export const uploadMediaSchema = z.object({
 });
 
 export const analyzePostImageSchema = z.object({
-  type: postType
+  type: postType,
+  provider: z.enum(["gemini", "qwen"]).optional()
 });
 
 export type { AnalyzePostImageInput, CreatePostInput, ListOwnPostsQuery, ListPostsQuery, UpdatePostInput, UploadMediaInput } from "../../application/post.dto.js";

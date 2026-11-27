@@ -57,7 +57,7 @@ export function createPostController({ postService, geminiImageService, illustra
       const files = uploadedAnalysisFiles(request);
       if (!files.length) throw new HttpError(400, "Cần gửi ít nhất một ảnh vật phẩm với field name là files.");
       const input = analyzePostImageSchema.parse(request.body);
-      response.json(await geminiImageService.analyzePostImages(files, input.type));
+      response.json(await geminiImageService.analyzePostImages(files, input.type, input.provider));
     },
 
     async getFormCatalog(_request: Request, response: Response) {

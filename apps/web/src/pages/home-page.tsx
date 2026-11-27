@@ -341,9 +341,9 @@ export function HomePage() {
   }
 
   function completeImageAnalysis(result: ImageAnalysisResult) {
+    cancelStageScroll();
     setAnalysisResult(result);
     setWorkflowPhase("draft-ready");
-    scrollToStage("#quick-story", 650);
   }
 
   function failImageAnalysis(message: string) {

@@ -6,7 +6,8 @@ export interface ImageAnalysis {
   categoryName: string;
   visualAttributes: string[];
   visibleText: string[];
-  confidence: number;
+  confidence: number | null;
+  confidence_source?: "unavailable" | "provider";
   warnings: string[];
   imageEmbedding?: number[] | null;
   isSensitiveDocument?: boolean;

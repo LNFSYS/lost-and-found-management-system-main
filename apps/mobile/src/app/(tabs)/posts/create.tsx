@@ -293,24 +293,24 @@ export default function CreateOrEditPostScreen() {
       setSelectedCategoryId(draft.suggestedCategoryId);
       setFormErrors((prev) => ({ ...prev, categoryId: undefined }));
     }
-    setAnalysisSignals({
+    setAnalysisSignals(typeof draft.confidence === "number" ? {
       visualAttributes: draft.visualAttributes || [],
       visibleText: draft.visibleText || [],
-      confidence: draft.confidence || 0.9,
-    });
+      confidence: draft.confidence,
+    } : null);
     Alert.alert(
       "Đã áp dụng bản nháp AI",
-      "Thông tin tiêu đề, mô tả và danh mục gợi ý bởi AI Vision (DINOv2 & OCR) đã được điền vào biểu mẫu."
+      "Thông tin tiêu đề, mô tả và danh mục gợi ý đã được điền vào biểu mẫu. Bạn có thể kiểm tra và chỉnh sửa."
     );
   }, []);
 
   const handleAnalysisSuccess = useCallback((result: ImageAnalysisResult) => {
     if (result.visualAttributes || result.visibleText) {
-      setAnalysisSignals({
+      setAnalysisSignals(typeof result.confidence === "number" ? {
         visualAttributes: result.visualAttributes || [],
         visibleText: result.visibleText || [],
-        confidence: result.confidence || 0.9,
-      });
+        confidence: result.confidence,
+      } : null);
     }
   }, []);
 

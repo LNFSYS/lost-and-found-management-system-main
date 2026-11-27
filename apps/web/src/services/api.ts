@@ -564,7 +564,8 @@ export interface ImageAnalysisResult {
   suggestedCategory: { id: string; name: string; parentId: string | null } | null;
   visualAttributes: string[];
   visibleText: string[];
-  confidence: number;
+  confidence: number | null;
+  confidence_source?: "unavailable" | "provider";
   warnings: string[];
   assistedBy: string;
   model: string;
@@ -1389,9 +1390,10 @@ export const api = {
   deletePost: (postId: string) => raw<void>(`/posts/${postId}`, { method: "DELETE" }),
   getPostMedia: (path: string) => mediaBlob(path),
   createPost: (payload: CreatePostPayload) => raw<CreatedPost>("/posts", { method: "POST", body: JSON.stringify(payload) }),
-  analyzePostImage: (type: "LOST" | "FOUND", files: File[]) => {
+  analyzePostImage: (type: "LOST" | "FOUND", files: File[], provider?: "gemini" | "qwen") => {
     const form = new FormData();
     form.append("type", type);
+    if (provider) form.append("provider", provider);
     files.forEach((file) => form.append("files", file));
     return raw<ImageAnalysisResult>("/posts/analyze-image", { method: "POST", body: form });
   },

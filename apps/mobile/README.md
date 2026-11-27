@@ -22,6 +22,25 @@ Open the Metro link with the installed development build. An Expo account and an
 
 When running in development, `EXPO_PUBLIC_API_URL` defaults to `http://localhost:3001/api` if it is unset. Preview and production builds require `EXPO_PUBLIC_API_URL` and reject localhost addresses so the deployed app cannot silently target a developer's machine.
 
+## Windows Android emulator: long C++ build paths
+
+If Ninja fails with `mkdir(...worklets...): No such file or directory`, the generated C++ paths may exceed Windows' path limit. From `apps/mobile/android`, build with the included Gradle init script:
+
+```powershell
+.\gradlew.bat -I ../scripts/windows-cmake.gradle app:assembleDebug -x lint -x test --build-cache -PreactNativeArchitectures=x86_64 -PreactNativeDevServerPort=8082
+```
+
+The script keeps CMake intermediates in the ignored repository `test-results/cxx` directory and shortens object paths. It does not edit generated Android files or dependencies. Set `JAVA_HOME` to your JDK and `ANDROID_HOME` to your Android SDK if they are not already configured. Install the resulting `android/app/build/outputs/apk/debug/app-debug.apk` on the emulator using `adb install -r`.
+
+After the development APK is installed, start Metro from `apps/mobile` (no native rebuild needed for ordinary JS/TS changes):
+
+```powershell
+$env:EXPO_PUBLIC_API_URL = 'http://10.0.2.2:3001/api'
+npx.cmd expo start --dev-client --port 8082
+```
+
+Keep the backend running on port 3001. `10.0.2.2` is for the Android emulator; a physical device needs the computer's LAN address or a deployed API.
+
 ## Shared foundations
 
 - `src/services/api.ts`: Axios client, SecureStore access token, cookie-backed refresh, API errors, and authenticated `mediaBlob(path)`.
