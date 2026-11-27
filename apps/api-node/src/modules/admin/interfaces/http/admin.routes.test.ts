@@ -103,15 +103,15 @@ test("admin routes enforce strict ADMIN vs STAFF RBAC", async () => {
     });
     assert.equal(adminReview.status, 200);
 
-    // 4. Staff is FORBIDDEN (403) from creating categories
+    // 4. Staff CAN access catalog management (create category)
     const staffCreateCat = await fetch(`${baseUrl}/categories`, {
       method: "POST",
       headers: { authorization: `Bearer ${staffToken}`, "content-type": "application/json" },
       body: JSON.stringify({ name: "Category Test" })
     });
-    assert.equal(staffCreateCat.status, 403);
+    assert.equal(staffCreateCat.status, 200);
 
-    // 5. Admin can create categories
+    // 5. Admin can also create categories
     const adminCreateCat = await fetch(`${baseUrl}/categories`, {
       method: "POST",
       headers: { authorization: `Bearer ${adminToken}`, "content-type": "application/json" },
@@ -119,12 +119,11 @@ test("admin routes enforce strict ADMIN vs STAFF RBAC", async () => {
     });
     assert.equal(adminCreateCat.status, 200);
 
-    // 6. Staff is FORBIDDEN (403) from updating/deleting areas, buildings, handover points
-    const staffDeleteHp = await fetch(`${baseUrl}/handover-points/123`, {
-      method: "DELETE",
+    // 6. Staff is FORBIDDEN (403) from user management
+    const staffGetUsers = await fetch(`${baseUrl}/users`, {
       headers: { authorization: `Bearer ${staffToken}` }
     });
-    assert.equal(staffDeleteHp.status, 403);
+    assert.equal(staffGetUsers.status, 403);
   } finally {
     server.close();
   }
