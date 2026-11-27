@@ -249,36 +249,35 @@ h3 {
   line-height: 1.2;
 }
 
-.auth-page:has(.otp-field):has(.auth-privacy-ref) .auth-panel {
-  padding-block: 16px;
+/* Keep the login proportions, but fit the longer registration form on laptops. */
+@media (min-width: 761px) and (max-height: 850px) {
+  .auth-page:has(.otp-field):has(.auth-privacy-ref) {
+    .auth-panel { padding-block: 12px; }
+    .auth-card { padding: 18px 32px; }
+    .auth-card > .eyebrow { margin-bottom: 6px; }
+    .auth-card h2 { font-size: 1.6rem; }
+    .auth-card > .muted { margin: 8px 0 0; font-size: 0.875rem; line-height: 1.5; }
+    .form-stack { gap: 9px; margin-top: 14px; }
+    .input-field, .otp-field { gap: 4px; }
+    input, select { min-height: 38px; padding-block: 6px; }
+    .otp-field__input { min-height: 42px; }
+    .primary-button, .secondary-button { min-height: 38px; }
+    .form-links { margin: 10px 0 0; }
+    .auth-privacy-ref { margin: 8px 0 0; font-size: 0.75rem; line-height: 1.45; }
+    .form-note, .form-error { margin: 0; }
+  }
 }
 
-.auth-page:has(.otp-field):has(.auth-privacy-ref) .auth-card {
-  padding: 20px 28px;
-}
-
-.auth-page:has(.otp-field):has(.auth-privacy-ref) .form-stack {
-  gap: 10px;
-  margin-top: 16px;
-}
-
-.auth-page:has(.otp-field):has(.auth-privacy-ref) .input-field,
-.auth-page:has(.otp-field):has(.auth-privacy-ref) .otp-field {
-  gap: 5px;
-}
-
-.auth-page:has(.otp-field):has(.auth-privacy-ref) input,
-.auth-page:has(.otp-field):has(.auth-privacy-ref) select {
-  min-height: 42px;
-}
-
-.auth-page:has(.otp-field):has(.auth-privacy-ref) .otp-field__input {
-  min-height: 48px;
-}
-
-.auth-page:has(.otp-field):has(.auth-privacy-ref) .form-links,
-.auth-page:has(.otp-field):has(.auth-privacy-ref) .auth-privacy-ref {
-  margin-top: 12px;
+@media (min-width: 761px) and (max-height: 650px) {
+  .auth-page:has(.otp-field):has(.auth-privacy-ref) {
+    .auth-panel { padding-block: 6px; }
+    .auth-card { padding-block: 8px; }
+    .auth-card h2 { font-size: 1.5rem; }
+    .form-stack { gap: 4px; margin-top: 8px; }
+    .auth-aside { padding-block: 28px; }
+    .auth-aside h1 { font-size: 2rem; }
+    .auth-aside::after { bottom: 16px; }
+  }
 }
 
 .form-stack {
