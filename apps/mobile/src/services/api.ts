@@ -461,7 +461,8 @@ export interface ImageAnalysisResult {
   suggestedCategory: { id: string; name: string; parentId: string | null } | null;
   visualAttributes: string[];
   visibleText: string[];
-  confidence: number;
+  confidence: number | null;
+  confidence_source?: "unavailable" | "provider";
   warnings: string[];
   assistedBy: string;
   model: string;
@@ -1071,9 +1072,10 @@ export const postService = {
     api.patch<PostSummary>(`/posts/${postId}`, payload).then((res) => res.data),
   deletePost: (postId: string): Promise<void> =>
     api.delete<void>(`/posts/${postId}`).then((res) => res.data),
-  analyzePostImage: async (type: "LOST" | "FOUND", files: MobileImageFile[]): Promise<ImageAnalysisResult> => {
+  analyzePostImage: async (type: "LOST" | "FOUND", files: MobileImageFile[], provider?: "gemini" | "qwen"): Promise<ImageAnalysisResult> => {
     const formData = new FormData();
     formData.append("type", type);
+    if (provider) formData.append("provider", provider);
     for (const file of files) {
       await appendFileToFormData(formData, "files", file);
     }
