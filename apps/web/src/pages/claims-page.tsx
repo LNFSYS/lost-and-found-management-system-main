@@ -386,7 +386,7 @@ export function ClaimsPage() {
   const [questionsExpanded, setQuestionsExpanded] = useState(true);
   const questionToggle = useRef<HTMLButtonElement>(null);
   const [evidenceUploadRequest, setEvidenceUploadRequest] = useState(0);
-  const [contextCollapsed, setContextCollapsed] = useState(true);
+  const [contextCollapsed, setContextCollapsed] = useState(false);
   const call = useCall();
   const calleeId = claim ? (claim.claimantId === user?.id ? claim.finderId : claim.claimantId) : null;
   const chatFileInput = useRef<HTMLInputElement>(null);
@@ -635,7 +635,7 @@ export function ClaimsPage() {
   }, [claimId, composePostId, navigate]);
 
   useEffect(() => {
-    setContextCollapsed(true);
+    setContextCollapsed(false);
     const hasClaimHandoff = Boolean(claimId && location.state?.claimId === claimId);
     const handoffClaim = hasClaimHandoff && location.state?.initialClaim?.id === claimId
       ? location.state.initialClaim as ClaimRecord : null;
@@ -1055,13 +1055,13 @@ export function ClaimsPage() {
                 <div className="claim-chat-topbar">
                   <button
                     type="button"
-                    className="claim-back-button"
-                    title="Quay lại danh sách cuộc trò chuyện"
-                    aria-label="Quay lại danh sách cuộc trò chuyện"
+                    className="claim-back-button mobile-conversation-toggle"
+                    title={`Cuộc trò chuyện (${claims.length})`}
+                    aria-label={`Cuộc trò chuyện (${claims.length})`}
                     onClick={() => navigate("/claims")}
                   >
                     <ArrowLeft size={16} />
-                    <span>Quay lại</span>
+                    <span>Cuộc trò chuyện ({claims.length})</span>
                   </button>
                   <div className="claim-chat-identity">
                     <div className="claim-chat-avatar">
@@ -1075,10 +1075,14 @@ export function ClaimsPage() {
                           <i /> {claim.canSend ? "Đang hoạt động" : statusLabels[claim.status]}
                         </span>
                       </div>
-                      <div className="claim-chat-item-tag" title={claimTitle(claim)}>
+                      <div className="claim-chat-item-tag claim-chat-desktop-tag" title={claimTitle(claim)}>
                         <span className="claim-item-tag-icon">📦</span>
                         <small>{claimTitle(claim)}</small>
                       </div>
+                      <h2 className="claim-chat-item-tag claim-chat-mobile-heading" style={{ margin: 0, fontSize: "inherit", fontWeight: "normal" }} title={claimTitle(claim)}>
+                        <span className="claim-item-tag-icon">📦</span>
+                        <small>{claimTitle(claim)}</small>
+                      </h2>
                     </div>
                   </div>
 
@@ -1121,12 +1125,12 @@ export function ClaimsPage() {
                         </button>
                       </div>
                     )}
-                    {(Boolean(verification) || Boolean(verificationError)) && (
+                    {(showLostOwnerSafetyNote || Boolean(verification) || Boolean(verificationError)) && (
                       <button
                         type="button"
                         className={`claim-toggle-context-btn ${contextCollapsed ? "is-collapsed" : ""}`}
                         onClick={() => setContextCollapsed(v => !v)}
-                        title={contextCollapsed ? "Mở thông tin xác minh" : "Thu gọn thông tin xác minh"}
+                        title={contextCollapsed ? "Mở thông tin xác minh & an toàn" : "Thu gọn thông tin xác minh & an toàn"}
                       >
                         <ShieldCheck size={16} />
                         <span>{contextCollapsed ? "Xem xác minh" : "Thu gọn"}</span>
@@ -1203,18 +1207,17 @@ export function ClaimsPage() {
                   </div>
                 </div>
 
-                {showLostOwnerSafetyNote && (
-                  <aside className="claim-lost-safety-note" aria-label="Lưu ý tránh lừa đảo">
-                    <AlertTriangle aria-hidden="true" />
-                    <div>
-                      <strong>Hãy xin ảnh vật phẩm trước khi hẹn nhận đồ</strong>
-                      <p>Yêu cầu người liên hệ gửi ảnh hiện tại và đối chiếu đặc điểm riêng của món đồ. Không chuyển tiền hoặc cung cấp thông tin nhạy cảm; ảnh tương đồng chưa chứng minh họ đang giữ đồ.</p>
-                    </div>
-                  </aside>
-                )}
-
                 {!contextCollapsed && (
-                  <div className="claim-chat-context">
+                  <div className={`claim-chat-context${showLostOwnerSafetyNote ? " claim-chat-context--with-safety" : ""}`}>
+                    {showLostOwnerSafetyNote && (
+                      <aside className="claim-lost-safety-note" aria-label="Lưu ý tránh lừa đảo">
+                        <AlertTriangle aria-hidden="true" />
+                        <div>
+                          <strong>Hãy xin ảnh vật phẩm trước khi hẹn nhận đồ</strong>
+                          <p>Yêu cầu người liên hệ gửi ảnh hiện tại và đối chiếu đặc điểm riêng của món đồ. Không chuyển tiền hoặc cung cấp thông tin nhạy cảm; ảnh tương đồng chưa chứng minh họ đang giữ đồ.</p>
+                        </div>
+                      </aside>
+                    )}
                     <div className="claim-chat-review">
                       <ClaimVerificationPanel key={`review:${claim.id}`} claim={claim} verification={verification} loading={verificationLoading} loadError={verificationError} onRetry={() => void loadVerification(claim.id, true)} onVerificationChange={value => { if (isCurrentRoom(claim.id, displayedGeneration)) setVerification(value); }} onClaimChange={value => { if (isCurrentRoom(claim.id, displayedGeneration)) applyClaimUpdate(value); }} onDecisionMessage={(message) => { if (isCurrentRoom(claim.id, displayedGeneration)) setMessages((current) => mergeMessages(current, [message])); }} />
                       <Link className="claim-history-link" to={`/claims/${claim.id}/history`}><Clock3 size={15} /> Lịch sử claim và xác minh</Link>
