@@ -10672,7 +10672,8 @@ body:has(.custody-modal-overlay) {
   height: 0 !important;
 }
 
-.custody-modal {
+.custody-modal,
+.return-receipt-modal {
   width: min(100%, 560px);
   padding: 24px 28px;
   border-radius: 14px;

@@ -110,6 +110,9 @@ for (const width of [1440, 390]) {
     await page.goto("/home");
     await expect(page).toHaveURL(/\/home$/);
     await expect(page.getByRole("heading", { name: /Đồ thất lạc/ })).toBeVisible();
+    if (width <= 900) {
+      await page.getByRole("button", { name: "Mở menu" }).click();
+    }
     await expect(page.getByRole("navigation", { name: "Điều hướng chính" })).toBeVisible();
     await expect(page.getByRole("link", { name: "Khu vực nội bộ" })).toHaveCount(0);
     await expect(page.getByRole("link", { name: "Quản trị", exact: true })).toBeVisible();

@@ -428,7 +428,7 @@ export function StoryPostForm({
         </div>
       )}
       <div className="story-image-analysis-copy">
-        <p className="story-image-analysis-hint">Chọn một trong hai nút để tự động điền thông tin từ ảnh bằng AI (Gemini hoặc Qwen).</p>
+        <p className="story-image-analysis-hint">Chọn một trong hai nút để tự động điền thông tin từ ảnh.</p>
         <p className="story-image-analysis-warning" style={{ color: "#92400e", backgroundColor: "#fffbeb", border: "1px solid #fef3c7", padding: "0.5rem 0.75rem", borderRadius: "6px", fontSize: "0.85rem", marginTop: "0.5rem" }}>
           <strong>Lưu ý bảo mật (S1/S2):</strong> Nếu ảnh chụp chứa giấy tờ tùy thân (CCCD, Thẻ sinh viên, Thẻ ngân hàng, GPLX...), vui lòng che mờ hoặc ẩn các số định danh nhạy cảm trước khi gửi phân tích AI nhằm bảo vệ quyền riêng tư.
         </p>
