@@ -33,6 +33,8 @@ The backend refresh endpoint rotates an HTTP-only `lnfs_refresh` cookie and retu
 
 ## Android APK preview
 
+For a local Windows emulator build, run `npm --workspace @lnfs/mobile run build:android:windows -- -Emulator` from the repository root. The script generates the Android project with Expo when needed, then uses a temporary Gradle init script to shorten the CMake staging path and avoid Ninja path-length failures. Omit `-Emulator` when building for the default set of device architectures.
+
 The `preview` EAS profile creates an installable APK (`com.fptu.lostfound`). The app's Android version code is set in `app.json`; increment it before producing a later release if the previous APK is already installed.
 
 1. Install Node.js dependencies from the repository root with `npm install`.

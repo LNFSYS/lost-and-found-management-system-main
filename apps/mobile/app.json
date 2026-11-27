@@ -46,7 +46,7 @@
         {
           "photosPermission": "Cho phép FPTU Lost & Found truy cập thư viện để chọn ảnh đồ vật và ảnh đại diện.",
           "cameraPermission": "Cho phép FPTU Lost & Found chụp ảnh đồ vật thất lạc / nhặt được và ảnh đại diện.",
-          "microphonePermission": false
+          "microphonePermission": "Cho phép FPTU Lost & Found dùng micro khi gọi thoại và video."
         }
       ],
       [

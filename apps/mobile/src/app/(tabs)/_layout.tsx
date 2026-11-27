@@ -8,6 +8,9 @@ import { colors } from "@/constants/theme";
 import { useAuth } from "@/context/auth-context";
 import { useNotificationCount } from "@/context/notification-count-context";
 
+// SDK 58 redirects focused href:null routes, so hide their buttons without hiding the routes.
+const hideTabButton = () => null;
+
 export default function TabsLayout() {
   const { user, isHydrating } = useAuth();
   const { unreadCount } = useNotificationCount();
@@ -37,16 +40,16 @@ export default function TabsLayout() {
         tabBarHideOnKeyboard: true,
       }}
     >
-      <Tabs.Screen name="home" options={{ title: appTabLabels.home, href: isAdmin ? null : undefined, tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name="home-variant-outline" color={String(color)} size={size} /> }} />
-      <Tabs.Screen name="posts" options={{ title: appTabLabels.posts, href: isAdmin ? null : undefined, tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name="view-grid-outline" color={String(color)} size={size} /> }} />
-      <Tabs.Screen name="claims" options={{ title: appTabLabels.claims, href: isAdmin ? null : undefined, tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name="message-text-outline" color={String(color)} size={size} /> }} />
-      <Tabs.Screen name="appointments" options={{ title: appTabLabels.appointments, href: isAdmin ? null : undefined, tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name="calendar-check-outline" color={String(color)} size={size} /> }} />
-      <Tabs.Screen name="profile" options={{ title: appTabLabels.profile, href: isAdmin ? null : undefined, tabBarBadge: unreadCount > 0 ? (unreadCount > 99 ? "99+" : unreadCount) : undefined, tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name="account-circle-outline" color={String(color)} size={size} /> }} />
-      <Tabs.Screen name="notifications" options={{ href: null }} />
-      <Tabs.Screen name="reports" options={{ href: null }} />
-      <Tabs.Screen name="custody" options={{ href: null }} />
-      <Tabs.Screen name="admin" options={{ title: appTabLabels.admin, href: isAdmin ? undefined : null, tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name="shield-account-outline" color={String(color)} size={size} /> }} />
-      <Tabs.Screen name="staff" options={{ title: isAdmin ? "Nhiệm vụ" : appTabLabels.staff, href: isStaff ? undefined : null, tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name="clipboard-check-outline" color={String(color)} size={size} /> }} />
+      <Tabs.Screen name="home" options={{ title: appTabLabels.home, tabBarButton: isAdmin ? hideTabButton : undefined, tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name="home-variant-outline" color={String(color)} size={size} /> }} />
+      <Tabs.Screen name="posts" options={{ title: appTabLabels.posts, tabBarButton: isAdmin ? hideTabButton : undefined, tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name="view-grid-outline" color={String(color)} size={size} /> }} />
+      <Tabs.Screen name="claims" options={{ title: appTabLabels.claims, tabBarButton: isAdmin ? hideTabButton : undefined, tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name="message-text-outline" color={String(color)} size={size} /> }} />
+      <Tabs.Screen name="appointments" options={{ title: appTabLabels.appointments, tabBarButton: isAdmin ? hideTabButton : undefined, tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name="calendar-check-outline" color={String(color)} size={size} /> }} />
+      <Tabs.Screen name="profile" options={{ title: appTabLabels.profile, tabBarButton: isAdmin ? hideTabButton : undefined, tabBarBadge: unreadCount > 0 ? (unreadCount > 99 ? "99+" : unreadCount) : undefined, tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name="account-circle-outline" color={String(color)} size={size} /> }} />
+      <Tabs.Screen name="notifications" options={{ tabBarButton: hideTabButton }} />
+      <Tabs.Screen name="reports" options={{ tabBarButton: hideTabButton }} />
+      <Tabs.Screen name="custody" options={{ tabBarButton: hideTabButton }} />
+      <Tabs.Screen name="admin" options={{ title: appTabLabels.admin, tabBarButton: isAdmin ? undefined : hideTabButton, tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name="shield-account-outline" color={String(color)} size={size} /> }} />
+      <Tabs.Screen name="staff" options={{ title: isAdmin ? "Nhiệm vụ" : appTabLabels.staff, tabBarButton: isStaff ? undefined : hideTabButton, tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name="clipboard-check-outline" color={String(color)} size={size} /> }} />
     </Tabs>
   );
 }
