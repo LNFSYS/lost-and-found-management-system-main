@@ -7320,6 +7320,8 @@ textarea {
 
 .story-image-analysis-actions {
   display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr);
   align-self: start;
   gap: 10px;
   padding: 18px;
@@ -7379,7 +7381,21 @@ textarea {
 }
 
 .story-analyze-button {
-  white-space: nowrap;
+  min-width: 0;
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.4;
+  padding-block: 10px;
+}
+
+.story-image-analysis-actions .story-analyze-button {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.story-analyze-button svg {
+  flex-shrink: 0;
 }
 
 .story-analyze-button:disabled {

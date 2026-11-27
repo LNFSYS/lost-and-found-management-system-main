@@ -10,7 +10,7 @@ import {
   Sparkles,
   X
 } from "lucide-react";
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { useAuth } from "../context/auth-context";
 import { useNetworkStatus } from "../hooks/use-network-status";
 import { LostIllustrationPanel } from "./lost-illustration-panel";
@@ -97,6 +97,9 @@ export function StoryPostForm({
   const [catalogError, setCatalogError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
+  const [activeProvider, setActiveProvider] = useState<"gemini" | "qwen">("gemini");
+  const analysisRequest = useRef(0);
+  useEffect(() => () => { analysisRequest.current += 1; }, []);
   const [generatingIllustration, setGeneratingIllustration] = useState(false);
   const [illustrationId, setIllustrationId] = useState<string | null>(null);
   const [illustrationDraftId, setIllustrationDraftId] = useState<string | null>(null);
@@ -206,7 +209,7 @@ export function StoryPostForm({
     setFiles((current) => current.filter((_, fileIndex) => fileIndex !== index));
   }
 
-  async function analyzeImage() {
+  async function analyzeImage(provider: "gemini" | "qwen") {
     if (!files.length || analyzing) return;
     setError("");
     if (!online) {
@@ -214,9 +217,12 @@ export function StoryPostForm({
       return;
     }
     setAnalyzing(true);
+    setActiveProvider(provider);
+    const requestId = ++analysisRequest.current;
     onAnalysisStart?.(files);
     try {
-      const result = await api.analyzePostImage(type, files);
+      const result = await api.analyzePostImage(type, files, provider);
+      if (requestId !== analysisRequest.current) return;
       setAnalysis(result);
       setDraft((current) => ({
         ...current,
@@ -229,11 +235,12 @@ export function StoryPostForm({
       }
       onAnalysisComplete?.(result);
     } catch (reason) {
+      if (requestId !== analysisRequest.current) return;
       const message = reason instanceof Error ? reason.message : "Không thể phân tích ảnh. Bạn vẫn có thể nhập thủ công.";
       setError(message);
       onAnalysisError?.(message);
     } finally {
-      setAnalyzing(false);
+      if (requestId === analysisRequest.current) setAnalyzing(false);
     }
   }
 
@@ -272,7 +279,7 @@ export function StoryPostForm({
         lostFoundAt: new Date(draft.lostFoundAt).toISOString(),
         handoverPointId: type === "FOUND" ? draft.handoverPointId || null : null,
         visibilityMode: type === "FOUND" && draft.privateDetails ? "PRIVATE_DETAILS" : "PUBLIC",
-        analysisSignals: analysis && !illustrationId ? {
+        analysisSignals: analysis && typeof analysis.confidence === "number" && !illustrationId ? {
           visualAttributes: analysis.visualAttributes,
           visibleText: analysis.visibleText,
           confidence: analysis.confidence,
@@ -382,22 +389,22 @@ export function StoryPostForm({
         </div>}
       </div>
       <div className="story-image-analysis-actions">
-        <button className="story-analyze-button" type="button" disabled={!online || !files.length || analyzing} onClick={analyzeImage}>
-          {analyzing ? <><LoaderCircle className="is-spinning" /> Đang phân tích {files.length} ảnh...</> : <><Sparkles /> Phân tích {files.length || "các"} ảnh</>}
-        </button>
-        <p>Chụp nhiều góc giúp đọc rõ hãng, model, chữ, phụ kiện và dấu hiệu riêng. Ảnh được phân tích trực tiếp qua Google Gemini API để tự động trích xuất tên, mô tả và danh mục.</p>
+        {(["gemini", "qwen"] as const).map(provider => <button key={provider} className="story-analyze-button" type="button" disabled={!online || !files.length || analyzing} onClick={() => void analyzeImage(provider)}>
+          {analyzing && activeProvider === provider ? <><LoaderCircle className="is-spinning" /> {provider === "gemini" ? "Gemini" : "Qwen"} đang phân tích...</> : <><Sparkles /> Phân tích bằng {provider === "gemini" ? "Gemini" : "Qwen"}</>}
+        </button>)}
+        <p>Chọn Gemini hoặc Qwen để gợi ý tên, mô tả và danh mục từ ảnh. Bạn có thể thử lần lượt cả hai trên cùng bộ ảnh.</p>
       </div>
       <div className="story-image-analysis-copy">
-        <p className="story-image-analysis-hint">Hãy dùng chức năng phân tích ảnh bằng Gemini AI để tự động điền thông tin nhanh hơn.</p>
-        <p className="story-image-analysis-note"><strong>Lưu ý:</strong> Thông tin điền sẵn từ Gemini AI chỉ mang tính tham khảo, không đảm bảo chính xác 100%. Vui lòng kiểm tra kỹ và chỉnh sửa trước khi đăng.</p>
+        <p className="story-image-analysis-hint">Chọn một trong hai nút để tự động điền thông tin từ ảnh.</p>
+        <p className="story-image-analysis-note"><strong>Lưu ý:</strong> Thông tin điền sẵn từ ảnh chỉ mang tính tham khảo, không đảm bảo chính xác 100%. Vui lòng kiểm tra kỹ và chỉnh sửa trước khi đăng.</p>
       </div>
     </div>
 
     {analysis && <div className="story-analysis-result" role="status">
       <span><Sparkles /></span>
       <div>
-        <strong>Đã tổng hợp {analysis.imageCount || files.length} ảnh · độ tin cậy {Math.round(analysis.confidence * 100)}%</strong>
-        <p>Bạn có thể sửa mọi trường. Vị trí và thời gian không được suy đoán từ ảnh.</p>
+        <strong>Đã tổng hợp {analysis.imageCount || files.length} ảnh · {typeof analysis.confidence === "number" ? `độ tin cậy ${Math.round(analysis.confidence * 100)}%` : "Chưa có điểm tin cậy"}</strong>
+        <p>{analysis.assistedBy} · Bạn có thể sửa mọi trường. Vị trí và thời gian không được suy đoán từ ảnh.</p>
         {analysis.visualAttributes.length > 0 && <div>{analysis.visualAttributes.slice(0, 5).map((attribute) => <small key={attribute}>{attribute}</small>)}</div>}
         {analysis.warnings.map((warning) => <em key={warning}>{warning}</em>)}
       </div>
