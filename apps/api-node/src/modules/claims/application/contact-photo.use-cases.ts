@@ -44,7 +44,7 @@ export function createContactPhotoUseCases(options: { repository: ContactPhotoRe
         }
         const analysis = await options.imageAnalysis.analyzePostImages([file],"FOUND");
         const score = Math.floor(scoreContactPhoto(target,{ ...analysis, categoryId: analysis.suggestedCategory?.id ?? null }) * 100000) / 100000;
-        const approved = score >= CONTACT_PHOTO_MINIMUM_SCORE && analysis.confidence >= .6;
+        const approved = score >= CONTACT_PHOTO_MINIMUM_SCORE && analysis.confidence !== null && analysis.confidence >= .6;
         const questions = contactPhotoQuestions(analysis);
         if (!approved) return { checkId: null, approved: false, score, expiresAt: null, questions: [] };
         const checkId = operation.id;

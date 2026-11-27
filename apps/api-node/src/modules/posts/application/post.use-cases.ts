@@ -497,8 +497,9 @@ export function createPostUseCases(options: PostDependencies) {
               if (analysis.imageEmbedding && analysis.imageEmbedding.length > 0) {
                 await postRepository.updateImageEmbedding!(postId, analysis.imageEmbedding!, connection);
               }
-              if (analysis.visualAttributes.length > 0 || analysis.visibleText.length > 0) {
-                await matchingRepository.replaceAnalysisTags(postId, analysis, connection);
+              // ai_tags requires a numeric score; never persist unknown confidence as zero.
+              if (analysis.confidence !== null && (analysis.visualAttributes.length > 0 || analysis.visibleText.length > 0)) {
+                await matchingRepository.replaceAnalysisTags(postId, { ...analysis, confidence: analysis.confidence }, connection);
               }
               if (analysis.isSensitiveDocument) {
                 await postRepository.updatePost(postId, { visibilityMode: "PRIVATE_DETAILS" }, connection);

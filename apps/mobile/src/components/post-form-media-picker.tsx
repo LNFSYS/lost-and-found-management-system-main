@@ -29,7 +29,7 @@ export interface ApplyAiDraftPayload {
   suggestedCategoryId?: string | null;
   visualAttributes: string[];
   visibleText: string[];
-  confidence: number;
+  confidence: number | null;
 }
 
 export interface PostFormMediaPickerProps {
@@ -62,6 +62,7 @@ export function PostFormMediaPicker({
 }: PostFormMediaPickerProps) {
   const [sourceModalVisible, setSourceModalVisible] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [activeProvider, setActiveProvider] = useState<"gemini" | "qwen">("gemini");
   const [analysisStepIndex, setAnalysisStepIndex] = useState(0);
   const [aiResult, setAiResult] = useState<ImageAnalysisResult | null>(initialAiResult);
   const [prevInitialAiResult, setPrevInitialAiResult] = useState(initialAiResult);
@@ -214,7 +215,7 @@ export function PostFormMediaPicker({
     [disabled, isAnalyzing, images, onChangeImages]
   );
 
-  const handleAnalyzeImages = useCallback(async () => {
+  const handleAnalyzeImages = useCallback(async (provider: "gemini" | "qwen") => {
     if (disabled || isAnalyzing) return;
     if (images.length === 0) {
       Alert.alert(
@@ -227,10 +228,11 @@ export function PostFormMediaPicker({
     setAiError(null);
     setAnalysisStepIndex(0);
     setIsAnalyzing(true);
+    setActiveProvider(provider);
     setDraftApplied(false);
 
     try {
-      const result = await postService.analyzePostImage(postType, images);
+      const result = await postService.analyzePostImage(postType, images, provider);
       setAiResult(result);
       onAnalysisSuccess?.(result);
     } catch (error) {
@@ -250,7 +252,7 @@ export function PostFormMediaPicker({
       suggestedCategoryId: aiResult.suggestedCategory?.id ?? null,
       visualAttributes: aiResult.visualAttributes || [],
       visibleText: aiResult.visibleText || [],
-      confidence: aiResult.confidence ?? 0.85,
+      confidence: aiResult.confidence ?? null,
     });
     setDraftApplied(true);
   }, [aiResult, onApplyAiDraft]);
@@ -356,6 +358,15 @@ export function PostFormMediaPicker({
       </View>
 
       {/* Helper text under grid */}
+      {(["gemini", "qwen"] as const).map(provider => <Pressable
+        key={provider} accessibilityRole="button"
+        accessibilityLabel={`Phân tích bằng ${provider === "gemini" ? "Gemini" : "Qwen"}`}
+        disabled={disabled || isAnalyzing || images.length === 0}
+        onPress={() => void handleAnalyzeImages(provider)}
+        style={[styles.reAnalyzeBtn, { marginTop: 8, opacity: disabled || isAnalyzing || images.length === 0 ? 0.5 : 1 }]}
+      >
+        <Text style={styles.reAnalyzeBtnText}>{isAnalyzing && activeProvider === provider ? "Đang phân tích bằng " : "Phân tích bằng "}{provider === "gemini" ? "Gemini" : "Qwen"}</Text>
+      </Pressable>)}
       <Text style={styles.instructionNote}>
         Mẹo: Chọn góc chụp sáng rõ, bao quát toàn bộ đồ vật và các chi tiết đặc biệt (logo, tem, số hiệu, vết xước) để AI nhận dạng chính xác nhất.
       </Text>
@@ -399,21 +410,21 @@ export function PostFormMediaPicker({
                 <MaterialCommunityIcons name="creation" size={18} color="#7C3AED" />
               </View>
               <View>
-                <Text style={styles.aiResultHeaderTitle}>Gợi ý từ AI Vision (DINOv2)</Text>
+                <Text style={styles.aiResultHeaderTitle}>Gợi ý phân tích ảnh</Text>
                 <Text style={styles.aiModelTag}>
                   Mô hình: {aiResult.model || "dinov2_vits14 + easyocr"}
                 </Text>
               </View>
             </View>
 
-            {typeof aiResult.confidence === "number" && (
+            {typeof aiResult.confidence === "number" ? (
               <View style={styles.confidenceBadge}>
                 <MaterialCommunityIcons name="check-decagram" size={13} color={colors.success} />
                 <Text style={styles.confidenceText}>
                   {Math.round(aiResult.confidence * 100)}% tin cậy
                 </Text>
               </View>
-            )}
+            ) : <Text style={styles.confidenceText}>Chưa có điểm tin cậy</Text>}
           </View>
 
           {/* Suggested Category */}
@@ -530,7 +541,7 @@ export function PostFormMediaPicker({
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Phân tích lại"
-                onPress={handleAnalyzeImages}
+                onPress={() => void handleAnalyzeImages(activeProvider)}
                 disabled={isAnalyzing}
                 style={({ pressed }) => [
                   styles.reAnalyzeBtn,

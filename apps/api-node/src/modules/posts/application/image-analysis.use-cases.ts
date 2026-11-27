@@ -11,6 +11,7 @@ import { AppError } from "../../../shared/domain/app-error.js";
 import { validateImageUpload } from "../../../shared/domain/media.js";
 
 import { matchSuggestedCategory } from "../domain/image-category.js";
+import { sentenceCase } from "../domain/qwen-description.js";
 
 const MAX_ANALYSIS_IMAGES = 5;
 
@@ -22,7 +23,8 @@ export interface PostImageAnalysisResult {
   suggestedCategory: ReturnType<typeof matchSuggestedCategory>;
   visualAttributes: string[];
   visibleText: string[];
-  confidence: number;
+  confidence: number | null;
+  confidence_source?: "unavailable" | "provider";
   warnings: string[];
   assistedBy: string;
   model: string;
@@ -30,10 +32,12 @@ export interface PostImageAnalysisResult {
   imageEmbedding?: number[] | null;
 }
 
-export function createImageAnalysisUseCases({ postRepository, analyzer }: { postRepository: Pick<PostRepository, "getFormCatalog">; analyzer: ImageAnalyzer; }) {
+export function createImageAnalysisUseCases({ postRepository, analyzer: defaultAnalyzer, analyzers }: { postRepository: Pick<PostRepository, "getFormCatalog">; analyzer: ImageAnalyzer; analyzers?: Partial<Record<"gemini" | "qwen", ImageAnalyzer>>; }) {
 
   const useCases = {
-    async analyzePostImages(files: ImageUpload[], type: AnalyzePostImageInput["type"]): Promise<PostImageAnalysisResult> {
+    async analyzePostImages(files: ImageUpload[], type: AnalyzePostImageInput["type"], provider?: "gemini" | "qwen"): Promise<PostImageAnalysisResult> {
+      const analyzer = provider ? analyzers?.[provider] : defaultAnalyzer;
+      if (!analyzer) throw new AppError("unavailable", `Dịch vụ ${provider === "qwen" ? "Qwen" : "Gemini"} chưa được cấu hình.`);
       if (!files.length) throw new AppError("bad_request", "Cần gửi ít nhất một ảnh để phân tích.");
       if (files.length > MAX_ANALYSIS_IMAGES) {
         throw new AppError("bad_request", `Chỉ được phân tích tối đa ${MAX_ANALYSIS_IMAGES} ảnh trong một lần.`);
@@ -50,14 +54,16 @@ export function createImageAnalysisUseCases({ postRepository, analyzer }: { post
       const result = await analyzer.analyze(files, type, leafCategories.map((category) => category.name));
       const suggestedCategory = matchSuggestedCategory(result.categoryName, leafCategories);
       return {
-        title: result.title,
-        description: result.description,
+        title: sentenceCase(result.title),
+        description: sentenceCase(result.description),
         suggestedCategory,
         visualAttributes: result.visualAttributes,
         visibleText: result.visibleText,
         confidence: result.confidence,
+        confidence_source: result.confidence_source ?? (result.confidence === null ? "unavailable" : "provider"),
         warnings: result.warnings,
-        assistedBy: analyzer.model.includes("local") ? "DINOv2 + EasyOCR AI (local)" : "Gemini image understanding",
+        assistedBy: analyzer.model.startsWith("Qwen") ? "Qwen image understanding (local)"
+          : analyzer.model.includes("local") ? "DINOv2 + EasyOCR AI (local)" : "Gemini image understanding",
         model: analyzer.model,
         imageCount: files.length,
         imageEmbedding: result.imageEmbedding ?? null

@@ -9,7 +9,10 @@ const session = {
 const catalog = {
   categories: [
     { id: "99999999-9999-4999-8999-999999999999", name: "Túi ví & phụ kiện", parentId: null },
-    { id: "11111111-1111-4111-8111-111111111111", name: "Ví / bóp", parentId: "99999999-9999-4999-8999-999999999999" }
+    { id: "11111111-1111-4111-8111-111111111111", name: "Ví / bóp", parentId: "99999999-9999-4999-8999-999999999999" },
+    { id: "55555555-5555-4555-8555-555555555555", name: "Balo", parentId: "99999999-9999-4999-8999-999999999999" },
+    { id: "66666666-6666-4666-8666-666666666666", name: "Thiết bị điện tử", parentId: null },
+    { id: "77777777-7777-4777-8777-777777777777", name: "Điện thoại", parentId: "66666666-6666-4666-8666-666666666666" }
   ],
   areas: [{ id: "22222222-2222-4222-8222-222222222222", name: "Tòa" }],
   buildings: [{ id: "33333333-3333-4333-8333-333333333333", areaId: "22222222-2222-4222-8222-222222222222", name: "Tòa Alpha" }],
@@ -115,6 +118,147 @@ async function fillCommonForm(page: Page) {
   await form.getByLabel("Mô tả nhận dạng").fill("Ví da màu đen có một vết xước nhỏ ở cạnh.");
 }
 
+test("phone draft autofills title description and both category dropdowns", async ({ page }) => {
+  await prepare(page, () => undefined);
+  await page.route("**/api/posts/analyze-image", route => route.fulfill({ json: {
+    title: "Điện thoại màu đỏ", description: "Điện thoại màu đỏ có màn hình đen.",
+    suggestedCategory: catalog.categories[4], visualAttributes: ["đỏ", "màn hình đen"], visibleText: [],
+    confidence: null, warnings: [], assistedBy: "Qwen image understanding (local)", model: "Qwen", imageCount: 1
+  } }));
+  const form = page.locator(".story-post-form");
+  await form.locator('input[type=file]').setInputFiles("tests/fixtures/appointment-item.png");
+  await form.getByRole("button", { name: "Phân tích bằng Qwen" }).click();
+  await expect(form.getByLabel("Tên vật phẩm")).toHaveValue("Điện thoại màu đỏ");
+  await expect(form.getByLabel("Mô tả nhận dạng")).toHaveValue("Điện thoại màu đỏ có màn hình đen.");
+  await expect(form.getByLabel("Nhóm chính", { exact: true })).toHaveValue(catalog.categories[3].id);
+  await expect(form.getByLabel("Danh mục cụ thể", { exact: true })).toHaveValue(catalog.categories[4].id);
+});
+
+for (const status of [200, 503]) {
+  test(`ending analysis session ignores late ${status} response and never scrolls back`, async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await prepare(page, () => undefined);
+    let release!: () => void;
+    const pending = new Promise<void>(resolve => { release = resolve; });
+    await page.route("**/api/posts/analyze-image", async route => {
+      await pending;
+      await route.fulfill({ status, json: status === 200 ? {
+        title: "Late draft", description: "Late result", suggestedCategory: null,
+        visualAttributes: [], visibleText: [], confidence: null, warnings: [], imageCount: 1
+      } : { message: "Late provider failure" } });
+    });
+    await page.locator('.story-post-form input[type=file]').setInputFiles("tests/fixtures/appointment-item.png");
+    await page.getByRole("button", { name: "Phân tích bằng Qwen" }).click();
+    await expect(page.locator("#system-analysis .is-scanning")).toBeVisible();
+    await page.locator("#system-analysis").getByRole("button", { name: "Kết thúc phiên", exact: true }).click();
+    await expect(page.locator("#system-analysis .workflow-analysis-layout")).toHaveCount(0);
+    await page.evaluate(() => {
+      const original = window.scrollTo.bind(window);
+      (window as unknown as { resetScrollCalls: number }).resetScrollCalls = 0;
+      window.scrollTo = (...args: [ScrollToOptions]) => {
+        (window as unknown as { resetScrollCalls: number }).resetScrollCalls++;
+        original(...args);
+      };
+    });
+    const response = page.waitForResponse("**/api/posts/analyze-image");
+    release();
+    await response;
+    // Covers the former 650 ms completion scroll timer, not just immediate state.
+    await page.waitForTimeout(850);
+    await expect(page.locator("#system-analysis .workflow-analysis-layout")).toHaveCount(0);
+    await expect(page.locator('.story-post-form').getByLabel("Tên vật phẩm")).toHaveValue("");
+    expect(await page.evaluate(() => (window as unknown as { resetScrollCalls: number }).resetScrollCalls)).toBe(0);
+  });
+}
+
+for (const width of [390, 768, 1024, 1440]) {
+  test(`analysis buttons stay inside their panel at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 1000 });
+    await prepare(page, () => undefined);
+    const panel = page.locator(".story-image-analysis-actions");
+    await expect(panel.locator("button")).toHaveCount(2);
+    expect(await panel.evaluate(element => {
+      const rect = element.getBoundingClientRect();
+      const style = getComputedStyle(element);
+      return [...element.querySelectorAll("button")].every(button => {
+        const bounds = button.getBoundingClientRect();
+        return bounds.left >= rect.left + parseFloat(style.paddingLeft) - 1
+          && bounds.right <= rect.right - parseFloat(style.paddingRight) + 1
+          && button.scrollWidth <= button.clientWidth;
+      });
+    })).toBe(true);
+  });
+}
+
+for (const width of [390, 1440]) {
+  test(`provider buttons send independent choices and recover from Qwen failure at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await prepare(page, () => undefined);
+    const calls: string[] = [];
+    await page.route("**/api/posts/analyze-image", route => {
+      const body = route.request().postData() ?? "";
+      const provider = body.match(/name="provider"\r?\n\r?\n(gemini|qwen)/)?.[1];
+      calls.push(provider ?? "missing");
+      if (provider === "qwen") return route.fulfill({ status: 503, json: { message: "Qwen chưa sẵn sàng" } });
+      return route.fulfill({ json: { title: "Balo từ Gemini", description: "Balo màu xanh đậm.",
+        suggestedCategory: catalog.categories[2], visualAttributes: [], visibleText: [], confidence: 0.8,
+        warnings: [], assistedBy: "Gemini image understanding", model: "gemini-test", imageCount: 1 } });
+    });
+    const form = page.locator(".story-post-form");
+    const gemini = form.getByRole("button", { name: "Phân tích bằng Gemini" });
+    const qwen = form.getByRole("button", { name: "Phân tích bằng Qwen" });
+    await expect(gemini).toBeDisabled();
+    await expect(qwen).toBeDisabled();
+    await form.locator('input[type=file]').setInputFiles("tests/fixtures/appointment-item.png");
+    await gemini.click();
+    await expect(form.getByLabel("Tên vật phẩm")).toHaveValue("Balo từ Gemini");
+    await qwen.click();
+    await expect(gemini).toBeEnabled();
+    await gemini.click();
+    await expect.poll(() => calls).toEqual(["gemini", "qwen", "gemini"]);
+    await expect(form.getByLabel("Tên vật phẩm")).toHaveValue("Balo từ Gemini");
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  });
+}
+
+for (const type of ["LOST", "FOUND"] as const) {
+  for (const resolved of [true, false]) {
+    test(`Qwen ${type} draft preserves unknown confidence and editable ${resolved ? "resolved" : "unresolved"} category`, async ({ page }) => {
+      let payload: Record<string, unknown> = {};
+      await prepare(page, value => { payload = value; });
+      if (type === "FOUND") await page.locator("#two-sides").getByRole("button", { name: /Tôi nhặt được đồ/i }).click();
+      const description = "Balo xanh đậm có ba sọc trắng, quai đen và túi khóa kéo phía trước.";
+      await page.route("**/api/posts/analyze-image", route => route.fulfill({ json: {
+        title: "Balo xanh đậm", description, suggestedCategory: resolved ? catalog.categories[2] : null,
+        visualAttributes: ["xanh đậm", "đen", "trắng", "quai đen"], visibleText: [],
+        confidence: null, confidence_source: "unavailable", warnings: [],
+        model: "Qwen3-VL-2B-Instruct (local)", assistedBy: "Qwen image understanding (local)", imageCount: 1
+      } }));
+      const form = page.locator(".story-post-form");
+      // Synthetic fixture exercises upload; the backpack model result above is mocked.
+      await form.locator('input[type=file]').setInputFiles("tests/fixtures/appointment-item.png");
+      await form.getByRole("button", { name: "Phân tích bằng Qwen" }).click();
+      await expect(form.getByLabel("Tên vật phẩm")).toHaveValue("Balo xanh đậm");
+      await expect(form.getByLabel("Mô tả nhận dạng")).toHaveValue(description);
+      await expect(form.getByText(/Chưa có điểm tin cậy/)).toBeVisible();
+      await expect(form.getByText(/độ tin cậy 0%/)).toHaveCount(0);
+      await expect(form.getByText("xanh đậm", { exact: true })).toBeVisible();
+      await expect(form.getByLabel("Nhóm chính", { exact: true })).toHaveValue(resolved ? catalog.categories[0].id : "");
+      await expect(form.getByLabel("Danh mục cụ thể", { exact: true })).toHaveValue(resolved ? catalog.categories[2].id : "");
+      await form.getByLabel("Nhóm chính", { exact: true }).selectOption(catalog.categories[0].id);
+      await form.getByLabel("Danh mục cụ thể", { exact: true }).selectOption(catalog.categories[2].id);
+      await form.getByLabel("Mô tả nhận dạng").fill(`${description} Thông tin do người dùng bổ sung.`);
+      await form.getByLabel("Khu vực").selectOption(catalog.areas[0].id);
+      await form.getByRole("button", { name: `Đăng bài ${type}` }).click();
+      await expect.poll(() => payload.type).toBe(type);
+      expect(payload.categoryId).toBe(catalog.categories[2].id);
+      expect(payload.description).toContain("Thông tin do người dùng bổ sung.");
+      // Existing DB tags require numeric confidence; unknown scores must not become 0.
+      expect(payload.analysisSignals).toBeUndefined();
+    });
+  }
+}
+
 for (const type of ["LOST", "FOUND"] as const) {
   for (const width of [1440, 390]) {
     for (const reducedMotion of ["reduce", "no-preference"] as const) {
@@ -139,7 +283,7 @@ for (const type of ["LOST", "FOUND"] as const) {
           return movement <= 1 ? Math.min(...offsets) : -1;
         })).toBeGreaterThan(0);
         await expect(form.locator(".story-image-drop")).toBeInViewport({ ratio: 1 });
-        await expect(form.getByRole("button", { name: "Phân tích các ảnh" })).toBeInViewport({ ratio: 1 });
+        await expect(form.getByRole("button", { name: "Phân tích bằng Gemini" })).toBeInViewport({ ratio: 1 });
         await page.screenshot({ path: testInfo.outputPath("selected-form.png") });
       });
     }
@@ -192,7 +336,7 @@ for (const type of ["LOST", "FOUND"] as const) {
         window.scrollBy({ top: element.getBoundingClientRect().top - navigation.getBoundingClientRect().bottom - 16, behavior: "instant" });
       });
       const upload = form.locator(".story-image-drop");
-      const analyze = form.getByRole("button", { name: "Phân tích các ảnh" });
+      const analyze = form.getByRole("button", { name: "Phân tích bằng Gemini" });
       await expect(upload).toBeInViewport({ ratio: 1 });
       await expect(analyze).toBeInViewport({ ratio: 1 });
       if (width > 700) {
@@ -202,10 +346,10 @@ for (const type of ["LOST", "FOUND"] as const) {
           return Math.abs(uploadRect.top - actionsRect.top) < 1 && Math.abs(uploadRect.bottom - actionsRect.bottom) < 1;
         })).toBe(true);
       }
-      await expect(form.locator(".story-image-analysis-actions p")).toHaveText("Chụp nhiều góc giúp đọc rõ hãng, model, chữ, phụ kiện và dấu hiệu riêng. Ảnh được phân tích nội bộ qua mô hình DINOv2 và EasyOCR của hệ thống.");
+      await expect(form.locator(".story-image-analysis-actions p")).toContainText("Chọn Gemini hoặc Qwen");
       const analysisHint = form.locator(".story-image-analysis-hint");
       await expect(analysisHint).toBeInViewport({ ratio: 1 });
-      await expect(analysisHint).toHaveText("Hãy dùng chức năng phân tích ảnh để tự động điền thông tin nhanh hơn.");
+      await expect(analysisHint).toHaveText("Chọn một trong hai nút để tự động điền thông tin từ ảnh.");
       expect(await form.evaluate((element) => {
         const uploadRect = element.querySelector(".story-image-drop")!.getBoundingClientRect();
         const actionsRect = element.querySelector(".story-image-analysis-actions")!.getBoundingClientRect();
@@ -233,7 +377,7 @@ for (const type of ["LOST", "FOUND"] as const) {
       await upload.locator("input[type=file]").setInputFiles({ name: "item.png", mimeType: "image/png", buffer: png });
       await expect(form.locator(".story-image-thumb")).toHaveCount(1);
       await expect.poll(() => form.locator(".story-image-thumb img").evaluate((element: HTMLImageElement) => element.naturalWidth)).toBeGreaterThan(0);
-      await expect(form.getByRole("button", { name: "Phân tích 1 ảnh" })).toBeEnabled();
+      await expect(form.getByRole("button", { name: "Phân tích bằng Gemini" })).toBeEnabled();
       await expect(form.getByLabel("Tên vật phẩm")).toHaveValue("");
       await form.getByRole("button", { name: "Xóa ảnh 1" }).click();
       await expect(form.locator(".story-image-thumb")).toHaveCount(0);
@@ -507,7 +651,7 @@ test("analyzes an image, fills an editable draft, posts it and shows real catego
     { name: "wallet-back.png", mimeType: "image/png", buffer: png }
   ]);
   await expect(page.locator(".story-image-thumb")).toHaveCount(2);
-  await page.getByRole("button", { name: "Phân tích 2 ảnh" }).click();
+  await page.getByRole("button", { name: "Phân tích bằng Gemini" }).click();
   // Hold the response until loading-state assertions finish, regardless of runner speed.
   try {
     await page.locator("#system-analysis").scrollIntoViewIfNeeded();

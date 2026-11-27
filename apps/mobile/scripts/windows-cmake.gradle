@@ -1,0 +1,13 @@
+// Keep generated C++ object paths below Windows/Ninja's path limit.
+// Usage from android/: gradlew.bat -I ../scripts/windows-cmake.gradle app:assembleDebug ...
+allprojects { target ->
+    target.afterEvaluate {
+        def android = target.extensions.findByName('android')
+        if (android != null && android.hasProperty('defaultConfig')) {
+            android.defaultConfig.externalNativeBuild.cmake.arguments.add('-DCMAKE_OBJECT_PATH_MAX=240')
+            def shortId = Integer.toHexString(target.path.hashCode())
+            android.externalNativeBuild.cmake.buildStagingDirectory =
+                new File(rootProject.rootDir, "../../../test-results/cxx/${shortId}").canonicalFile
+        }
+    }
+}

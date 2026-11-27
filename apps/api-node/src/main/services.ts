@@ -22,6 +22,7 @@ import { createCloudflareIllustrationModel } from "../modules/posts/infrastructu
 import { createPostUseCases } from "../modules/posts/application/post.use-cases.js";
 import { createGeminiImageAnalyzer } from "../modules/posts/infrastructure/gemini-image-analyzer.js";
 import { createLocalAiImageAnalyzer } from "../modules/posts/infrastructure/local-ai-image-analyzer.js";
+import { createQwenImageAnalyzer } from "../modules/posts/infrastructure/qwen-image-analyzer.js";
 import { createRealtimeUseCases } from "../modules/realtime/application/realtime.use-cases.js";
 import { createChatSocketUseCases } from "../modules/realtime/application/chat-socket.use-cases.js";
 import { createCallSocketUseCases } from "../modules/realtime/application/call-socket.use-cases.js";
@@ -164,9 +165,19 @@ export function createServices(persistence: Persistence, config: typeof env = en
     withTransaction: transaction, id, mediaStorage: claimMediaStorage,
     hashIdempotencyPayload: security.hashToken, logger: console, uploads: mediaUploads
   });
+  const draftProvider = process.env.LNFS_IMAGE_ANALYSIS_PROVIDER || "gemini";
+  if (!["gemini", "qwen"].includes(draftProvider)) throw new Error("Unsupported LNFS_IMAGE_ANALYSIS_PROVIDER");
+  const geminiDraftAnalyzer = createGeminiImageAnalyzer(config.gemini);
+  const qwenDraftAnalyzer = process.env.QWEN_API_KEY ? createQwenImageAnalyzer({
+      serviceUrl: process.env.QWEN_SERVICE_URL || "http://127.0.0.1:8000",
+      apiKey: process.env.QWEN_API_KEY || "",
+      timeoutMs: Number(process.env.QWEN_TIMEOUT_MS || "180000")
+    }) : undefined;
+  if (draftProvider === "qwen" && !qwenDraftAnalyzer) throw new Error("QWEN_API_KEY is required for default Qwen provider");
   const geminiImageService = createImageAnalysisUseCases({
     postRepository,
-    analyzer: createGeminiImageAnalyzer(config.gemini)
+    analyzer: draftProvider === "qwen" ? qwenDraftAnalyzer! : geminiDraftAnalyzer,
+    analyzers: { gemini: geminiDraftAnalyzer, qwen: qwenDraftAnalyzer }
   });
   const radarService = createRadarUseCases({ radarRepository: persistence.radarRepository, idFactory: id });
   return {

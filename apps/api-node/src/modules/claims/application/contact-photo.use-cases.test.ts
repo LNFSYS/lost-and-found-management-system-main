@@ -31,7 +31,8 @@ function setup() {
   let row: ContactPhotoCheck | null = { id: checkId, actorId: actor, postId, postRevision: revision, score: .91, model: "fixture",
     storageRef: "private://contact-photo", publicId: checkId, format: "jpg", bytes: 4, expiresAt: new Date(Date.now()+60000).toISOString(), claimId: null };
   let currentRevision: string | null = revision, approval = false, saved = 0, created = 0, removed = 0;
-  let confidence = .9, providerFails = false, forbidden = false;
+  let confidence: number | null = .9;
+  let providerFails = false, forbidden = false;
   const evidence: unknown[] = [], audit: unknown[] = [], messages: unknown[] = [];
   repository.revision = async () => currentRevision;
   repository.lock = async () => row;
@@ -57,13 +58,20 @@ function setup() {
       return { ...observation, suggestedCategory: { id: "wallet", name: "Wallet", parentId: "bags" }, confidence, warnings: [], assistedBy: "fixture", model: "fixture", imageCount: 1 };
     } } });
   return { repository, service, evidence, audit, messages, setRow(value: ContactPhotoCheck | null) { row = value; }, getRow: () => row!,
-    setRevision(value: string | null) { currentRevision = value; }, setConfidence(value: number) { confidence = value; },
+    setRevision(value: string | null) { currentRevision = value; }, setConfidence(value: number | null) { confidence = value; },
     failProvider() { providerFails = true; }, denyTarget() { forbidden = true; }, stats: () => ({ saved,created,removed }) };
 }
 
 test("contact scoring reuses matching signals without trusting photo location or time", () => {
   assert.ok(scoreContactPhoto(target,observation) > .6);
   assert.ok(scoreContactPhoto(target,{ title: "Red bicycle", description: "steel frame wheels", categoryId: "bicycle", visualAttributes: ["red","wheels"], visibleText: [] }) <= .6);
+});
+
+test("unavailable confidence never approves a contact photo or stores evidence", async () => {
+  const f = setup();
+  f.setConfidence(null);
+  assert.equal((await f.service.analyze(postId, actor, photo)).approved, false);
+  assert.deepEqual(f.stats(), { saved: 0, created: 0, removed: 0 });
 });
 
 test("a server-approved photo stores a private expiring check, not an ownership decision", async () => {
