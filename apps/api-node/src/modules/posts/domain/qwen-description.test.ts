@@ -62,3 +62,9 @@ test("similar features with different numbers or positions are not merged", () =
     ["điện thoại có camera ở mặt sau", "điện thoại có camera ở mặt trước", "có chữ A12", "có chữ A13"]);
   for (const detail of ["camera ở mặt sau", "camera ở mặt trước", "A12", "A13"]) assert.ok(result.includes(detail));
 });
+
+test("multi-view surface clauses form one sentence and retain literal OCR", () => {
+  const result = polishedDescription(["Chai nước màu trắng.", "Chai nước có nắp."], "Chai nước", ["trắng"],
+    ["chữ “LOCK&LOCK”", "Có nắp màu đen", "Bề mặt nhẵn", "Bề mặt có vết trầy", "Bề mặt nhẵn"]);
+  assert.equal(result, "Chai nước màu trắng, có chữ “LOCK&LOCK” và nắp màu đen. Bề mặt nhẵn và có vết trầy.");
+});
