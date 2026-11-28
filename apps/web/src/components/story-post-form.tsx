@@ -450,14 +450,14 @@ export function StoryPostForm({
               }}
               style={{ marginTop: "2px" }}
             />
-            <span>Tôi xác nhận đã che mờ các số định danh cá nhân (số CCCD, MSSV, số thẻ ATM) trên ảnh giấy tờ trước khi gửi AI.</span>
+             <span>Tôi đã che kín thông tin cá nhân, ảnh chân dung, chữ ký, ngày tháng và QR/barcode. Với thẻ ngân hàng, tôi đã che cả tên chủ thẻ, toàn bộ số thẻ/tài khoản và CVV/CVC. Tôi không gửi PIN, OTP hoặc mật khẩu.</span>
           </label>
         </div>
       )}
       <div className="story-image-analysis-copy">
         <p className="story-image-analysis-hint">Chọn một trong hai nút để tự động điền thông tin từ ảnh.</p>
         <p className="story-image-analysis-warning" style={{ color: "#92400e", backgroundColor: "#fffbeb", border: "1px solid #fef3c7", padding: "0.5rem 0.75rem", borderRadius: "6px", fontSize: "0.85rem", marginTop: "0.5rem" }}>
-          <strong>Lưu ý bảo mật (S1/S2):</strong> Nếu ảnh chụp chứa giấy tờ tùy thân (CCCD, Thẻ sinh viên, Thẻ ngân hàng, GPLX...), vui lòng che mờ hoặc ẩn các số định danh nhạy cảm trước khi gửi phân tích AI nhằm bảo vệ quyền riêng tư.
+          <strong>Lưu ý bảo mật:</strong> Chỉ gửi giấy tờ/thẻ ngân hàng đã che kín thông tin cá nhân, số thẻ/tài khoản, ngày tháng, CVV/CVC, chữ ký và QR/barcode. Không gửi PIN, OTP hoặc mật khẩu. Ảnh được gửi tới dịch vụ AI bên ngoài để kiểm duyệt khi tính năng này được bật, kể cả khi chọn Qwen. Nếu không muốn gửi ảnh, hãy nhập mô tả chung bằng tay và đăng không kèm ảnh.
         </p>
         <p className="story-image-analysis-note"><strong>Lưu ý:</strong> Thông tin điền sẵn từ ảnh chỉ mang tính tham khảo, không đảm bảo chính xác 100%. Vui lòng kiểm tra kỹ và chỉnh sửa trước khi đăng.</p>
       </div>
