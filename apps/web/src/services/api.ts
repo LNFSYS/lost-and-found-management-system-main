@@ -1390,12 +1390,12 @@ export const api = {
   deletePost: (postId: string) => raw<void>(`/posts/${postId}`, { method: "DELETE" }),
   getPostMedia: (path: string) => mediaBlob(path),
   createPost: (payload: CreatePostPayload) => raw<CreatedPost>("/posts", { method: "POST", body: JSON.stringify(payload) }),
-  analyzePostImage: (type: "LOST" | "FOUND", files: File[], provider?: "gemini" | "qwen") => {
+  analyzePostImage: (type: "LOST" | "FOUND", files: File[], provider?: "gemini" | "qwen" | "deepseek", signal?: AbortSignal) => {
     const form = new FormData();
     form.append("type", type);
     if (provider) form.append("provider", provider);
     files.forEach((file) => form.append("files", file));
-    return raw<ImageAnalysisResult>("/posts/analyze-image", { method: "POST", body: form });
+    return raw<ImageAnalysisResult>("/posts/analyze-image", { method: "POST", body: form, signal });
   },
   uploadPostMedia: (postId: string, file: File) => {
     const form = new FormData();

@@ -97,9 +97,15 @@ export function StoryPostForm({
   const [catalogError, setCatalogError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
-  const [activeProvider, setActiveProvider] = useState<"gemini" | "qwen">("gemini");
+  const [activeProvider, setActiveProvider] = useState<"gemini" | "qwen" | "deepseek">("gemini");
   const analysisRequest = useRef(0);
-  useEffect(() => () => { analysisRequest.current += 1; }, []);
+  const analysisController = useRef<AbortController | null>(null);
+  const aiCategory = useRef<string | null>(null);
+  useEffect(() => () => {
+    analysisRequest.current += 1;
+    analysisController.current?.abort();
+    analysisController.current = null;
+  }, []);
   const [generatingIllustration, setGeneratingIllustration] = useState(false);
   const [illustrationId, setIllustrationId] = useState<string | null>(null);
   const [illustrationDraftId, setIllustrationDraftId] = useState<string | null>(null);
@@ -130,6 +136,11 @@ export function StoryPostForm({
   }, [previewUrls]);
 
   useEffect(() => {
+    analysisRequest.current += 1;
+    analysisController.current?.abort();
+    analysisController.current = null;
+    aiCategory.current = null;
+    setAnalyzing(false);
     setCreated(null);
     setAnalysis(null);
     setError("");
@@ -160,6 +171,11 @@ export function StoryPostForm({
   }
 
   function resetDraft() {
+    analysisRequest.current += 1;
+    analysisController.current?.abort();
+    analysisController.current = null;
+    aiCategory.current = null;
+    setAnalyzing(false);
     setCreated(null);
     setAnalysis(null);
     setError("");
@@ -209,19 +225,22 @@ export function StoryPostForm({
     setFiles((current) => current.filter((_, fileIndex) => fileIndex !== index));
   }
 
-  async function analyzeImage(provider: "gemini" | "qwen") {
-    if (!files.length || analyzing) return;
+  async function analyzeImage(provider: "gemini" | "qwen" | "deepseek") {
+    if (!files.length || analysisController.current) return;
     setError("");
     if (!online) {
       setError("Bạn đang offline. Phân tích ảnh cần kết nối mạng và chưa được gửi.");
       return;
     }
+    const controller = new AbortController();
+    analysisController.current = controller;
     setAnalyzing(true);
+    setAnalysis(null);
     setActiveProvider(provider);
     const requestId = ++analysisRequest.current;
     onAnalysisStart?.(files);
     try {
-      const result = await api.analyzePostImage(type, files, provider);
+      const result = await api.analyzePostImage(type, files, provider, controller.signal);
       if (requestId !== analysisRequest.current) return;
       setAnalysis(result);
       setDraft((current) => ({
@@ -232,6 +251,11 @@ export function StoryPostForm({
       if (result.suggestedCategory?.parentId) {
         setMainCategoryId(result.suggestedCategory.parentId);
         setCategoryId(result.suggestedCategory.id);
+        aiCategory.current = result.suggestedCategory.id;
+      } else if (aiCategory.current !== null) {
+        setMainCategoryId("");
+        setCategoryId("");
+        aiCategory.current = null;
       }
       onAnalysisComplete?.(result);
     } catch (reason) {
@@ -240,7 +264,10 @@ export function StoryPostForm({
       setError(message);
       onAnalysisError?.(message);
     } finally {
-      if (requestId === analysisRequest.current) setAnalyzing(false);
+      if (requestId === analysisRequest.current) {
+        analysisController.current = null;
+        setAnalyzing(false);
+      }
     }
   }
 
@@ -389,13 +416,13 @@ export function StoryPostForm({
         </div>}
       </div>
       <div className="story-image-analysis-actions">
-        {(["gemini", "qwen"] as const).map(provider => <button key={provider} className="story-analyze-button" type="button" disabled={!online || !files.length || analyzing} onClick={() => void analyzeImage(provider)}>
-          {analyzing && activeProvider === provider ? <><LoaderCircle className="is-spinning" /> {provider === "gemini" ? "Gemini" : "Qwen"} đang phân tích...</> : <><Sparkles /> Phân tích bằng {provider === "gemini" ? "Gemini" : "Qwen"}</>}
+        {(["gemini", "qwen", "deepseek"] as const).map(provider => <button key={provider} className="story-analyze-button" type="button" disabled={!online || !files.length || analyzing} onClick={() => void analyzeImage(provider)}>
+          {analyzing && activeProvider === provider ? <><LoaderCircle className="is-spinning" /> {provider === "gemini" ? "Gemini" : provider === "deepseek" ? "DeepSeek" : "Qwen"} đang phân tích...</> : <><Sparkles /> Phân tích bằng {provider === "gemini" ? "Gemini" : provider === "deepseek" ? "DeepSeek" : "Qwen"}</>}
         </button>)}
-        <p>Chọn Gemini hoặc Qwen để gợi ý tên, mô tả và danh mục từ ảnh. Bạn có thể thử lần lượt cả hai trên cùng bộ ảnh.</p>
+        <p>Chọn Gemini, Qwen hoặc DeepSeek để gợi ý tên, mô tả và danh mục từ ảnh. Bạn có thể thử lần lượt các model trên cùng bộ ảnh.</p>
       </div>
       <div className="story-image-analysis-copy">
-        <p className="story-image-analysis-hint">Chọn một trong hai nút để tự động điền thông tin từ ảnh.</p>
+        <p className="story-image-analysis-hint">Chọn một trong các nút để tự động điền thông tin từ ảnh.</p>
         <p className="story-image-analysis-note"><strong>Lưu ý:</strong> Thông tin điền sẵn từ ảnh chỉ mang tính tham khảo, không đảm bảo chính xác 100%. Vui lòng kiểm tra kỹ và chỉnh sửa trước khi đăng.</p>
       </div>
     </div>
@@ -417,14 +444,14 @@ export function StoryPostForm({
       </label>
       <div className="story-field">
         <label htmlFor={`${type}-main-category`}>Nhóm chính</label>
-        <select id={`${type}-main-category`} value={mainCategoryId} required disabled={!catalog} onChange={(event) => { setMainCategoryId(event.target.value); setCategoryId(""); }}>
+        <select id={`${type}-main-category`} value={mainCategoryId} required disabled={!catalog} onChange={(event) => { aiCategory.current = null; setMainCategoryId(event.target.value); setCategoryId(""); }}>
           <option value="">Chọn nhóm vật phẩm</option>
           {mainCategoryOptions.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
         </select>
       </div>
       <div className="story-field">
         <label htmlFor={`${type}-category`}>Danh mục cụ thể</label>
-        <select id={`${type}-category`} value={categoryId} required disabled={!mainCategoryId || categoryOptions.length === 0} onChange={(event) => setCategoryId(event.target.value)}>
+        <select id={`${type}-category`} value={categoryId} required disabled={!mainCategoryId || categoryOptions.length === 0} onChange={(event) => { aiCategory.current = null; setCategoryId(event.target.value); }}>
           <option value="">{!mainCategoryId ? "Chọn nhóm chính trước" : categoryOptions.length === 0 ? "Nhóm chưa có danh mục cụ thể" : "Chọn loại vật phẩm"}</option>
           {categoryOptions.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
         </select>
