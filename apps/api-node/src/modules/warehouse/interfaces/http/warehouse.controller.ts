@@ -36,7 +36,7 @@ export function createWarehouseController({ warehouseService, warehouseConversat
 
     async listSensitiveDocuments(request: Request, response: Response) {
       const q = typeof request.query.q === "string" ? request.query.q : undefined;
-      const items = await warehouseService.listSensitiveDocuments(q);
+      const items = await warehouseService.listSensitiveDocuments(q, request.auth?.sub);
       response.json({ success: true, items });
     },
 

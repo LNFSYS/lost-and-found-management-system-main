@@ -43,34 +43,31 @@ const initialState: CallState = {
   error: null
 };
 
-const iceServers: RTCIceServer[] = [
-  // 1. STUN Servers (ưu tiên kết nối trực tiếp P2P tốc độ cao khi cùng mạng hoặc NAT đơn giản)
-  { urls: "stun:stun.l.google.com:19302" },
-  { urls: "stun:stun1.l.google.com:19302" },
-  { urls: "stun:stun.relay.metered.ca:80" },
+function resolveIceServers(): RTCIceServer[] {
+  const servers: RTCIceServer[] = [
+    // STUN Servers (ưu tiên kết nối trực tiếp P2P tốc độ cao khi cùng mạng hoặc NAT đơn giản)
+    { urls: "stun:stun.l.google.com:19302" },
+    { urls: "stun:stun1.l.google.com:19302" },
+    { urls: "stun:stun.relay.metered.ca:80" }
+  ];
 
-  // 2. TURN Relay Servers (trung chuyển âm thanh & video khi khác mạng, 4G, hoặc sau tường lửa/Symmetric NAT)
-  {
-    urls: "turn:global.relay.metered.ca:80",
-    username: "305f34e3ab6f4c59dcb3c02a",
-    credential: "4tgkFu6U/cgUBy4h"
-  },
-  {
-    urls: "turn:global.relay.metered.ca:80?transport=tcp",
-    username: "305f34e3ab6f4c59dcb3c02a",
-    credential: "4tgkFu6U/cgUBy4h"
-  },
-  {
-    urls: "turn:global.relay.metered.ca:443",
-    username: "305f34e3ab6f4c59dcb3c02a",
-    credential: "4tgkFu6U/cgUBy4h"
-  },
-  {
-    urls: "turns:global.relay.metered.ca:443?transport=tcp",
-    username: "305f34e3ab6f4c59dcb3c02a",
-    credential: "4tgkFu6U/cgUBy4h"
+  // Đọc TURN credentials từ biến môi trường thay vì hardcode trực tiếp trong bundle
+  const turnUrl = import.meta.env.VITE_TURN_URL;
+  const turnUsername = import.meta.env.VITE_TURN_USERNAME;
+  const turnCredential = import.meta.env.VITE_TURN_CREDENTIAL;
+
+  if (turnUrl && turnUsername && turnCredential) {
+    servers.push({
+      urls: turnUrl,
+      username: turnUsername,
+      credential: turnCredential
+    });
   }
-];
+
+  return servers;
+}
+
+const iceServers: RTCIceServer[] = resolveIceServers();
 
 interface CallSocket {
   emit(event: string, data: unknown): void;

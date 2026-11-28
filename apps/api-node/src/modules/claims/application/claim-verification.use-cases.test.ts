@@ -388,7 +388,11 @@ test("an authorized correction appends a correction event instead of replacing h
   harness.audits.push(originalDecision);
   harness.repository.findById = async () => claim(currentStatus);
   harness.repository.findByIdForUpdate = async () => claim(currentStatus);
-  harness.repository.updateFinderDecision = async (input) => { currentStatus = input.status; };
+  let capturedExpectedCurrentStatus: ClaimStatus[] | undefined;
+  harness.repository.updateFinderDecision = async (input) => {
+    currentStatus = input.status;
+    capturedExpectedCurrentStatus = input.expectedCurrentStatus;
+  };
   const service = createTestClaimUseCases({ claimRepository: harness.repository });
 
   const result = await service.decideVerification(claimId, finderId, {
@@ -399,6 +403,7 @@ test("an authorized correction appends a correction event instead of replacing h
   });
 
   assert.equal(result.claim.status, "REJECTED");
+  assert.deepEqual(capturedExpectedCurrentStatus, ["ACCEPTED", "REJECTED"]);
   assert.equal(harness.audits.length, 2);
   assert.equal(harness.audits[0]?.action, "VERIFICATION_ACCEPTED");
   assert.equal(harness.audits[1]?.action, "VERIFICATION_DECISION_CORRECTED");

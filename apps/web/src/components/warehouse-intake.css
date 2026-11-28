@@ -127,7 +127,13 @@
 .intake-confirm { display: flex; align-items: flex-start; gap: 10px; font-size: 14px; }
 .intake-confirm input { width: 18px; height: 18px; flex: 0 0 18px; }
 .intake-analysis { border-left: 3px solid #1c8b59; padding: 12px; background: #f1faf5; }
-.warehouse-ai-widget { position: fixed; z-index: 1300; right: 24px; bottom: 24px; }
+.warehouse-ai-widget { position: fixed; z-index: 900; right: 24px; bottom: 24px; }
+.warehouse-ai-widget--open { z-index: 950; }
+body:has(.custody-modal-overlay) .warehouse-ai-widget,
+body:has([role="dialog"]) .warehouse-ai-widget,
+body:has(.receipt-document-overlay) .warehouse-ai-widget {
+  display: none !important;
+}
 .warehouse-ai-widget__launcher { width: 66px; height: 66px; position: relative; display: grid; place-items: center; border: 2px solid #fff; border-radius: 50%; background: linear-gradient(145deg, #06b6d4 0%, #2563eb 55%, #6d28d9 100%); color: #fff; box-shadow: 0 10px 28px #1d4ed866, 0 0 0 6px #2563eb1a; cursor: pointer; transition: transform .18s ease, box-shadow .18s ease; }
 .warehouse-ai-widget__launcher::before { content: "Trợ lý AI"; position: absolute; top: 50%; right: 76px; transform: translateY(-50%); padding: 8px 12px; border: 1px solid #dbeafe; border-radius: 999px; background: #fff; box-shadow: 0 5px 18px #0f172a24; color: #174ea6; font-size: 13px; font-weight: 700; white-space: nowrap; }
 .warehouse-ai-widget__launcher:hover { transform: translateY(-2px) scale(1.03); box-shadow: 0 14px 32px #1d4ed877, 0 0 0 7px #2563eb24; }
@@ -185,9 +191,9 @@
   .intake-source dl { grid-template-columns: 1fr; gap: 4px; }
   .intake-source dd { margin-bottom: 10px; }
   .intake-dialog .warehouse-form-pair { grid-template-columns: 1fr; }
-  .warehouse-ai-widget { right: 24px; bottom: 24px; }
-  .warehouse-ai-widget__launcher { width: 62px; height: 62px; }
-  .warehouse-ai-widget__launcher::before { right: 72px; padding: 7px 10px; font-size: 12px; }
+  .warehouse-ai-widget { right: 16px; bottom: 16px; z-index: 900; }
+  .warehouse-ai-widget__launcher { width: 54px; height: 54px; }
+  .warehouse-ai-widget__launcher::before { display: none; }
   .warehouse-ai-chat__panel { right: -4px; bottom: 78px; width: min(400px, calc(100vw - 32px)); height: min(520px, calc(100dvh - 108px)); min-height: min(260px, calc(100dvh - 108px)); max-height: min(520px, calc(100dvh - 108px)); padding: 12px; gap: 10px; }
   .warehouse-ai-chat__header { margin: -12px -12px 0; padding: 12px; }
   .warehouse-ai-chat__messages { min-height: 0; }

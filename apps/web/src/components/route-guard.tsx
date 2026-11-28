@@ -21,7 +21,7 @@ export function RouteGuard({ roles }: { roles?: Role[] }) {
     <Link to="/login">Đăng nhập lại</Link>
   </main>;
   if (!ready) return <main className="center-state">Đang khôi phục phiên đăng nhập...</main>;
-  if (!user) return <Navigate to="/login" replace state={{ from: location.pathname }} />;
+  if (!user) return <Navigate to="/login" replace state={{ from: `${location.pathname}${location.search}` }} />;
   if (roles && !user.roles.some((role) => roles.includes(role))) return <Navigate to="/home" replace />;
   return <Outlet />;
 }

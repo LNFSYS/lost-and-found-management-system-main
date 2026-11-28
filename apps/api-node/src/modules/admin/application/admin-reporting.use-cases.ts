@@ -221,7 +221,12 @@ export function createAdminReportingUseCases(options: AdminReportingDependencies
   async function applyAction(actionType: ModerationActionType, targetId: string, connection: TransactionContext) {
     if (actionType === "DISMISS_REPORT" || actionType === "RESOLVE_REPORT" || actionType === "WARN_USER") return;
     if (actionType === "HIDE_POST" && !await repository.hidePost(targetId, connection)) throw new AppError("not_found", "Không tìm thấy bài đăng cần ẩn");
-    if (actionType === "DELETE_POST" && !await repository.deletePost(targetId, connection)) throw new AppError("not_found", "Không tìm thấy bài đăng cần xóa");
+    if (actionType === "DELETE_POST") {
+      if (await repository.hasDeletionBlockers(targetId, connection)) {
+        throw new AppError("conflict", "Không thể xóa bài đang có bàn giao, vật phẩm trong kho, claim, lịch hẹn, tranh chấp hoặc legal hold chưa kết thúc");
+      }
+      if (!await repository.deletePost(targetId, connection)) throw new AppError("not_found", "Không tìm thấy bài đăng cần xóa");
+    }
     if (actionType === "BAN_USER") {
       if (!await repository.setUserStatus(targetId, "DISABLED", connection)) throw new AppError("not_found", "Không tìm thấy người dùng cần khóa");
       await repository.revokeRefreshTokens(targetId, connection);

@@ -298,6 +298,7 @@
 /* 3. Feedback Banner */
 .radar-feedback-banner {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 10px;
   padding: 12px 18px;
@@ -446,11 +447,12 @@
 
 .radar-alerts-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
   gap: 16px;
 }
 
 .radar-alert-card {
+  min-width: 0;
   border-radius: 10px;
   padding: 16px;
   display: flex;
@@ -1173,6 +1175,7 @@
 /* Quick link banner on Admin Operations dashboard */
 .admin-operations-radar-banner {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 16px;

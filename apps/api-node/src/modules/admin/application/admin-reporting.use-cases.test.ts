@@ -117,6 +117,9 @@ function fakeRepository(seedReports: ModerationReportRecord[] = [], options: { a
       target.status = "HIDDEN";
       return true;
     },
+    async hasDeletionBlockers() {
+      return false;
+    },
     async setUserStatus(userId, status) {
       const target = targets.get(userId);
       if (!target) return false;
@@ -247,6 +250,18 @@ test("moderation derives the post owner for user actions", async () => {
 
   await service.reviewReport("admin-id", report.id, { actionType: "WARN_USER", reason: "Policy violation" });
   assert.equal(actions[0] && (actions[0] as { targetId: string; }).targetId, "user-id");
+});
+
+test("moderation DELETE_POST fails when post has deletion blockers", async () => {
+  const report = makeReport({ entityType: "POST", entityId: "post-id" });
+  const { repository } = fakeRepository([report]);
+  repository.hasDeletionBlockers = async () => true;
+  const service = serviceFor(repository);
+
+  await assert.rejects(() => service.reviewReport("admin-id", report.id, {
+    actionType: "DELETE_POST",
+    reason: "Blocked deletion test"
+  }), (error: unknown) => error instanceof AppError && error.code === "conflict");
 });
 
 test("moderation rejects self-ban and protects the last active admin", async () => {

@@ -340,6 +340,30 @@ export function createAdminReportingRepository(database: SqlExecutor) {
       return result.affectedRows > 0;
     },
 
+    async hasDeletionBlockers(postId: string, connection: Queryable) {
+      const [rows] = await sqlExecutor(connection).execute<RowDataPacket[]>(
+        `WITH related_claims AS (
+           SELECT id FROM claims WHERE post_id = ? OR lost_post_id = ? OR source_found_post_id = ?
+         ), physical_posts AS (
+           SELECT COALESCE(source_found_post_id,post_id) AS id FROM claims WHERE id IN (SELECT id FROM related_claims)
+         )
+         SELECT wi.id FROM warehouse_items wi
+           WHERE (wi.post_id = ? OR wi.post_id IN (SELECT id FROM physical_posts)
+             OR wi.id IN (SELECT warehouse_item_id FROM custody_requests WHERE claim_id IN (SELECT id FROM related_claims) AND status = 'INTAKED')) AND wi.deleted_at IS NULL
+             AND (wi.status IN ('RECEIVED','STORED','CLAIMED','EXPIRED') OR wi.legal_hold = TRUE)
+         UNION SELECT cr.id FROM custody_requests cr
+           WHERE (cr.post_id = ? OR cr.claim_id IN (SELECT id FROM related_claims)) AND cr.status IN ('PENDING','ACCEPTED')
+         UNION SELECT c.id FROM claims c WHERE c.id IN (SELECT id FROM related_claims)
+           AND c.status IN ('PENDING','CONVERSATION_OPEN','NEED_MORE_INFO','ACCEPTED')
+           AND NOT EXISTS (SELECT 1 FROM return_appointments completed WHERE completed.claim_id = c.id AND completed.status = 'COMPLETED')
+         UNION SELECT a.id FROM return_appointments a WHERE a.claim_id IN (SELECT id FROM related_claims)
+           AND a.status IN ('PENDING','ACCEPTED','RESCHEDULED')
+         LIMIT 1`,
+        [postId, postId, postId, postId, postId]
+      );
+      return rows.length > 0;
+    },
+
     async setUserStatus(userId: string, status: "ACTIVE" | "DISABLED", connection: Queryable) {
       const [result] = await sqlExecutor(connection).execute<ResultSetHeader>(
         "UPDATE users SET status = ?, session_version = session_version + 1 WHERE id = ?",

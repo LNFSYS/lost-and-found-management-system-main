@@ -1,4 +1,4 @@
-import { FileText, FolderTree, Handshake, History, MapPinned, Power, Radar, Settings2, ShieldCheck, UsersRound, Warehouse } from "lucide-react";
+import { ArrowLeft, FileText, FolderTree, Handshake, History, MapPinned, Power, Radar, Settings2, ShieldCheck, UsersRound, Warehouse } from "lucide-react";
 import { NavLink, Outlet, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../context/auth-context";
 import { useNetworkStatus } from "../hooks/use-network-status";
@@ -53,7 +53,13 @@ export function AdminLayout() {
     </aside>
     <main className="admin-main">
       <header className="admin-workspace-bar">
-        <span><ShieldCheck size={17} /> {isAdmin ? "Quản trị" : "Nội bộ"}</span>
+        <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+          <NavLink to="/home" className="admin-home-link" title="Về trang chủ" style={{ display: "inline-flex", alignItems: "center", gap: "5px", fontSize: "0.82rem", color: "#64748b", textDecoration: "none", padding: "4px 8px", borderRadius: "6px", border: "1px solid #cbd5e1", background: "#f8fafc" }}>
+            <ArrowLeft size={15} />
+            <span>Về trang chủ</span>
+          </NavLink>
+          <span><ShieldCheck size={17} /> {isAdmin ? "Quản trị" : "Nội bộ"}</span>
+        </div>
       </header>
       {!online && <div className="offline-banner" role="status">Bạn đang offline. Thao tác gửi mới cần kết nối mạng.</div>}
       <Outlet />
