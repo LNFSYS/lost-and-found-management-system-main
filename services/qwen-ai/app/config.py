@@ -15,7 +15,7 @@ class Settings(BaseModel):
     allow_cpu_fallback: bool = False
     max_upload_bytes: int = Field(default=8 * 1024 * 1024, ge=1024, le=16 * 1024 * 1024)
     max_image_pixels: int = Field(default=20_000_000, ge=1024, le=40_000_000)
-    image_edge: int = Field(default=448, ge=128, le=768)
+    image_edge: int = Field(default=672, ge=128, le=768)
     max_new_tokens: int = Field(default=640, ge=64, le=768)
     load_timeout: float = Field(default=600, gt=0, le=1800)
     inference_timeout: float = Field(default=120, gt=0, le=600)
@@ -35,7 +35,7 @@ class Settings(BaseModel):
             device=os.getenv("QWEN_DEVICE", "cuda"),
             allow_cpu_fallback=os.getenv("ALLOW_CPU_FALLBACK", "false").lower() == "true",
             max_upload_bytes=int(os.getenv("MAX_UPLOAD_MB", "8")) * 1024 * 1024,
-            image_edge=int(os.getenv("MAX_IMAGE_EDGE", "448")),
+            image_edge=int(os.getenv("MAX_IMAGE_EDGE", "672")),
             max_new_tokens=int(os.getenv("MAX_NEW_TOKENS", "640")),
             load_timeout=float(os.getenv("MODEL_LOAD_TIMEOUT_SECONDS", "600")),
             inference_timeout=float(os.getenv("INFERENCE_TIMEOUT_SECONDS", "120")),

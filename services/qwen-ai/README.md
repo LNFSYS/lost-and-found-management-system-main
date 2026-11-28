@@ -61,6 +61,31 @@ a continuously refreshed global GPU monitor.
 
 ## API contract
 
+### Visual detail pipeline
+
+Analysis retains a CPU image up to three times the inference edge (capped at 1536), obtains a bounded
+object crop from Qwen, and checks that the crop still identifies the same object.
+Invalid or conflicting crops fall back to the overview. Each GPU view stays at
+`MAX_IMAGE_EDGE`. Viewpoint, physical parts and surface wear are queried separately
+on overview/crop images. Each candidate observation is checked against the image again;
+only explicit `yes` answers are retained. Supported physical parts, markings,
+and wear terms are then localized using a Vietnamese vocabulary. This avoids
+the small model mistranslating technical names or generating a long repetitive
+caption. Unknown phrases are omitted. A short printed brand is retained only when
+overview and crop reads agree exactly. A separate label-region pass reads printed
+words using two prompts on the higher-resolution region; only complete lines
+matching across those reads are retained. It does not autocorrect near-matching
+product names, infer a model from appearance, or retain serial numbers.
+Logo shapes are described separately from brand claims. Agreement is still not
+proof of correct OCR. Text-region inference uses the same model and GPU limit.
+
+The default `MAX_IMAGE_EDGE` is 672. Existing installations should update that
+setting in `.env` and restart the service. The OOM retry remains bounded at 224.
+The extra visual passes cost more time than the former name-and-color-only
+pipeline. Self-checking is not independent verification and does not provide a
+calibrated confidence score; users must still review the draft. Unusual items
+or details outside the vocabulary may produce a shorter description.
+
 - `GET /health`: no key, no model load.
 - `GET /ai/model-info`: `Authorization: Bearer <AI_API_KEY>`.
 - `POST /ai/analyze`: same header, multipart `image`, required `type=LOST|FOUND`,
