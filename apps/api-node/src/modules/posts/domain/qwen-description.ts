@@ -62,10 +62,15 @@ export function polishedDescription(captions: Array<string | null>, objectName: 
   if (additionalColors.length) subject += ` màu ${joinDetails(additionalColors)}`;
   const details: string[] = [];
   for (const detail of compactDetails(features.length ? features : sentences, objectName || "Vật phẩm", subject)) {
-    if (details.length >= 6) break;
+    if (details.length >= 10) break;
     if (`${subject}, có ${joinDetails([...details, detail])}.`.length <= 500) details.push(detail);
   }
-  return `${subject}${details.length ? `, có ${joinDetails(details)}` : ""}.`;
+  const surfaces = details.filter(value => /^bề mặt\s+/iu.test(value))
+    .map(value => value.replace(/^bề mặt\s+/iu, ""));
+  const structure = details.filter(value => !/^bề mặt\s+/iu.test(value))
+    .map(value => value.replace(/^Thân\b/u, "thân"));
+  return `${subject}${structure.length ? `, có ${joinDetails(structure)}` : ""}.`
+    + (surfaces.length ? ` Bề mặt ${joinDetails(surfaces)}.` : "");
 }
 
 const normalized = (value: string) => value.normalize("NFD").replace(/[\u0300-\u036f]/g, "")
@@ -73,6 +78,7 @@ const normalized = (value: string) => value.normalize("NFD").replace(/[\u0300-\u
 
 // Names from 008_seed_item_categories.sql; IDs always come from the live catalog.
 const aliases = [
+  ["computer mouse", "mouse", "wireless mouse", "wired mouse", "gaming mouse", "keyboard", "computer keyboard", "chuot", "chuot may tinh", "chuot khong day", "chuot co day", "ban phim", "chuot ban phim"],
   ["backpack", "rucksack", "balo", "ba lo"],
   ["wallet", "vi", "bop", "vi bop"],
   ["handbag", "tui xach"],
@@ -83,6 +89,10 @@ const aliases = [
   ["water bottle", "drinking bottle", "insulated bottle", "thermal bottle", "thermos",
     "vacuum flask", "thermos flask", "binh nuoc", "binh giu nhiet", "chai nuoc", "binh dung nuoc"],
 ];
+
+export function isHumanSubject(value: string | null): boolean {
+  return /^(?:ban tay|ngon tay|nguoi|hand|hands|finger|person|human)(?: |$)/.test(normalized(value ?? ""));
+}
 
 export function resolveQwenCategory(evidence: Array<string | null>, catalogNames: string[]): string {
   const detected = evidence.map(value => normalized(value ?? "").replace(/\s+mau\s+.+$/, "")).filter(Boolean);

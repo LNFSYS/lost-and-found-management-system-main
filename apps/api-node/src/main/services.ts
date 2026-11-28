@@ -1,3 +1,4 @@
+import { createDeepSeekImageAnalyzer } from "../modules/posts/infrastructure/deepseek-image-analyzer.js";
 import { createAdminCatalogUseCases } from "../modules/admin/application/admin-catalog.use-cases.js";
 import { createAppointmentUseCases } from "../modules/appointments/application/appointment.use-cases.js";
 import { createActivityUseCases } from "../modules/activity/application/activity.use-cases.js";
@@ -165,7 +166,8 @@ export function createServices(persistence: Persistence, config: typeof env = en
     hashIdempotencyPayload: security.hashToken, logger: console, uploads: mediaUploads
   });
   const draftProvider = process.env.LNFS_IMAGE_ANALYSIS_PROVIDER || "gemini";
-  if (!["gemini", "qwen"].includes(draftProvider)) throw new Error("Unsupported LNFS_IMAGE_ANALYSIS_PROVIDER");
+  if (!["gemini", "qwen", "deepseek"].includes(draftProvider)) throw new Error("Unsupported LNFS_IMAGE_ANALYSIS_PROVIDER");
+  const deepseekDraftAnalyzer = createDeepSeekImageAnalyzer(config.deepseek);
   const geminiDraftAnalyzer = createGeminiImageAnalyzer(config.gemini);
   const qwenDraftAnalyzer = process.env.QWEN_API_KEY ? createQwenImageAnalyzer({
       serviceUrl: process.env.QWEN_SERVICE_URL || "http://127.0.0.1:8000",
@@ -175,8 +177,8 @@ export function createServices(persistence: Persistence, config: typeof env = en
   if (draftProvider === "qwen" && !qwenDraftAnalyzer) throw new Error("QWEN_API_KEY is required for default Qwen provider");
   const geminiImageService = createImageAnalysisUseCases({
     postRepository,
-    analyzer: draftProvider === "qwen" ? qwenDraftAnalyzer! : geminiDraftAnalyzer,
-    analyzers: { gemini: geminiDraftAnalyzer, qwen: qwenDraftAnalyzer }
+    analyzer: draftProvider === "deepseek" ? deepseekDraftAnalyzer : draftProvider === "qwen" ? qwenDraftAnalyzer! : geminiDraftAnalyzer,
+    analyzers: { gemini: geminiDraftAnalyzer, qwen: qwenDraftAnalyzer, deepseek: deepseekDraftAnalyzer }
   });
   const radarService = createRadarUseCases({ radarRepository: persistence.radarRepository, idFactory: id });
   return {
