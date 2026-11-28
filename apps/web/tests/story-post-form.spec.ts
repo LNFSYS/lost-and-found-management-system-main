@@ -185,8 +185,30 @@ test("pending provider locks all analysis buttons against repeated clicks", asyn
   expect(calls).toBe(1);
 });
 
+for (const status of [200, 503]) for (const width of [1440, 390]) test(`analysis completion ${status} smoothly returns to the form at ${width}px`, async ({ page }) => {
+  await page.setViewportSize({ width, height: 900 });
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await prepare(page, () => undefined);
+  let release!: () => void;
+  const pending = new Promise<void>(resolve => { release = resolve; });
+  await page.route("**/api/posts/analyze-image", async route => {
+    await pending;
+    await route.fulfill({ status, json: status === 200 ? { title: "Ví đen", description: "Ví màu đen.", suggestedCategory: null,
+      visualAttributes: [], visibleText: [], confidence: null, warnings: [], imageCount: 1 } : { message: "Phân tích thất bại, vui lòng thử lại." } });
+  });
+  await page.locator('.story-post-form input[type=file]').setInputFiles("tests/fixtures/appointment-item.png");
+  await page.getByRole("button", { name: "Phân tích bằng Gemini" }).click();
+  await expect(page.locator("#system-analysis .is-scanning")).toBeInViewport();
+  release();
+  if (status === 200) await expect(page.getByLabel("Tên vật phẩm")).toHaveValue("Ví đen");
+  else await expect(page.locator(".story-post-form").getByText("Phân tích thất bại, vui lòng thử lại.", { exact: true })).toBeVisible();
+  await expect.poll(() => page.locator(".story-post-form__head").evaluate(element =>
+    Math.abs(element.getBoundingClientRect().top - (document.querySelector(".topbar")?.getBoundingClientRect().bottom ?? 0) - 16)
+  )).toBeLessThan(3);
+});
+
 for (const status of [200, 503]) {
-  test(`ending analysis session ignores late ${status} response and never scrolls back`, async ({ page }) => {
+  test(`ending analysis session returns to form and ignores late ${status} response`, async ({ page }) => {
     await page.emulateMedia({ reducedMotion: "reduce" });
     await prepare(page, () => undefined);
     let release!: () => void;
@@ -203,6 +225,9 @@ for (const status of [200, 503]) {
     await expect(page.locator("#system-analysis .is-scanning")).toBeVisible();
     await page.locator("#system-analysis").getByRole("button", { name: "Kết thúc phiên", exact: true }).click();
     await expect(page.locator("#system-analysis .workflow-analysis-layout")).toHaveCount(0);
+    await expect.poll(() => page.locator(".story-post-form__head").evaluate(element =>
+      Math.abs(element.getBoundingClientRect().top - (document.querySelector(".topbar")?.getBoundingClientRect().bottom ?? 0) - 16)
+    )).toBeLessThan(3);
     await page.evaluate(() => {
       const original = window.scrollTo.bind(window);
       (window as unknown as { resetScrollCalls: number }).resetScrollCalls = 0;

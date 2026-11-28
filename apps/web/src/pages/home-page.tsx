@@ -298,10 +298,10 @@ export function HomePage() {
       const target = document.querySelector<HTMLElement>(selector === "#quick-story" ? "#quick-story .story-post-form__head" : selector);
       if (!target) return;
       // Layout offsets stay stable while a story stage animates its transform.
-      let top = 0;
-      for (let element: HTMLElement | null = target; element; element = element.offsetParent as HTMLElement | null) {
-        top += element.offsetTop + ((element.offsetParent as HTMLElement | null)?.clientTop ?? 0);
-      }
+      let top = target.getBoundingClientRect().top + window.scrollY;
+      const stage = target.closest<HTMLElement>(".story-stage");
+      const transform = stage ? getComputedStyle(stage).transform : "none";
+      if (transform !== "none") top -= new DOMMatrixReadOnly(transform).m42;
       const navigationBottom = document.querySelector(".topbar")?.getBoundingClientRect().bottom ?? 0;
       window.scrollTo({
         top: Math.max(0, top - navigationBottom - 16),
@@ -321,6 +321,7 @@ export function HomePage() {
     setWorkflowError("");
     setIsScanningModalOpen(false);
     setWorkflowSession((current) => current + 1);
+    scrollToStage("#quick-story", 80);
   }
 
   function chooseStory(side: StorySide) {
@@ -344,6 +345,7 @@ export function HomePage() {
     cancelStageScroll();
     setAnalysisResult(result);
     setWorkflowPhase("draft-ready");
+    scrollToStage("#quick-story", 80);
   }
 
   function failImageAnalysis(message: string) {
@@ -351,6 +353,7 @@ export function HomePage() {
     setWorkflowError(message);
     setWorkflowPhase("idle");
     setAnalysisFiles([]);
+    scrollToStage("#quick-story", 80);
   }
 
   function resetImageAnalysis() {
