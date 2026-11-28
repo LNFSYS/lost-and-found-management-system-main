@@ -1,3 +1,5 @@
+import { createVisionImageModerator } from "../modules/posts/infrastructure/vision-image-moderator.js";
+import { createDeepSeekImageAnalyzer } from "../modules/posts/infrastructure/deepseek-image-analyzer.js";
 import { createAdminCatalogUseCases } from "../modules/admin/application/admin-catalog.use-cases.js";
 import { createAppointmentUseCases } from "../modules/appointments/application/appointment.use-cases.js";
 import { createActivityUseCases } from "../modules/activity/application/activity.use-cases.js";
@@ -149,6 +151,8 @@ export function createServices(persistence: Persistence, config: typeof env = en
     serviceUrl: process.env.LNFS_AI_SERVICE_URL || "http://127.0.0.1:5000",
     fallback: config.gemini.apiKey ? createGeminiImageAnalyzer(config.gemini) : undefined
   });
+  const imageModerator = config.imageModeration.enabled
+    ? createVisionImageModerator({ ...config.deepseek, timeoutMs: config.imageModeration.timeoutMs }) : undefined;
   const postService = createPostUseCases({
     postRepository, matchingRepository, matchingService,
     withTransaction: transaction, id, mediaStorage: postMediaStorage, logger: console, uploads: mediaUploads, illustrations,
@@ -166,7 +170,8 @@ export function createServices(persistence: Persistence, config: typeof env = en
     hashIdempotencyPayload: security.hashToken, logger: console, uploads: mediaUploads
   });
   const draftProvider = process.env.LNFS_IMAGE_ANALYSIS_PROVIDER || "gemini";
-  if (!["gemini", "qwen"].includes(draftProvider)) throw new Error("Unsupported LNFS_IMAGE_ANALYSIS_PROVIDER");
+  if (!["gemini", "qwen", "deepseek"].includes(draftProvider)) throw new Error("Unsupported LNFS_IMAGE_ANALYSIS_PROVIDER");
+  const deepseekDraftAnalyzer = createDeepSeekImageAnalyzer(config.deepseek);
   const geminiDraftAnalyzer = createGeminiImageAnalyzer(config.gemini);
   const qwenDraftAnalyzer = process.env.QWEN_API_KEY ? createQwenImageAnalyzer({
       serviceUrl: process.env.QWEN_SERVICE_URL || "http://127.0.0.1:8000",
@@ -175,9 +180,10 @@ export function createServices(persistence: Persistence, config: typeof env = en
     }) : undefined;
   if (draftProvider === "qwen" && !qwenDraftAnalyzer) throw new Error("QWEN_API_KEY is required for default Qwen provider");
   const geminiImageService = createImageAnalysisUseCases({
+    moderator: imageModerator,
     postRepository,
-    analyzer: draftProvider === "qwen" ? qwenDraftAnalyzer! : geminiDraftAnalyzer,
-    analyzers: { gemini: geminiDraftAnalyzer, qwen: qwenDraftAnalyzer }
+    analyzer: draftProvider === "deepseek" ? deepseekDraftAnalyzer : draftProvider === "qwen" ? qwenDraftAnalyzer! : geminiDraftAnalyzer,
+    analyzers: { gemini: geminiDraftAnalyzer, qwen: qwenDraftAnalyzer, deepseek: deepseekDraftAnalyzer }
   });
   const radarService = createRadarUseCases({ radarRepository: persistence.radarRepository, idFactory: id });
   return {

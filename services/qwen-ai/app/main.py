@@ -100,7 +100,10 @@ def decode_image(raw, mime, settings):
                 probe.verify()
             with Image.open(io.BytesIO(raw)) as original:
                 image = ImageOps.exif_transpose(original).convert("RGB")
-                image.thumbnail((settings.image_edge, settings.image_edge), Image.Resampling.LANCZOS)
+                # Retain detail on CPU for a validated object crop; each inference
+                # view is still independently bounded by image_edge on the GPU.
+                source_edge = min(settings.image_edge * 3, 1536)
+                image.thumbnail((source_edge, source_edge), Image.Resampling.LANCZOS)
                 buffer = io.BytesIO()
                 image.save(buffer, format="PNG")
                 image.close()
@@ -138,7 +141,7 @@ def create_app(settings=None, runner=None):
         return {"model_id": settings.model_id, "revision": settings.revision,
                 "model_loaded": runner.loaded, "model_status": runner.state,
                 "image_edge": settings.image_edge, "max_new_tokens": settings.max_new_tokens,
-                "output_format": "json-schema-constrained", "prompt_version": "lnfs-v4-bounded",
+                "output_format": "validated-structured-observations", "prompt_version": "lnfs-v5-focused-lettering",
                 "metrics_note": "last worker sample; null before first load",
                 **runner.info}
 

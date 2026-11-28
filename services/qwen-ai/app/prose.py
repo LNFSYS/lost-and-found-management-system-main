@@ -46,7 +46,7 @@ def describe(object_name, colors, details):
         subject += " màu " + joined(colors)
     kept = []
     for detail in compact_details(details, object_name, subject):
-        if len(kept) >= 6:
+        if len(kept) >= 10:
             break
         if len(subject + ", có " + joined([*kept, detail]) + ".") <= 500:
             kept.append(detail)

@@ -107,6 +107,16 @@ export const env = {
     model: process.env.GEMINI_MODEL?.trim() || "gemini-3.5-flash-lite",
     timeoutMs: number("GEMINI_TIMEOUT_MS", 30_000)
   },
+  imageModeration: {
+    enabled: bool("IMAGE_MODERATION_ENABLED", false),
+    timeoutMs: boundedNumber("IMAGE_MODERATION_TIMEOUT_MS", 60_000, 1_000, 120_000)
+  },
+  deepseek: {
+    apiKey: process.env.DEEPSEEK_API_KEY?.trim() || null,
+    baseUrl: process.env.DEEPSEEK_BASE_URL?.trim() || "https://api.vilao.ai/v1",
+    model: process.env.DEEPSEEK_MODEL?.trim() || "spd/deepseek-v4-flash-vision-exp",
+    timeoutMs: boundedNumber("DEEPSEEK_TIMEOUT_MS", 120_000, 1_000, 300_000)
+  },
   lostIllustration: {
     cfToken: process.env.CLOUDFLARE_API_TOKEN?.trim() || null,
     cfAccountId: process.env.CLOUDFLARE_ACCOUNT_ID?.trim() || null,

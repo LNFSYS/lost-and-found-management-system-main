@@ -8,11 +8,18 @@ from fastapi.testclient import TestClient
 from PIL import Image
 
 from app.config import Settings
-from app.main import create_app
+from app.main import create_app, decode_image
 from app.runner import Runner, ServiceError
 from app.schema import parse_analysis
 
 KEY = "unit-test-key-not-a-secret-0123456789"
+
+
+def test_upload_retains_detail_for_crop_but_bounds_cpu_image():
+    settings = Settings(image_edge=672)
+    raw = decode_image(image_bytes((1800, 2400)), "image/png", settings)
+    with Image.open(io.BytesIO(raw)) as decoded:
+        assert max(decoded.size) == 1536
 DATA = {"category": "wallet", "object_name": "wallet", "colors": ["black"],
         "material": None, "brand": None, "visible_text": [], "distinctive_features": [],
         "caption": "A black wallet."}

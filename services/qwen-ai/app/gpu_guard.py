@@ -10,6 +10,8 @@ WDDM_DESKTOP_CLIENTS = frozenset({
     "cloudflare warp.exe", "mcafee-security.exe", "dwm.exe", "explorer.exe",
     "msedgewebview2.exe", "code.exe", "shellexperiencehost.exe", "shellhost.exe",
     "msedge.exe", "chrome.exe",
+    "windowsterminal.exe", "notepad.exe", "systemsettings.exe", "igcc.exe",
+    "applicationframehost.exe", "openwith.exe", "snippingtool.exe",
 })
 
 

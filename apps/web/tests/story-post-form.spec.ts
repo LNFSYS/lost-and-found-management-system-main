@@ -118,7 +118,8 @@ async function fillCommonForm(page: Page) {
   await form.getByLabel("Mô tả nhận dạng").fill("Ví da màu đen có một vết xước nhỏ ở cạnh.");
 }
 
-test("phone draft autofills title description and both category dropdowns", async ({ page }) => {
+for (const provider of ["Qwen", "DeepSeek"]) {
+test(`${provider} phone draft autofills title description and both category dropdowns`, async ({ page }) => {
   await prepare(page, () => undefined);
   await page.route("**/api/posts/analyze-image", route => route.fulfill({ json: {
     title: "Điện thoại màu đỏ", description: "Điện thoại màu đỏ có màn hình đen.",
@@ -127,15 +128,87 @@ test("phone draft autofills title description and both category dropdowns", asyn
   } }));
   const form = page.locator(".story-post-form");
   await form.locator('input[type=file]').setInputFiles("tests/fixtures/appointment-item.png");
-  await form.getByRole("button", { name: "Phân tích bằng Qwen" }).click();
+  await form.getByRole("button", { name: `Phân tích bằng ${provider}` }).click();
   await expect(form.getByLabel("Tên vật phẩm")).toHaveValue("Điện thoại màu đỏ");
   await expect(form.getByLabel("Mô tả nhận dạng")).toHaveValue("Điện thoại màu đỏ có màn hình đen.");
   await expect(form.getByLabel("Nhóm chính", { exact: true })).toHaveValue(catalog.categories[3].id);
   await expect(form.getByLabel("Danh mục cụ thể", { exact: true })).toHaveValue(catalog.categories[4].id);
 });
+}
+
+test("switching providers replaces AI category but preserves a manual category", async ({ page }) => {
+  await prepare(page, () => undefined);
+  const calls: string[] = [];
+  await page.route("**/api/posts/analyze-image", route => {
+    const provider = route.request().postData()?.match(/name="provider"\r?\n\r?\n(gemini|qwen|deepseek)/)?.[1] ?? "missing";
+    calls.push(provider);
+    return route.fulfill({ json: {
+      title: `Vật phẩm ${provider}`, description: `Mô tả riêng của ${provider}.`,
+      suggestedCategory: provider === "gemini" ? catalog.categories[4] : null,
+      visualAttributes: [provider], visibleText: [], confidence: null, warnings: [], assistedBy: provider, model: provider, imageCount: 1
+    } });
+  });
+  const form = page.locator(".story-post-form");
+  await form.locator('input[type=file]').setInputFiles("tests/fixtures/appointment-item.png");
+  await form.getByRole("button", { name: "Phân tích bằng Gemini" }).click();
+  await expect(form.getByLabel("Danh mục cụ thể", { exact: true })).toHaveValue(catalog.categories[4].id);
+  await form.getByRole("button", { name: "Phân tích bằng Qwen" }).click();
+  await expect(form.getByLabel("Tên vật phẩm")).toHaveValue("Vật phẩm qwen");
+  await expect(form.getByLabel("Nhóm chính", { exact: true })).toHaveValue("");
+  await expect(form.getByLabel("Danh mục cụ thể", { exact: true })).toHaveValue("");
+  await form.getByLabel("Nhóm chính", { exact: true }).selectOption(catalog.categories[0].id);
+  await form.getByLabel("Danh mục cụ thể", { exact: true }).selectOption(catalog.categories[2].id);
+  await form.getByRole("button", { name: "Phân tích bằng DeepSeek" }).click();
+  await expect(form.getByLabel("Tên vật phẩm")).toHaveValue("Vật phẩm deepseek");
+  await expect(form.getByLabel("Mô tả nhận dạng")).toHaveValue("Mô tả riêng của deepseek.");
+  await expect(form.getByLabel("Danh mục cụ thể", { exact: true })).toHaveValue(catalog.categories[2].id);
+  expect(calls).toEqual(["gemini", "qwen", "deepseek"]);
+});
+
+test("pending provider locks all analysis buttons against repeated clicks", async ({ page }) => {
+  await prepare(page, () => undefined);
+  let calls = 0;
+  let release!: () => void;
+  const pending = new Promise<void>(resolve => { release = resolve; });
+  await page.route("**/api/posts/analyze-image", async route => {
+    calls++;
+    await pending;
+    await route.fulfill({ status: 503, json: { message: "DeepSeek tạm bận" } });
+  });
+  const form = page.locator(".story-post-form");
+  await form.locator('input[type=file]').setInputFiles("tests/fixtures/appointment-item.png");
+  await form.getByRole("button", { name: "Phân tích bằng DeepSeek" }).click();
+  await expect.poll(() => calls).toBe(1);
+  for (const button of await form.locator(".story-image-analysis-actions button").all()) await expect(button).toBeDisabled();
+  release();
+  await expect(form.getByRole("button", { name: "Phân tích bằng DeepSeek" })).toBeEnabled();
+  expect(calls).toBe(1);
+});
+
+for (const status of [200, 503]) for (const width of [1440, 390]) test(`analysis completion ${status} smoothly returns to the form at ${width}px`, async ({ page }) => {
+  await page.setViewportSize({ width, height: 900 });
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await prepare(page, () => undefined);
+  let release!: () => void;
+  const pending = new Promise<void>(resolve => { release = resolve; });
+  await page.route("**/api/posts/analyze-image", async route => {
+    await pending;
+    await route.fulfill({ status, json: status === 200 ? { title: "Ví đen", description: "Ví màu đen.", suggestedCategory: null,
+      visualAttributes: [], visibleText: [], confidence: null, warnings: [], imageCount: 1 } : { message: "Phân tích thất bại, vui lòng thử lại." } });
+  });
+  await page.locator('.story-post-form input[type=file]').setInputFiles("tests/fixtures/appointment-item.png");
+  await page.getByRole("button", { name: "Phân tích bằng Gemini" }).click();
+  await expect(page.locator("#system-analysis .is-scanning")).toBeInViewport();
+  release();
+  if (status === 200) await expect(page.getByLabel("Tên vật phẩm")).toHaveValue("Ví đen");
+  else await expect(page.locator(".story-post-form").getByText("Phân tích thất bại, vui lòng thử lại.", { exact: true })).toBeVisible();
+  await expect.poll(() => page.locator(".story-post-form__head").evaluate(element =>
+    Math.abs(element.getBoundingClientRect().top - (document.querySelector(".topbar")?.getBoundingClientRect().bottom ?? 0) - 16)
+  )).toBeLessThan(3);
+});
 
 for (const status of [200, 503]) {
-  test(`ending analysis session ignores late ${status} response and never scrolls back`, async ({ page }) => {
+  test(`ending analysis session returns to form and ignores late ${status} response`, async ({ page }) => {
     await page.emulateMedia({ reducedMotion: "reduce" });
     await prepare(page, () => undefined);
     let release!: () => void;
@@ -152,6 +225,9 @@ for (const status of [200, 503]) {
     await expect(page.locator("#system-analysis .is-scanning")).toBeVisible();
     await page.locator("#system-analysis").getByRole("button", { name: "Kết thúc phiên", exact: true }).click();
     await expect(page.locator("#system-analysis .workflow-analysis-layout")).toHaveCount(0);
+    await expect.poll(() => page.locator(".story-post-form__head").evaluate(element =>
+      Math.abs(element.getBoundingClientRect().top - (document.querySelector(".topbar")?.getBoundingClientRect().bottom ?? 0) - 16)
+    )).toBeLessThan(3);
     await page.evaluate(() => {
       const original = window.scrollTo.bind(window);
       (window as unknown as { resetScrollCalls: number }).resetScrollCalls = 0;
@@ -160,9 +236,7 @@ for (const status of [200, 503]) {
         original(...args);
       };
     });
-    const response = page.waitForResponse("**/api/posts/analyze-image");
     release();
-    await response;
     // Covers the former 650 ms completion scroll timer, not just immediate state.
     await page.waitForTimeout(850);
     await expect(page.locator("#system-analysis .workflow-analysis-layout")).toHaveCount(0);
@@ -176,7 +250,7 @@ for (const width of [390, 768, 1024, 1440]) {
     await page.setViewportSize({ width, height: 1000 });
     await prepare(page, () => undefined);
     const panel = page.locator(".story-image-analysis-actions");
-    await expect(panel.locator("button")).toHaveCount(2);
+    await expect(panel.locator("button")).toHaveCount(3);
     expect(await panel.evaluate(element => {
       const rect = element.getBoundingClientRect();
       const style = getComputedStyle(element);
@@ -197,7 +271,7 @@ for (const width of [390, 1440]) {
     const calls: string[] = [];
     await page.route("**/api/posts/analyze-image", route => {
       const body = route.request().postData() ?? "";
-      const provider = body.match(/name="provider"\r?\n\r?\n(gemini|qwen)/)?.[1];
+      const provider = body.match(/name="provider"\r?\n\r?\n(gemini|qwen|deepseek)/)?.[1];
       calls.push(provider ?? "missing");
       if (provider === "qwen") return route.fulfill({ status: 503, json: { message: "Qwen chưa sẵn sàng" } });
       return route.fulfill({ json: { title: "Balo từ Gemini", description: "Balo màu xanh đậm.",
@@ -217,6 +291,8 @@ for (const width of [390, 1440]) {
     await gemini.click();
     await expect.poll(() => calls).toEqual(["gemini", "qwen", "gemini"]);
     await expect(form.getByLabel("Tên vật phẩm")).toHaveValue("Balo từ Gemini");
+    await form.getByRole("button", { name: "Phân tích bằng DeepSeek" }).click();
+    await expect.poll(() => calls).toEqual(["gemini", "qwen", "gemini", "deepseek"]);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   });
 }
@@ -346,10 +422,10 @@ for (const type of ["LOST", "FOUND"] as const) {
           return Math.abs(uploadRect.top - actionsRect.top) < 1 && Math.abs(uploadRect.bottom - actionsRect.bottom) < 1;
         })).toBe(true);
       }
-      await expect(form.locator(".story-image-analysis-actions p")).toContainText("Chọn Gemini hoặc Qwen");
+      await expect(form.locator(".story-image-analysis-actions p")).toContainText("Chọn Gemini, Qwen hoặc DeepSeek");
       const analysisHint = form.locator(".story-image-analysis-hint");
       await expect(analysisHint).toBeInViewport({ ratio: 1 });
-      await expect(analysisHint).toHaveText("Chọn một trong hai nút để tự động điền thông tin từ ảnh.");
+      await expect(analysisHint).toHaveText("Chọn một trong các nút để tự động điền thông tin từ ảnh.");
       expect(await form.evaluate((element) => {
         const uploadRect = element.querySelector(".story-image-drop")!.getBoundingClientRect();
         const actionsRect = element.querySelector(".story-image-analysis-actions")!.getBoundingClientRect();

@@ -1,3 +1,4 @@
+import type { ImageModerator } from "./image-moderator.port.js";
 import type { ImageAnalyzer } from "./image-analyzer.port.js";
 
 import type { PostRepository } from "./post.repository.port.js";
@@ -32,12 +33,12 @@ export interface PostImageAnalysisResult {
   imageEmbedding?: number[] | null;
 }
 
-export function createImageAnalysisUseCases({ postRepository, analyzer: defaultAnalyzer, analyzers }: { postRepository: Pick<PostRepository, "getFormCatalog">; analyzer: ImageAnalyzer; analyzers?: Partial<Record<"gemini" | "qwen", ImageAnalyzer>>; }) {
+export function createImageAnalysisUseCases({ postRepository, analyzer: defaultAnalyzer, analyzers, moderator }: { postRepository: Pick<PostRepository, "getFormCatalog">; analyzer: ImageAnalyzer; moderator?: ImageModerator; analyzers?: Partial<Record<"gemini" | "qwen" | "deepseek", ImageAnalyzer>>; }) {
 
   const useCases = {
-    async analyzePostImages(files: ImageUpload[], type: AnalyzePostImageInput["type"], provider?: "gemini" | "qwen"): Promise<PostImageAnalysisResult> {
+    async analyzePostImages(files: ImageUpload[], type: AnalyzePostImageInput["type"], provider?: "gemini" | "qwen" | "deepseek", signal?: AbortSignal): Promise<PostImageAnalysisResult> {
       const analyzer = provider ? analyzers?.[provider] : defaultAnalyzer;
-      if (!analyzer) throw new AppError("unavailable", `Dịch vụ ${provider === "qwen" ? "Qwen" : "Gemini"} chưa được cấu hình.`);
+      if (!analyzer) throw new AppError("unavailable", `Dịch vụ ${provider === "deepseek" ? "DeepSeek" : provider === "qwen" ? "Qwen" : "Gemini"} chưa được cấu hình.`);
       if (!files.length) throw new AppError("bad_request", "Cần gửi ít nhất một ảnh để phân tích.");
       if (files.length > MAX_ANALYSIS_IMAGES) {
         throw new AppError("bad_request", `Chỉ được phân tích tối đa ${MAX_ANALYSIS_IMAGES} ảnh trong một lần.`);
@@ -47,11 +48,24 @@ export function createImageAnalysisUseCases({ postRepository, analyzer: defaultA
       if (totalBytes > MAX_ANALYSIS_TOTAL_BYTES) {
         throw new AppError("payload_too_large", "Tổng dung lượng ảnh phân tích không được vượt quá 14 MB.");
       }
+      const admission = await moderator?.assertAllowed(files, signal);
+      if (admission?.sensitiveDocument) {
+        // No downstream OCR/description request for an admitted redacted document.
+        return {
+          title: "Giấy tờ cá nhân đã che thông tin",
+          description: "Giấy tờ cá nhân. Thông tin định danh đã được che; vui lòng chọn loại giấy tờ và xác minh riêng với Staff.",
+          suggestedCategory: null, visualAttributes: [], visibleText: [], confidence: null,
+          confidence_source: "unavailable", warnings: ["Không trích xuất thông tin cá nhân từ giấy tờ. Hãy chọn danh mục thủ công."],
+          assistedBy: "Kiểm tra giấy tờ riêng tư", model: "privacy-gate", imageCount: files.length,
+          imageEmbedding: null
+        };
+      }
       const catalog = await postRepository.getFormCatalog();
       const leafCategories = catalog.categories.filter((category) => category.parentId !== null);
       if (!leafCategories.length) throw new AppError("unavailable", "Danh mục vật phẩm chưa sẵn sàng để phân tích ảnh.");
 
-      const result = await analyzer.analyze(files, type, leafCategories.map((category) => category.name));
+      signal?.throwIfAborted();
+      const result = await analyzer.analyze(files, type, leafCategories.map((category) => category.name), { signal });
       const suggestedCategory = matchSuggestedCategory(result.categoryName, leafCategories);
       return {
         title: sentenceCase(result.title),
@@ -62,7 +76,7 @@ export function createImageAnalysisUseCases({ postRepository, analyzer: defaultA
         confidence: result.confidence,
         confidence_source: result.confidence_source ?? (result.confidence === null ? "unavailable" : "provider"),
         warnings: result.warnings,
-        assistedBy: analyzer.model.startsWith("Qwen") ? "Qwen image understanding (local)"
+        assistedBy: analyzer.model.toLowerCase().includes("deepseek") ? "DeepSeek image understanding (Vilao)" : analyzer.model.startsWith("Qwen") ? "Qwen image understanding (local)"
           : analyzer.model.includes("local") ? "DINOv2 + EasyOCR AI (local)" : "Gemini image understanding",
         model: analyzer.model,
         imageCount: files.length,

@@ -16,6 +16,7 @@ export interface ImageAnalysis {
 }
 
 export interface ImageAnalyzerContext {
+  signal?: AbortSignal;
   title?: string;
   description?: string;
 }

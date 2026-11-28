@@ -10,6 +10,35 @@ const payload = { status: "success", model: "Qwen/Qwen3-VL-2B-Instruct", data: {
   brand: null, visible_text: [], distinctive_features: ["zipper"], caption: "A black wallet."
 } };
 
+test("held mouse uses agreeing object views instead of the first hand observation", async () => {
+  let call = 0;
+  const views = [
+    { ...payload.data, category: "hand", object_name: "Bàn tay cầm", caption: "Bàn tay cầm màu đen.", distinctive_features: ["ngón tay"] },
+    { ...payload.data, category: "computer mouse", object_name: "Chuột máy tính", caption: "Chuột màu đen có con lăn.", distinctive_features: ["con lăn"] },
+    { ...payload.data, category: "wireless mouse", object_name: "Chuột máy tính", caption: "Mặt dưới có cảm biến.", distinctive_features: ["cảm biến"] }
+  ];
+  const analyzer = createQwenImageAnalyzer({ serviceUrl: "http://localhost:8000", apiKey,
+    request: async () => Response.json({ ...payload, data: views[call++] }) });
+  const category = { id: "mouse-keyboard", name: "Chuột / bàn phím", parentId: "electronics" };
+  const service = createImageAnalysisUseCases({ analyzer, postRepository: { getFormCatalog: async () => ({ categories: [category] }) } as any });
+  const upload = { buffer: Buffer.from([0xff, 0xd8, 0xff, 0xe0]), size: 4, mimetype: "image/jpeg" };
+  const result = await service.analyzePostImages([upload, upload, upload], "LOST");
+  assert.equal(result.title, "Chuột máy tính");
+  assert.deepEqual(result.suggestedCategory, category);
+  assert.ok(!result.description.includes("Bàn tay"));
+  assert.ok(!result.visualAttributes.includes("ngón tay"));
+});
+
+test("hand-only observations never invent a mouse or carry hand details into the draft", async () => {
+  const analyzer = createQwenImageAnalyzer({ serviceUrl: "http://localhost:8000", apiKey,
+    request: async () => Response.json({ ...payload, data: { ...payload.data, category: "hand", object_name: "Bàn tay cầm" } }) });
+  const result = await analyzer.analyze([file], "FOUND", ["Chuột / bàn phím"]);
+  assert.equal(result.title, "Vật phẩm cần kiểm tra");
+  assert.equal(result.description, "");
+  assert.equal(result.categoryName, "");
+  assert.deepEqual(result.visualAttributes, []);
+});
+
 test("three thermos views populate an existing category and parent even with one unknown view", async () => {
   let call = 0;
   const analyzer = createQwenImageAnalyzer({ serviceUrl: "http://localhost:8000", apiKey,
@@ -32,7 +61,12 @@ test("conflicting recognized views do not autofill a category", async () => {
   const analyzer = createQwenImageAnalyzer({ serviceUrl: "http://localhost:8000", apiKey,
     request: async () => Response.json({ ...payload, data: { ...payload.data,
       category: ["thermos", "water bottle", "backpack"][call++], object_name: null } }) });
-  assert.equal((await analyzer.analyze([file, file, file], "FOUND", ["Bình nước", "Balo"])).categoryName, "");
+  const result = await analyzer.analyze([file, file, file], "FOUND", ["Bình nước", "Balo"]);
+  assert.equal(result.categoryName, "");
+  assert.equal(result.title, "Vật phẩm cần kiểm tra");
+  assert.equal(result.description, "");
+  assert.deepEqual(result.visualAttributes, []);
+  assert.ok(result.warnings.some(warning => warning.includes("khác nhau")));
 });
 
 test("phone analysis returns catalog IDs for both dependent dropdowns", async () => {
