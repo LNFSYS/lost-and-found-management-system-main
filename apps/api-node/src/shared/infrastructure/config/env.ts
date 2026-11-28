@@ -107,6 +107,10 @@ export const env = {
     model: process.env.GEMINI_MODEL?.trim() || "gemini-3.5-flash-lite",
     timeoutMs: number("GEMINI_TIMEOUT_MS", 30_000)
   },
+  imageModeration: {
+    enabled: bool("IMAGE_MODERATION_ENABLED", false),
+    timeoutMs: boundedNumber("IMAGE_MODERATION_TIMEOUT_MS", 60_000, 1_000, 120_000)
+  },
   deepseek: {
     apiKey: process.env.DEEPSEEK_API_KEY?.trim() || null,
     baseUrl: process.env.DEEPSEEK_BASE_URL?.trim() || "https://api.vilao.ai/v1",

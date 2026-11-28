@@ -1,3 +1,4 @@
+import type { ImageModerator } from "./image-moderator.port.js";
 import type { ImageAnalyzer } from "./image-analyzer.port.js";
 
 import type { PostRepository } from "./post.repository.port.js";
@@ -32,7 +33,7 @@ export interface PostImageAnalysisResult {
   imageEmbedding?: number[] | null;
 }
 
-export function createImageAnalysisUseCases({ postRepository, analyzer: defaultAnalyzer, analyzers }: { postRepository: Pick<PostRepository, "getFormCatalog">; analyzer: ImageAnalyzer; analyzers?: Partial<Record<"gemini" | "qwen" | "deepseek", ImageAnalyzer>>; }) {
+export function createImageAnalysisUseCases({ postRepository, analyzer: defaultAnalyzer, analyzers, moderator }: { postRepository: Pick<PostRepository, "getFormCatalog">; analyzer: ImageAnalyzer; moderator?: ImageModerator; analyzers?: Partial<Record<"gemini" | "qwen" | "deepseek", ImageAnalyzer>>; }) {
 
   const useCases = {
     async analyzePostImages(files: ImageUpload[], type: AnalyzePostImageInput["type"], provider?: "gemini" | "qwen" | "deepseek", signal?: AbortSignal): Promise<PostImageAnalysisResult> {
@@ -46,6 +47,18 @@ export function createImageAnalysisUseCases({ postRepository, analyzer: defaultA
       const totalBytes = files.reduce((total, file) => total + file.size, 0);
       if (totalBytes > MAX_ANALYSIS_TOTAL_BYTES) {
         throw new AppError("payload_too_large", "Tổng dung lượng ảnh phân tích không được vượt quá 14 MB.");
+      }
+      const admission = await moderator?.assertAllowed(files, signal);
+      if (admission?.sensitiveDocument) {
+        // No downstream OCR/description request for an admitted redacted document.
+        return {
+          title: "Giấy tờ cá nhân đã che thông tin",
+          description: "Giấy tờ cá nhân. Thông tin định danh đã được che; vui lòng chọn loại giấy tờ và xác minh riêng với Staff.",
+          suggestedCategory: null, visualAttributes: [], visibleText: [], confidence: null,
+          confidence_source: "unavailable", warnings: ["Không trích xuất thông tin cá nhân từ giấy tờ. Hãy chọn danh mục thủ công."],
+          assistedBy: "Kiểm tra giấy tờ riêng tư", model: "privacy-gate", imageCount: files.length,
+          imageEmbedding: null
+        };
       }
       const catalog = await postRepository.getFormCatalog();
       const leafCategories = catalog.categories.filter((category) => category.parentId !== null);
